@@ -27,22 +27,22 @@ import kotlin.time.ExperimentalTime
 data class POSInvoicePaymentEntity(
 
     @PrimaryKey(autoGenerate = true)
-    val id: Int = 0,
+    var id: Int = 0,
 
     @ColumnInfo(name = "parent_invoice")
-    val parentInvoice: String, // invoice_name del padre
+    var parentInvoice: String, // invoice_name del padre
 
     @ColumnInfo(name = "mode_of_payment")
-    val modeOfPayment: String, // Cash, Card, Transfer...
+    var modeOfPayment: String, // Cash, Card, Transfer...
 
     @ColumnInfo(name = "amount")
-    val amount: Double = 0.0,
+    var amount: Double = 0.0,
 
     @ColumnInfo(name = "payment_reference")
-    val paymentReference: String? = null, // No. de recibo o transacción
+    var paymentReference: String? = null, // No. de recibo o transacción
     @ColumnInfo(name = "payment_date")
-    val paymentDate: String? = null,
+    var paymentDate: String? = null,
 
     @ColumnInfo(name = "created_at")
-    val createdAt: Long = Clock.System.now().toEpochMilliseconds()
+    var createdAt: Long = Clock.System.now().toEpochMilliseconds()
 )

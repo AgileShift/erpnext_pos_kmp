@@ -24,63 +24,63 @@ import kotlin.time.ExperimentalTime
 data class SalesInvoiceItemEntity(
 
     @PrimaryKey(autoGenerate = true)
-    val id: Int = 0,
+    var id: Int = 0,
 
     // 🔗 Referencia a la factura
     @ColumnInfo(name = "parent_invoice")
-    val parentInvoice: String, // invoice_name del padre
+    var parentInvoice: String, // invoice_name del padre
 
     // 🧩 Identificación del ítem
     @ColumnInfo(name = "item_code")
-    val itemCode: String,
+    var itemCode: String,
     @ColumnInfo(name = "item_name")
-    val itemName: String? = null,
+    var itemName: String? = null,
     @ColumnInfo(name = "description")
-    val description: String? = null,
+    var description: String? = null,
     @ColumnInfo(name = "uom")
-    val uom: String? = "Unit",
+    var uom: String? = "Unit",
     @ColumnInfo(name = "qty")
-    val qty: Double = 1.0,
+    var qty: Double = 1.0,
     @ColumnInfo(name = "rate")
-    val rate: Double = 0.0,
+    var rate: Double = 0.0,
     @ColumnInfo(name = "amount")
-    val amount: Double = 0.0,
+    var amount: Double = 0.0,
 
     // 💰 Cuentas y precios
     @ColumnInfo(name = "price_list_rate")
-    val priceListRate: Double = 0.0,
+    var priceListRate: Double = 0.0,
     @ColumnInfo(name = "discount_percentage")
-    val discountPercentage: Double = 0.0,
+    var discountPercentage: Double = 0.0,
     @ColumnInfo(name = "discount_amount")
-    val discountAmount: Double = 0.0,
+    var discountAmount: Double = 0.0,
     @ColumnInfo(name = "net_rate")
-    val netRate: Double = 0.0,
+    var netRate: Double = 0.0,
     @ColumnInfo(name = "net_amount")
-    val netAmount: Double = 0.0,
+    var netAmount: Double = 0.0,
 
     // 🧾 Impuestos individuales (si aplica)
     @ColumnInfo(name = "tax_rate")
-    val taxRate: Double = 0.0,
+    var taxRate: Double = 0.0,
     @ColumnInfo(name = "tax_amount")
-    val taxAmount: Double = 0.0,
+    var taxAmount: Double = 0.0,
 
     // 📦 Almacén y trazabilidad
     @ColumnInfo(name = "warehouse")
-    val warehouse: String? = null,
+    var warehouse: String? = null,
     @ColumnInfo(name = "batch_no")
-    val batchNo: String? = null,
+    var batchNo: String? = null,
     @ColumnInfo(name = "serial_no")
-    val serialNo: String? = null,
+    var serialNo: String? = null,
     @ColumnInfo("income_account")
-    val incomeAccount: String? = null,
+    var incomeAccount: String? = null,
     @ColumnInfo("cost_center")
-    val costCenter: String? = null,
+    var costCenter: String? = null,
 
     // ⚙️ Estado y auditoría
     @ColumnInfo(name = "is_return")
-    val isReturn: Boolean = false,
+    var isReturn: Boolean = false,
     @ColumnInfo(name = "created_at")
-    val createdAt: Long = Clock.System.now().toEpochMilliseconds(),
+    var createdAt: Long = Clock.System.now().toEpochMilliseconds(),
     @ColumnInfo(name = "modified_at")
-    val modifiedAt: Long = Clock.System.now().toEpochMilliseconds()
+    var modifiedAt: Long = Clock.System.now().toEpochMilliseconds()
 )

@@ -5,12 +5,12 @@ import androidx.room.PrimaryKey
 
 @Entity(tableName = "tabUser")
 data class UserEntity(
-    val name: String,
-    val firstName: String,
-    val lastName: String?,
-    val username: String?,
+    var name: String,
+    var firstName: String,
+    var lastName: String?,
+    var username: String?,
     @PrimaryKey(autoGenerate = false)
-    val email: String,
-    val language: String?,
-    val enabled: Boolean
+    var email: String,
+    var language: String?,
+    var enabled: Boolean
 )

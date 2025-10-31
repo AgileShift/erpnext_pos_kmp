@@ -40,8 +40,9 @@ interface SalesInvoiceDao {
     @Query("SELECT * FROM tabSalesInvoice WHERE invoice_name = :invoiceName LIMIT 1")
     suspend fun getInvoiceByName(invoiceName: String): SalesInvoiceWithItemsAndPayments?
 
+    @Transaction
     @Query("SELECT * FROM tabSalesInvoice WHERE sync_status = 'Pending'")
-    suspend fun getPendingSyncInvoices(): List<SalesInvoiceEntity>
+    suspend fun getPendingSyncInvoices(): List<SalesInvoiceWithItemsAndPayments>
 
     @Query("UPDATE tabSalesInvoice SET sync_status = :status WHERE invoice_name = :invoiceName")
     suspend fun updateSyncStatus(invoiceName: String, status: String)

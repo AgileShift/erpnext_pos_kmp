@@ -1,6 +1,7 @@
 package com.erpnext.pos.sync
 
 import com.erpnext.pos.data.repositories.CheckoutRepository
+import com.erpnext.pos.data.repositories.SalesInvoiceRepository
 import com.erpnext.pos.localSource.entities.PendingSalesInvoiceEntity
 import com.erpnext.pos.remoteSource.api.APIService
 import com.erpnext.pos.utils.TimeProvider
@@ -13,7 +14,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 
 class SyncManager(
-    private val invoiceRepo: CheckoutRepository,
+    private val invoiceRepo: SalesInvoiceRepository,
     private val api: APIService,
     private val networkMonitor: Flow<Boolean>, // inject NetworkMonitor.isConnected
     private val timeProvider: TimeProvider,
@@ -48,12 +49,12 @@ class SyncManager(
     }
 
     private suspend fun refreshPendingCount() {
-        val cnt = invoiceRepo.countPending()
+        val cnt = invoiceRepo . getPendingSyncInvoices ().size
         _pendingCount.value = cnt
     }
 
     suspend fun queueInvoice(entity: PendingSalesInvoiceEntity) {
-        invoiceRepo.insertInvoice(entity)
+        invoiceRepo.saveInvoiceLocally(entity)
         refreshPendingCount()
     }
 
@@ -68,7 +69,8 @@ class SyncManager(
                 } catch (e: Exception) {
                     _syncState.value = SyncState.Error(e.message ?: "sync error")
                     kotlinx.coroutines.delay(backoff)
-                    backoff = ((backoff * config.backoffFactor).coerceAtMost(config.maxBackoffMillis.toDouble())).toLong()
+                    backoff =
+                        ((backoff * config.backoffFactor).coerceAtMost(config.maxBackoffMillis.toDouble())).toLong()
                 }
             }
             _syncState.value = SyncState.Idle

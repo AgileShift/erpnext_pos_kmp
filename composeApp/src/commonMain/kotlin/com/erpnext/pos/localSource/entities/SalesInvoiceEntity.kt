@@ -23,6 +23,7 @@ import kotlin.time.ExperimentalTime
         )
     ],
     indices = [
+        Index(value = ["invoice_name"], unique = true),
         Index(value = ["profile_id"]),
         Index(value = ["customer"]),
         Index(value = ["status"]),
@@ -32,100 +33,100 @@ import kotlin.time.ExperimentalTime
 data class SalesInvoiceEntity(
 
     @PrimaryKey(autoGenerate = true)
-    val id: Int = 0,
+    var id: Int = 0,
 
     // 🔗 Relación con el perfil POS
     @ColumnInfo(name = "profile_id")
-    val profileId: String? = null,
+    var profileId: String? = null,
 
     // 🧾 Identificación contable
     @ColumnInfo(name = "invoice_name")
-    val invoiceName: String? = null, // Nombre remoto (ej. SINV-00045)
+    var invoiceName: String? = null, // Nombre remoto (ej. SINV-00045)
     @ColumnInfo(name = "reference_no")
-    val referenceNo: String? = null, // Ej. número de recibo o comprobante externo
+    var referenceNo: String? = null, // Ej. número de recibo o comprobante externo
 
     // 👤 Cliente y compañía
-    val customer: String,
+    var customer: String,
     @ColumnInfo(name = "customer_name")
-    val customerName: String? = null,
-    val company: String,
-    val branch: String? = null,
-    val warehouse: String? = null,
-    val currency: String = "USD",
+    var customerName: String? = null,
+    var company: String,
+    var branch: String? = null,
+    var warehouse: String? = null,
+    var currency: String = "USD",
 
     // 📅 Fechas clave
     @ColumnInfo(name = "posting_date")
-    val postingDate: String, // Fecha de emisión
+    var postingDate: String, // Fecha de emisión
     @ColumnInfo(name = "due_date")
-    val dueDate: String? = null, // Fecha límite de pago
+    var dueDate: String? = null, // Fecha límite de pago
     @ColumnInfo(name = "posting_time")
-    val postingTime: String? = null, // Hora precisa (opcional)
+    var postingTime: String? = null, // Hora precisa (opcional)
 
     // 💰 Montos y cuentas
     @ColumnInfo(name = "net_total")
-    val netTotal: Double = 0.0, // Subtotal sin impuestos
+    var netTotal: Double = 0.0, // Subtotal sin impuestos
     @ColumnInfo(name = "tax_total")
-    val taxTotal: Double = 0.0, // Total de impuestos
+    var taxTotal: Double = 0.0, // Total de impuestos
     @ColumnInfo(name = "discount_amount")
-    val discountAmount: Double = 0.0,
+    var discountAmount: Double = 0.0,
     @ColumnInfo(name = "grand_total")
-    val grandTotal: Double = 0.0, // Total final con impuestos
+    var grandTotal: Double = 0.0, // Total final con impuestos
     @ColumnInfo(name = "paid_amount")
-    val paidAmount: Double = 0.0,
+    var paidAmount: Double = 0.0,
     @ColumnInfo(name = "outstanding_amount")
-    val outstandingAmount: Double = 0.0, // Saldo pendiente
+    var outstandingAmount: Double = 0.0, // Saldo pendiente
 
     // 📦 Contabilidad
     @ColumnInfo(name = "income_account")
-    val incomeAccount: String? = null,
+    var incomeAccount: String? = null,
     @ColumnInfo(name = "expense_account")
-    val expenseAccount: String? = null,
+    var expenseAccount: String? = null,
     @ColumnInfo(name = "cost_center")
-    val costCenter: String? = null,
+    var costCenter: String? = null,
     @ColumnInfo(name = "price_list")
-    val priceList: String? = null,
+    var priceList: String? = null,
 
     // ⚙️ Estado y sincronización
-    val status: String = "Draft", // Draft, Submitted, Paid, Cancelled
+    var status: String = "Draft", // Draft, Submitted, Paid, Cancelled
     @ColumnInfo(name = "sync_status")
-    val syncStatus: String = "Pending", // Pending, Synced, Failed
+    var syncStatus: String = "Pending", // Pending, Synced, Failed
     @ColumnInfo(name = "docstatus")
-    val docstatus: Int = 0, // 0 = borrador, 1 = enviado, 2 = cancelado
+    var docstatus: Int = 0, // 0 = borrador, 1 = enviado, 2 = cancelado
     @ColumnInfo(name = "is_return")
-    val isReturn: Boolean = false, // Nota de crédito o devolución
+    var isReturn: Boolean = false, // Nota de crédito o devolución
 
     // 💳 Método de pago (último o principal)
     @ColumnInfo(name = "mode_of_payment")
-    val modeOfPayment: String? = null,
+    var modeOfPayment: String? = null,
 
     // 🧠 Auditoría y metadatos
     @ColumnInfo(name = "created_by")
-    val createdBy: String? = null,
+    var createdBy: String? = null,
     @ColumnInfo(name = "modified_by")
-    val modifiedBy: String? = null,
+    var modifiedBy: String? = null,
     @ColumnInfo(name = "created_at")
-    val createdAt: Long = Clock.System.now().toEpochMilliseconds(),
+    var createdAt: Long = Clock.System.now().toEpochMilliseconds(),
     @ColumnInfo(name = "modified_at")
-    val modifiedAt: Long = Clock.System.now().toEpochMilliseconds(),
+    var modifiedAt: Long = Clock.System.now().toEpochMilliseconds(),
     @ColumnInfo(name = "remarks")
-    val remarks: String? = null
+    var remarks: String? = null
 )
 
 
 data class SalesInvoiceWithItemsAndPayments(
 
     @Embedded
-    val invoice: SalesInvoiceEntity,
+    var invoice: SalesInvoiceEntity,
 
     @Relation(
         parentColumn = "invoice_name",
         entityColumn = "parent_invoice"
     )
-    val items: List<SalesInvoiceItemEntity> = emptyList(),
+    var items: List<SalesInvoiceItemEntity> = emptyList(),
 
     @Relation(
         parentColumn = "invoice_name",
         entityColumn = "parent_invoice"
     )
-    val payments: List<POSInvoicePaymentEntity> = emptyList()
+    var payments: List<POSInvoicePaymentEntity> = emptyList()
 )

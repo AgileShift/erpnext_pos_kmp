@@ -1,9 +1,9 @@
 package com.erpnext.pos.views.home
 
 import androidx.lifecycle.viewModelScope
-import androidx.lifecycle.viewmodel.compose.viewModel
 import com.erpnext.pos.base.BaseViewModel
 import com.erpnext.pos.domain.models.POSProfileBO
+import com.erpnext.pos.domain.models.POSProfileSimpleBO
 import com.erpnext.pos.domain.models.UserBO
 import com.erpnext.pos.domain.usecases.FetchPosProfileInfoUseCase
 import com.erpnext.pos.domain.usecases.FetchPosProfileUseCase
@@ -29,7 +29,7 @@ class HomeViewModel(
     val stateFlow = _stateFlow.asStateFlow()
 
     private var userInfo: UserBO = UserBO("", "", "", "", "", "", false)
-    private var posProfiles: List<POSProfileBO> = emptyList()
+    private var posProfiles: List<POSProfileSimpleBO> = emptyList()
 
     init {
         viewModelScope.launch {

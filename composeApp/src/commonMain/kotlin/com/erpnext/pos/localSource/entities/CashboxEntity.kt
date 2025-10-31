@@ -13,13 +13,13 @@ import androidx.room.Relation
 )
 data class CashboxEntity(
     @PrimaryKey(autoGenerate = true)
-    val localId: Long = 0,
-    val posProfile: String,
-    val company: String,
-    val periodStartDate: Long,
-    val user: String,
-    val status: Boolean,
-    val pendingSync: Boolean = true // Flag para sync (true si no synced)
+    var localId: Long = 0,
+    var posProfile: String,
+    var company: String,
+    var periodStartDate: Long,
+    var user: String,
+    var status: Boolean,
+    var pendingSync: Boolean = true // Flag para sync (true si no synced)
 )
 
 @Entity(
@@ -35,17 +35,17 @@ data class CashboxEntity(
 )
 data class BalanceDetailsEntity(
     @PrimaryKey(autoGenerate = true)
-    val id: Long = 0,
+    var id: Long = 0,
     var cashboxId: Long = 0,
-    val modeOfPayment: String,
-    val openingAmount: Double
+    var modeOfPayment: String,
+    var openingAmount: Double
 )
 
 data class CashboxWithDetails(
-    @Embedded val cashbox: CashboxEntity,
+    @Embedded var cashbox: CashboxEntity,
     @Relation(
         parentColumn = "localId",
         entityColumn = "cashboxId"
     )
-    val details: List<BalanceDetailsEntity>
+    var details: List<BalanceDetailsEntity>
 )

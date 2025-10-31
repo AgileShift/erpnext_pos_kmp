@@ -20,44 +20,25 @@ import kotlinx.coroutines.flow.onStart
 class SalesInvoiceRemoteSource(
     private val apiService: APIService,
     private val pendingInvoiceDao: PendingInvoiceDao,
-    private val salesInvoiceDao: SalesInvoiceDao,
 ) {
 
-    /**
-     * Obtener una factura específica desde ERPNext y guardarla localmente
-     */
-    suspend fun fetchInvoice(name: String) {
-        val dto: SalesInvoiceDto = apiService.getSalesInvoiceByName(name)
-        val entities = dto.toEntities()
-        salesInvoiceDao.insertInvoice(entities.invoice)
-        salesInvoiceDao.insertItems(entities.items)
-        salesInvoiceDao.insertPayments(entities.payments)
-    }
+    suspend fun fetchInvoices(
+        limit: Int,
+        offset: Int
+    ): List<SalesInvoiceDto> =
+        emptyList()  //apiService.getPendingInvoices(limit, offset, baseUrl, headers)
 
-    /**
-     * Crear factura en ERPNext y guardar localmente
-     */
-    suspend fun createInvoice(invoice: SalesInvoiceWithItemsAndPayments) {
-        val dto = invoice.toDto()
-        val createdDto = apiService.createSalesInvoice(dto)
-        val entities = createdDto.toEntities()
-        salesInvoiceDao.insertInvoice(entities.invoice)
-        salesInvoiceDao.insertItems(entities.items)
-        salesInvoiceDao.insertPayments(entities.payments)
-    }
+    suspend fun fetchInvoice(name: String): SalesInvoiceDto? = null
+    //apiService.getInvoiceDetail(name, baseUrl, headers)
 
-    /**
-     * Actualizar factura remota y sincronizar local
-     */
-    suspend fun updateInvoice(invoice: SalesInvoiceWithItemsAndPayments) {
-        val dto = invoice.toDto()
-        val updatedDto =
-            apiService.updateSalesInvoice(invoice.invoice.invoiceName ?: "", dto)
-        val entities = updatedDto.toEntities()
-        salesInvoiceDao.insertInvoice(entities.invoice)
-        salesInvoiceDao.insertItems(entities.items)
-        salesInvoiceDao.insertPayments(entities.payments)
-    }
+    suspend fun createInvoice(invoice: SalesInvoiceDto): SalesInvoiceDto =
+        apiService.createSalesInvoice(invoice)
+
+    suspend fun updateInvoice(name: String, invoice: SalesInvoiceDto): SalesInvoiceDto =
+        apiService.updateSalesInvoice(name, invoice)
+
+    suspend fun deleteInvoice(name: String) = null
+    //apiService.delete(name, baseUrl, headers)
 
     fun getAllInvoices(
         posProfileName: String,

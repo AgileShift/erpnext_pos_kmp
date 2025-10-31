@@ -3,7 +3,9 @@ package com.erpnext.pos.di
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import com.erpnext.pos.data.AppDatabase
 import com.erpnext.pos.data.DatabaseBuilder
+import com.erpnext.pos.data.repositories.CheckoutRepository
 import com.erpnext.pos.data.repositories.CustomerRepository
+import com.erpnext.pos.data.repositories.ICheckoutRepository
 import com.erpnext.pos.data.repositories.InventoryRepository
 import com.erpnext.pos.data.repositories.POSProfileRepository
 import com.erpnext.pos.data.repositories.SalesInvoiceRepository
@@ -24,6 +26,7 @@ import com.erpnext.pos.domain.usecases.FetchPosProfileUseCase
 import com.erpnext.pos.domain.usecases.FetchUserInfoUseCase
 import com.erpnext.pos.localSource.datasources.CustomerLocalSource
 import com.erpnext.pos.localSource.datasources.InventoryLocalSource
+import com.erpnext.pos.localSource.datasources.InvoiceLocalSource
 import com.erpnext.pos.navigation.NavigationManager
 import com.erpnext.pos.remoteSource.api.APIService
 import com.erpnext.pos.remoteSource.api.defaultEngine
@@ -136,14 +139,14 @@ val appModule = module {
     //region Invoices
     single { SalesInvoiceRemoteSource(get(), get()) }
     single { InvoiceViewModel(get(), get(), get()) }
-    single<ISaleInvoiceRepository> { SalesInvoiceRepository(get()) }
+    single<ISaleInvoiceRepository> { SalesInvoiceRepository(get(), get()) }
     //endregion
 
     //region Checkout
     single { CheckoutViewModel(get(), get(), get()) }
-    /*single { CheckoutRemoteSource(get(), get()) }
-    single { CheckoutLocalSource(get()) }
-    single<ICheckoutRepository> { CheckoutRepository(get()) }*/
+    single { SalesInvoiceRemoteSource(get(), get()) }
+    single { InvoiceLocalSource(get(), get()) }
+    single<ICheckoutRepository> { CheckoutRepository(get(), get()) }
     //endregion
 
     //region UseCases DI

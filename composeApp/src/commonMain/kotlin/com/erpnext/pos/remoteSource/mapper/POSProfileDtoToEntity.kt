@@ -17,12 +17,16 @@ fun POSProfileDto.toEntity(): POSProfileEntity {
         profileName = this.profileName,
         warehouse = this.warehouse,
         country = this.country,
-        disabled = this.disabled,
         company = this.company,
         currency = this.currency,
-        defaultCurrency = this.currency,
         route = this.route,
-        user = ""
+        user = "",
+        incomeAccount = this.incomeAccount,
+        expenseAccount = this.expenseAccount,
+        branch = this.branch,
+        applyDiscountOn = this.applyDiscountOn,
+        costCenter = this.costCenter,
+        sellingPriceList = this.sellingPriceList,
     )
 }
 

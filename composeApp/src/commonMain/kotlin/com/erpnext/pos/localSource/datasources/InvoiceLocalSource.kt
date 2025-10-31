@@ -23,7 +23,7 @@ interface IInvoiceLocalSource {
 
     suspend fun markAsSynced(invoiceName: String)
     suspend fun markAsFailed(invoiceName: String)
-    suspend fun getPendingSyncInvoices(): List<SalesInvoiceEntity>
+    suspend fun getPendingSyncInvoices(): List<SalesInvoiceWithItemsAndPayments>
 }
 
 class InvoiceLocalSource(
@@ -62,7 +62,7 @@ class InvoiceLocalSource(
         return salesInvoiceDao.updateSyncStatus(invoiceName, "Failed")
     }
 
-    override suspend fun getPendingSyncInvoices(): List<SalesInvoiceEntity> {
+    override suspend fun getPendingSyncInvoices(): List<SalesInvoiceWithItemsAndPayments> {
         return salesInvoiceDao.getPendingSyncInvoices()
     }
 }

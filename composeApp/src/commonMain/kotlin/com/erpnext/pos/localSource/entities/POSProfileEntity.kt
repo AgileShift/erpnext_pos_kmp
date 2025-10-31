@@ -8,37 +8,37 @@ import androidx.room.Relation
 
 @Entity(tableName = "tabPosProfile")
 data class POSProfileEntity(
-    @PrimaryKey(autoGenerate = false) @ColumnInfo(name = "profile_name") val profileName: String,
+    @PrimaryKey(autoGenerate = false) @ColumnInfo(name = "profile_name") var profileName: String,
 
-    @ColumnInfo(name = "warehouse") val warehouse: String,
+    @ColumnInfo(name = "warehouse") var warehouse: String,
 
-    @ColumnInfo(name = "route") val route: String,
+    @ColumnInfo(name = "route") var route: String,
 
-    @ColumnInfo(name = "country") val country: String,
+    @ColumnInfo(name = "country") var country: String,
 
-    @ColumnInfo(name = "company") val company: String,
+    @ColumnInfo(name = "company") var company: String,
 
-    @ColumnInfo(name = "currency") val currency: String,
+    @ColumnInfo(name = "currency") var currency: String,
 
-    @ColumnInfo("income_account") val incomeAccount: String,
+    @ColumnInfo("income_account") var incomeAccount: String,
 
-    @ColumnInfo("expense_account") val expenseAccount: String,
+    @ColumnInfo("expense_account") var expenseAccount: String,
 
-    @ColumnInfo("branch") val branch: String,
+    @ColumnInfo("branch") var branch: String,
 
-    @ColumnInfo("apply_discount_on") val applyDiscountOn: String,
+    @ColumnInfo("apply_discount_on") var applyDiscountOn: String,
 
-    @ColumnInfo("cost_center") val costCenter: String,
+    @ColumnInfo("cost_center") var costCenter: String,
 
-    @ColumnInfo("selling_price_list") val sellingPriceList: String,
+    @ColumnInfo("selling_price_list") var sellingPriceList: String,
 
-    @ColumnInfo(name = "active") val active: Boolean? = false,
+    @ColumnInfo(name = "active") var active: Boolean? = false,
 
-    @ColumnInfo(name = "user") val user: String,
+    @ColumnInfo(name = "user") var user: String,
 )
 
 data class POSProfileWithPaymentsInfo(
-    @Embedded val profile: POSProfileEntity, @Relation(
+    @Embedded var profile: POSProfileEntity, @Relation(
         parentColumn = "profile_name", entityColumn = "profile_id"
-    ) val payments: List<POSInvoicePaymentEntity>
+    ) var payments: List<POSInvoicePaymentEntity>
 )

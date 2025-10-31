@@ -11,6 +11,7 @@ import com.erpnext.pos.localSource.dao.ItemDao
 import com.erpnext.pos.localSource.dao.POSProfileDao
 import com.erpnext.pos.localSource.dao.PaymentModesDao
 import com.erpnext.pos.localSource.dao.PendingInvoiceDao
+import com.erpnext.pos.localSource.dao.SalesInvoiceDao
 import com.erpnext.pos.localSource.dao.UserDao
 import com.erpnext.pos.localSource.entities.BalanceDetailsEntity
 import com.erpnext.pos.localSource.entities.CashboxEntity
@@ -23,6 +24,8 @@ import com.erpnext.pos.localSource.entities.POSInvoicePaymentEntity
 import com.erpnext.pos.localSource.entities.POSProfileEntity
 import com.erpnext.pos.localSource.entities.PaymentModesEntity
 import com.erpnext.pos.localSource.entities.PendingSalesInvoiceEntity
+import com.erpnext.pos.localSource.entities.SalesInvoiceEntity
+import com.erpnext.pos.localSource.entities.SalesInvoiceItemEntity
 import com.erpnext.pos.localSource.entities.UserEntity
 
 @Database(
@@ -38,8 +41,10 @@ import com.erpnext.pos.localSource.entities.UserEntity
         BalanceDetailsEntity::class,
         CustomerEntity::class,
         PendingSalesInvoiceEntity::class,
-        CategoryEntity::class
-    ], version = 29,
+        CategoryEntity::class,
+        SalesInvoiceEntity::class,
+        SalesInvoiceItemEntity::class,
+    ], version = 31,
     exportSchema = true
 )
 @ConstructedBy(AppDatabaseConstructor::class)
@@ -52,7 +57,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun customerDao(): CustomerDao
     abstract fun pendingInvoiceDao(): PendingInvoiceDao
     abstract fun categoryDao(): CategoryDao
-    abstract fun sale
+    abstract fun saleInvoiceDao(): SalesInvoiceDao
 }
 
 expect object AppDatabaseConstructor : RoomDatabaseConstructor<AppDatabase> {

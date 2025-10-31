@@ -4,8 +4,8 @@ import androidx.room.Entity
 
 @Entity(tableName = "pending_sync")
 data class PendingSyncEntity(
-    val id: String,
-    val entityType: String,
-    val payload: String,
-    val createdAt: Long
+    var id: String,
+    var entityType: String,
+    var payload: String,
+    var createdAt: Long
 )

@@ -6,5 +6,5 @@ import androidx.room.PrimaryKey
 @Entity(tableName = "tabCategory")
 data class CategoryEntity(
     @PrimaryKey(autoGenerate = false)
-    val name: String
+    var name: String
 )

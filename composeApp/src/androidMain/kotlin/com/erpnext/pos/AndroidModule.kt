@@ -26,4 +26,5 @@ val androidModule = module {
     single { get<AppDatabase>().customerDao() }
     single { get<AppDatabase>().pendingInvoiceDao() }
     single { get<AppDatabase>().categoryDao() }
+    single { get<AppDatabase>().saleInvoiceDao() }
 }

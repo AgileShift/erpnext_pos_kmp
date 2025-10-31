@@ -6,13 +6,13 @@ import androidx.room.PrimaryKey
 @Entity(tableName = "tabPOSInvoiceItem")
 data class POSInvoiceItemEntity(
     @PrimaryKey(autoGenerate = true)
-    val id: Int = 0,
-    val invoiceName: String,
-    val itemCode: String,
-    val itemName: String,
-    val qty: Double,
-    val rate: Double,
-    val amount: Double,
-    val discountPercentage: Double? = null,
-    val discountAmount: Double? = null
+    var id: Int = 0,
+    var invoiceName: String,
+    var itemCode: String,
+    var itemName: String,
+    var qty: Double,
+    var rate: Double,
+    var amount: Double,
+    var discountPercentage: Double? = null,
+    var discountAmount: Double? = null
 )

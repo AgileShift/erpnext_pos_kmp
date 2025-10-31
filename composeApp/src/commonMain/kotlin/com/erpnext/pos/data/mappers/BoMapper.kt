@@ -167,3 +167,22 @@ fun POSProfileSimpleDto.toBO(): POSProfileSimpleBO {
         paymentModes = emptyList()
     )
 }
+
+fun SalesInvoiceEntity.toBO(): PendingInvoiceBO {
+    return PendingInvoiceBO(
+        invoiceId = this.invoiceName ?: "",
+        status = this.status,
+        paidAmount = this.paidAmount,
+        customerPhone = "",
+        currency = this.currency,
+        docStatus = this.docstatus,
+        netTotal = this.netTotal,
+        customer = this.customer,
+        dueDate = this.dueDate,
+        outstandingAmount = this.outstandingAmount,
+        isPos = false,
+        total = this.grandTotal,
+        customerId = this.customerName ?: "",
+        postingDate = this.postingDate
+    )
+}

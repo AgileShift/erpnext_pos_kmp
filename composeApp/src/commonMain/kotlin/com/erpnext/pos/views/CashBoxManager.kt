@@ -60,7 +60,7 @@ class CashBoxManager(
             CashBoxState.Opened(
                 entry.posProfile,
                 currentProfile?.warehouse,
-                currentProfile?.priceList
+                currentProfile?.route
             )
         }
 

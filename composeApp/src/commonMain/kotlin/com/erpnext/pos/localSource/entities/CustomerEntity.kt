@@ -8,16 +8,16 @@ import androidx.room.PrimaryKey
 data class CustomerEntity(
     @ColumnInfo(name = "id")
     @PrimaryKey(autoGenerate = false)
-    val name: String,
-    val customerName: String,
-    val territory: String?,
-    val email: String?,
-    val mobileNo: String?,
-    val customerType: String,
-    val creditLimit: Double? = null,
-    val currentBalance: Double,
-    val totalPendingAmount: Double,  // Sum outstanding_amount
-    val pendingInvoicesCount: Int,
-    val availableCredit: Double,
-    val address: String? = null  // Formatted
+    var name: String,
+    var customerName: String,
+    var territory: String?,
+    var email: String?,
+    var mobileNo: String?,
+    var customerType: String,
+    var creditLimit: Double? = null,
+    var currentBalance: Double,
+    var totalPendingAmount: Double,  // Sum outstanding_amount
+    var pendingInvoicesCount: Int,
+    var availableCredit: Double,
+    var address: String? = null  // Formatted
 )

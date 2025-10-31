@@ -23,7 +23,7 @@ interface ISaleInvoiceRepository {
     )
     suspend fun markAsSynced(invoiceName: String)
     suspend fun markAsFailed(invoiceName: String)
-    suspend fun getPendingSyncInvoices() : List<SalesInvoiceEntity>
+    suspend fun getPendingSyncInvoices() : List<SalesInvoiceWithItemsAndPayments>
     suspend fun fetchRemoteInvoices(limit: Int = 50, offset: Int= 0)
     suspend fun fetchRemoteInvoices(name: String): SalesInvoiceWithItemsAndPayments
 

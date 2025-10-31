@@ -7,14 +7,14 @@ import kotlin.time.ExperimentalTime
 @OptIn(ExperimentalTime::class)
 open class BaseEntity() {
     @ColumnInfo(name = "created_at")
-    val createdAt: Long = Clock.System.now().toEpochMilliseconds()
+    var createdAt: Long = Clock.System.now().toEpochMilliseconds()
 
     @ColumnInfo(name = "synced")
-    val synced: Boolean = false
+    var synced: Boolean = false
 
     @ColumnInfo(name = "last_attempt")
-    val lastAttempt: Long? = null
+    var lastAttempt: Long? = null
 
     @ColumnInfo(name = "attempts")
-    val attempts: Int = 0
+    var attempts: Int = 0
 }

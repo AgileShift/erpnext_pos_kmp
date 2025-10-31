@@ -7,8 +7,8 @@ import androidx.room.PrimaryKey
 @Entity(tableName = "tabPaymentModes")
 data class PaymentModesEntity(
     @PrimaryKey(autoGenerate = false)
-    val name: String,
-    val default: Boolean,
+    var name: String,
+    var default: Boolean,
     @ColumnInfo("mode_of_payment")
-    val modeOfPayment: String,
+    var modeOfPayment: String,
 )
