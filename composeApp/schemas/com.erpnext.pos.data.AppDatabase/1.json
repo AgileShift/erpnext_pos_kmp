@@ -1,0 +1,1355 @@
+{
+  "formatVersion": 1,
+  "database": {
+    "version": 1,
+    "identityHash": "54e6c884b4a72e522fcb464202e0772d",
+    "entities": [
+      {
+        "tableName": "tabUser",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`name` TEXT NOT NULL, `firstName` TEXT NOT NULL, `lastName` TEXT, `username` TEXT, `email` TEXT NOT NULL, `language` TEXT, `enabled` INTEGER NOT NULL, PRIMARY KEY(`email`))",
+        "fields": [
+          {
+            "fieldPath": "name",
+            "columnName": "name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "firstName",
+            "columnName": "firstName",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastName",
+            "columnName": "lastName",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "username",
+            "columnName": "username",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "email",
+            "columnName": "email",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "language",
+            "columnName": "language",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "enabled",
+            "columnName": "enabled",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "email"
+          ]
+        }
+      },
+      {
+        "tableName": "tabItem",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`itemCode` TEXT NOT NULL, `actualQty` REAL NOT NULL, `name` TEXT NOT NULL, `description` TEXT NOT NULL, `barcode` TEXT NOT NULL, `image` TEXT, `itemGroup` TEXT NOT NULL, `brand` TEXT, `price` REAL NOT NULL, `discount` REAL NOT NULL, `isService` INTEGER NOT NULL, `isStocked` INTEGER NOT NULL, `stockUom` TEXT NOT NULL, `currency` TEXT NOT NULL, `last_synced_at` INTEGER, PRIMARY KEY(`itemCode`))",
+        "fields": [
+          {
+            "fieldPath": "itemCode",
+            "columnName": "itemCode",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "actualQty",
+            "columnName": "actualQty",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "name",
+            "columnName": "name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "description",
+            "columnName": "description",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "barcode",
+            "columnName": "barcode",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "image",
+            "columnName": "image",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "itemGroup",
+            "columnName": "itemGroup",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "brand",
+            "columnName": "brand",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "price",
+            "columnName": "price",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "discount",
+            "columnName": "discount",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "isService",
+            "columnName": "isService",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "isStocked",
+            "columnName": "isStocked",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "stockUom",
+            "columnName": "stockUom",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "currency",
+            "columnName": "currency",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastSyncedAt",
+            "columnName": "last_synced_at",
+            "affinity": "INTEGER"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "itemCode"
+          ]
+        }
+      },
+      {
+        "tableName": "tabPosProfile",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`profile_name` TEXT NOT NULL, `warehouse` TEXT NOT NULL, `route` TEXT, `country` TEXT NOT NULL, `company` TEXT NOT NULL, `currency` TEXT NOT NULL, `income_account` TEXT NOT NULL, `expense_account` TEXT NOT NULL, `branch` TEXT NOT NULL, `apply_discount_on` TEXT NOT NULL, `cost_center` TEXT NOT NULL, `selling_price_list` TEXT NOT NULL, `active` INTEGER, `user` TEXT, `last_synced_at` INTEGER, PRIMARY KEY(`profile_name`))",
+        "fields": [
+          {
+            "fieldPath": "profileName",
+            "columnName": "profile_name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "warehouse",
+            "columnName": "warehouse",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "route",
+            "columnName": "route",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "country",
+            "columnName": "country",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "company",
+            "columnName": "company",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "currency",
+            "columnName": "currency",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "incomeAccount",
+            "columnName": "income_account",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "expenseAccount",
+            "columnName": "expense_account",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "branch",
+            "columnName": "branch",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "applyDiscountOn",
+            "columnName": "apply_discount_on",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "costCenter",
+            "columnName": "cost_center",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sellingPriceList",
+            "columnName": "selling_price_list",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "active",
+            "columnName": "active",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "user",
+            "columnName": "user",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "lastSyncedAt",
+            "columnName": "last_synced_at",
+            "affinity": "INTEGER"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "profile_name"
+          ]
+        }
+      },
+      {
+        "tableName": "tabPaymentModes",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`name` TEXT NOT NULL, `default` INTEGER NOT NULL, `mode_of_payment` TEXT NOT NULL, PRIMARY KEY(`name`))",
+        "fields": [
+          {
+            "fieldPath": "name",
+            "columnName": "name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "default",
+            "columnName": "default",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "modeOfPayment",
+            "columnName": "mode_of_payment",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "name"
+          ]
+        }
+      },
+      {
+        "tableName": "tabSalesInvoicePayment",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `parent_invoice` TEXT NOT NULL, `mode_of_payment` TEXT NOT NULL, `amount` REAL NOT NULL, `payment_reference` TEXT, `payment_date` TEXT, `created_at` INTEGER NOT NULL, `last_synced_at` INTEGER, FOREIGN KEY(`parent_invoice`) REFERENCES `tabSalesInvoice`(`invoice_name`) ON UPDATE CASCADE ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "parentInvoice",
+            "columnName": "parent_invoice",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "modeOfPayment",
+            "columnName": "mode_of_payment",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "amount",
+            "columnName": "amount",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "paymentReference",
+            "columnName": "payment_reference",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "paymentDate",
+            "columnName": "payment_date",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "created_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastSyncedAt",
+            "columnName": "last_synced_at",
+            "affinity": "INTEGER"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_tabSalesInvoicePayment_parent_invoice",
+            "unique": false,
+            "columnNames": [
+              "parent_invoice"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_tabSalesInvoicePayment_parent_invoice` ON `${TABLE_NAME}` (`parent_invoice`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "tabSalesInvoice",
+            "onDelete": "CASCADE",
+            "onUpdate": "CASCADE",
+            "columns": [
+              "parent_invoice"
+            ],
+            "referencedColumns": [
+              "invoice_name"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "tabCashbox",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`localId` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `openingEntryId` TEXT, `closingEntryId` TEXT, `posProfile` TEXT NOT NULL, `company` TEXT NOT NULL, `periodStartDate` TEXT NOT NULL, `periodEndDate` TEXT, `user` TEXT NOT NULL, `status` INTEGER NOT NULL, `pendingSync` INTEGER NOT NULL)",
+        "fields": [
+          {
+            "fieldPath": "localId",
+            "columnName": "localId",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "openingEntryId",
+            "columnName": "openingEntryId",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "closingEntryId",
+            "columnName": "closingEntryId",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "posProfile",
+            "columnName": "posProfile",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "company",
+            "columnName": "company",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "periodStartDate",
+            "columnName": "periodStartDate",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "periodEndDate",
+            "columnName": "periodEndDate",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "user",
+            "columnName": "user",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "status",
+            "columnName": "status",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "pendingSync",
+            "columnName": "pendingSync",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "localId"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_tabCashbox_posProfile_user_openingEntryId_closingEntryId",
+            "unique": true,
+            "columnNames": [
+              "posProfile",
+              "user",
+              "openingEntryId",
+              "closingEntryId"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_tabCashbox_posProfile_user_openingEntryId_closingEntryId` ON `${TABLE_NAME}` (`posProfile`, `user`, `openingEntryId`, `closingEntryId`)"
+          }
+        ]
+      },
+      {
+        "tableName": "balance_details",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `cashbox_id` INTEGER NOT NULL, `pos_opening_entry` TEXT, `pos_closing_entry` TEXT, `mode_of_payment` TEXT NOT NULL, `opening_amount` REAL NOT NULL, `closing_amount` REAL, FOREIGN KEY(`cashbox_id`) REFERENCES `tabCashbox`(`localId`) ON UPDATE NO ACTION ON DELETE CASCADE , FOREIGN KEY(`pos_opening_entry`) REFERENCES `tab_pos_opening_entry`(`name`) ON UPDATE NO ACTION ON DELETE CASCADE , FOREIGN KEY(`pos_closing_entry`) REFERENCES `tab_pos_closing_entry`(`name`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "cashboxId",
+            "columnName": "cashbox_id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "posOpeningEntry",
+            "columnName": "pos_opening_entry",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "posClosingEntry",
+            "columnName": "pos_closing_entry",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "modeOfPayment",
+            "columnName": "mode_of_payment",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "openingAmount",
+            "columnName": "opening_amount",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "closingAmount",
+            "columnName": "closing_amount",
+            "affinity": "REAL"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_balance_details_cashbox_id",
+            "unique": false,
+            "columnNames": [
+              "cashbox_id"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_balance_details_cashbox_id` ON `${TABLE_NAME}` (`cashbox_id`)"
+          },
+          {
+            "name": "index_balance_details_pos_opening_entry",
+            "unique": false,
+            "columnNames": [
+              "pos_opening_entry"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_balance_details_pos_opening_entry` ON `${TABLE_NAME}` (`pos_opening_entry`)"
+          },
+          {
+            "name": "index_balance_details_pos_closing_entry",
+            "unique": false,
+            "columnNames": [
+              "pos_closing_entry"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_balance_details_pos_closing_entry` ON `${TABLE_NAME}` (`pos_closing_entry`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "tabCashbox",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "cashbox_id"
+            ],
+            "referencedColumns": [
+              "localId"
+            ]
+          },
+          {
+            "table": "tab_pos_opening_entry",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "pos_opening_entry"
+            ],
+            "referencedColumns": [
+              "name"
+            ]
+          },
+          {
+            "table": "tab_pos_closing_entry",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "pos_closing_entry"
+            ],
+            "referencedColumns": [
+              "name"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "customers",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `customerName` TEXT NOT NULL, `territory` TEXT, `email` TEXT, `mobileNo` TEXT, `customerType` TEXT NOT NULL, `creditLimit` REAL, `currentBalance` REAL, `totalPendingAmount` REAL, `pendingInvoicesCount` INTEGER, `availableCredit` REAL, `address` TEXT, `last_synced_at` INTEGER, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "name",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "customerName",
+            "columnName": "customerName",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "territory",
+            "columnName": "territory",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "email",
+            "columnName": "email",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "mobileNo",
+            "columnName": "mobileNo",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "customerType",
+            "columnName": "customerType",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "creditLimit",
+            "columnName": "creditLimit",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "currentBalance",
+            "columnName": "currentBalance",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "totalPendingAmount",
+            "columnName": "totalPendingAmount",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "pendingInvoicesCount",
+            "columnName": "pendingInvoicesCount",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "availableCredit",
+            "columnName": "availableCredit",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "address",
+            "columnName": "address",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "lastSyncedAt",
+            "columnName": "last_synced_at",
+            "affinity": "INTEGER"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        }
+      },
+      {
+        "tableName": "tabCategory",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`name` TEXT NOT NULL, PRIMARY KEY(`name`))",
+        "fields": [
+          {
+            "fieldPath": "name",
+            "columnName": "name",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "name"
+          ]
+        }
+      },
+      {
+        "tableName": "tabSalesInvoice",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `profile_id` TEXT, `invoice_name` TEXT, `reference_no` TEXT, `pos_profile` TEXT, `route` TEXT, `customer` TEXT NOT NULL, `customer_name` TEXT, `customerPhone` TEXT, `company` TEXT NOT NULL, `branch` TEXT, `warehouse` TEXT, `currency` TEXT NOT NULL, `posting_date` TEXT NOT NULL, `due_date` TEXT, `posting_time` TEXT, `net_total` REAL NOT NULL, `tax_total` REAL NOT NULL, `discount_amount` REAL NOT NULL, `grand_total` REAL NOT NULL, `paid_amount` REAL NOT NULL, `outstanding_amount` REAL NOT NULL, `income_account` TEXT, `expense_account` TEXT, `cost_center` TEXT, `price_list` TEXT, `status` TEXT NOT NULL, `sync_status` TEXT NOT NULL, `docstatus` INTEGER NOT NULL, `is_return` INTEGER NOT NULL, `mode_of_payment` TEXT, `created_by` TEXT, `modified_by` TEXT, `created_at` INTEGER NOT NULL, `modified_at` INTEGER NOT NULL, `remarks` TEXT, `is_pos` INTEGER NOT NULL, `last_synced_at` INTEGER, FOREIGN KEY(`profile_id`) REFERENCES `tabPosProfile`(`profile_name`) ON UPDATE CASCADE ON DELETE SET NULL )",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "profileId",
+            "columnName": "profile_id",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "invoiceName",
+            "columnName": "invoice_name",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "referenceNo",
+            "columnName": "reference_no",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "posProfile",
+            "columnName": "pos_profile",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "route",
+            "columnName": "route",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "customer",
+            "columnName": "customer",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "customerName",
+            "columnName": "customer_name",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "customerPhone",
+            "columnName": "customerPhone",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "company",
+            "columnName": "company",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "branch",
+            "columnName": "branch",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "warehouse",
+            "columnName": "warehouse",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "currency",
+            "columnName": "currency",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "postingDate",
+            "columnName": "posting_date",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "dueDate",
+            "columnName": "due_date",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "postingTime",
+            "columnName": "posting_time",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "netTotal",
+            "columnName": "net_total",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "taxTotal",
+            "columnName": "tax_total",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "discountAmount",
+            "columnName": "discount_amount",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "grandTotal",
+            "columnName": "grand_total",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "paidAmount",
+            "columnName": "paid_amount",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "outstandingAmount",
+            "columnName": "outstanding_amount",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "incomeAccount",
+            "columnName": "income_account",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "expenseAccount",
+            "columnName": "expense_account",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "costCenter",
+            "columnName": "cost_center",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "priceList",
+            "columnName": "price_list",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "status",
+            "columnName": "status",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "syncStatus",
+            "columnName": "sync_status",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "docstatus",
+            "columnName": "docstatus",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "isReturn",
+            "columnName": "is_return",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "modeOfPayment",
+            "columnName": "mode_of_payment",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "createdBy",
+            "columnName": "created_by",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "modifiedBy",
+            "columnName": "modified_by",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "created_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "modifiedAt",
+            "columnName": "modified_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "remarks",
+            "columnName": "remarks",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "isPos",
+            "columnName": "is_pos",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastSyncedAt",
+            "columnName": "last_synced_at",
+            "affinity": "INTEGER"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_tabSalesInvoice_invoice_name",
+            "unique": true,
+            "columnNames": [
+              "invoice_name"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_tabSalesInvoice_invoice_name` ON `${TABLE_NAME}` (`invoice_name`)"
+          },
+          {
+            "name": "index_tabSalesInvoice_profile_id",
+            "unique": false,
+            "columnNames": [
+              "profile_id"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_tabSalesInvoice_profile_id` ON `${TABLE_NAME}` (`profile_id`)"
+          },
+          {
+            "name": "index_tabSalesInvoice_customer",
+            "unique": false,
+            "columnNames": [
+              "customer"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_tabSalesInvoice_customer` ON `${TABLE_NAME}` (`customer`)"
+          },
+          {
+            "name": "index_tabSalesInvoice_status",
+            "unique": false,
+            "columnNames": [
+              "status"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_tabSalesInvoice_status` ON `${TABLE_NAME}` (`status`)"
+          },
+          {
+            "name": "index_tabSalesInvoice_posting_date",
+            "unique": false,
+            "columnNames": [
+              "posting_date"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_tabSalesInvoice_posting_date` ON `${TABLE_NAME}` (`posting_date`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "tabPosProfile",
+            "onDelete": "SET NULL",
+            "onUpdate": "CASCADE",
+            "columns": [
+              "profile_id"
+            ],
+            "referencedColumns": [
+              "profile_name"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "tabSalesInvoiceItem",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `parent_invoice` TEXT NOT NULL, `item_code` TEXT NOT NULL, `item_name` TEXT, `description` TEXT, `uom` TEXT, `qty` REAL NOT NULL, `rate` REAL NOT NULL, `amount` REAL NOT NULL, `price_list_rate` REAL NOT NULL, `discount_percentage` REAL NOT NULL, `discount_amount` REAL NOT NULL, `net_rate` REAL NOT NULL, `net_amount` REAL NOT NULL, `tax_rate` REAL NOT NULL, `tax_amount` REAL NOT NULL, `warehouse` TEXT, `batch_no` TEXT, `serial_no` TEXT, `income_account` TEXT, `cost_center` TEXT, `is_return` INTEGER NOT NULL, `created_at` INTEGER NOT NULL, `modified_at` INTEGER NOT NULL, `last_synced_at` INTEGER, FOREIGN KEY(`parent_invoice`) REFERENCES `tabSalesInvoice`(`invoice_name`) ON UPDATE CASCADE ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "parentInvoice",
+            "columnName": "parent_invoice",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "itemCode",
+            "columnName": "item_code",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "itemName",
+            "columnName": "item_name",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "description",
+            "columnName": "description",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "uom",
+            "columnName": "uom",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "qty",
+            "columnName": "qty",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "rate",
+            "columnName": "rate",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "amount",
+            "columnName": "amount",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "priceListRate",
+            "columnName": "price_list_rate",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "discountPercentage",
+            "columnName": "discount_percentage",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "discountAmount",
+            "columnName": "discount_amount",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "netRate",
+            "columnName": "net_rate",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "netAmount",
+            "columnName": "net_amount",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "taxRate",
+            "columnName": "tax_rate",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "taxAmount",
+            "columnName": "tax_amount",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "warehouse",
+            "columnName": "warehouse",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "batchNo",
+            "columnName": "batch_no",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "serialNo",
+            "columnName": "serial_no",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "incomeAccount",
+            "columnName": "income_account",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "costCenter",
+            "columnName": "cost_center",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "isReturn",
+            "columnName": "is_return",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "created_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "modifiedAt",
+            "columnName": "modified_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastSyncedAt",
+            "columnName": "last_synced_at",
+            "affinity": "INTEGER"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_tabSalesInvoiceItem_parent_invoice",
+            "unique": false,
+            "columnNames": [
+              "parent_invoice"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_tabSalesInvoiceItem_parent_invoice` ON `${TABLE_NAME}` (`parent_invoice`)"
+          },
+          {
+            "name": "index_tabSalesInvoiceItem_item_code",
+            "unique": false,
+            "columnNames": [
+              "item_code"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_tabSalesInvoiceItem_item_code` ON `${TABLE_NAME}` (`item_code`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "tabSalesInvoice",
+            "onDelete": "CASCADE",
+            "onUpdate": "CASCADE",
+            "columns": [
+              "parent_invoice"
+            ],
+            "referencedColumns": [
+              "invoice_name"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "tab_pos_opening_entry",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`name` TEXT NOT NULL, `pos_profile` TEXT NOT NULL, `company` TEXT NOT NULL, `period_start_date` TEXT NOT NULL, `posting_date` TEXT NOT NULL, `posting_time` TEXT NOT NULL, `user` TEXT, `pending_sync` INTEGER NOT NULL, PRIMARY KEY(`name`))",
+        "fields": [
+          {
+            "fieldPath": "name",
+            "columnName": "name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "posProfile",
+            "columnName": "pos_profile",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "company",
+            "columnName": "company",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "periodStartDate",
+            "columnName": "period_start_date",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "postingDate",
+            "columnName": "posting_date",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "postingTime",
+            "columnName": "posting_time",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "user",
+            "columnName": "user",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "pendingSync",
+            "columnName": "pending_sync",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "name"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_tab_pos_opening_entry_pos_profile_user",
+            "unique": false,
+            "columnNames": [
+              "pos_profile",
+              "user"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_tab_pos_opening_entry_pos_profile_user` ON `${TABLE_NAME}` (`pos_profile`, `user`)"
+          }
+        ]
+      },
+      {
+        "tableName": "tab_pos_closing_entry",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`name` TEXT NOT NULL, `pos_profile` TEXT NOT NULL, `pos_opening_entry` TEXT NOT NULL, `user` TEXT NOT NULL, `period_start_date` TEXT NOT NULL, `period_end_date` TEXT NOT NULL, `closing_amount` REAL NOT NULL, `pending_sync` INTEGER NOT NULL, PRIMARY KEY(`name`), FOREIGN KEY(`pos_opening_entry`) REFERENCES `tab_pos_opening_entry`(`name`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "name",
+            "columnName": "name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "posProfile",
+            "columnName": "pos_profile",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "posOpeningEntry",
+            "columnName": "pos_opening_entry",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "user",
+            "columnName": "user",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "periodStartDate",
+            "columnName": "period_start_date",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "periodEndDate",
+            "columnName": "period_end_date",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "closingAmount",
+            "columnName": "closing_amount",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "pendingSync",
+            "columnName": "pending_sync",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "name"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_tab_pos_closing_entry_pos_opening_entry",
+            "unique": false,
+            "columnNames": [
+              "pos_opening_entry"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_tab_pos_closing_entry_pos_opening_entry` ON `${TABLE_NAME}` (`pos_opening_entry`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "tab_pos_opening_entry",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "pos_opening_entry"
+            ],
+            "referencedColumns": [
+              "name"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "tax_details",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `pos_closing_entry` TEXT NOT NULL, `account_head` TEXT NOT NULL, `taxAmount` REAL NOT NULL, `rate` REAL NOT NULL, FOREIGN KEY(`pos_closing_entry`) REFERENCES `tab_pos_closing_entry`(`name`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "posClosingEntry",
+            "columnName": "pos_closing_entry",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "accountHead",
+            "columnName": "account_head",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "taxAmount",
+            "columnName": "taxAmount",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "rate",
+            "columnName": "rate",
+            "affinity": "REAL",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_tax_details_pos_closing_entry",
+            "unique": false,
+            "columnNames": [
+              "pos_closing_entry"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_tax_details_pos_closing_entry` ON `${TABLE_NAME}` (`pos_closing_entry`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "tab_pos_closing_entry",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "pos_closing_entry"
+            ],
+            "referencedColumns": [
+              "name"
+            ]
+          }
+        ]
+      }
+    ],
+    "setupQueries": [
+      "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '54e6c884b4a72e522fcb464202e0772d')"
+    ]
+  }
+}

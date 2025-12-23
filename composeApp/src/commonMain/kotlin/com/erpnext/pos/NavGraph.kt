@@ -1,0 +1,56 @@
+package com.erpnext.pos
+
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.navigation.NavHostController
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import com.erpnext.pos.navigation.NavRoute
+import com.erpnext.pos.navigation.NavigationManager
+import com.erpnext.pos.views.billing.BillingRoute
+import com.erpnext.pos.views.customer.CustomerRoute
+import com.erpnext.pos.views.home.HomeRoute
+import com.erpnext.pos.views.inventory.InventoryRoute
+import com.erpnext.pos.views.invoice.InvoiceRoute
+import com.erpnext.pos.views.login.LoginRoute
+import com.erpnext.pos.views.settings.SettingsRoute
+import com.erpnext.pos.views.splash.SplashRoute
+import org.koin.compose.koinInject
+
+@ExperimentalMaterial3Api
+object NavGraph {
+
+    @Composable
+    fun Setup(
+        navController: NavHostController,
+        isExpandedScreen: Boolean
+    ) {
+        NavHost(navController, startDestination = NavRoute.Splash.path) {
+            composable(NavRoute.Splash.path) {
+                SplashRoute()
+            }
+            composable(NavRoute.Login.path) {
+                LoginRoute()
+            }
+            composable(NavRoute.Home.path) {
+                HomeRoute()
+            }
+            composable(NavRoute.Inventory.path) {
+                InventoryRoute()
+            }
+            composable(NavRoute.Billing.path) {
+                BillingRoute()
+            }
+            composable(NavRoute.Customer.path) {
+                CustomerRoute()
+            }
+            composable(NavRoute.Credits.path) {
+                InvoiceRoute()
+            }
+            composable(NavRoute.Settings.path) {
+                SettingsRoute()
+            }
+        }
+    }
+}

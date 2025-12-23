@@ -1,0 +1,25 @@
+package com.erpnext.pos.navigation
+
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Inventory2
+import androidx.compose.material.icons.filled.People
+import androidx.compose.material.icons.filled.PointOfSale
+import androidx.compose.material.icons.filled.Receipt
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.ui.graphics.vector.ImageVector
+
+sealed class NavRoute(
+    val path: String,
+    val title: String,
+    val icon: ImageVector
+) {
+    object Splash : NavRoute("splash", "Splash", Icons.Filled.Home)
+    object Login : NavRoute("login", "Inicio de sesion", Icons.Filled.Home)
+    object Home : NavRoute("home", "Inicio", Icons.Filled.Home)
+    object Inventory : NavRoute("inventory", "Inventario", Icons.Filled.Inventory2)
+    object Billing : NavRoute("sale", "Ventas", Icons.Filled.PointOfSale)
+    object Customer : NavRoute("customer", "Clientes", Icons.Filled.People)
+    object Credits : NavRoute("credits", "Créditos", Icons.Filled.Receipt)
+    object Settings : NavRoute("settings", "Configuración", Icons.Filled.Settings)
+}
