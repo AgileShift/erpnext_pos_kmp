@@ -16,6 +16,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.paging.PagingData
 import androidx.paging.compose.collectAsLazyPagingItems
+import com.erpnext.pos.domain.models.CategoryBO
+import com.erpnext.pos.domain.models.ItemBO
 import com.erpnext.pos.views.inventory.components.*
 import dev.materii.pullrefresh.PullRefreshIndicator
 import dev.materii.pullrefresh.pullRefresh
@@ -185,8 +187,30 @@ private fun Int?.orZero() = this ?: 0
 fun InventoryScreenPreview() {
     InventoryScreen(
         state = InventoryState.Success(
-            items = flowOf(PagingData.empty()),
-            categories = emptyList()
+            items = flowOf(
+                PagingData.from(
+                    listOf(
+                        ItemBO(
+                            "Producto de prueba",
+                            "Producto de prueba con una descripcion",
+                            "Pollo Frito congelado",
+                            "",
+                            image = null,
+                            currency = "NIO",
+                            itemGroup = "POLLO",
+                            brand = "TIPTOP",
+                            price = 1000.0,
+                            actualQty = 10.0,
+                            discount = 0.0,
+                            isService = false,
+                            isStocked = true,
+                            uom = "Unidad",
+                            lastSyncedAt = null,
+                        )
+                    )
+                )
+            ),
+            categories = listOf<CategoryBO>(CategoryBO("Carne"), CategoryBO("Embutidos"), CategoryBO("Pollo"))
         ),
         actions = InventoryAction(),
     )

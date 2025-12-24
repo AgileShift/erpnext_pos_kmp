@@ -62,6 +62,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun posClosingDao(): POSClosingEntryDao
 }
 
+@Suppress("KotlinNoActualForExpect")
 expect object AppDatabaseConstructor : RoomDatabaseConstructor<AppDatabase> {
     override fun initialize(): AppDatabase
 }

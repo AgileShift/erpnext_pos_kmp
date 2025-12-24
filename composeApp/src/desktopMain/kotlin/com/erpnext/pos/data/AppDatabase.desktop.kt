@@ -1,18 +1,18 @@
 package com.erpnext.pos.data
 
-import android.content.Context
 import androidx.room.Room
 import kotlinx.coroutines.Dispatchers
+import java.io.File
 import androidx.sqlite.driver.bundled.BundledSQLiteDriver
 
-actual class DatabaseBuilder(private val context: Context) {
-    actual fun build(): AppDatabase =
-        Room.databaseBuilder(
-            context,
-            AppDatabase::class.java,
-            "app_database",
+actual class DatabaseBuilder {
+    actual fun build(): AppDatabase {
+        val dbPath = File(System.getProperty("java.io.tmpdir"), "erpnext_pos.db")
+        return Room.databaseBuilder<AppDatabase>(
+            name = dbPath.absolutePath
         ).setDriver(BundledSQLiteDriver())
             .setQueryCoroutineContext(Dispatchers.IO)
             .fallbackToDestructiveMigration(false)
             .build()
+    }
 }
