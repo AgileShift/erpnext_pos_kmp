@@ -179,4 +179,44 @@ interface QuotationDao {
         lastSyncedAt: Long?,
         updatedAt: Long
     )
+
+    @Query(
+        """
+      UPDATE quotations
+      SET partyName = :newCustomerId,
+          customerName = :newCustomerName,
+          updated_at = :updatedAt
+      WHERE instanceId = :instanceId
+        AND companyId = :companyId
+        AND partyName = :oldCustomerId
+    """
+    )
+    suspend fun replaceCustomerReference(
+        instanceId: String,
+        companyId: String,
+        oldCustomerId: String,
+        newCustomerId: String,
+        newCustomerName: String,
+        updatedAt: Long
+    )
+
+    @Query(
+        """
+      UPDATE quotation_customer_links
+      SET partyName = :newCustomerId,
+          customerName = :newCustomerName,
+          updated_at = :updatedAt
+      WHERE instanceId = :instanceId
+        AND companyId = :companyId
+        AND partyName = :oldCustomerId
+    """
+    )
+    suspend fun replaceCustomerLinkReference(
+        instanceId: String,
+        companyId: String,
+        oldCustomerId: String,
+        newCustomerId: String,
+        newCustomerName: String,
+        updatedAt: Long
+    )
 }

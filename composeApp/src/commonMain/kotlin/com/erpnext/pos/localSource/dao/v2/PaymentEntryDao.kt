@@ -131,4 +131,23 @@ interface PaymentEntryDao {
         lastSyncedAt: Long?,
         updatedAt: Long
     )
+
+    @Query(
+        """
+      UPDATE payment_entries
+      SET partyId = :newCustomerId,
+          updated_at = :updatedAt
+      WHERE instanceId = :instanceId
+        AND companyId = :companyId
+        AND partyType = 'Customer'
+        AND partyId = :oldCustomerId
+    """
+    )
+    suspend fun replaceCustomerReference(
+        instanceId: String,
+        companyId: String,
+        oldCustomerId: String,
+        newCustomerId: String,
+        updatedAt: Long
+    )
 }

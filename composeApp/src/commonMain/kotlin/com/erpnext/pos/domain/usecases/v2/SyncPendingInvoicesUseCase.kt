@@ -5,6 +5,7 @@ import com.erpnext.pos.data.repositories.v2.SyncRepository
 import com.erpnext.pos.domain.policy.BackoffPolicy
 import com.erpnext.pos.domain.policy.CatalogInvalidationPolicy
 import com.erpnext.pos.domain.usecases.UseCase
+import com.erpnext.pos.domain.sync.SyncDocType
 import com.erpnext.pos.localSource.dao.v2.SalesInvoiceDao
 import kotlinx.coroutines.delay
 import kotlin.random.Random
@@ -27,7 +28,8 @@ class SyncPendingInvoicesUseCase(
 ) : UseCase<SyncPendingInvoicesInput, Unit>() {
 
     override suspend fun useCaseFunction(input: SyncPendingInvoicesInput) {
-        syncRepository.setInProgress(input.instanceId, input.companyId, true)
+        val docType = SyncDocType.SALES_INVOICE.value
+        syncRepository.setInProgress(input.instanceId, input.companyId, docType, true)
 
         try {
             val pending =
@@ -70,21 +72,25 @@ class SyncPendingInvoicesUseCase(
                     syncRepository.refreshCounters(
                         input.instanceId,
                         input.companyId,
+                        docType,
                         lastFullSyncAt = Clock.System.now().epochSeconds
                     )
                 }
             }
 
             syncRepository.refreshCounters(
-                input.instanceId, input.companyId, lastFullSyncAt = Clock.System.now().epochSeconds
+                input.instanceId,
+                input.companyId,
+                docType,
+                lastFullSyncAt = Clock.System.now().epochSeconds
             )
         } finally {
-            syncRepository.setInProgress(input.instanceId, input.companyId, false)
+            syncRepository.setInProgress(input.instanceId, input.companyId, docType, false)
             syncRepository.refreshCounters(
                 input.instanceId,
-                input.companyId
+                input.companyId,
+                docType
             ) // asegura contadores coherentes
         }
     }
 }
-

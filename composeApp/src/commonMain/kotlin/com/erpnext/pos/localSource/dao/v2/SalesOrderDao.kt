@@ -131,4 +131,24 @@ interface SalesOrderDao {
         lastSyncedAt: Long?,
         updatedAt: Long
     )
+
+    @Query(
+        """
+      UPDATE sales_orders
+      SET customerId = :newCustomerId,
+          customerName = :newCustomerName,
+          updated_at = :updatedAt
+      WHERE instanceId = :instanceId
+        AND companyId = :companyId
+        AND customerId = :oldCustomerId
+    """
+    )
+    suspend fun replaceCustomerReference(
+        instanceId: String,
+        companyId: String,
+        oldCustomerId: String,
+        newCustomerId: String,
+        newCustomerName: String,
+        updatedAt: Long
+    )
 }
