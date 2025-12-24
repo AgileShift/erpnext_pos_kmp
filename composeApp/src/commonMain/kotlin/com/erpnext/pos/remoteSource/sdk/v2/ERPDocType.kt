@@ -222,7 +222,7 @@ val fields: List<DocTypeFields> = listOf(
             "party",
             "paid_amount",
             "received_amount",
-            "references"
+            "unallocated_amount"
         )
     ),
     DocTypeFields(
@@ -235,8 +235,7 @@ val fields: List<DocTypeFields> = listOf(
             "customer_name",
             "territory",
             "status",
-            "set_warehouse",
-            "items"
+            "set_warehouse"
         )
     ),
     DocTypeFields(
