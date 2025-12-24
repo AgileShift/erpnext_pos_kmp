@@ -43,21 +43,18 @@ interface DeliveryNoteDao {
     ): DeliveryNoteEntity?
 
     @Transaction
-    @Query(
-        """
-        SELECT * FROM delivery_notes
-        WHERE instanceId = :instanceId
-          AND companyId = :companyId
-          AND deliveryNoteId = :deliveryNoteId
-          AND is_deleted = 0
-        LIMIT 1
-    """
-    )
     suspend fun getDeliveryNoteWithDetails(
         instanceId: String,
         companyId: String,
         deliveryNoteId: String
-    ): DeliveryNoteWithItemsAndLinks?
+    ): DeliveryNoteWithItemsAndLinks? {
+        val note = getDeliveryNote(instanceId, companyId, deliveryNoteId) ?: return null
+        return DeliveryNoteWithItemsAndLinks(
+            deliveryNote = note,
+            items = getDeliveryNoteItems(instanceId, companyId, deliveryNoteId),
+            links = getDeliveryNoteLinks(instanceId, companyId, deliveryNoteId)
+        )
+    }
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertDeliveryNote(note: DeliveryNoteEntity)
@@ -84,6 +81,47 @@ interface DeliveryNoteDao {
     }
 
     @Transaction
+    suspend fun getPendingDeliveryNotesWithDetails(
+        instanceId: String,
+        companyId: String
+    ): List<DeliveryNoteWithItemsAndLinks> {
+        return getPendingDeliveryNotes(instanceId, companyId).map { note ->
+            DeliveryNoteWithItemsAndLinks(
+                deliveryNote = note,
+                items = getDeliveryNoteItems(instanceId, companyId, note.deliveryNoteId),
+                links = getDeliveryNoteLinks(instanceId, companyId, note.deliveryNoteId)
+            )
+        }
+    }
+
+    @Query(
+        """
+        SELECT * FROM delivery_note_items
+        WHERE instanceId = :instanceId
+          AND companyId = :companyId
+          AND deliveryNoteId = :deliveryNoteId
+    """
+    )
+    suspend fun getDeliveryNoteItems(
+        instanceId: String,
+        companyId: String,
+        deliveryNoteId: String
+    ): List<DeliveryNoteItemEntity>
+
+    @Query(
+        """
+        SELECT * FROM delivery_note_links
+        WHERE instanceId = :instanceId
+          AND companyId = :companyId
+          AND deliveryNoteId = :deliveryNoteId
+    """
+    )
+    suspend fun getDeliveryNoteLinks(
+        instanceId: String,
+        companyId: String,
+        deliveryNoteId: String
+    ): List<DeliveryNoteLinkEntity>
+
     @Query(
         """
         SELECT * FROM delivery_notes
@@ -93,10 +131,10 @@ interface DeliveryNoteDao {
           AND syncStatus = 'PENDING'
     """
     )
-    suspend fun getPendingDeliveryNotesWithDetails(
+    suspend fun getPendingDeliveryNotes(
         instanceId: String,
         companyId: String
-    ): List<DeliveryNoteWithItemsAndLinks>
+    ): List<DeliveryNoteEntity>
 
     @Query(
         """

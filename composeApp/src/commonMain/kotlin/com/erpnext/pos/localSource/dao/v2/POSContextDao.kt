@@ -76,6 +76,18 @@ interface POSContextDao {
     ): TerritoryEntity?
 
     @Transaction
+    suspend fun getPosProfileWithPayments(
+        instanceId: String,
+        companyId: String,
+        posProfileId: String
+    ): POSProfileWithPayments? {
+        val profile = getPosProfile(instanceId, companyId, posProfileId) ?: return null
+        return POSProfileWithPayments(
+            profile = profile,
+            paymentMethods = getPaymentMethods(instanceId, companyId, posProfileId)
+        )
+    }
+
     @Query(
         """
         SELECT *
@@ -84,9 +96,24 @@ interface POSContextDao {
         LIMIT 1
     """
     )
-    suspend fun getPosProfileWithPayments(
+    suspend fun getPosProfile(
         instanceId: String,
         companyId: String,
         posProfileId: String
-    ): POSProfileWithPayments?
+    ): com.erpnext.pos.localSource.entities.v2.POSProfileEntity?
+
+    @Query(
+        """
+        SELECT *
+        FROM pos_payment_methods
+        WHERE instanceId = :instanceId
+          AND companyId = :companyId
+          AND posProfileId = :posProfileId
+    """
+    )
+    suspend fun getPaymentMethods(
+        instanceId: String,
+        companyId: String,
+        posProfileId: String
+    ): List<com.erpnext.pos.localSource.entities.v2.POSPaymentMethodEntity>
 }

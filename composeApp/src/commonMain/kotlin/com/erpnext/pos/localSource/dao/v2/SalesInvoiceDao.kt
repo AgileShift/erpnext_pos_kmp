@@ -70,19 +70,18 @@ interface SalesInvoiceDao {
     }
 
     @Transaction
-    @Query(
-        """
-        SELECT * FROM sales_invoices
-        WHERE instanceId = :instanceId
-          AND companyId = :companyId
-          AND is_deleted = 0
-          AND syncStatus = 'PENDING'
-    """
-    )
     suspend fun getPendingInvoicesWithDetails(
         instanceId: String,
         companyId: String
-    ): List<SalesInvoiceWithItemsAndPayments>
+    ): List<SalesInvoiceWithItemsAndPayments> {
+        return getPendingInvoices(instanceId, companyId).map { invoice ->
+            SalesInvoiceWithItemsAndPayments(
+                invoice = invoice,
+                items = getInvoiceItems(instanceId, companyId, invoice.invoiceId),
+                payments = getInvoicePayments(instanceId, companyId, invoice.invoiceId)
+            )
+        }
+    }
 
     @Query(
         """
@@ -111,25 +110,20 @@ interface SalesInvoiceDao {
     }
 
     @Transaction
-    @Query(
-        """
-    SELECT * FROM sales_invoices
-    WHERE instanceId = :instanceId
-      AND companyId = :companyId
-      AND territoryId = :territoryId
-      AND is_deleted = 0
-      AND (
-            syncStatus = 'PENDING'
-            OR postingDate >= :fromDate
-          )
-      """
-    )
     suspend fun getInvoicesForRoute(
         instanceId: String,
         companyId: String,
         territoryId: String,
         fromDate: String
-    ): List<SalesInvoiceWithItemsAndPayments>
+    ): List<SalesInvoiceWithItemsAndPayments> {
+        return getInvoiceHeadersForRoute(instanceId, companyId, territoryId, fromDate).map { invoice ->
+            SalesInvoiceWithItemsAndPayments(
+                invoice = invoice,
+                items = getInvoiceItems(instanceId, companyId, invoice.invoiceId),
+                payments = getInvoicePayments(instanceId, companyId, invoice.invoiceId)
+            )
+        }
+    }
 
     @Query(
         """
@@ -218,21 +212,18 @@ interface SalesInvoiceDao {
 
     // ------------- OUTBOX SYNC -------------
     @Transaction
-    @Query(
-        """
-        SELECT *
-        FROM sales_invoices
-        WHERE instanceId = :instanceId 
-            AND companyId = :companyId
-            AND (syncStatus IS NULL OR syncStatus = 'SYNCED')
-            AND is_deleted = 0
-        ORDER BY created_at ASC
-    """
-    )
     suspend fun getPendingOutbox(
         instanceId: String,
         companyId: String
-    ): List<SalesInvoiceWithItemsAndPayments>
+    ): List<SalesInvoiceWithItemsAndPayments> {
+        return getPendingOutboxHeaders(instanceId, companyId).map { invoice ->
+            SalesInvoiceWithItemsAndPayments(
+                invoice = invoice,
+                items = getInvoiceItems(instanceId, companyId, invoice.invoiceId),
+                payments = getInvoicePayments(instanceId, companyId, invoice.invoiceId)
+            )
+        }
+    }
 
     @Query(
         """
@@ -274,4 +265,68 @@ interface SalesInvoiceDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertInvoices(list: List<SalesInvoiceEntity>)
+
+    @Query(
+        """
+        SELECT * FROM sales_invoice_items
+        WHERE instanceId = :instanceId
+          AND companyId = :companyId
+          AND invoiceId = :invoiceId
+    """
+    )
+    suspend fun getInvoiceItems(
+        instanceId: String,
+        companyId: String,
+        invoiceId: String
+    ): List<SalesInvoiceItemEntity>
+
+    @Query(
+        """
+        SELECT * FROM sales_invoice_payments
+        WHERE instanceId = :instanceId
+          AND companyId = :companyId
+          AND invoiceId = :invoiceId
+    """
+    )
+    suspend fun getInvoicePayments(
+        instanceId: String,
+        companyId: String,
+        invoiceId: String
+    ): List<SalesInvoicePaymentEntity>
+
+    @Query(
+        """
+        SELECT * FROM sales_invoices
+        WHERE instanceId = :instanceId
+          AND companyId = :companyId
+          AND territoryId = :territoryId
+          AND is_deleted = 0
+          AND (
+                syncStatus = 'PENDING'
+                OR postingDate >= :fromDate
+              )
+    """
+    )
+    suspend fun getInvoiceHeadersForRoute(
+        instanceId: String,
+        companyId: String,
+        territoryId: String,
+        fromDate: String
+    ): List<SalesInvoiceEntity>
+
+    @Query(
+        """
+        SELECT *
+        FROM sales_invoices
+        WHERE instanceId = :instanceId 
+            AND companyId = :companyId
+            AND (syncStatus IS NULL OR syncStatus = 'SYNCED')
+            AND is_deleted = 0
+        ORDER BY created_at ASC
+    """
+    )
+    suspend fun getPendingOutboxHeaders(
+        instanceId: String,
+        companyId: String
+    ): List<SalesInvoiceEntity>
 }

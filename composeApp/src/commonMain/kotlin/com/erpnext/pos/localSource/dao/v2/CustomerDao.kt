@@ -31,36 +31,33 @@ interface CustomerDao {
     ): List<CustomerWithContactsAndAddresses>
 
     @Transaction
-    @Query(
-        """
-        SELECT *
-        FROM customersv2
-        WHERE instanceId = :instanceId AND companyId = :companyId
-          AND territoryId = :territoryId
-          AND disabled = 0
-    """
-    )
     suspend fun getCustomersWithContactsAndAddressesForTerritory(
         instanceId: String,
         companyId: String,
         territoryId: String
-    ): List<CustomerWithContactsAndAddresses>
+    ): List<CustomerWithContactsAndAddresses> {
+        return getCustomersForTerritory(instanceId, companyId, territoryId).map { customer ->
+            CustomerWithContactsAndAddresses(
+                customer = customer,
+                contacts = getContactsForCustomer(instanceId, companyId, customer.customerId),
+                addresses = getAddressesForCustomer(instanceId, companyId, customer.customerId)
+            )
+        }
+    }
 
     @Transaction
-    @Query(
-        """
-        SELECT *
-        FROM customersv2
-        WHERE instanceId = :instanceId AND companyId = :companyId
-          AND customerId = :customerId
-        LIMIT 1
-    """
-    )
     suspend fun getCustomerWithContactsAndAddresses(
         instanceId: String,
         companyId: String,
         customerId: String
-    ): CustomerWithContactsAndAddresses?
+    ): CustomerWithContactsAndAddresses? {
+        val customer = getCustomer(instanceId, companyId, customerId) ?: return null
+        return CustomerWithContactsAndAddresses(
+            customer = customer,
+            contacts = getContactsForCustomer(instanceId, companyId, customerId),
+            addresses = getAddressesForCustomer(instanceId, companyId, customerId)
+        )
+    }
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertCustomer(customer: CustomerEntity)
@@ -87,6 +84,62 @@ interface CustomerDao {
     }
 
     @Transaction
+    suspend fun getPendingCustomersWithContactsAndAddresses(
+        instanceId: String,
+        companyId: String
+    ): List<CustomerWithContactsAndAddresses> {
+        return getPendingCustomers(instanceId, companyId).map { customer ->
+            CustomerWithContactsAndAddresses(
+                customer = customer,
+                contacts = getContactsForCustomer(instanceId, companyId, customer.customerId),
+                addresses = getAddressesForCustomer(instanceId, companyId, customer.customerId)
+            )
+        }
+    }
+
+    @Query(
+        """
+        SELECT *
+        FROM customersv2
+        WHERE instanceId = :instanceId AND companyId = :companyId
+          AND customerId = :customerId
+        LIMIT 1
+    """
+    )
+    suspend fun getCustomer(
+        instanceId: String,
+        companyId: String,
+        customerId: String
+    ): CustomerEntity?
+
+    @Query(
+        """
+        SELECT *
+        FROM customer_contact
+        WHERE instanceId = :instanceId AND companyId = :companyId
+          AND customerId = :customerId
+    """
+    )
+    suspend fun getContactsForCustomer(
+        instanceId: String,
+        companyId: String,
+        customerId: String
+    ): List<CustomerContactEntity>
+
+    @Query(
+        """
+        SELECT *
+        FROM customer_address
+        WHERE instanceId = :instanceId AND companyId = :companyId
+          AND customerId = :customerId
+    """
+    )
+    suspend fun getAddressesForCustomer(
+        instanceId: String,
+        companyId: String,
+        customerId: String
+    ): List<CustomerAddressEntity>
+
     @Query(
         """
         SELECT *
@@ -96,10 +149,10 @@ interface CustomerDao {
           AND is_deleted = 0
     """
     )
-    suspend fun getPendingCustomersWithContactsAndAddresses(
+    suspend fun getPendingCustomers(
         instanceId: String,
         companyId: String
-    ): List<CustomerWithContactsAndAddresses>
+    ): List<CustomerEntity>
 
     @Query(
         """
