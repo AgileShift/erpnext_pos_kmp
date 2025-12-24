@@ -15,7 +15,12 @@ enum class ERPDocType(val path: String) {
     Bin("Bin"),
     Customer("Customer"),
     CustomerContact("Contact"),
+    Quotation("Quotation"),
+    SalesOrder("Sales Order"),
     SalesInvoice("Sales Invoice"),
+    PaymentEntry("Payment Entry"),
+    DeliveryNote("Delivery Note"),
+    PricingRule("Pricing Rule"),
     PurchaseInvoice("Purchase Invoice"),
     StockEntry("Stock Entry"),
     POSProfile("POS Profile"),
@@ -162,9 +167,90 @@ val fields: List<DocTypeFields> = listOf(
             "pos_profile",
             "docstatus",
             "route",
+            "territory",
             "contact_display",
             "contact_mobile",
             "party_account_currency",
+        )
+    ),
+    DocTypeFields(
+        ERPDocType.Quotation,
+        listOf(
+            "name",
+            "transaction_date",
+            "valid_till",
+            "company",
+            "party_name",
+            "customer_name",
+            "territory",
+            "status",
+            "price_list_currency",
+            "selling_price_list",
+            "net_total",
+            "grand_total"
+        )
+    ),
+    DocTypeFields(
+        ERPDocType.SalesOrder,
+        listOf(
+            "name",
+            "transaction_date",
+            "delivery_date",
+            "company",
+            "customer",
+            "customer_name",
+            "territory",
+            "status",
+            "delivery_status",
+            "billing_status",
+            "price_list_currency",
+            "selling_price_list",
+            "net_total",
+            "grand_total"
+        )
+    ),
+    DocTypeFields(
+        ERPDocType.PaymentEntry,
+        listOf(
+            "name",
+            "posting_date",
+            "company",
+            "territory",
+            "payment_type",
+            "mode_of_payment",
+            "party_type",
+            "party",
+            "paid_amount",
+            "received_amount",
+            "references"
+        )
+    ),
+    DocTypeFields(
+        ERPDocType.DeliveryNote,
+        listOf(
+            "name",
+            "posting_date",
+            "company",
+            "customer",
+            "customer_name",
+            "territory",
+            "status",
+            "set_warehouse",
+            "items"
+        )
+    ),
+    DocTypeFields(
+        ERPDocType.PricingRule,
+        listOf(
+            "name",
+            "priority",
+            "condition",
+            "territory",
+            "for_price_list",
+            "other_item_code",
+            "other_item_group",
+            "valid_from",
+            "valid_upto"
         )
     ),
     DocTypeFields(
