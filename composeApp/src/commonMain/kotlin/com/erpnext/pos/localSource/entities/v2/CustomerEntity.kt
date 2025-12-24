@@ -2,6 +2,7 @@ package com.erpnext.pos.localSource.entities.v2
 
 import androidx.room.Entity
 import androidx.room.Index
+import com.erpnext.pos.localSource.dao.SyncStatus
 
 @Entity(
     tableName = "customersv2",
@@ -30,5 +31,6 @@ data class CustomerEntity(
     var outstandingAmount: Double? = 0.0,
     var overdueAmount: Double? = 0.0,
     var unpaidInvoiceCount: Int? = 0,
-    var lastPaidDate: String? = null
+    var lastPaidDate: String? = null,
+    var syncStatus: SyncStatus? = null
 ) : BaseEntity()

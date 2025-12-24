@@ -1,9 +1,12 @@
 package com.erpnext.pos.localSource.dao.v2
 
 import androidx.room.Dao
+import androidx.room.Insert
+import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Transaction
 import com.erpnext.pos.localSource.entities.v2.PaymentEntryEntity
+import com.erpnext.pos.localSource.entities.v2.PaymentEntryReferenceEntity
 import com.erpnext.pos.localSource.relations.v2.PaymentEntryWithReferences
 
 @Dao
@@ -54,4 +57,56 @@ interface PaymentEntryDao {
         companyId: String,
         paymentEntryId: String
     ): PaymentEntryWithReferences?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertPaymentEntry(entry: PaymentEntryEntity)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertReferences(references: List<PaymentEntryReferenceEntity>)
+
+    @Transaction
+    suspend fun insertPaymentEntryWithReferences(
+        entry: PaymentEntryEntity,
+        references: List<PaymentEntryReferenceEntity>
+    ) {
+        insertPaymentEntry(entry)
+        if (references.isNotEmpty()) {
+            insertReferences(references)
+        }
+    }
+
+    @Transaction
+    @Query(
+        """
+        SELECT * FROM payment_entries
+        WHERE instanceId = :instanceId
+          AND companyId = :companyId
+          AND is_deleted = 0
+          AND syncStatus = 'PENDING'
+    """
+    )
+    suspend fun getPendingPaymentEntriesWithReferences(
+        instanceId: String,
+        companyId: String
+    ): List<PaymentEntryWithReferences>
+
+    @Query(
+        """
+      UPDATE payment_entries
+      SET syncStatus = :syncStatus,
+          lastSyncedAt = :lastSyncedAt,
+          updated_at = :updatedAt
+      WHERE instanceId = :instanceId
+        AND companyId = :companyId
+        AND paymentEntryId = :paymentEntryId
+    """
+    )
+    suspend fun updateSyncStatus(
+        instanceId: String,
+        companyId: String,
+        paymentEntryId: String,
+        syncStatus: String,
+        lastSyncedAt: Long?,
+        updatedAt: Long
+    )
 }
