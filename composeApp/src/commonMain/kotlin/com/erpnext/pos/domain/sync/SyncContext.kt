@@ -6,6 +6,11 @@ data class SyncUnitResult(
     val error: Throwable? = null
 )
 
+data class PendingSync<T>(
+    val localId: String,
+    val payload: T
+)
+
 interface SyncUnit {
     val name: String
     suspend fun run(ctx: SyncContext): SyncUnitResult

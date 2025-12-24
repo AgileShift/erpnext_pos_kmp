@@ -197,6 +197,26 @@ interface SalesInvoiceDao {
 
     @Query(
         """
+      UPDATE sales_invoices
+      SET customerId = :newCustomerId,
+          customerName = :newCustomerName,
+          updated_at = :updatedAt
+      WHERE instanceId = :instanceId
+        AND companyId = :companyId
+        AND customerId = :oldCustomerId
+    """
+    )
+    suspend fun replaceCustomerReference(
+        instanceId: String,
+        companyId: String,
+        oldCustomerId: String,
+        newCustomerId: String,
+        newCustomerName: String,
+        updatedAt: Long
+    )
+
+    @Query(
+        """
         SELECT *
         FROM sales_invoices
         WHERE instanceId = :instanceId AND companyId = :companyId

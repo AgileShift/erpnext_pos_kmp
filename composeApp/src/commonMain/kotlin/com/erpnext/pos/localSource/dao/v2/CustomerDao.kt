@@ -103,6 +103,92 @@ interface CustomerDao {
 
     @Query(
         """
+        SELECT *
+        FROM customersv2
+        WHERE instanceId = :instanceId
+          AND companyId = :companyId
+          AND syncStatus = 'SYNCED'
+          AND is_deleted = 0
+          AND (
+                LOWER(customerName) = LOWER(:customerName)
+                OR (:mobileNo IS NOT NULL AND mobileNo = :mobileNo)
+              )
+        LIMIT 1
+    """
+    )
+    suspend fun findSyncedCustomerMatch(
+        instanceId: String,
+        companyId: String,
+        customerName: String,
+        mobileNo: String?
+    ): CustomerEntity?
+
+    @Query(
+        """
+        SELECT remote_name
+        FROM customersv2
+        WHERE instanceId = :instanceId
+          AND companyId = :companyId
+          AND customerId = :customerId
+        LIMIT 1
+    """
+    )
+    suspend fun getRemoteCustomerId(
+        instanceId: String,
+        companyId: String,
+        customerId: String
+    ): String?
+
+    @Query(
+        """
+      UPDATE customersv2
+      SET syncStatus = 'SYNCED',
+          remote_name = :remoteName,
+          remote_modified = :remoteModified,
+          lastSyncedAt = :lastSyncedAt,
+          updated_at = :updatedAt,
+          is_deleted = :isDeleted
+      WHERE instanceId = :instanceId
+        AND companyId = :companyId
+        AND customerId = :customerId
+    """
+    )
+    suspend fun markMergedCustomer(
+        instanceId: String,
+        companyId: String,
+        customerId: String,
+        remoteName: String,
+        remoteModified: String?,
+        lastSyncedAt: Long,
+        updatedAt: Long,
+        isDeleted: Boolean
+    )
+
+    @Query(
+        """
+      UPDATE customersv2
+      SET syncStatus = 'SYNCED',
+          remote_name = :remoteName,
+          remote_modified = :remoteModified,
+          lastSyncedAt = :lastSyncedAt,
+          updated_at = :updatedAt
+      WHERE instanceId = :instanceId
+        AND companyId = :companyId
+        AND customerId = :customerId
+    """
+    )
+    suspend fun markCustomerSynced(
+        instanceId: String,
+        companyId: String,
+        customerId: String,
+        remoteName: String,
+        remoteModified: String?,
+        lastSyncedAt: Long,
+        updatedAt: Long
+    )
+
+    @Query(
+        """
       UPDATE customersv2
       SET syncStatus = :syncStatus,
           lastSyncedAt = :lastSyncedAt,
