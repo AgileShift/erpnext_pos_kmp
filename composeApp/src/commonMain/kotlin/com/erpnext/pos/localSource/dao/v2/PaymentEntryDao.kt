@@ -42,21 +42,17 @@ interface PaymentEntryDao {
     ): PaymentEntryEntity?
 
     @Transaction
-    @Query(
-        """
-        SELECT * FROM payment_entries
-        WHERE instanceId = :instanceId
-          AND companyId = :companyId
-          AND paymentEntryId = :paymentEntryId
-          AND is_deleted = 0
-        LIMIT 1
-    """
-    )
     suspend fun getPaymentEntryWithReferences(
         instanceId: String,
         companyId: String,
         paymentEntryId: String
-    ): PaymentEntryWithReferences?
+    ): PaymentEntryWithReferences? {
+        val entry = getPaymentEntry(instanceId, companyId, paymentEntryId) ?: return null
+        return PaymentEntryWithReferences(
+            paymentEntry = entry,
+            references = getPaymentEntryReferences(instanceId, companyId, paymentEntryId)
+        )
+    }
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertPaymentEntry(entry: PaymentEntryEntity)
@@ -76,6 +72,32 @@ interface PaymentEntryDao {
     }
 
     @Transaction
+    suspend fun getPendingPaymentEntriesWithReferences(
+        instanceId: String,
+        companyId: String
+    ): List<PaymentEntryWithReferences> {
+        return getPendingPaymentEntries(instanceId, companyId).map { entry ->
+            PaymentEntryWithReferences(
+                paymentEntry = entry,
+                references = getPaymentEntryReferences(instanceId, companyId, entry.paymentEntryId)
+            )
+        }
+    }
+
+    @Query(
+        """
+        SELECT * FROM payment_entry_references
+        WHERE instanceId = :instanceId
+          AND companyId = :companyId
+          AND paymentEntryId = :paymentEntryId
+    """
+    )
+    suspend fun getPaymentEntryReferences(
+        instanceId: String,
+        companyId: String,
+        paymentEntryId: String
+    ): List<PaymentEntryReferenceEntity>
+
     @Query(
         """
         SELECT * FROM payment_entries
@@ -85,10 +107,10 @@ interface PaymentEntryDao {
           AND syncStatus = 'PENDING'
     """
     )
-    suspend fun getPendingPaymentEntriesWithReferences(
+    suspend fun getPendingPaymentEntries(
         instanceId: String,
         companyId: String
-    ): List<PaymentEntryWithReferences>
+    ): List<PaymentEntryEntity>
 
     @Query(
         """

@@ -44,21 +44,19 @@ interface QuotationDao {
     ): QuotationEntity?
 
     @Transaction
-    @Query(
-        """
-        SELECT * FROM quotations
-        WHERE instanceId = :instanceId
-          AND companyId = :companyId
-          AND quotationId = :quotationId
-          AND is_deleted = 0
-        LIMIT 1
-    """
-    )
     suspend fun getQuotationWithDetails(
         instanceId: String,
         companyId: String,
         quotationId: String
-    ): QuotationWithDetails?
+    ): QuotationWithDetails? {
+        val quotation = getQuotation(instanceId, companyId, quotationId) ?: return null
+        return QuotationWithDetails(
+            quotation = quotation,
+            items = getQuotationItems(instanceId, companyId, quotationId),
+            taxes = getQuotationTaxes(instanceId, companyId, quotationId),
+            customerLinks = getQuotationCustomerLinks(instanceId, companyId, quotationId)
+        )
+    }
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertQuotation(quotation: QuotationEntity)
@@ -92,6 +90,62 @@ interface QuotationDao {
     }
 
     @Transaction
+    suspend fun getPendingQuotationsWithDetails(
+        instanceId: String,
+        companyId: String
+    ): List<QuotationWithDetails> {
+        return getPendingQuotations(instanceId, companyId).map { quotation ->
+            QuotationWithDetails(
+                quotation = quotation,
+                items = getQuotationItems(instanceId, companyId, quotation.quotationId),
+                taxes = getQuotationTaxes(instanceId, companyId, quotation.quotationId),
+                customerLinks = getQuotationCustomerLinks(instanceId, companyId, quotation.quotationId)
+            )
+        }
+    }
+
+    @Query(
+        """
+        SELECT * FROM quotation_items
+        WHERE instanceId = :instanceId
+          AND companyId = :companyId
+          AND quotationId = :quotationId
+    """
+    )
+    suspend fun getQuotationItems(
+        instanceId: String,
+        companyId: String,
+        quotationId: String
+    ): List<QuotationItemEntity>
+
+    @Query(
+        """
+        SELECT * FROM quotation_taxes
+        WHERE instanceId = :instanceId
+          AND companyId = :companyId
+          AND quotationId = :quotationId
+    """
+    )
+    suspend fun getQuotationTaxes(
+        instanceId: String,
+        companyId: String,
+        quotationId: String
+    ): List<QuotationTaxEntity>
+
+    @Query(
+        """
+        SELECT * FROM quotation_customer_links
+        WHERE instanceId = :instanceId
+          AND companyId = :companyId
+          AND quotationId = :quotationId
+    """
+    )
+    suspend fun getQuotationCustomerLinks(
+        instanceId: String,
+        companyId: String,
+        quotationId: String
+    ): List<QuotationCustomerLinkEntity>
+
     @Query(
         """
         SELECT * FROM quotations
@@ -101,10 +155,10 @@ interface QuotationDao {
           AND syncStatus = 'PENDING'
     """
     )
-    suspend fun getPendingQuotationsWithDetails(
+    suspend fun getPendingQuotations(
         instanceId: String,
         companyId: String
-    ): List<QuotationWithDetails>
+    ): List<QuotationEntity>
 
     @Query(
         """

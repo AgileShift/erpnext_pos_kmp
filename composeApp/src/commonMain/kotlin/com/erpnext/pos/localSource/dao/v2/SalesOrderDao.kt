@@ -42,21 +42,17 @@ interface SalesOrderDao {
     ): SalesOrderEntity?
 
     @Transaction
-    @Query(
-        """
-        SELECT * FROM sales_orders
-        WHERE instanceId = :instanceId
-          AND companyId = :companyId
-          AND salesOrderId = :salesOrderId
-          AND is_deleted = 0
-        LIMIT 1
-    """
-    )
     suspend fun getSalesOrderWithItems(
         instanceId: String,
         companyId: String,
         salesOrderId: String
-    ): SalesOrderWithItems?
+    ): SalesOrderWithItems? {
+        val order = getSalesOrder(instanceId, companyId, salesOrderId) ?: return null
+        return SalesOrderWithItems(
+            salesOrder = order,
+            items = getSalesOrderItems(instanceId, companyId, salesOrderId)
+        )
+    }
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertSalesOrder(order: SalesOrderEntity)
@@ -76,6 +72,32 @@ interface SalesOrderDao {
     }
 
     @Transaction
+    suspend fun getPendingSalesOrdersWithItems(
+        instanceId: String,
+        companyId: String
+    ): List<SalesOrderWithItems> {
+        return getPendingSalesOrders(instanceId, companyId).map { order ->
+            SalesOrderWithItems(
+                salesOrder = order,
+                items = getSalesOrderItems(instanceId, companyId, order.salesOrderId)
+            )
+        }
+    }
+
+    @Query(
+        """
+        SELECT * FROM sales_order_items
+        WHERE instanceId = :instanceId
+          AND companyId = :companyId
+          AND salesOrderId = :salesOrderId
+    """
+    )
+    suspend fun getSalesOrderItems(
+        instanceId: String,
+        companyId: String,
+        salesOrderId: String
+    ): List<SalesOrderItemEntity>
+
     @Query(
         """
         SELECT * FROM sales_orders
@@ -85,10 +107,10 @@ interface SalesOrderDao {
           AND syncStatus = 'PENDING'
     """
     )
-    suspend fun getPendingSalesOrdersWithItems(
+    suspend fun getPendingSalesOrders(
         instanceId: String,
         companyId: String
-    ): List<SalesOrderWithItems>
+    ): List<SalesOrderEntity>
 
     @Query(
         """
