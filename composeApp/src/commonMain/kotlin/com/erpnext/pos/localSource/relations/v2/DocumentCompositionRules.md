@@ -4,10 +4,21 @@ This module reconstructs ERPNext documents locally by composing flat header rows
 related child tables. All joins must use the composite key `(instanceId, companyId, docId)`
 where `docId` is the primary identifier for the document type.
 
-## Customer + Address + Contact
+## Customers
+### Customer
 - **Header:** `CustomerEntity` (`customersv2` table)
 - **Child tables:** `CustomerAddressEntity` (`customer_address`), `CustomerContactEntity` (`customer_contact`)
 - **Join keys:** `(instanceId, companyId, customerId)`
+
+### Address
+- **Header:** `CustomerAddressEntity` (`customer_address` table)
+- **Child tables:** none
+- **Join keys:** `(instanceId, companyId, addressId)` (linked to customer via `customerId`)
+
+### Contact
+- **Header:** `CustomerContactEntity` (`customer_contact` table)
+- **Child tables:** none
+- **Join keys:** `(instanceId, companyId, contactId)` (linked to customer via `customerId`)
 
 ## Catalog
 ### Item
@@ -51,10 +62,15 @@ where `docId` is the primary identifier for the document type.
 - **Child tables:** none
 - **Join keys:** `(instanceId, companyId, salesPersonId)`
 
-### POS Profile + Payment Methods
+### POS Profile
 - **Header:** `POSProfileEntity` (`pos_profiles` table)
 - **Child tables:** `POSPaymentMethodEntity` (`pos_payment_methods` table)
 - **Join keys:** `(instanceId, companyId, posProfileId)`
+
+### Payment Methods
+- **Header:** `POSPaymentMethodEntity` (`pos_payment_methods` table)
+- **Child tables:** none (child rows of `POSProfileEntity`)
+- **Join keys:** `(instanceId, companyId, posProfileId, modeOfPayment)`
 
 ## Sales
 ### Quotation
@@ -85,10 +101,10 @@ where `docId` is the primary identifier for the document type.
 - **Child tables:** `PaymentEntryReferenceEntity` (`payment_entry_references`)
 - **Join keys:** `(instanceId, companyId, paymentEntryId)`
 
-### POS Payments
+### POS Invoice Payment
 - **Header:** `SalesInvoicePaymentEntity` (`sales_invoice_payments` table)
 - **Child tables:** none (child rows of `SalesInvoiceEntity`)
-- **Join keys:** `(instanceId, companyId, invoiceId)`
+- **Join keys:** `(instanceId, companyId, invoiceId, paymentId)`
 
 ## Cashbox (legacy tables)
 ### POS Opening Entry
@@ -101,7 +117,55 @@ where `docId` is the primary identifier for the document type.
 - **Child tables:** `TaxDetailsEntity` (`tax_details`), `BalanceDetailsEntity` (`balance_details`)
 - **Join keys:** `name` + `pos_closing_entry` (legacy tables do not yet include `instanceId`/`companyId`)
 
+## Taxes / Charges (if applicable)
+### Quotation Taxes
+- **Header:** `QuotationTaxEntity` (`quotation_taxes` table)
+- **Child tables:** none (child rows of `QuotationEntity`)
+- **Join keys:** `(instanceId, companyId, quotationId)`
+
+### POS Closing Taxes
+- **Header:** `TaxDetailsEntity` (`tax_details` table)
+- **Child tables:** none (child rows of `POSClosingEntryEntity`)
+- **Join keys:** `name` + `pos_closing_entry`
+
 ## Pricing Rule
 - **Header:** `PricingRuleEntity` (`pricing_rules` table)
 - **Child tables:** none
 - **Join keys:** `(instanceId, companyId, pricingRuleId)`
+
+## Document Composition Diagram (Mermaid)
+```mermaid
+flowchart LR
+  Customer[Customer] -->|addresses| CustomerAddress[Address]
+  Customer -->|contacts| CustomerContact[Contact]
+
+  Item[Item] --> ItemPrice[Item Price]
+  Item --> Bin[Bin]
+  ItemGroup[Item Group] --> Item
+  PricingRule[Pricing Rule] --> ItemPrice
+
+  Quotation[Quotation] --> QuotationItems[Quotation Items]
+  QuotationItems --> Item
+  Quotation --> QuotationTaxes[Quotation Taxes]
+  Quotation --> Customer
+
+  SalesOrder[Sales Order] --> SalesOrderItems[Sales Order Items]
+  SalesOrderItems --> Item
+  SalesOrder --> Customer
+
+  SalesInvoice[Sales Invoice] --> SalesInvoiceItems[Sales Invoice Items]
+  SalesInvoiceItems --> Item
+  SalesInvoice --> SalesInvoicePayments[POS Invoice Payment]
+  SalesInvoice --> Customer
+
+  DeliveryNote[Delivery Note] --> DeliveryNoteItems[Delivery Note Items]
+  DeliveryNoteItems --> Item
+  DeliveryNote --> Customer
+
+  PaymentEntry[Payment Entry] --> PaymentEntryRefs[Payment Entry References]
+
+  POSProfile[POS Profile] --> PaymentMethods[Payment Methods]
+  POSOpening[POS Opening] --> BalanceDetails[Balance Details]
+  POSClosing[POS Closing] --> BalanceDetails
+  POSClosing --> TaxDetails[Tax Details]
+```
