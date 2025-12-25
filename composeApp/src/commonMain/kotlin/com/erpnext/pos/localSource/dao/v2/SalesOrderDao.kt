@@ -60,6 +60,12 @@ interface SalesOrderDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertItems(items: List<SalesOrderItemEntity>)
 
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertSalesOrders(orders: List<SalesOrderEntity>)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertItems(items: List<SalesOrderItemEntity>)
+
     @Transaction
     suspend fun insertSalesOrderWithItems(
         order: SalesOrderEntity,

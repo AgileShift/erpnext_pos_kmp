@@ -36,11 +36,11 @@ val appModulev2 = module {
 
     single { CatalogRepository(get()) }
     single { InventoryRepository(get()) }
-    single { CustomerRepository(get(), get(), get(), get(), get(), get()) }
-    single { QuotationRepository(get(), get()) }
-    single { SalesOrderRepository(get(), get()) }
-    single { DeliveryNoteRepository(get(), get()) }
-    single { PaymentEntryRepository(get(), get()) }
+    single { CustomerRepository(get(), get(), get(), get(), get(), get(), get()) }
+    single { QuotationRepository(get(), get(), get()) }
+    single { SalesOrderRepository(get(), get(), get()) }
+    single { DeliveryNoteRepository(get(), get(), get()) }
+    single { PaymentEntryRepository(get(), get(), get()) }
     single { SyncRepository(get(), get()) }
     single { APIServiceV2(get(), get(), get()) }
 
