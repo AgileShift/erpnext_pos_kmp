@@ -65,6 +65,15 @@ interface DeliveryNoteDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertLinks(links: List<DeliveryNoteLinkEntity>)
 
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertDeliveryNotes(notes: List<DeliveryNoteEntity>)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertItems(items: List<DeliveryNoteItemEntity>)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertLinks(links: List<DeliveryNoteLinkEntity>)
+
     @Transaction
     suspend fun insertDeliveryNoteWithDetails(
         note: DeliveryNoteEntity,

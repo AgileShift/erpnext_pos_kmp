@@ -70,6 +70,18 @@ interface QuotationDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertCustomerLinks(links: List<QuotationCustomerLinkEntity>)
 
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertQuotations(quotations: List<QuotationEntity>)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertItems(items: List<QuotationItemEntity>)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertTaxes(taxes: List<QuotationTaxEntity>)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertCustomerLinks(links: List<QuotationCustomerLinkEntity>)
+
     @Transaction
     suspend fun insertQuotationWithDetails(
         quotation: QuotationEntity,

@@ -7,18 +7,31 @@ import com.erpnext.pos.localSource.entities.v2.QuotationCustomerLinkEntity
 import com.erpnext.pos.localSource.entities.v2.QuotationEntity
 import com.erpnext.pos.localSource.entities.v2.QuotationItemEntity
 import com.erpnext.pos.localSource.entities.v2.QuotationTaxEntity
+import com.erpnext.pos.remoteSource.api.v2.APIServiceV2
 import com.erpnext.pos.remoteSource.dto.v2.QuotationCreateDto
 import com.erpnext.pos.remoteSource.dto.v2.QuotationItemCreateDto
+import com.erpnext.pos.remoteSource.dto.v2.QuotationSnapshot
 import com.erpnext.pos.remoteSource.dto.v2.QuotationTaxCreateDto
+import com.erpnext.pos.remoteSource.mapper.v2.toEntity
+import com.erpnext.pos.remoteSource.sdk.v2.ERPDocType
+import com.erpnext.pos.remoteSource.sdk.v2.IncrementalSyncFilters
 import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
 
 class QuotationRepository(
     private val quotationDao: QuotationDao,
-    private val customerRepository: CustomerRepository
+    private val customerRepository: CustomerRepository,
+    private val api: APIServiceV2
 ) {
 
     suspend fun pull(ctx: SyncContext): Boolean {
+        val quotations = api.list<QuotationSnapshot>(
+            doctype = ERPDocType.Quotation,
+            filters = IncrementalSyncFilters.quotation(ctx)
+        )
+        if (quotations.isEmpty()) return false
+        val entities = quotations.map { it.toEntity(ctx.instanceId, ctx.companyId) }
+        quotationDao.upsertQuotations(entities)
         return true
     }
 

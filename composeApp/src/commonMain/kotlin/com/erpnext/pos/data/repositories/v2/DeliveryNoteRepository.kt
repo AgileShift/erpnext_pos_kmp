@@ -6,17 +6,30 @@ import com.erpnext.pos.localSource.dao.v2.DeliveryNoteDao
 import com.erpnext.pos.localSource.entities.v2.DeliveryNoteEntity
 import com.erpnext.pos.localSource.entities.v2.DeliveryNoteItemEntity
 import com.erpnext.pos.localSource.entities.v2.DeliveryNoteLinkEntity
+import com.erpnext.pos.remoteSource.api.v2.APIServiceV2
 import com.erpnext.pos.remoteSource.dto.v2.DeliveryNoteCreateDto
 import com.erpnext.pos.remoteSource.dto.v2.DeliveryNoteItemCreateDto
+import com.erpnext.pos.remoteSource.dto.v2.DeliveryNoteSnapshot
+import com.erpnext.pos.remoteSource.mapper.v2.toEntity
+import com.erpnext.pos.remoteSource.sdk.v2.ERPDocType
+import com.erpnext.pos.remoteSource.sdk.v2.IncrementalSyncFilters
 import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
 
 class DeliveryNoteRepository(
     private val deliveryNoteDao: DeliveryNoteDao,
-    private val customerRepository: CustomerRepository
+    private val customerRepository: CustomerRepository,
+    private val api: APIServiceV2
 ) {
 
     suspend fun pull(ctx: SyncContext): Boolean {
+        val notes = api.list<DeliveryNoteSnapshot>(
+            doctype = ERPDocType.DeliveryNote,
+            filters = IncrementalSyncFilters.deliveryNote(ctx)
+        )
+        if (notes.isEmpty()) return false
+        val entities = notes.map { it.toEntity(ctx.instanceId, ctx.companyId) }
+        deliveryNoteDao.upsertDeliveryNotes(entities)
         return true
     }
 
