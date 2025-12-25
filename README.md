@@ -1,45 +1,84 @@
-This is a Kotlin Multiplatform project targeting Android, iOS, Desktop.
+# ERPNext POS (KMP)
 
-* `/composeApp` is for code that will be shared across your Compose Multiplatform applications.
-  It contains several subfolders:
-  - `commonMain` is for code that’s common for all targets.
-  - Other folders are for Kotlin code that will be compiled for only the platform indicated in the folder name.
-    For example, if you want to use Apple’s CoreCrypto for the iOS part of your Kotlin app,
-    `iosMain` would be the right folder for such calls.
+## Purpose
+This project delivers an **offline-first Point of Sale (POS)** for **ERPNext v15/v16**, built with **Kotlin Multiplatform (KMP)** to share business logic and UI across **Android, iOS, and Desktop**. It prioritizes local operations and resilient sync so sales can continue even without connectivity.
 
-* `/iosApp` contains iOS applications. Even if you’re sharing your UI with Compose Multiplatform, 
-  you need this entry point for your iOS app. This is also where you should add SwiftUI code for your project.
+## What it does
+- **Sales flow:** create Sales Invoices, Sales Orders, Quotations, Delivery Notes, and Payments (including offline creation).
+- **Cash management:** opening/closing entries and cashbox tracking.
+- **Catalog & inventory:** items, pricing, stock, and customer data cached locally.
+- **Sync:** bidirectional pull/push with background orchestration and status tracking.
+- **Offline operation:** persist data locally first and sync when connectivity returns.
 
+## How it works
+- **Pull sync (remote → local):**
+  - Uses incremental filters (date, modified, route, territory, warehouse) defined in `remoteSource/sdk/v2/SyncFilters.kt`.
+  - Remote DTOs are mapped to local entities through `remoteSource/mapper` and `data/mappers`.
+- **Push sync (local → remote):**
+  - Offline-created entities are stored with `SyncStatus.PENDING` and later pushed by use cases in `domain/usecases/v2/sync`.
+  - Status transitions are managed in `localSource/dao/v2` and `data/repositories/v2/SyncRepository.kt`.
+- **Room (KMP) local store:**
+  - Room entities and DAOs live under `localSource/entities` and `localSource/dao` (including V2 schemas).
+  - `data/AppDatabase.kt` wires the local database for common code.
+- **DTOs, mappers, repositories:**
+  - **DTOs**: `remoteSource/dto` and `remoteSource/dto/v2` mirror ERPNext payloads.
+  - **Mappers**: `remoteSource/mapper` and `data/mappers` map between DTOs, entities, and domain models.
+  - **Repositories**: `data/repositories` and `data/repositories/v2` coordinate local/remote access.
 
-Learn more about [Kotlin Multiplatform](https://www.jetbrains.com/help/kotlin-multiplatform-dev/get-started.html)…
+## Architecture overview
+**Layers (shared in `commonMain`):**
+1. **UI**: Compose screens and coordinators (`ui/`, `views/`, `navigation/`).
+2. **Domain**: Models, policies, and use cases (`domain/models`, `domain/usecases`, `domain/usecases/v2`).
+3. **Data**: Repository implementations and adapters (`data/repositories`, `data/adapters`).
+4. **Local**: Room entities/DAOs and relations (`localSource/entities`, `localSource/dao`, `localSource/relations`).
+5. **Remote**: API clients, DTOs, SDK helpers (`remoteSource/api`, `remoteSource/dto`, `remoteSource/sdk`).
+6. **Sync**: Orchestration and state (`sync/SyncManager.kt`, `sync/SyncWorker.kt`).
 
-## V2 local composition rules (flat entities)
+**Data flow (simplified):**
+```
+UI → ViewModel/Coordinator → Use Case → Repository
+   → (Local DAO/Room) + (Remote API/DTO) → Sync state updates
+```
 
-The V2 sync layer stores ERPNext documents as **flat tables** and composes them locally.
-Each document is reconstructed by joining its header rows with their related detail rows
-using the shared identifiers (`instanceId`, `companyId`, and the document ID).
+## Key modules & paths
+- **Shared KMP code**: `composeApp/src/commonMain/kotlin/com/erpnext/pos`
+- **Platform entrypoints**:
+  - Android: `composeApp/src/androidMain`
+  - iOS: `composeApp/src/iosMain` and `iosApp/`
+  - Desktop: `composeApp/src/desktopMain`
+- **Database & entities**:
+  - `composeApp/src/commonMain/kotlin/com/erpnext/pos/data/AppDatabase.kt`
+  - `composeApp/src/commonMain/kotlin/com/erpnext/pos/localSource/entities`
+  - `composeApp/src/commonMain/kotlin/com/erpnext/pos/localSource/dao`
+- **Repositories**:
+  - `composeApp/src/commonMain/kotlin/com/erpnext/pos/data/repositories`
+  - `composeApp/src/commonMain/kotlin/com/erpnext/pos/data/repositories/v2`
+- **Domain use cases**:
+  - Offline creation: `composeApp/src/commonMain/kotlin/com/erpnext/pos/domain/usecases/v2` (e.g., `CreateInvoiceOfflineUseCase.kt`)
+  - Sync units: `composeApp/src/commonMain/kotlin/com/erpnext/pos/domain/usecases/v2/sync`
+- **Remote integration**:
+  - API & SDK: `composeApp/src/commonMain/kotlin/com/erpnext/pos/remoteSource/api`, `.../sdk`, `.../sdk/v2`
+  - DTOs: `composeApp/src/commonMain/kotlin/com/erpnext/pos/remoteSource/dto`
+- **Sync orchestration**:
+  - `composeApp/src/commonMain/kotlin/com/erpnext/pos/sync/SyncManager.kt`
+  - `composeApp/src/commonMain/kotlin/com/erpnext/pos/sync/SyncWorker.kt`
+- **DI modules**:
+  - `composeApp/src/commonMain/kotlin/com/erpnext/pos/di/AppModule.kt`
+  - `composeApp/src/commonMain/kotlin/com/erpnext/pos/di/v2/AppModule.kt`
 
-| DocType | Header entity | Detail entities | Join keys |
-| --- | --- | --- | --- |
-| Quotation | `QuotationEntity` | `QuotationItemEntity`, `QuotationTaxEntity`, `QuotationCustomerLinkEntity` | `quotationId` |
-| Sales Order | `SalesOrderEntity` | `SalesOrderItemEntity` | `salesOrderId` |
-| Payment Entry | `PaymentEntryEntity` | `PaymentEntryReferenceEntity` | `paymentEntryId` |
-| Delivery Note | `DeliveryNoteEntity` | `DeliveryNoteItemEntity`, `DeliveryNoteLinkEntity` | `deliveryNoteId` |
-| Pricing Rule | `PricingRuleEntity` | _none_ | `pricingRuleId` |
+## Offline-first strategy
+- **Local-first writes:**
+  - Offline use cases (e.g., `CreateInvoiceOfflineUseCase.kt`) persist entities locally with `SyncStatus.PENDING`.
+- **Pending queue & retries:**
+  - Pending items are fetched from Room and pushed in sync units (`domain/usecases/v2/sync`).
+  - Failures are marked `FAILED`, counters are refreshed, and backoff policies apply (see `SyncPendingInvoicesUseCase.kt`).
+- **Conflict handling:**
+  - The server remains the source of truth; failed pushes are kept locally for retry and surfaced via sync status counters.
+  - Incremental pull uses server `modified` filters to refresh local snapshots.
+- **Operational visibility:**
+  - Sync state and counters are stored in `localSource/entities/v2/SyncStateEntity.kt` and exposed in the UI.
 
-Composition steps:
-1. Fetch headers by `instanceId`, `companyId`, and document ID.
-2. Fetch detail rows using the same composite key.
-3. Merge detail rows into the in-memory view model without embedding them in the stored entity.
-
-## Incremental sync criteria (V2)
-
-Incremental sync should filter ERPNext list queries by **date**, **modified**, **route**, and
-**warehouse** depending on the document type. The helper functions in
-`remoteSource/sdk/v2/SyncFilters.kt` use these criteria:
-
-* **Quotation**: `transaction_date >= fromDate`, optional `modified >= modifiedSince`, optional `route = routeId`, `territory = territoryId`.
-* **Sales Order**: `transaction_date >= fromDate`, optional `modified >= modifiedSince`, optional `route = routeId`, `territory = territoryId`.
-* **Payment Entry**: `posting_date >= fromDate`, optional `modified >= modifiedSince`, `territory = territoryId`.
-* **Delivery Note**: `posting_date >= fromDate`, optional `modified >= modifiedSince`, optional `set_warehouse = warehouseId`, `territory = territoryId`.
-* **Pricing Rule**: `modified >= modifiedSince`, optional `for_price_list = priceList`, `valid_upto >= fromDate`, `territory = territoryId`.
+## KMP consistency
+- **Shared logic/UI** in `commonMain` ensures consistent behavior on Android, iOS, and Desktop.
+- **Platform hooks** exist only where needed (entrypoints, platform services), keeping business logic and sync fully shared.
+- **Room + DTO + Repository patterns** are centralized in common code to avoid platform divergence.
