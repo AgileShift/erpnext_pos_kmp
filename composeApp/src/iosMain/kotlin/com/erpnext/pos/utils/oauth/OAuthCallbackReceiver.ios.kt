@@ -1,7 +1,7 @@
 package com.erpnext.pos.utils.oauth
 
 actual class OAuthCallbackReceiver {
-    actual fun start(): String = "org.erpnext.pos://oauth2redirect"
+    actual fun start(redirectUrl: String): String = redirectUrl
 
     actual suspend fun awaitCode(expectedState: String): String = ""
 
