@@ -111,6 +111,7 @@ val fields: List<DocTypeFields> = listOf(
         fields = listOf(
             "name",
             "warehouse",
+            "route",
             "currency",
             "payments",
             "selling_price_list",

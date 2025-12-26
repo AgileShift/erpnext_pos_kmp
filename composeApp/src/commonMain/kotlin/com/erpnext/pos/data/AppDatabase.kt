@@ -124,12 +124,13 @@ import com.erpnext.pos.localSource.entities.v2.UserEntity as UserEntityV2
         PaymentEntryEntity::class,
         PaymentEntryReferenceEntity::class,
         SyncStateEntity::class
-    ], version = 7,
+    ], version = 8,
     exportSchema = true,
     autoMigrations = [
         AutoMigration(from = 4, to = 5),
         AutoMigration(from = 5, to = 6),
-        AutoMigration(from = 6, to = 7)
+        AutoMigration(from = 6, to = 7),
+        AutoMigration(from = 7, to = 8)
     ]
 )
 @ConstructedBy(AppDatabaseConstructor::class)

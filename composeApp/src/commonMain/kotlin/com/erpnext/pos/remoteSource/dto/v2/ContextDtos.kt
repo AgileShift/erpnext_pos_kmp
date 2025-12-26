@@ -105,6 +105,8 @@ data class POSProfileDto(
     val posProfileId: String,
     @SerialName("warehouse")
     val warehouseId: String,
+    @SerialName("route")
+    val routeId: String? = null,
     @SerialName("cost_center")
     val costCenterId: String,
     @SerialName("currency")

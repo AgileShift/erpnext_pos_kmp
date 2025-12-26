@@ -12,6 +12,7 @@ data class POSProfileEntity(
     var costCenterId: String,
     var currency: String,
     var priceList: String,
+    var routeId: String? = null,
     var allowNegativeStock: Boolean,
     var updateStock: Boolean = true,
     var allowCreditSales: Boolean = false,

@@ -87,6 +87,7 @@ fun POSProfileDto.toEntity(instanceId: String, companyId: String) =
         costCenterId = costCenterId,
         currency = currency,
         priceList = priceList,
+        routeId = routeId,
         allowNegativeStock = allowNegativeStock,
         updateStock = updateStock,
         allowCreditSales = allowCreditSales,
