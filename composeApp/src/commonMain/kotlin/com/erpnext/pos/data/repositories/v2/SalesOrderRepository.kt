@@ -2,6 +2,7 @@ package com.erpnext.pos.data.repositories.v2
 
 import com.erpnext.pos.domain.sync.PendingSync
 import com.erpnext.pos.domain.sync.SyncContext
+import com.erpnext.pos.localSource.dao.v2.PaymentScheduleDao
 import com.erpnext.pos.localSource.dao.v2.SalesOrderDao
 import com.erpnext.pos.localSource.entities.v2.SalesOrderEntity
 import com.erpnext.pos.localSource.entities.v2.SalesOrderItemEntity
@@ -19,11 +20,13 @@ import kotlin.time.ExperimentalTime
 class SalesOrderRepository(
     private val salesOrderDao: SalesOrderDao,
     private val customerRepository: CustomerRepository,
+    private val paymentScheduleDao: PaymentScheduleDao,
     private val api: APIServiceV2
 ) {
     private companion object {
-        // Completed orders are excluded to keep offline detail sync focused on active work.
-        val DETAIL_ELIGIBLE_STATUSES = setOf("To Deliver", "To Bill", "To Deliver and Bill")
+        // ERPNext v15/16 Sales Order status options: Draft, On Hold, To Deliver and Bill, To Bill, To Deliver, Completed, Cancelled, Closed.
+        val DETAIL_ELIGIBLE_STATUSES =
+            setOf("Draft", "On Hold", "To Deliver", "To Bill", "To Deliver and Bill")
     }
 
     suspend fun pull(ctx: SyncContext): Boolean {
@@ -45,12 +48,30 @@ class SalesOrderRepository(
         ).toSet()
         val missing = orderIds.filterNot { it in existing }
 
-        missing.forEach { orderId ->
-            val detail = api.getDoc<SalesOrderDetailDto>(ERPDocType.SalesOrder, orderId)
+        val details = if (missing.isEmpty()) {
+            emptyList()
+        } else {
+            api.getDocsInBatches<SalesOrderDetailDto>(ERPDocType.SalesOrder, missing)
+        }
+
+        details.forEach { detail ->
+            val orderId = detail.salesOrderId
             if (detail.items.isNotEmpty()) {
                 salesOrderDao.upsertItems(
                     detail.items.map { item ->
                         item.toEntity(orderId, ctx.instanceId, ctx.companyId)
+                    }
+                )
+            }
+            if (detail.paymentSchedule.isNotEmpty()) {
+                paymentScheduleDao.upsertSchedules(
+                    detail.paymentSchedule.map { schedule ->
+                        schedule.toEntity(
+                            referenceType = ERPDocType.SalesOrder.path,
+                            referenceId = orderId,
+                            instanceId = ctx.instanceId,
+                            companyId = ctx.companyId
+                        )
                     }
                 )
             }
@@ -114,34 +135,35 @@ class SalesOrderRepository(
         instanceId: String,
         companyId: String
     ): List<PendingSync<SalesOrderCreateDto>> {
-        return salesOrderDao.getPendingSalesOrdersWithItems(instanceId, companyId).map { snapshot ->
-            val customerId = customerRepository.resolveRemoteCustomerId(
-                instanceId,
-                companyId,
-                snapshot.order.customerId
-            )
-            PendingSync(
-                localId = snapshot.order.salesOrderId,
-                payload = SalesOrderCreateDto(
-                    company = snapshot.order.company,
-                    transactionDate = snapshot.order.transactionDate,
-                    customerId = customerId,
-                    deliveryDate = snapshot.order.deliveryDate,
-                    customerName = snapshot.order.customerName,
-                    territory = snapshot.order.territory,
-                    sellingPriceList = snapshot.order.sellingPriceList,
-                    currency = snapshot.order.priceListCurrency,
-                    items = snapshot.items.map { item ->
-                        SalesOrderItemCreateDto(
-                            itemCode = item.itemCode,
-                            qty = item.qty,
-                            rate = item.rate,
-                            uom = item.uom,
-                            warehouse = item.warehouse
-                        )
-                    }
+        return salesOrderDao.getPendingSalesOrdersWithItems(instanceId, companyId)
+            .map { snapshot ->
+                val customerId = customerRepository.resolveRemoteCustomerId(
+                    instanceId,
+                    companyId,
+                    snapshot.salesOrder.customerId
                 )
-            )
-        }
+                PendingSync(
+                    localId = snapshot.salesOrder.salesOrderId,
+                    payload = SalesOrderCreateDto(
+                        company = snapshot.salesOrder.company,
+                        transactionDate = snapshot.salesOrder.transactionDate,
+                        customerId = customerId,
+                        deliveryDate = snapshot.salesOrder.deliveryDate,
+                        customerName = snapshot.salesOrder.customerName,
+                        territory = snapshot.salesOrder.territory,
+                        sellingPriceList = snapshot.salesOrder.sellingPriceList,
+                        currency = snapshot.salesOrder.priceListCurrency,
+                        items = snapshot.items.map { item ->
+                            SalesOrderItemCreateDto(
+                                itemCode = item.itemCode,
+                                qty = item.qty,
+                                rate = item.rate,
+                                uom = item.uom,
+                                warehouse = item.warehouse
+                            )
+                        }
+                    )
+                )
+            }
     }
 }

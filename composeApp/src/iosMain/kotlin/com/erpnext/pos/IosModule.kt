@@ -1,6 +1,5 @@
 package com.erpnext.pos
 
-import com.erpnext.pos.navigation.AuthNavigator
 import com.erpnext.pos.remoteSource.oauth.TokenStore
 import com.erpnext.pos.remoteSource.oauth.TransientAuthStore
 import com.erpnext.pos.utils.NetworkMonitor

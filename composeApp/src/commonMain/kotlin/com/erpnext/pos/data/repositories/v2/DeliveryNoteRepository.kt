@@ -23,8 +23,8 @@ class DeliveryNoteRepository(
     private val api: APIServiceV2
 ) {
     private companion object {
-        // Only delivery notes pending billing require offline item detail.
-        val DETAIL_ELIGIBLE_STATUSES = setOf("To Bill")
+        // ERPNext v15/16 Delivery Note status options: Draft, To Bill, Completed, Return Issued, Cancelled, Closed.
+        val DETAIL_ELIGIBLE_STATUSES = setOf("Draft", "To Bill")
     }
 
     suspend fun pull(ctx: SyncContext): Boolean {
@@ -46,8 +46,14 @@ class DeliveryNoteRepository(
         ).toSet()
         val missing = noteIds.filterNot { it in existing }
 
-        missing.forEach { noteId ->
-            val detail = api.getDoc<DeliveryNoteDetailDto>(ERPDocType.DeliveryNote, noteId)
+        val details = if (missing.isEmpty()) {
+            emptyList()
+        } else {
+            api.getDocsInBatches<DeliveryNoteDetailDto>(ERPDocType.DeliveryNote, missing)
+        }
+
+        details.forEach { detail ->
+            val noteId = detail.deliveryNoteId
             if (detail.items.isNotEmpty()) {
                 deliveryNoteDao.upsertItems(
                     detail.items.map { item ->
@@ -135,17 +141,17 @@ class DeliveryNoteRepository(
             val customerId = customerRepository.resolveRemoteCustomerId(
                 instanceId,
                 companyId,
-                snapshot.note.customerId
+                snapshot.deliveryNote.customerId
             )
             PendingSync(
-                localId = snapshot.note.deliveryNoteId,
+                localId = snapshot.deliveryNote.deliveryNoteId,
                 payload = DeliveryNoteCreateDto(
-                    company = snapshot.note.company,
-                    postingDate = snapshot.note.postingDate,
+                    company = snapshot.deliveryNote.company,
+                    postingDate = snapshot.deliveryNote.postingDate,
                     customerId = customerId,
-                    customerName = snapshot.note.customerName,
-                    territory = snapshot.note.territory,
-                    setWarehouse = snapshot.note.setWarehouse,
+                    customerName = snapshot.deliveryNote.customerName,
+                    territory = snapshot.deliveryNote.territory,
+                    setWarehouse = snapshot.deliveryNote.setWarehouse,
                     items = snapshot.items.map { item ->
                         DeliveryNoteItemCreateDto(
                             itemCode = item.itemCode,

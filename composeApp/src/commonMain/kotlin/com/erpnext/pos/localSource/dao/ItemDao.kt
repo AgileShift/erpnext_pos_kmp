@@ -17,7 +17,7 @@ interface ItemDao {
     fun getAllItemsPaged(): PagingSource<Int, ItemEntity>
 
     @Query("SELECT * FROM tabItem ORDER BY name ASC")
-    fun getAllItems(): List<ItemEntity>
+    suspend fun getAllItems(): List<ItemEntity>
 
     @Query("SELECT * FROM TABITEM WHERE name == :id")
     fun getItemById(id: String): PagingSource<Int, ItemEntity>
@@ -29,10 +29,10 @@ interface ItemDao {
     fun getAllItemsFiltered(search: String): Flow<List<ItemEntity>>
 
     @Query("SELECT COUNT(*) FROM tabItem")
-    fun countAll(): Int
+    suspend fun countAll(): Int
 
     @Query("DELETE FROM tabItem")
-    fun deleteAll()
+    suspend fun deleteAll()
 
     @Query("SELECT * FROM tabItem ORDER BY last_synced_at ASC LIMIT 1")
     suspend fun getOldestItem(): ItemEntity?

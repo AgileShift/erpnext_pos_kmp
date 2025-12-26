@@ -2,6 +2,7 @@ package com.erpnext.pos.data.repositories.v2
 
 import com.erpnext.pos.domain.sync.PendingSync
 import com.erpnext.pos.domain.sync.SyncContext
+import com.erpnext.pos.localSource.dao.v2.PaymentScheduleDao
 import com.erpnext.pos.localSource.dao.v2.QuotationDao
 import com.erpnext.pos.localSource.entities.v2.QuotationCustomerLinkEntity
 import com.erpnext.pos.localSource.entities.v2.QuotationEntity
@@ -22,11 +23,12 @@ import kotlin.time.ExperimentalTime
 class QuotationRepository(
     private val quotationDao: QuotationDao,
     private val customerRepository: CustomerRepository,
+    private val paymentScheduleDao: PaymentScheduleDao,
     private val api: APIServiceV2
 ) {
     private companion object {
-        // Completed quotations are excluded to avoid fetching non-actionable details offline.
-        val DETAIL_ELIGIBLE_STATUSES = setOf("Open", "Partially Ordered")
+        // ERPNext v15/16 Quotation status options: Draft, Open, Replied, Partially Ordered, Ordered, Lost, Cancelled, Expired.
+        val DETAIL_ELIGIBLE_STATUSES = setOf("Draft", "Open", "Replied", "Partially Ordered")
     }
 
     suspend fun pull(ctx: SyncContext): Boolean {
@@ -48,8 +50,14 @@ class QuotationRepository(
         ).toSet()
         val missing = quotationIds.filterNot { it in existing }
 
-        missing.forEach { quotationId ->
-            val detail = api.getDoc<QuotationDetailDto>(ERPDocType.Quotation, quotationId)
+        val details = if (missing.isEmpty()) {
+            emptyList()
+        } else {
+            api.getDocsInBatches<QuotationDetailDto>(ERPDocType.Quotation, missing)
+        }
+
+        details.forEach { detail ->
+            val quotationId = detail.quotationId
             if (detail.items.isNotEmpty()) {
                 quotationDao.upsertItems(
                     detail.items.map { item ->
@@ -61,6 +69,18 @@ class QuotationRepository(
                 quotationDao.upsertTaxes(
                     detail.taxes.map { tax ->
                         tax.toEntity(quotationId, ctx.instanceId, ctx.companyId)
+                    }
+                )
+            }
+            if (detail.paymentSchedule.isNotEmpty()) {
+                paymentScheduleDao.upsertSchedules(
+                    detail.paymentSchedule.map { schedule ->
+                        schedule.toEntity(
+                            referenceType = ERPDocType.Quotation.path,
+                            referenceId = quotationId,
+                            instanceId = ctx.instanceId,
+                            companyId = ctx.companyId
+                        )
                     }
                 )
             }

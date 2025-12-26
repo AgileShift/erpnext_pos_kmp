@@ -32,6 +32,8 @@ import com.erpnext.pos.domain.usecases.v2.sync.SalesInvoiceSyncUnit
 import com.erpnext.pos.domain.usecases.v2.sync.SalesOrderSyncUnit
 import com.erpnext.pos.remoteSource.api.v2.APIServiceV2
 import com.erpnext.pos.domain.utils.UUIDGenerator
+import org.koin.core.qualifier.Qualifier
+import org.koin.core.qualifier.named
 import org.koin.dsl.module
 
 val appModulev2 = module {
@@ -44,6 +46,7 @@ val appModulev2 = module {
     single { get<AppDatabase>().salesOrderDaoV2() }
     single { get<AppDatabase>().deliveryNoteDaoV2() }
     single { get<AppDatabase>().paymentEntryDaoV2() }
+    single { get<AppDatabase>().paymentScheduleDaoV2() }
     single { get<AppDatabase>().posContextDaoV2() }
 
     single { CatalogRepository(get()) }
@@ -54,12 +57,12 @@ val appModulev2 = module {
     single { SalesInvoiceLocalAdapter(get()) }
     single { SalesInvoiceRemoteRepository(get(), get()) }
     single { SalesInvoiceRepository(get(), get(), get(), get()) }
-    single { QuotationRepository(get(), get(), get()) }
-    single { SalesOrderRepository(get(), get(), get()) }
+    single { QuotationRepository(get(), get(), get(), get()) }
+    single { SalesOrderRepository(get(), get(), get(), get()) }
     single { DeliveryNoteRepository(get(), get(), get()) }
     single { PaymentEntryRepository(get(), get(), get()) }
     single { SyncRepository(get(), get()) }
-    single { APIServiceV2(get(), get(), get()) }
+    single(named("apiServiceV2")) { APIServiceV2(get(), get(), get()) }
 
     factory { UUIDGenerator() }
 
@@ -73,12 +76,12 @@ val appModulev2 = module {
     factory { ItemSyncUnit(get(), get()) }
     factory { ItemPriceSyncUnit(get(), get()) }
     factory { BinSyncUnit(get(), get()) }
-    factory { CustomerSyncUnit(get(), get(), get()) }
+    factory { CustomerSyncUnit(get(), get(named("apiServiceV2")), get()) }
     factory { SalesInvoiceSyncUnit(get(), get()) }
-    factory { QuotationSyncUnit(get(), get(), get()) }
-    factory { SalesOrderSyncUnit(get(), get(), get()) }
-    factory { DeliveryNoteSyncUnit(get(), get(), get()) }
-    factory { PaymentEntrySyncUnit(get(), get(), get()) }
+    factory { QuotationSyncUnit(get(), get(named("apiServiceV2")), get()) }
+    factory { SalesOrderSyncUnit(get(), get(named("apiServiceV2")), get()) }
+    factory { DeliveryNoteSyncUnit(get(), get(named("apiServiceV2")), get()) }
+    factory { PaymentEntrySyncUnit(get(), get(named("apiServiceV2")), get()) }
 
     factory<List<SyncUnit>> {
         listOf(

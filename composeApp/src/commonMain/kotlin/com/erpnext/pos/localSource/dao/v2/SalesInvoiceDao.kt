@@ -116,7 +116,12 @@ interface SalesInvoiceDao {
         territoryId: String,
         fromDate: String
     ): List<SalesInvoiceWithItemsAndPayments> {
-        return getInvoiceHeadersForRoute(instanceId, companyId, territoryId, fromDate).map { invoice ->
+        return getInvoiceHeadersForRoute(
+            instanceId,
+            companyId,
+            territoryId,
+            fromDate
+        ).map { invoice ->
             SalesInvoiceWithItemsAndPayments(
                 invoice = invoice,
                 items = getInvoiceItems(instanceId, companyId, invoice.invoiceId),

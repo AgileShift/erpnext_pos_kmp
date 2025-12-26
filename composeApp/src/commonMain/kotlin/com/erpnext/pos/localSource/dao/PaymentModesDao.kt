@@ -16,7 +16,7 @@ interface PaymentModesDao {
     suspend fun insert(item: PaymentModesEntity)
 
     @Query("SELECT * FROM tabPaymentModes ORDER BY name ASC")
-    fun getAll(): PaymentModesEntity
+    suspend fun getAll(): PaymentModesEntity
 
     @Query("DELETE FROM tabPaymentModes")
     suspend fun deleteAll()

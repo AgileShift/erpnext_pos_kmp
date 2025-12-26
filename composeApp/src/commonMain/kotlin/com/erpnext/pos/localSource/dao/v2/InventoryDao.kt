@@ -1,14 +1,16 @@
 package com.erpnext.pos.localSource.dao.v2
 
+import androidx.room.ColumnInfo
 import androidx.room.Dao
 import androidx.room.Query
+import kotlinx.serialization.SerialName
 
 @Dao
 interface InventoryDao {
 
     @Query(
         """
-        SELECT itemId, actualQty, reservedQty, projectedQty
+        SELECT itemId as itemCode, actualQty, reservedQty, projectedQty
         FROM inventory_bins
         WHERE instanceId = :instanceId
           AND companyId = :companyId

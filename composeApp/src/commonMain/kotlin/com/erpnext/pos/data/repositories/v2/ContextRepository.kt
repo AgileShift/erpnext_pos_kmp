@@ -104,7 +104,7 @@ class ContextRepository(
 
         var changed = false
         company?.let {
-            posContextDao.upsertCompany(it.toEntity(input.instanceId))
+            posContextDao.upsertCompany(it.toEntity(input.companyId,input.instanceId))
             changed = true
         }
         user?.let {

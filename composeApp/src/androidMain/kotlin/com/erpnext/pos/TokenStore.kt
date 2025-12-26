@@ -88,7 +88,7 @@ class AndroidTokenStore(private val context: Context) : TokenStore, TransientAut
     // AuthInfoStore Implementation
     // ------------------------------------------------------------
 
-    override suspend fun loadAuthInfoByUrl(url: String?): LoginInfo {
+    override suspend fun loadAuthInfoByUrl(url: String?, platform: String?): LoginInfo {
         var currentUrl = url
         if (currentUrl.isNullOrEmpty())
             currentUrl = getCurrentSite()

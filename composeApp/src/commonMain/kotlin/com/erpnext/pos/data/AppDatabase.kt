@@ -19,6 +19,7 @@ import com.erpnext.pos.localSource.dao.v2.CatalogDao as CatalogDaoV2
 import com.erpnext.pos.localSource.dao.v2.CustomerDao as CustomerDaoV2
 import com.erpnext.pos.localSource.dao.v2.DeliveryNoteDao
 import com.erpnext.pos.localSource.dao.v2.InventoryDao as InventoryDaoV2
+import com.erpnext.pos.localSource.dao.v2.PaymentScheduleDao
 import com.erpnext.pos.localSource.dao.v2.PaymentEntryDao
 import com.erpnext.pos.localSource.dao.v2.POSContextDao
 import com.erpnext.pos.localSource.dao.v2.PricingRuleDao
@@ -55,6 +56,7 @@ import com.erpnext.pos.localSource.entities.v2.ItemGroupEntity
 import com.erpnext.pos.localSource.entities.v2.ItemPriceEntity
 import com.erpnext.pos.localSource.entities.v2.PaymentEntryEntity
 import com.erpnext.pos.localSource.entities.v2.PaymentEntryReferenceEntity
+import com.erpnext.pos.localSource.entities.v2.PaymentScheduleEntity
 import com.erpnext.pos.localSource.entities.v2.POSPaymentMethodEntity
 import com.erpnext.pos.localSource.entities.v2.POSProfileEntity as POSProfileEntityV2
 import com.erpnext.pos.localSource.entities.v2.PricingRuleEntity
@@ -97,6 +99,7 @@ import com.erpnext.pos.localSource.entities.v2.UserEntity as UserEntityV2
         SalesPersonEntity::class,
         SalesTeamEntity::class,
         TerritoryEntity::class,
+        //====== V2 ======
         CustomerEntityV2::class,
         CustomerAddressEntity::class,
         CustomerContactEntity::class,
@@ -123,15 +126,14 @@ import com.erpnext.pos.localSource.entities.v2.UserEntity as UserEntityV2
         DeliveryNoteLinkEntity::class,
         PaymentEntryEntity::class,
         PaymentEntryReferenceEntity::class,
+        PaymentScheduleEntity::class,
         SyncStateEntity::class
-    ], version = 8,
+    ],
+    version = 2,
     exportSchema = true,
-    autoMigrations = [
-        AutoMigration(from = 4, to = 5),
-        AutoMigration(from = 5, to = 6),
-        AutoMigration(from = 6, to = 7),
-        AutoMigration(from = 7, to = 8)
-    ]
+    /*autoMigrations = [
+        AutoMigration(from = 1, to = 2),
+    ]*/
 )
 @ConstructedBy(AppDatabaseConstructor::class)
 abstract class AppDatabase : RoomDatabase() {
@@ -156,6 +158,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun salesOrderDaoV2(): SalesOrderDao
     abstract fun deliveryNoteDaoV2(): DeliveryNoteDao
     abstract fun paymentEntryDaoV2(): PaymentEntryDao
+    abstract fun paymentScheduleDaoV2(): PaymentScheduleDao
     abstract fun pricingRuleDaoV2(): PricingRuleDao
 }
 

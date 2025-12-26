@@ -15,9 +15,8 @@ import com.erpnext.pos.remoteSource.dto.v2.SalesPersonDto
 import com.erpnext.pos.remoteSource.dto.v2.TerritoryDto
 import com.erpnext.pos.remoteSource.dto.v2.UserDto
 
-fun CompanyDto.toEntity(instanceId: String) =
+fun CompanyDto.toEntity(companyId: String, instanceId: String) =
     CompanyEntity(
-        companyId = companyId,
         companyName = companyName,
         abbr = abbr,
         defaultCurrency = defaultCurrency,
@@ -29,6 +28,7 @@ fun CompanyDto.toEntity(instanceId: String) =
         companyLogo = companyLogo,
         letterHead = letterHead
     ).apply {
+        this.companyId = companyId
         this.instanceId = instanceId
     }
 

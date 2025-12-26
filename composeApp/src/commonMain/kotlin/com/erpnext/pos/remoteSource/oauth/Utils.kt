@@ -2,6 +2,8 @@ package com.erpnext.pos.remoteSource.oauth
 
 import com.erpnext.pos.randomUrlSafe
 import com.erpnext.pos.remoteSource.dto.LoginInfo
+import com.erpnext.pos.utils.oauth.OAuthRedirect
+import io.ktor.http.encodeURLParameter
 import kotlin.collections.ifEmpty
 
 data class AuthRequest(val url: String, val state: String, val pkce: Pkce)
@@ -34,4 +36,4 @@ fun buildAuthorizeRequest(
     return AuthRequest("${cfg.authorizeUrl}?$query", state, pkce)
 }
 
-private fun encode(v: String) = v.encodeToByteArray().decodeToString()
+private fun encode(v: String) = v.encodeURLParameter() // v.encodeToByteArray().decodeToString()

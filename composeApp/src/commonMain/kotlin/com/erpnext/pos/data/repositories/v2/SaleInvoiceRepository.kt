@@ -13,6 +13,7 @@ import com.erpnext.pos.remoteSource.dto.v2.SalesInvoiceSnapshot
 import com.erpnext.pos.remoteSource.mapper.v2.toEntity
 import com.erpnext.pos.remoteSource.sdk.v2.ERPDocType
 import com.erpnext.pos.remoteSource.sdk.v2.IncrementalSyncFilters
+import com.erpnext.pos.remoteSource.sdk.v2.getFields
 import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
 
