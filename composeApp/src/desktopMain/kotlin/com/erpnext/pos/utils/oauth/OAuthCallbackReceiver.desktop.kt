@@ -17,14 +17,8 @@ actual class OAuthCallbackReceiver {
 
         deferred = CompletableDeferred()
 
-        val redirectUri = URI.create(redirectUrl)
-        val host = redirectUri.host ?: error("Redirect URL must include a host")
-        val port = redirectUri.port
-        require(port != -1) { "Redirect URL must include a fixed port" }
-        val path = redirectUri.path.ifBlank { "/" }
-
-        val s = HttpServer.create(InetSocketAddress(host, port), 0)
-        s.createContext(path) { ex ->
+        val s = HttpServer.create(InetSocketAddress(HOST, PORT), 0)
+        s.createContext(PATH) { ex ->
             val params = parseQuery(ex.requestURI.rawQuery.orEmpty())
             val html = """
                 <html><body>
@@ -43,7 +37,8 @@ actual class OAuthCallbackReceiver {
         s.start()
 
         server = s
-        redirect = redirectUrl
+        redirect = REDIRECT_URL
+
         return redirect
     }
 
@@ -62,10 +57,15 @@ actual class OAuthCallbackReceiver {
     }
 
     private fun parseQuery(q: String): Map<String, String> =
-        q.split("&")
-            .filter { it.isNotBlank() }
-            .associate { part ->
-                val (k, v) = part.split("=", limit = 2)
-                URLDecoder.decode(k, "UTF-8") to URLDecoder.decode(v, "UTF-8")
-            }
+        q.split("&").filter { it.isNotBlank() }.associate { part ->
+            val (k, v) = part.split("=", limit = 2)
+            URLDecoder.decode(k, "UTF-8") to URLDecoder.decode(v, "UTF-8")
+        }
+
+    private companion object {
+        const val HOST = "127.0.0.1"
+        const val PORT = 8070
+        const val PATH = "/oauth2redirect"
+        const val REDIRECT_URL = "http://127.0.0.1:8070/oauth2redirect"
+    }
 }

@@ -49,9 +49,14 @@ class LoginViewModel(
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 val oAuthConfig = authStore.loadAuthInfoByUrl().toOAuthConfig()
-                val authRequest = buildAuthorizeRequest(oAuthConfig)
+                val resolvedConfig = if (getPlatformName() == "Desktop") {
+                    oAuthConfig.copy(redirectUrl = DESKTOP_REDIRECT_URI)
+                } else {
+                    oAuthConfig
+                }
+                val authRequest = buildAuthorizeRequest(resolvedConfig)
                 val tokens = oauthService.exchangeCode(
-                    oAuthConfig,
+                    resolvedConfig,
                     code,
                     authRequest.pkce,
                     authRequest.state,
@@ -88,8 +93,7 @@ class LoginViewModel(
             try {
                 val oauthConfig = authStore.loadAuthInfoByUrl(site.url).toOAuthConfig()
                 val request = if (isDesktop) {
-                    val redirectUri =
-                        receiver?.start(oauthConfig.redirectUrl) ?: oauthConfig.redirectUrl
+                    val redirectUri = receiver?.start(DESKTOP_REDIRECT_URI) ?: DESKTOP_REDIRECT_URI
                     buildAuthorizeRequest(oauthConfig.copy(redirectUrl = redirectUri))
                 } else {
                     buildAuthorizeRequest(oauthConfig)
@@ -131,5 +135,9 @@ class LoginViewModel(
         if (isAuth)
             navManager.navigateTo(NavRoute.Home)
         _stateFlow.update { LoginState.Success() }
+    }
+
+    private companion object {
+        const val DESKTOP_REDIRECT_URI = "http://127.0.0.1:8070/oauth2redirect"
     }
 }
