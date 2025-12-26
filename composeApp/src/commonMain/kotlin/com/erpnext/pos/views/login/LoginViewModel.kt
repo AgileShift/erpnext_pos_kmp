@@ -88,7 +88,8 @@ class LoginViewModel(
             try {
                 val oauthConfig = authStore.loadAuthInfoByUrl(site.url).toOAuthConfig()
                 val request = if (isDesktop) {
-                    val redirectUri = receiver?.start(oauthConfig.redirectUrl) ?: oauthConfig.redirectUrl
+                    val redirectUri =
+                        receiver?.start(oauthConfig.redirectUrl) ?: oauthConfig.redirectUrl
                     buildAuthorizeRequest(oauthConfig.copy(redirectUrl = redirectUri))
                 } else {
                     buildAuthorizeRequest(oauthConfig)
