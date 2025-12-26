@@ -23,7 +23,8 @@ class DeliveryNoteRepository(
     private val api: APIServiceV2
 ) {
     private companion object {
-        val DETAIL_ELIGIBLE_STATUSES = setOf("To Bill")
+        // ERPNext v15/16 Delivery Note status options: Draft, To Bill, Completed, Return Issued, Cancelled, Closed.
+        val DETAIL_ELIGIBLE_STATUSES = setOf("Draft", "To Bill")
     }
 
     suspend fun pull(ctx: SyncContext): Boolean {
