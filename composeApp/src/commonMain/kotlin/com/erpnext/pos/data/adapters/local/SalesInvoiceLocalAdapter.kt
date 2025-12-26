@@ -34,7 +34,8 @@ class SalesInvoiceLocalAdapter(
             localInvoiceId = localInvoiceId,
             remoteName = remoteName,
             remoteModified = remoteModified,
-            syncedAd = now
+            syncedAd = now,
+            updatedAt = now
         )
     }
 

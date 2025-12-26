@@ -264,7 +264,8 @@ interface SalesInvoiceDao {
         localInvoiceId: String,
         remoteName: String,
         remoteModified: String?,
-        syncedAd: Long
+        syncedAd: Long,
+        updatedAt: Long
     )
 
     @Query(
