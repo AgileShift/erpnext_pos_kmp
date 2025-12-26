@@ -5,17 +5,36 @@ import com.erpnext.pos.domain.sync.SyncContext
 import com.erpnext.pos.localSource.dao.v2.PaymentEntryDao
 import com.erpnext.pos.localSource.entities.v2.PaymentEntryEntity
 import com.erpnext.pos.localSource.entities.v2.PaymentEntryReferenceEntity
+import com.erpnext.pos.remoteSource.api.v2.APIServiceV2
 import com.erpnext.pos.remoteSource.dto.v2.PaymentEntryCreateDto
 import com.erpnext.pos.remoteSource.dto.v2.PaymentEntryReferenceCreateDto
+import com.erpnext.pos.remoteSource.dto.v2.PaymentEntrySnapshot
+import com.erpnext.pos.remoteSource.mapper.v2.toEntity
+import com.erpnext.pos.remoteSource.sdk.v2.ERPDocType
+import com.erpnext.pos.remoteSource.sdk.v2.IncrementalSyncFilters
 import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
 
 class PaymentEntryRepository(
     private val paymentEntryDao: PaymentEntryDao,
-    private val customerRepository: CustomerRepository
+    private val customerRepository: CustomerRepository,
+    private val api: APIServiceV2
 ) {
 
     suspend fun pull(ctx: SyncContext): Boolean {
+        val entries = api.list<PaymentEntrySnapshot>(
+            doctype = ERPDocType.PaymentEntry,
+            filters = IncrementalSyncFilters.paymentEntry(ctx)
+        )
+        if (entries.isEmpty()) return false
+        val entities = entries.map { it.toEntity(ctx.instanceId, ctx.companyId) }
+        val referenceEntities = entries.flatMap { snapshot ->
+            snapshot.references.map { it.toEntity(ctx.instanceId, ctx.companyId) }
+        }
+        paymentEntryDao.upsertPaymentEntries(entities)
+        if (referenceEntities.isNotEmpty()) {
+            paymentEntryDao.upsertReferences(referenceEntities)
+        }
         return true
     }
 

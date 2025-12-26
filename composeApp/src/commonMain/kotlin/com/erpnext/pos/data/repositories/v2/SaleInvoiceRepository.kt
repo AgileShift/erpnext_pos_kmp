@@ -1,7 +1,6 @@
 package com.erpnext.pos.data.repositories.v2
 
 import com.erpnext.pos.domain.ports.local.SalesInvoiceLocalPort
-import com.erpnext.pos.domain.ports.remote.SalesInvoiceRemotePort
 import com.erpnext.pos.domain.repositories.v2.ISalesInvoiceRepository
 import com.erpnext.pos.domain.sync.SyncContext
 import com.erpnext.pos.localSource.dao.v2.SalesInvoiceDao
@@ -9,26 +8,73 @@ import com.erpnext.pos.localSource.entities.v2.SalesInvoiceEntity
 import com.erpnext.pos.localSource.entities.v2.SalesInvoiceItemEntity
 import com.erpnext.pos.localSource.entities.v2.SalesInvoicePaymentEntity
 import com.erpnext.pos.localSource.relations.v2.SalesInvoiceWithItemsAndPayments
+import com.erpnext.pos.remoteSource.api.v2.APIServiceV2
+import com.erpnext.pos.remoteSource.dto.v2.SalesInvoiceSnapshot
+import com.erpnext.pos.remoteSource.mapper.v2.toEntity
+import com.erpnext.pos.remoteSource.sdk.v2.ERPDocType
+import com.erpnext.pos.remoteSource.sdk.v2.IncrementalSyncFilters
+import com.erpnext.pos.remoteSource.sdk.v2.getFields
+import kotlin.time.Clock
+import kotlin.time.ExperimentalTime
 
 class SalesInvoiceRepository(
     private val dao: SalesInvoiceDao,
     private val local: SalesInvoiceLocalPort,
-    private val remote: SalesInvoiceRemotePort
+    private val remote: SalesInvoiceRemoteRepository,
+    private val api: APIServiceV2
 ) : ISalesInvoiceRepository {
 
+    @OptIn(ExperimentalTime::class)
     suspend fun syncOutbox(ctx: SyncContext): Boolean {
+        val pending = local.getPendingOutbox(ctx.instanceId, ctx.companyId)
+        if (pending.isEmpty()) return false
+
+        val now = Clock.System.now().epochSeconds
+        pending.forEach { invoice ->
+            val res = remote.submitInvoice(invoice)
+            if (res.isSuccess) {
+                val response = res.getOrNull()
+                if (response != null) {
+                    local.markOutboxSynced(
+                        ctx.instanceId,
+                        ctx.companyId,
+                        invoice.invoice.invoiceId,
+                        response.name,
+                        response.modified
+                    )
+                } else {
+                    dao.updateSyncStatus(
+                        ctx.instanceId,
+                        ctx.companyId,
+                        invoice.invoice.invoiceId,
+                        syncStatus = "SYNCED",
+                        lastSyncedAt = now,
+                        updatedAt = now
+                    )
+                }
+            } else {
+                dao.updateSyncStatus(
+                    ctx.instanceId,
+                    ctx.companyId,
+                    invoice.invoice.invoiceId,
+                    syncStatus = "FAILED",
+                    lastSyncedAt = null,
+                    updatedAt = now
+                )
+            }
+        }
         return true
     }
 
     suspend fun pullInvoices(ctx: SyncContext): Boolean {
-        /*val recent = remote.fetchInvoicesForTerritory(ctx.territoryId, ctx.fromDate)
-        val outstanding = remote.fetchOutstandingInvoices()
-
-        val merged = (recent + outstanding).distinctBy { it.name }
-        val entities = merged.map { it.toEntity(ctx.instanceId, ctx.companyId) }
-
-        return local.upsertFromServer(ctx.instanceId, ctx.companyId, entities)*/
-        return true
+        val invoices = api.list<SalesInvoiceSnapshot>(
+            doctype = ERPDocType.SalesInvoice,
+            fields = ERPDocType.SalesInvoice.getFields() + "modified",
+            filters = IncrementalSyncFilters.salesInvoice(ctx)
+        )
+        if (invoices.isEmpty()) return false
+        val entities = invoices.map { it.toEntity(ctx.instanceId, ctx.companyId) }
+        return local.upsertFromServer(ctx.instanceId, ctx.companyId, entities)
     }
 
     override suspend fun insertInvoiceWithItemsAndPayments(

@@ -12,9 +12,15 @@ import com.erpnext.pos.localSource.dao.v2.SalesOrderDao
 import com.erpnext.pos.localSource.entities.v2.CustomerAddressEntity
 import com.erpnext.pos.localSource.entities.v2.CustomerContactEntity
 import com.erpnext.pos.localSource.entities.v2.CustomerEntity
+import com.erpnext.pos.remoteSource.api.v2.APIServiceV2
 import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
 import com.erpnext.pos.remoteSource.dto.v2.CustomerCreateDto
+import com.erpnext.pos.remoteSource.dto.v2.CustomerDto
+import com.erpnext.pos.remoteSource.mapper.v2.CustomerMappedEntities
+import com.erpnext.pos.remoteSource.mapper.v2.toEntities
+import com.erpnext.pos.remoteSource.sdk.v2.ERPDocType
+import com.erpnext.pos.remoteSource.sdk.v2.IncrementalSyncFilters
 
 class CustomerRepository(
     private val customerDao: CustomerDao,
@@ -22,10 +28,29 @@ class CustomerRepository(
     private val salesOrderDao: SalesOrderDao,
     private val quotationDao: QuotationDao,
     private val deliveryNoteDao: DeliveryNoteDao,
-    private val paymentEntryDao: PaymentEntryDao
+    private val paymentEntryDao: PaymentEntryDao,
+    private val api: APIServiceV2
 ) : ICustomerRepository {
 
     suspend fun pull(ctx: SyncContext): Boolean {
+        val customers = api.list<CustomerDto>(
+            doctype = ERPDocType.Customer,
+            filters = IncrementalSyncFilters.customer(ctx)
+        )
+        if (customers.isEmpty()) return false
+
+        val mapped = customers.map { it.toEntities(ctx.instanceId, ctx.companyId) }
+        val customerEntities = mapped.map(CustomerMappedEntities::customer)
+        val contactEntities = mapped.flatMap(CustomerMappedEntities::contacts)
+        val addressEntities = mapped.flatMap(CustomerMappedEntities::addresses)
+
+        customerDao.upsertCustomers(customerEntities)
+        if (contactEntities.isNotEmpty()) {
+            customerDao.upsertContacts(contactEntities)
+        }
+        if (addressEntities.isNotEmpty()) {
+            customerDao.upsertAddresses(addressEntities)
+        }
         return true
     }
 

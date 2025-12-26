@@ -257,7 +257,7 @@ interface SalesInvoiceDao {
                 remote_name = :remoteName,
                 remote_modified = :remoteModified,
                 lastSyncedAt = :syncedAd,
-                updated_at = :syncedAd
+                updated_at = :updatedAt
             WHERE instanceId = :instanceId 
                 AND companyId = :companyId 
                 AND invoiceId = :localInvoiceId
@@ -269,7 +269,8 @@ interface SalesInvoiceDao {
         localInvoiceId: String,
         remoteName: String,
         remoteModified: String?,
-        syncedAd: Long
+        syncedAd: Long,
+        updatedAt: Long
     )
 
     @Query(

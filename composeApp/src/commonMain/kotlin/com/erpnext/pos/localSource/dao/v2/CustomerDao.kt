@@ -68,6 +68,15 @@ interface CustomerDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAddresses(addresses: List<CustomerAddressEntity>)
 
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertCustomers(customers: List<CustomerEntity>)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertContacts(contacts: List<CustomerContactEntity>)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertAddresses(addresses: List<CustomerAddressEntity>)
+
     @Transaction
     suspend fun insertCustomerWithDetails(
         customer: CustomerEntity,

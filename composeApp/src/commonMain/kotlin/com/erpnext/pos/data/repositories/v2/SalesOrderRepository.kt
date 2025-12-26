@@ -5,17 +5,30 @@ import com.erpnext.pos.domain.sync.SyncContext
 import com.erpnext.pos.localSource.dao.v2.SalesOrderDao
 import com.erpnext.pos.localSource.entities.v2.SalesOrderEntity
 import com.erpnext.pos.localSource.entities.v2.SalesOrderItemEntity
+import com.erpnext.pos.remoteSource.api.v2.APIServiceV2
 import com.erpnext.pos.remoteSource.dto.v2.SalesOrderCreateDto
 import com.erpnext.pos.remoteSource.dto.v2.SalesOrderItemCreateDto
+import com.erpnext.pos.remoteSource.dto.v2.SalesOrderSnapshot
+import com.erpnext.pos.remoteSource.mapper.v2.toEntity
+import com.erpnext.pos.remoteSource.sdk.v2.ERPDocType
+import com.erpnext.pos.remoteSource.sdk.v2.IncrementalSyncFilters
 import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
 
 class SalesOrderRepository(
     private val salesOrderDao: SalesOrderDao,
-    private val customerRepository: CustomerRepository
+    private val customerRepository: CustomerRepository,
+    private val api: APIServiceV2
 ) {
 
     suspend fun pull(ctx: SyncContext): Boolean {
+        val orders = api.list<SalesOrderSnapshot>(
+            doctype = ERPDocType.SalesOrder,
+            filters = IncrementalSyncFilters.salesOrder(ctx)
+        )
+        if (orders.isEmpty()) return false
+        val entities = orders.map { it.toEntity(ctx.instanceId, ctx.companyId) }
+        salesOrderDao.upsertSalesOrders(entities)
         return true
     }
 

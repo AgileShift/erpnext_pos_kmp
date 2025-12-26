@@ -1,9 +1,11 @@
 package com.erpnext.pos.domain.usecases.v2.sync
 
+import com.erpnext.pos.data.repositories.v2.CatalogSyncRepository
 import com.erpnext.pos.data.repositories.v2.CustomerRepository
 import com.erpnext.pos.data.repositories.v2.DeliveryNoteRepository
 import com.erpnext.pos.data.repositories.v2.PaymentEntryRepository
 import com.erpnext.pos.data.repositories.v2.QuotationRepository
+import com.erpnext.pos.data.repositories.v2.SalesInvoiceRepository
 import com.erpnext.pos.data.repositories.v2.SalesOrderRepository
 import com.erpnext.pos.data.repositories.v2.SyncRepository
 import com.erpnext.pos.domain.sync.SyncContext
@@ -17,6 +19,7 @@ import com.erpnext.pos.remoteSource.dto.v2.PaymentEntryCreateDto
 import com.erpnext.pos.remoteSource.dto.v2.QuotationCreateDto
 import com.erpnext.pos.remoteSource.dto.v2.SalesOrderCreateDto
 import com.erpnext.pos.remoteSource.sdk.v2.ERPDocType
+import com.erpnext.pos.utils.toErpDateTime
 import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
 
@@ -43,6 +46,90 @@ private suspend fun SyncRepository.runDocType(
         SyncUnitResult(success = false, changed = false, error = e)
     } finally {
         setInProgress(ctx.instanceId, ctx.companyId, docTypeValue, false)
+    }
+}
+
+class ItemGroupSyncUnit(
+    private val repository: CatalogSyncRepository,
+    private val syncRepository: SyncRepository
+) : SyncUnit {
+    override val name = SyncDocType.ITEM_GROUP.value
+
+    override suspend fun run(ctx: SyncContext): SyncUnitResult {
+        return syncRepository.runDocType(
+            ctx = ctx,
+            docType = SyncDocType.ITEM_GROUP,
+            pull = {
+                val modifiedSince = syncRepository
+                    .getLastPullAt(ctx.instanceId, ctx.companyId, SyncDocType.ITEM_GROUP.value)
+                    ?.let { (it * 1000).toErpDateTime() }
+                repository.syncItemGroups(ctx, modifiedSince) > 0
+            },
+            push = { false }
+        )
+    }
+}
+
+class ItemSyncUnit(
+    private val repository: CatalogSyncRepository,
+    private val syncRepository: SyncRepository
+) : SyncUnit {
+    override val name = SyncDocType.ITEM.value
+
+    override suspend fun run(ctx: SyncContext): SyncUnitResult {
+        return syncRepository.runDocType(
+            ctx = ctx,
+            docType = SyncDocType.ITEM,
+            pull = {
+                val modifiedSince = syncRepository
+                    .getLastPullAt(ctx.instanceId, ctx.companyId, SyncDocType.ITEM.value)
+                    ?.let { (it * 1000).toErpDateTime() }
+                repository.syncItems(ctx, modifiedSince) > 0
+            },
+            push = { false }
+        )
+    }
+}
+
+class ItemPriceSyncUnit(
+    private val repository: CatalogSyncRepository,
+    private val syncRepository: SyncRepository
+) : SyncUnit {
+    override val name = SyncDocType.ITEM_PRICE.value
+
+    override suspend fun run(ctx: SyncContext): SyncUnitResult {
+        return syncRepository.runDocType(
+            ctx = ctx,
+            docType = SyncDocType.ITEM_PRICE,
+            pull = {
+                val modifiedSince = syncRepository
+                    .getLastPullAt(ctx.instanceId, ctx.companyId, SyncDocType.ITEM_PRICE.value)
+                    ?.let { (it * 1000).toErpDateTime() }
+                repository.syncItemPrices(ctx, modifiedSince) > 0
+            },
+            push = { false }
+        )
+    }
+}
+
+class BinSyncUnit(
+    private val repository: CatalogSyncRepository,
+    private val syncRepository: SyncRepository
+) : SyncUnit {
+    override val name = SyncDocType.BIN.value
+
+    override suspend fun run(ctx: SyncContext): SyncUnitResult {
+        return syncRepository.runDocType(
+            ctx = ctx,
+            docType = SyncDocType.BIN,
+            pull = {
+                val modifiedSince = syncRepository
+                    .getLastPullAt(ctx.instanceId, ctx.companyId, SyncDocType.BIN.value)
+                    ?.let { (it * 1000).toErpDateTime() }
+                repository.syncBins(ctx, modifiedSince) > 0
+            },
+            push = { false }
+        )
     }
 }
 
@@ -82,6 +169,22 @@ class CustomerSyncUnit(
                 }
                 pending.isNotEmpty()
             }
+        )
+    }
+}
+
+class SalesInvoiceSyncUnit(
+    private val repository: SalesInvoiceRepository,
+    private val syncRepository: SyncRepository
+) : SyncUnit {
+    override val name = SyncDocType.SALES_INVOICE.value
+
+    override suspend fun run(ctx: SyncContext): SyncUnitResult {
+        return syncRepository.runDocType(
+            ctx = ctx,
+            docType = SyncDocType.SALES_INVOICE,
+            pull = { repository.pullInvoices(ctx) },
+            push = { repository.syncOutbox(ctx) }
         )
     }
 }

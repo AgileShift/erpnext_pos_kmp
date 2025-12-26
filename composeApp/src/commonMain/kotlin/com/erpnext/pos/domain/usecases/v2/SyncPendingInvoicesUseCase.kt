@@ -39,12 +39,28 @@ class SyncPendingInvoicesUseCase(
                 val res = remoteRepository.submitInvoice(inv)
 
                 if (res.isSuccess) {
-                    invoiceDao.updateSyncStatus(
-                        input.instanceId, input.companyId, inv.invoice.invoiceId,
-                        syncStatus = "SYNCED",
-                        lastSyncedAt = Clock.System.now().epochSeconds,
-                        updatedAt = Clock.System.now().epochSeconds
-                    )
+                    val response = res.getOrNull()
+                    val now = Clock.System.now().epochSeconds
+                    if (response != null) {
+                        invoiceDao.markSynced(
+                            input.instanceId,
+                            input.companyId,
+                            inv.invoice.invoiceId,
+                            remoteName = response.name,
+                            remoteModified = response.modified,
+                            syncedAd = now,
+                            updatedAt = now
+                        )
+                    } else {
+                        invoiceDao.updateSyncStatus(
+                            input.instanceId,
+                            input.companyId,
+                            inv.invoice.invoiceId,
+                            syncStatus = "SYNCED",
+                            lastSyncedAt = now,
+                            updatedAt = now
+                        )
+                    }
                 } else {
                     //TODO: Validar si es correcto el delay aca
                     val delayMs = backoff.nextDelayMs(attempt, Random.nextDouble())

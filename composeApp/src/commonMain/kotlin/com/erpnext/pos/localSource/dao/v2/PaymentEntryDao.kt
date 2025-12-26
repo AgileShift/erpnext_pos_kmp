@@ -60,6 +60,12 @@ interface PaymentEntryDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertReferences(references: List<PaymentEntryReferenceEntity>)
 
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertPaymentEntries(entries: List<PaymentEntryEntity>)
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertReferences(references: List<PaymentEntryReferenceEntity>)
+
     @Transaction
     suspend fun insertPaymentEntryWithReferences(
         entry: PaymentEntryEntity,

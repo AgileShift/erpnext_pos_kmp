@@ -6,6 +6,7 @@ enum class ERPDocType(val path: String) {
     Company("Company"),
     Employee("Employee"),
     SalesPerson("Sales Person"),
+    Territory("Territory"),
     Item("Item"),
     Category("Item Group"),
     ItemPrice("Item Price"),
@@ -56,6 +57,16 @@ val fields: List<DocTypeFields> = listOf(
         listOf("name", "sales_person_name", "employee", "is_group", "parent_sales_person")
     ),
     DocTypeFields(
+        ERPDocType.Territory,
+        listOf(
+            "name",
+            "territory_name",
+            "is_group",
+            "parent_territory",
+            "territory_manager"
+        )
+    ),
+    DocTypeFields(
         ERPDocType.Customer,
         listOf("name", "customer_name", "customer_type", "customer_group", "territory", "credit_limits", "payment_terms", "default_price_list", "default_currency", "primary_address", "mobile_no", "disabled")
     ),
@@ -81,13 +92,16 @@ val fields: List<DocTypeFields> = listOf(
             "disabled",
             "barcodes",
             "stock_uom",
+            "sales_uom",
             "standard_rate",
             "is_stock_item",
-            "is_sales_item"  // Correcciones
+            "is_sales_item",
+            "allow_negative_stock"
         )
     ),
     DocTypeFields(
-        ERPDocType.Category, listOf("name")
+        ERPDocType.Category,
+        listOf("name", "item_group_name", "parent_item_group", "is_group")
     ),
     DocTypeFields(
         ERPDocType.POSProfile, listOf("name", "company", "currency")
@@ -98,27 +112,29 @@ val fields: List<DocTypeFields> = listOf(
             "name",
             "warehouse",
             "route",
-            "country",
-            "company",
             "currency",
-            "income_account",
-            "expense_account",
             "payments",
-            "branch",
-            "applyDiscountOn",
+            "selling_price_list",
             "cost_center",
-            "selling_price_list"
+            "allow_negative_stock",
+            "update_stock",
+            "allow_credit_sales",
+            "customer",
+            "naming_series",
+            "taxes_and_charges",
+            "write_off_account",
+            "write_off_cost_center",
+            "disabled"
         )
     ),
     DocTypeFields(
         ERPDocType.User,
         listOf(
             "name",
-            "first_name",
-            "last_name",
-            "username",
-            "language",
-            "full_name"
+            "email",
+            "full_name",
+            "enabled",
+            "user_type"
         )
     ),
     DocTypeFields(
@@ -128,13 +144,14 @@ val fields: List<DocTypeFields> = listOf(
             "warehouse",
             "actual_qty",
             "projected_qty",
+            "reserved_qty",
             "stock_uom",
             "valuation_rate"
         )
     ),
     DocTypeFields(
         ERPDocType.ItemPrice,
-        listOf("item_code", "uom", "price_list", "price_list_rate", "selling", "currency")
+        listOf("name", "item_code", "uom", "price_list", "price_list_rate", "selling", "currency")
     ),
     DocTypeFields(
         ERPDocType.Customer,
