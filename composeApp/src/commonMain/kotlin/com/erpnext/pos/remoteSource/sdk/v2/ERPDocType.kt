@@ -81,13 +81,16 @@ val fields: List<DocTypeFields> = listOf(
             "disabled",
             "barcodes",
             "stock_uom",
+            "sales_uom",
             "standard_rate",
             "is_stock_item",
-            "is_sales_item"  // Correcciones
+            "is_sales_item",
+            "allow_negative_stock"
         )
     ),
     DocTypeFields(
-        ERPDocType.Category, listOf("name")
+        ERPDocType.Category,
+        listOf("name", "item_group_name", "parent_item_group", "is_group")
     ),
     DocTypeFields(
         ERPDocType.POSProfile, listOf("name", "company", "currency")
@@ -128,13 +131,14 @@ val fields: List<DocTypeFields> = listOf(
             "warehouse",
             "actual_qty",
             "projected_qty",
+            "reserved_qty",
             "stock_uom",
             "valuation_rate"
         )
     ),
     DocTypeFields(
         ERPDocType.ItemPrice,
-        listOf("item_code", "uom", "price_list", "price_list_rate", "selling", "currency")
+        listOf("name", "item_code", "uom", "price_list", "price_list_rate", "selling", "currency")
     ),
     DocTypeFields(
         ERPDocType.Customer,

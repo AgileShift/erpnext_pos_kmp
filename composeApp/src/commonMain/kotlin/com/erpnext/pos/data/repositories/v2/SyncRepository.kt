@@ -81,6 +81,12 @@ class SyncRepository(
         )
     }
 
+    suspend fun getLastPullAt(
+        instanceId: String,
+        companyId: String,
+        docType: String
+    ): Long? = syncDao.get(instanceId, companyId, docType)?.lastPullAt
+
     @OptIn(ExperimentalTime::class)
     suspend fun markPushSuccess(instanceId: String, companyId: String, docType: String) {
         ensureDocTypeState(instanceId, companyId, docType)
