@@ -2,6 +2,7 @@ package com.erpnext.pos.data.repositories.v2
 
 import com.erpnext.pos.domain.sync.PendingSync
 import com.erpnext.pos.domain.sync.SyncContext
+import com.erpnext.pos.localSource.dao.v2.PaymentScheduleDao
 import com.erpnext.pos.localSource.dao.v2.SalesOrderDao
 import com.erpnext.pos.localSource.entities.v2.SalesOrderEntity
 import com.erpnext.pos.localSource.entities.v2.SalesOrderItemEntity
@@ -19,6 +20,7 @@ import kotlin.time.ExperimentalTime
 class SalesOrderRepository(
     private val salesOrderDao: SalesOrderDao,
     private val customerRepository: CustomerRepository,
+    private val paymentScheduleDao: PaymentScheduleDao,
     private val api: APIServiceV2
 ) {
     private companion object {
@@ -50,6 +52,18 @@ class SalesOrderRepository(
                 salesOrderDao.upsertItems(
                     detail.items.map { item ->
                         item.toEntity(orderId, ctx.instanceId, ctx.companyId)
+                    }
+                )
+            }
+            if (detail.paymentSchedule.isNotEmpty()) {
+                paymentScheduleDao.upsertSchedules(
+                    detail.paymentSchedule.map { schedule ->
+                        schedule.toEntity(
+                            referenceType = ERPDocType.SalesOrder.path,
+                            referenceId = orderId,
+                            instanceId = ctx.instanceId,
+                            companyId = ctx.companyId
+                        )
                     }
                 )
             }

@@ -46,6 +46,7 @@ val appModulev2 = module {
     single { get<AppDatabase>().salesOrderDaoV2() }
     single { get<AppDatabase>().deliveryNoteDaoV2() }
     single { get<AppDatabase>().paymentEntryDaoV2() }
+    single { get<AppDatabase>().paymentScheduleDaoV2() }
     single { get<AppDatabase>().posContextDaoV2() }
 
     single { CatalogRepository(get()) }
@@ -56,8 +57,8 @@ val appModulev2 = module {
     single { SalesInvoiceLocalAdapter(get()) }
     single { SalesInvoiceRemoteRepository(get(), get()) }
     single { SalesInvoiceRepository(get(), get(), get(), get()) }
-    single { QuotationRepository(get(), get(), get()) }
-    single { SalesOrderRepository(get(), get(), get()) }
+    single { QuotationRepository(get(), get(), get(), get()) }
+    single { SalesOrderRepository(get(), get(), get(), get()) }
     single { DeliveryNoteRepository(get(), get(), get()) }
     single { PaymentEntryRepository(get(), get(), get()) }
     single { SyncRepository(get(), get()) }
