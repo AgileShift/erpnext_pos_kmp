@@ -22,6 +22,9 @@ import io.ktor.http.ContentType
 import io.ktor.http.Parameters
 import io.ktor.http.contentType
 import io.ktor.http.formUrlEncode
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 
 data class DocCreateResponse(
     val name: String,
@@ -106,6 +109,19 @@ class APIServiceV2(
             baseUrl = requireBaseUrl(),
             fields = fields
         )
+    }
+
+    suspend inline fun <reified T> getDocsInBatches(
+        doctype: ERPDocType,
+        names: List<String>,
+        fields: List<String> = emptyList(),
+        batchSize: Int = 5
+    ): List<T> = coroutineScope {
+        names.chunked(batchSize).flatMap { chunk ->
+            chunk.map { name ->
+                async { getDoc<T>(doctype, name, fields) }
+            }.awaitAll()
+        }
     }
 
     private suspend fun refreshToken(refresh: String): TokenResponse {

@@ -45,8 +45,14 @@ class DeliveryNoteRepository(
         ).toSet()
         val missing = noteIds.filterNot { it in existing }
 
-        missing.forEach { noteId ->
-            val detail = api.getDoc<DeliveryNoteDetailDto>(ERPDocType.DeliveryNote, noteId)
+        val details = if (missing.isEmpty()) {
+            emptyList()
+        } else {
+            api.getDocsInBatches<DeliveryNoteDetailDto>(ERPDocType.DeliveryNote, missing)
+        }
+
+        details.forEach { detail ->
+            val noteId = detail.deliveryNoteId
             if (detail.items.isNotEmpty()) {
                 deliveryNoteDao.upsertItems(
                     detail.items.map { item ->

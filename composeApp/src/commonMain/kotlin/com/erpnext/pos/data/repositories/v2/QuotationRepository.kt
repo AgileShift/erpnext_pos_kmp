@@ -47,8 +47,14 @@ class QuotationRepository(
         ).toSet()
         val missing = quotationIds.filterNot { it in existing }
 
-        missing.forEach { quotationId ->
-            val detail = api.getDoc<QuotationDetailDto>(ERPDocType.Quotation, quotationId)
+        val details = if (missing.isEmpty()) {
+            emptyList()
+        } else {
+            api.getDocsInBatches<QuotationDetailDto>(ERPDocType.Quotation, missing)
+        }
+
+        details.forEach { detail ->
+            val quotationId = detail.quotationId
             if (detail.items.isNotEmpty()) {
                 quotationDao.upsertItems(
                     detail.items.map { item ->

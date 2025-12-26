@@ -44,8 +44,14 @@ class SalesOrderRepository(
         ).toSet()
         val missing = orderIds.filterNot { it in existing }
 
-        missing.forEach { orderId ->
-            val detail = api.getDoc<SalesOrderDetailDto>(ERPDocType.SalesOrder, orderId)
+        val details = if (missing.isEmpty()) {
+            emptyList()
+        } else {
+            api.getDocsInBatches<SalesOrderDetailDto>(ERPDocType.SalesOrder, missing)
+        }
+
+        details.forEach { detail ->
+            val orderId = detail.salesOrderId
             if (detail.items.isNotEmpty()) {
                 salesOrderDao.upsertItems(
                     detail.items.map { item ->
