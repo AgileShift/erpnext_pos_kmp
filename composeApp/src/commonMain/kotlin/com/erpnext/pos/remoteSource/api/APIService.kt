@@ -262,7 +262,7 @@ class APIService(
         return LoginInfo(
             BuildKonfig.BASE_URL, BuildKonfig.REDIRECT_URI,
             BuildKonfig.CLIENT_ID, BuildKonfig.CLIENT_SECRET, listOf("all", "openid"),
-            "ERP-POS Distribuidora Reyes"
+            "ERP-POS Clothing Center"
         )
         /*return  clientOAuth.get("") {
              contentType(ContentType.Application.Json)

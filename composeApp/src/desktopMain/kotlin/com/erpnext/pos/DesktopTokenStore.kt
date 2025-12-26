@@ -6,18 +6,18 @@ import com.erpnext.pos.remoteSource.oauth.AuthInfoStore
 import com.erpnext.pos.remoteSource.oauth.TokenStore
 import com.erpnext.pos.remoteSource.oauth.TransientAuthStore
 import com.erpnext.pos.utils.TokenUtils.decodePayload
+import com.github.javakeyring.Keyring
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.json.Json
-import com.github.javakeyring.Keyring
 import java.util.prefs.Preferences
 
 class DesktopTokenStore(
-    private val domain: String = "com.erpnext.pos",          // “service name” en el keyring
-    prefsNode: String = "com.erpnext.pos.secure_prefs_v2"    // nodo Preferences
+    private val domain: String = "com.erpnext.pos",
+    prefsNode: String = "com.erpnext.pos.secure_prefs_v2"
 ) : TokenStore, TransientAuthStore, AuthInfoStore {
 
     private val mutex = Mutex()
@@ -25,35 +25,79 @@ class DesktopTokenStore(
     private val json = Json { ignoreUnknownKeys = true }
     private val prefs: Preferences = Preferences.userRoot().node(prefsNode)
 
-    // -------------------------
-    // Keyring helpers
-    // -------------------------
-    private inline fun <T> withKeyring(block: (Keyring) -> T): T {
-        val keyring = Keyring.create()
-        try {
-            return block(keyring)
-        } catch (e: Exception) {
-            throw IllegalStateException(
-                "No se pudo acceder al Keyring del sistema en Desktop. " +
-                        "Verifica soporte del SO/sesión (Linux) o empaquetado de la app.",
-                e
-            )
-        } finally {
+    /**
+     * Keyring best-effort:
+     * - Si falla por permisos/entorno/IDE, NO tumba la app.
+     * - Degrada a Preferences (menos seguro, pero evita crash).
+     */
+    @Volatile
+    private var keyringOk: Boolean = probeKeyring()
+
+    private fun probeKeyring(): Boolean {
+        return runCatching {
+            val kr = Keyring.create()
             try {
-                keyring.close()
-            } catch (_: Exception) {
+                val probeKey = "__probe__"
+                kr.setPassword(domain, probeKey, "ok")
+                kr.getPassword(domain, probeKey)
+                kr.deletePassword(domain, probeKey)
+            } finally {
+                runCatching { kr.close() }
+            }
+            true
+        }.getOrElse { e ->
+            // No rompas el arranque por esto; solo log.
+            // Puedes reemplazar por tu logger.
+            println(
+                "WARN: Keyring no disponible en Desktop. Fallback a Preferences. " +
+                        "${e.javaClass.simpleName}: ${e.message}"
+            )
+            false
+        }
+    }
+
+    private fun prefKey(key: String) = "secret.$key"
+
+    private inline fun <T> runKeyring(block: (Keyring) -> T): Result<T> {
+        return runCatching {
+            val kr = Keyring.create()
+            try {
+                block(kr)
+            } finally {
+                runCatching { kr.close() }
             }
         }
     }
 
-    private fun setSecret(key: String, value: String) =
-        withKeyring { it.setPassword(domain, key, value) }
+    private fun setSecret(key: String, value: String) {
+        if (keyringOk) {
+            val ok = runKeyring { it.setPassword(domain, key, value) }.isSuccess
+            if (ok) return
+            keyringOk = false
+        }
+        // Fallback (menos seguro, pero estable)
+        prefs.put(prefKey(key), value)
+        prefs.flush()
+    }
 
-    private fun getSecret(key: String): String? =
-        withKeyring { it.getPassword(domain, key) }
+    private fun getSecret(key: String): String? {
+        if (keyringOk) {
+            val res = runKeyring { it.getPassword(domain, key) }
+            if (res.isSuccess) return res.getOrNull()
+            keyringOk = false
+        }
+        return prefs.get(prefKey(key), null)
+    }
 
-    private fun deleteSecret(key: String) =
-        withKeyring { it.deletePassword(domain, key) }
+    private fun deleteSecret(key: String) {
+        if (keyringOk) {
+            val ok = runKeyring { it.deletePassword(domain, key) }.isSuccess
+            if (ok) return
+            keyringOk = false
+        }
+        prefs.remove(prefKey(key))
+        prefs.flush()
+    }
 
     // ------------------------------------------------------------
     // TokenStore
@@ -65,11 +109,12 @@ class DesktopTokenStore(
         val claims = decodePayload(tokens.id_token)
         val userId = claims?.get("email").toString()
 
+        // secretos
         setSecret("access_token", tokens.access_token)
         setSecret("refresh_token", tokens.refresh_token ?: "")
         setSecret("id_token", tokens.id_token)
 
-        // metadatos: Preferences
+        // metadatos (no secretos)
         prefs.putLong("expires_in", tokens.expires_in ?: 0L)
         prefs.put("userId", userId)
         prefs.flush()
@@ -78,6 +123,7 @@ class DesktopTokenStore(
     }
 
     override suspend fun load(): TokenResponse? = mutex.withLock {
+        // si falla keyring, getSecret() retorna null o usa fallback, sin crashear
         val at = getSecret("access_token") ?: return@withLock null
         val idToken = getSecret("id_token") ?: return@withLock null
         val rt = getSecret("refresh_token") ?: ""
@@ -143,7 +189,7 @@ class DesktopTokenStore(
     }
 
     // ------------------------------------------------------------
-    // TransientAuthStore (yo lo guardo también en keyring)
+    // TransientAuthStore
     // ------------------------------------------------------------
     override suspend fun savePkceVerifier(verifier: String) {
         setSecret("pkce_verifier", verifier)

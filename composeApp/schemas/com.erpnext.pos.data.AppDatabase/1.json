@@ -2,7 +2,7 @@
   "formatVersion": 1,
   "database": {
     "version": 1,
-    "identityHash": "54e6c884b4a72e522fcb464202e0772d",
+    "identityHash": "14db4a880e57dc49d6eec984222dd166",
     "entities": [
       {
         "tableName": "tabUser",
@@ -563,7 +563,7 @@
       },
       {
         "tableName": "customers",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `customerName` TEXT NOT NULL, `territory` TEXT, `email` TEXT, `mobileNo` TEXT, `customerType` TEXT NOT NULL, `creditLimit` REAL, `currentBalance` REAL, `totalPendingAmount` REAL, `pendingInvoicesCount` INTEGER, `availableCredit` REAL, `address` TEXT, `last_synced_at` INTEGER, PRIMARY KEY(`id`))",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `customerName` TEXT NOT NULL, `territory` TEXT, `email` TEXT, `mobileNo` TEXT, `customerType` TEXT NOT NULL, `creditLimit` REAL, `currentBalance` REAL, `totalPendingAmount` REAL, `pendingInvoicesCount` INTEGER, `availableCredit` REAL, `address` TEXT, `state` TEXT, `last_synced_at` INTEGER, PRIMARY KEY(`id`))",
         "fields": [
           {
             "fieldPath": "name",
@@ -626,6 +626,11 @@
           {
             "fieldPath": "address",
             "columnName": "address",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "state",
+            "columnName": "state",
             "affinity": "TEXT"
           },
           {
@@ -1127,7 +1132,7 @@
       },
       {
         "tableName": "tab_pos_opening_entry",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`name` TEXT NOT NULL, `pos_profile` TEXT NOT NULL, `company` TEXT NOT NULL, `period_start_date` TEXT NOT NULL, `posting_date` TEXT NOT NULL, `posting_time` TEXT NOT NULL, `user` TEXT, `pending_sync` INTEGER NOT NULL, PRIMARY KEY(`name`))",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`name` TEXT NOT NULL, `pos_profile` TEXT NOT NULL, `company` TEXT NOT NULL, `period_start_date` TEXT NOT NULL, `posting_date` TEXT NOT NULL, `user` TEXT, `pending_sync` INTEGER NOT NULL, PRIMARY KEY(`name`))",
         "fields": [
           {
             "fieldPath": "name",
@@ -1156,12 +1161,6 @@
           {
             "fieldPath": "postingDate",
             "columnName": "posting_date",
-            "affinity": "TEXT",
-            "notNull": true
-          },
-          {
-            "fieldPath": "postingTime",
-            "columnName": "posting_time",
             "affinity": "TEXT",
             "notNull": true
           },
@@ -1345,11 +1344,3726 @@
             ]
           }
         ]
+      },
+      {
+        "tableName": "users",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`userId` TEXT NOT NULL, `email` TEXT NOT NULL, `fullName` TEXT NOT NULL, `enabled` INTEGER NOT NULL, `userType` TEXT NOT NULL, `id` INTEGER NOT NULL, `created_at` INTEGER NOT NULL, `updated_at` INTEGER, `is_deleted` INTEGER NOT NULL, `companyId` TEXT NOT NULL, `instanceId` TEXT NOT NULL, `lastSyncedAt` INTEGER, PRIMARY KEY(`instanceId`, `companyId`, `userId`))",
+        "fields": [
+          {
+            "fieldPath": "userId",
+            "columnName": "userId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "email",
+            "columnName": "email",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "fullName",
+            "columnName": "fullName",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "enabled",
+            "columnName": "enabled",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "userType",
+            "columnName": "userType",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "created_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAt",
+            "columnName": "updated_at",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "isDeleted",
+            "columnName": "is_deleted",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "companyId",
+            "columnName": "companyId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "instanceId",
+            "columnName": "instanceId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastSyncedAt",
+            "columnName": "lastSyncedAt",
+            "affinity": "INTEGER"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "instanceId",
+            "companyId",
+            "userId"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_users_email",
+            "unique": false,
+            "columnNames": [
+              "email"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_users_email` ON `${TABLE_NAME}` (`email`)"
+          }
+        ]
+      },
+      {
+        "tableName": "companies",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`companyName` TEXT NOT NULL, `abbr` TEXT NOT NULL, `defaultCurrency` TEXT NOT NULL, `country` TEXT NOT NULL, `domain` TEXT, `taxId` TEXT, `isGroup` INTEGER NOT NULL, `parentCompanyId` TEXT, `companyLogo` TEXT, `letterHead` TEXT, `id` INTEGER NOT NULL, `created_at` INTEGER NOT NULL, `updated_at` INTEGER, `is_deleted` INTEGER NOT NULL, `companyId` TEXT NOT NULL, `instanceId` TEXT NOT NULL, `lastSyncedAt` INTEGER, PRIMARY KEY(`instanceId`, `companyId`))",
+        "fields": [
+          {
+            "fieldPath": "companyName",
+            "columnName": "companyName",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "abbr",
+            "columnName": "abbr",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "defaultCurrency",
+            "columnName": "defaultCurrency",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "country",
+            "columnName": "country",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "domain",
+            "columnName": "domain",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "taxId",
+            "columnName": "taxId",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "isGroup",
+            "columnName": "isGroup",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "parentCompanyId",
+            "columnName": "parentCompanyId",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "companyLogo",
+            "columnName": "companyLogo",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "letterHead",
+            "columnName": "letterHead",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "created_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAt",
+            "columnName": "updated_at",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "isDeleted",
+            "columnName": "is_deleted",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "companyId",
+            "columnName": "companyId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "instanceId",
+            "columnName": "instanceId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastSyncedAt",
+            "columnName": "lastSyncedAt",
+            "affinity": "INTEGER"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "instanceId",
+            "companyId"
+          ]
+        }
+      },
+      {
+        "tableName": "employees",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`employeeId` TEXT NOT NULL, `employeeName` TEXT NOT NULL, `userId` TEXT NOT NULL, `status` INTEGER NOT NULL, `company` TEXT NOT NULL, `id` INTEGER NOT NULL, `created_at` INTEGER NOT NULL, `updated_at` INTEGER, `is_deleted` INTEGER NOT NULL, `companyId` TEXT NOT NULL, `instanceId` TEXT NOT NULL, `lastSyncedAt` INTEGER, PRIMARY KEY(`instanceId`, `companyId`, `employeeId`))",
+        "fields": [
+          {
+            "fieldPath": "employeeId",
+            "columnName": "employeeId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "employeeName",
+            "columnName": "employeeName",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "userId",
+            "columnName": "userId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "status",
+            "columnName": "status",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "company",
+            "columnName": "company",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "created_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAt",
+            "columnName": "updated_at",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "isDeleted",
+            "columnName": "is_deleted",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "companyId",
+            "columnName": "companyId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "instanceId",
+            "columnName": "instanceId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastSyncedAt",
+            "columnName": "lastSyncedAt",
+            "affinity": "INTEGER"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "instanceId",
+            "companyId",
+            "employeeId"
+          ]
+        }
+      },
+      {
+        "tableName": "sales_people",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`salesPersonId` TEXT NOT NULL, `salesPersonName` TEXT NOT NULL, `employeeId` TEXT NOT NULL, `isGroup` INTEGER NOT NULL, `parentSalesPersonId` TEXT, `id` INTEGER NOT NULL, `created_at` INTEGER NOT NULL, `updated_at` INTEGER, `is_deleted` INTEGER NOT NULL, `companyId` TEXT NOT NULL, `instanceId` TEXT NOT NULL, `lastSyncedAt` INTEGER, PRIMARY KEY(`instanceId`, `companyId`, `salesPersonId`))",
+        "fields": [
+          {
+            "fieldPath": "salesPersonId",
+            "columnName": "salesPersonId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "salesPersonName",
+            "columnName": "salesPersonName",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "employeeId",
+            "columnName": "employeeId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "isGroup",
+            "columnName": "isGroup",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "parentSalesPersonId",
+            "columnName": "parentSalesPersonId",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "created_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAt",
+            "columnName": "updated_at",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "isDeleted",
+            "columnName": "is_deleted",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "companyId",
+            "columnName": "companyId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "instanceId",
+            "columnName": "instanceId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastSyncedAt",
+            "columnName": "lastSyncedAt",
+            "affinity": "INTEGER"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "instanceId",
+            "companyId",
+            "salesPersonId"
+          ]
+        }
+      },
+      {
+        "tableName": "sales_team",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`salesPerson` TEXT NOT NULL, `allocatedPercentage` REAL NOT NULL, `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `created_at` INTEGER NOT NULL, `updated_at` INTEGER, `is_deleted` INTEGER NOT NULL, `companyId` TEXT NOT NULL, `instanceId` TEXT NOT NULL, `lastSyncedAt` INTEGER)",
+        "fields": [
+          {
+            "fieldPath": "salesPerson",
+            "columnName": "salesPerson",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "allocatedPercentage",
+            "columnName": "allocatedPercentage",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "created_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAt",
+            "columnName": "updated_at",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "isDeleted",
+            "columnName": "is_deleted",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "companyId",
+            "columnName": "companyId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "instanceId",
+            "columnName": "instanceId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastSyncedAt",
+            "columnName": "lastSyncedAt",
+            "affinity": "INTEGER"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        }
+      },
+      {
+        "tableName": "territories",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`territoryId` TEXT NOT NULL, `territoryName` TEXT NOT NULL, `isGroup` INTEGER NOT NULL, `parentTerritoryId` TEXT, `territoryManagerSalesPersonId` TEXT, `id` INTEGER NOT NULL, `created_at` INTEGER NOT NULL, `updated_at` INTEGER, `is_deleted` INTEGER NOT NULL, `companyId` TEXT NOT NULL, `instanceId` TEXT NOT NULL, `lastSyncedAt` INTEGER, PRIMARY KEY(`instanceId`, `companyId`, `territoryId`))",
+        "fields": [
+          {
+            "fieldPath": "territoryId",
+            "columnName": "territoryId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "territoryName",
+            "columnName": "territoryName",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "isGroup",
+            "columnName": "isGroup",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "parentTerritoryId",
+            "columnName": "parentTerritoryId",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "territoryManagerSalesPersonId",
+            "columnName": "territoryManagerSalesPersonId",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "created_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAt",
+            "columnName": "updated_at",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "isDeleted",
+            "columnName": "is_deleted",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "companyId",
+            "columnName": "companyId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "instanceId",
+            "columnName": "instanceId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastSyncedAt",
+            "columnName": "lastSyncedAt",
+            "affinity": "INTEGER"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "instanceId",
+            "companyId",
+            "territoryId"
+          ]
+        }
+      },
+      {
+        "tableName": "customersv2",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`customerId` TEXT NOT NULL, `customerName` TEXT NOT NULL, `territoryId` TEXT NOT NULL, `customerType` TEXT NOT NULL, `disabled` INTEGER NOT NULL, `customerGroup` TEXT, `territory` TEXT NOT NULL, `creditLimit` REAL, `paymentTerms` TEXT, `defaultCurrency` TEXT, `defaultPriceList` TEXT, `primaryAddress` TEXT, `mobileNo` TEXT, `salesTeam` TEXT, `outstandingAmount` REAL, `overdueAmount` REAL, `unpaidInvoiceCount` INTEGER, `lastPaidDate` TEXT, `syncStatus` TEXT, `remote_name` TEXT, `remote_modified` TEXT, `id` INTEGER NOT NULL, `created_at` INTEGER NOT NULL, `updated_at` INTEGER, `is_deleted` INTEGER NOT NULL, `companyId` TEXT NOT NULL, `instanceId` TEXT NOT NULL, `lastSyncedAt` INTEGER, PRIMARY KEY(`instanceId`, `companyId`, `customerId`))",
+        "fields": [
+          {
+            "fieldPath": "customerId",
+            "columnName": "customerId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "customerName",
+            "columnName": "customerName",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "territoryId",
+            "columnName": "territoryId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "customerType",
+            "columnName": "customerType",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "disabled",
+            "columnName": "disabled",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "customerGroup",
+            "columnName": "customerGroup",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "territory",
+            "columnName": "territory",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "creditLimit",
+            "columnName": "creditLimit",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "paymentTerms",
+            "columnName": "paymentTerms",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "defaultCurrency",
+            "columnName": "defaultCurrency",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "defaultPriceList",
+            "columnName": "defaultPriceList",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "primaryAddress",
+            "columnName": "primaryAddress",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "mobileNo",
+            "columnName": "mobileNo",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "salesTeam",
+            "columnName": "salesTeam",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "outstandingAmount",
+            "columnName": "outstandingAmount",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "overdueAmount",
+            "columnName": "overdueAmount",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "unpaidInvoiceCount",
+            "columnName": "unpaidInvoiceCount",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "lastPaidDate",
+            "columnName": "lastPaidDate",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "syncStatus",
+            "columnName": "syncStatus",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "remoteName",
+            "columnName": "remote_name",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "remoteModified",
+            "columnName": "remote_modified",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "created_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAt",
+            "columnName": "updated_at",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "isDeleted",
+            "columnName": "is_deleted",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "companyId",
+            "columnName": "companyId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "instanceId",
+            "columnName": "instanceId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastSyncedAt",
+            "columnName": "lastSyncedAt",
+            "affinity": "INTEGER"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "instanceId",
+            "companyId",
+            "customerId"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_customersv2_instanceId_companyId_territoryId",
+            "unique": false,
+            "columnNames": [
+              "instanceId",
+              "companyId",
+              "territoryId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_customersv2_instanceId_companyId_territoryId` ON `${TABLE_NAME}` (`instanceId`, `companyId`, `territoryId`)"
+          },
+          {
+            "name": "index_customersv2_instanceId_companyId_customerId",
+            "unique": false,
+            "columnNames": [
+              "instanceId",
+              "companyId",
+              "customerId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_customersv2_instanceId_companyId_customerId` ON `${TABLE_NAME}` (`instanceId`, `companyId`, `customerId`)"
+          },
+          {
+            "name": "index_customersv2_customerId",
+            "unique": false,
+            "columnNames": [
+              "customerId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_customersv2_customerId` ON `${TABLE_NAME}` (`customerId`)"
+          }
+        ]
+      },
+      {
+        "tableName": "customer_address",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`addressId` TEXT NOT NULL, `customerId` TEXT NOT NULL, `addressTitle` TEXT NOT NULL, `addressType` TEXT NOT NULL, `line1` TEXT NOT NULL, `line2` TEXT, `city` TEXT NOT NULL, `county` TEXT, `state` TEXT, `country` TEXT, `pinCode` TEXT, `isPrimary` INTEGER NOT NULL, `isShipping` INTEGER NOT NULL, `disabled` INTEGER NOT NULL, `id` INTEGER NOT NULL, `created_at` INTEGER NOT NULL, `updated_at` INTEGER, `is_deleted` INTEGER NOT NULL, `companyId` TEXT NOT NULL, `instanceId` TEXT NOT NULL, `lastSyncedAt` INTEGER, PRIMARY KEY(`instanceId`, `companyId`, `addressId`))",
+        "fields": [
+          {
+            "fieldPath": "addressId",
+            "columnName": "addressId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "customerId",
+            "columnName": "customerId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "addressTitle",
+            "columnName": "addressTitle",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "addressType",
+            "columnName": "addressType",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "line1",
+            "columnName": "line1",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "line2",
+            "columnName": "line2",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "city",
+            "columnName": "city",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "county",
+            "columnName": "county",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "state",
+            "columnName": "state",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "country",
+            "columnName": "country",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "pinCode",
+            "columnName": "pinCode",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "isPrimary",
+            "columnName": "isPrimary",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "isShipping",
+            "columnName": "isShipping",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "disabled",
+            "columnName": "disabled",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "created_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAt",
+            "columnName": "updated_at",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "isDeleted",
+            "columnName": "is_deleted",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "companyId",
+            "columnName": "companyId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "instanceId",
+            "columnName": "instanceId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastSyncedAt",
+            "columnName": "lastSyncedAt",
+            "affinity": "INTEGER"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "instanceId",
+            "companyId",
+            "addressId"
+          ]
+        }
+      },
+      {
+        "tableName": "customer_contact",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`contactId` TEXT NOT NULL, `customerId` TEXT NOT NULL, `firstName` TEXT NOT NULL, `lastName` TEXT, `fullName` TEXT NOT NULL, `emailId` TEXT, `phone` TEXT, `mobileNo` TEXT, `isPrimary` INTEGER NOT NULL, `status` TEXT NOT NULL, `id` INTEGER NOT NULL, `created_at` INTEGER NOT NULL, `updated_at` INTEGER, `is_deleted` INTEGER NOT NULL, `companyId` TEXT NOT NULL, `instanceId` TEXT NOT NULL, `lastSyncedAt` INTEGER, PRIMARY KEY(`instanceId`, `companyId`, `contactId`))",
+        "fields": [
+          {
+            "fieldPath": "contactId",
+            "columnName": "contactId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "customerId",
+            "columnName": "customerId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "firstName",
+            "columnName": "firstName",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastName",
+            "columnName": "lastName",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "fullName",
+            "columnName": "fullName",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "emailId",
+            "columnName": "emailId",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "phone",
+            "columnName": "phone",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "mobileNo",
+            "columnName": "mobileNo",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "isPrimary",
+            "columnName": "isPrimary",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "status",
+            "columnName": "status",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "created_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAt",
+            "columnName": "updated_at",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "isDeleted",
+            "columnName": "is_deleted",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "companyId",
+            "columnName": "companyId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "instanceId",
+            "columnName": "instanceId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastSyncedAt",
+            "columnName": "lastSyncedAt",
+            "affinity": "INTEGER"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "instanceId",
+            "companyId",
+            "contactId"
+          ]
+        }
+      },
+      {
+        "tableName": "routes",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`name` TEXT NOT NULL, `territoryName` TEXT NOT NULL, `isGroup` INTEGER NOT NULL, `parentTerritoryId` TEXT, `territoryManager` TEXT, `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `created_at` INTEGER NOT NULL, `updated_at` INTEGER, `is_deleted` INTEGER NOT NULL, `companyId` TEXT NOT NULL, `instanceId` TEXT NOT NULL, `lastSyncedAt` INTEGER)",
+        "fields": [
+          {
+            "fieldPath": "name",
+            "columnName": "name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "territoryName",
+            "columnName": "territoryName",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "isGroup",
+            "columnName": "isGroup",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "parentTerritoryId",
+            "columnName": "parentTerritoryId",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "territoryManager",
+            "columnName": "territoryManager",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "created_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAt",
+            "columnName": "updated_at",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "isDeleted",
+            "columnName": "is_deleted",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "companyId",
+            "columnName": "companyId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "instanceId",
+            "columnName": "instanceId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastSyncedAt",
+            "columnName": "lastSyncedAt",
+            "affinity": "INTEGER"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        }
+      },
+      {
+        "tableName": "pos_profiles",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`posProfileId` TEXT NOT NULL, `warehouseId` TEXT NOT NULL, `costCenterId` TEXT NOT NULL, `currency` TEXT NOT NULL, `priceList` TEXT NOT NULL, `routeId` TEXT, `allowNegativeStock` INTEGER NOT NULL, `updateStock` INTEGER NOT NULL, `allowCreditSales` INTEGER NOT NULL, `customerId` TEXT, `namingSeries` TEXT, `taxTemplateId` TEXT, `writeOffAccount` TEXT, `writeOffCostCenter` TEXT, `disabled` INTEGER NOT NULL, `id` INTEGER NOT NULL, `created_at` INTEGER NOT NULL, `updated_at` INTEGER, `is_deleted` INTEGER NOT NULL, `companyId` TEXT NOT NULL, `instanceId` TEXT NOT NULL, `lastSyncedAt` INTEGER, PRIMARY KEY(`instanceId`, `companyId`, `posProfileId`))",
+        "fields": [
+          {
+            "fieldPath": "posProfileId",
+            "columnName": "posProfileId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "warehouseId",
+            "columnName": "warehouseId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "costCenterId",
+            "columnName": "costCenterId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "currency",
+            "columnName": "currency",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "priceList",
+            "columnName": "priceList",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "routeId",
+            "columnName": "routeId",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "allowNegativeStock",
+            "columnName": "allowNegativeStock",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updateStock",
+            "columnName": "updateStock",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "allowCreditSales",
+            "columnName": "allowCreditSales",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "customerId",
+            "columnName": "customerId",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "namingSeries",
+            "columnName": "namingSeries",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "taxTemplateId",
+            "columnName": "taxTemplateId",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "writeOffAccount",
+            "columnName": "writeOffAccount",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "writeOffCostCenter",
+            "columnName": "writeOffCostCenter",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "disabled",
+            "columnName": "disabled",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "created_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAt",
+            "columnName": "updated_at",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "isDeleted",
+            "columnName": "is_deleted",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "companyId",
+            "columnName": "companyId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "instanceId",
+            "columnName": "instanceId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastSyncedAt",
+            "columnName": "lastSyncedAt",
+            "affinity": "INTEGER"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "instanceId",
+            "companyId",
+            "posProfileId"
+          ]
+        }
+      },
+      {
+        "tableName": "pos_payment_methods",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`posProfileId` TEXT NOT NULL, `modeOfPayment` TEXT NOT NULL, `isDefault` INTEGER NOT NULL, `id` INTEGER NOT NULL, `created_at` INTEGER NOT NULL, `updated_at` INTEGER, `is_deleted` INTEGER NOT NULL, `companyId` TEXT NOT NULL, `instanceId` TEXT NOT NULL, `lastSyncedAt` INTEGER, PRIMARY KEY(`instanceId`, `companyId`, `posProfileId`, `modeOfPayment`))",
+        "fields": [
+          {
+            "fieldPath": "posProfileId",
+            "columnName": "posProfileId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "modeOfPayment",
+            "columnName": "modeOfPayment",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "isDefault",
+            "columnName": "isDefault",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "created_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAt",
+            "columnName": "updated_at",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "isDeleted",
+            "columnName": "is_deleted",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "companyId",
+            "columnName": "companyId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "instanceId",
+            "columnName": "instanceId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastSyncedAt",
+            "columnName": "lastSyncedAt",
+            "affinity": "INTEGER"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "instanceId",
+            "companyId",
+            "posProfileId",
+            "modeOfPayment"
+          ]
+        }
+      },
+      {
+        "tableName": "items",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`itemId` TEXT NOT NULL, `itemCode` TEXT NOT NULL, `itemName` TEXT NOT NULL, `itemGroup` TEXT NOT NULL, `brand` TEXT, `stockUom` TEXT, `salesUom` TEXT, `isStockItem` INTEGER NOT NULL, `allowNegativeStock` INTEGER NOT NULL, `imageUrl` TEXT, `disabled` INTEGER NOT NULL, `id` INTEGER NOT NULL, `created_at` INTEGER NOT NULL, `updated_at` INTEGER, `is_deleted` INTEGER NOT NULL, `companyId` TEXT NOT NULL, `instanceId` TEXT NOT NULL, `lastSyncedAt` INTEGER, PRIMARY KEY(`instanceId`, `companyId`, `itemId`))",
+        "fields": [
+          {
+            "fieldPath": "itemId",
+            "columnName": "itemId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "itemCode",
+            "columnName": "itemCode",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "itemName",
+            "columnName": "itemName",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "itemGroup",
+            "columnName": "itemGroup",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "brand",
+            "columnName": "brand",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "stockUom",
+            "columnName": "stockUom",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "salesUom",
+            "columnName": "salesUom",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "isStockItem",
+            "columnName": "isStockItem",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "allowNegativeStock",
+            "columnName": "allowNegativeStock",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "imageUrl",
+            "columnName": "imageUrl",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "disabled",
+            "columnName": "disabled",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "created_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAt",
+            "columnName": "updated_at",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "isDeleted",
+            "columnName": "is_deleted",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "companyId",
+            "columnName": "companyId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "instanceId",
+            "columnName": "instanceId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastSyncedAt",
+            "columnName": "lastSyncedAt",
+            "affinity": "INTEGER"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "instanceId",
+            "companyId",
+            "itemId"
+          ]
+        }
+      },
+      {
+        "tableName": "item_groups",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`itemGroupId` TEXT NOT NULL, `itemGroupName` TEXT NOT NULL, `parentItemGroupId` TEXT, `isGroup` INTEGER NOT NULL, `id` INTEGER NOT NULL, `created_at` INTEGER NOT NULL, `updated_at` INTEGER, `is_deleted` INTEGER NOT NULL, `companyId` TEXT NOT NULL, `instanceId` TEXT NOT NULL, `lastSyncedAt` INTEGER, PRIMARY KEY(`instanceId`, `companyId`, `itemGroupId`))",
+        "fields": [
+          {
+            "fieldPath": "itemGroupId",
+            "columnName": "itemGroupId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "itemGroupName",
+            "columnName": "itemGroupName",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "parentItemGroupId",
+            "columnName": "parentItemGroupId",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "isGroup",
+            "columnName": "isGroup",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "created_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAt",
+            "columnName": "updated_at",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "isDeleted",
+            "columnName": "is_deleted",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "companyId",
+            "columnName": "companyId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "instanceId",
+            "columnName": "instanceId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastSyncedAt",
+            "columnName": "lastSyncedAt",
+            "affinity": "INTEGER"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "instanceId",
+            "companyId",
+            "itemGroupId"
+          ]
+        }
+      },
+      {
+        "tableName": "item_prices",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`itemPriceId` TEXT NOT NULL, `itemId` TEXT NOT NULL, `priceList` TEXT NOT NULL, `rate` REAL NOT NULL, `currency` TEXT NOT NULL, `id` INTEGER NOT NULL, `created_at` INTEGER NOT NULL, `updated_at` INTEGER, `is_deleted` INTEGER NOT NULL, `companyId` TEXT NOT NULL, `instanceId` TEXT NOT NULL, `lastSyncedAt` INTEGER, PRIMARY KEY(`instanceId`, `companyId`, `itemId`, `priceList`))",
+        "fields": [
+          {
+            "fieldPath": "itemPriceId",
+            "columnName": "itemPriceId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "itemId",
+            "columnName": "itemId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "priceList",
+            "columnName": "priceList",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "rate",
+            "columnName": "rate",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "currency",
+            "columnName": "currency",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "created_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAt",
+            "columnName": "updated_at",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "isDeleted",
+            "columnName": "is_deleted",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "companyId",
+            "columnName": "companyId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "instanceId",
+            "columnName": "instanceId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastSyncedAt",
+            "columnName": "lastSyncedAt",
+            "affinity": "INTEGER"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "instanceId",
+            "companyId",
+            "itemId",
+            "priceList"
+          ]
+        }
+      },
+      {
+        "tableName": "inventory_bins",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`itemId` TEXT NOT NULL, `warehouseId` TEXT NOT NULL, `actualQty` REAL NOT NULL, `projectedQty` REAL, `reservedQty` REAL, `id` INTEGER NOT NULL, `created_at` INTEGER NOT NULL, `updated_at` INTEGER, `is_deleted` INTEGER NOT NULL, `companyId` TEXT NOT NULL, `instanceId` TEXT NOT NULL, `lastSyncedAt` INTEGER, PRIMARY KEY(`instanceId`, `companyId`, `warehouseId`, `itemId`))",
+        "fields": [
+          {
+            "fieldPath": "itemId",
+            "columnName": "itemId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "warehouseId",
+            "columnName": "warehouseId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "actualQty",
+            "columnName": "actualQty",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "projectedQty",
+            "columnName": "projectedQty",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "reservedQty",
+            "columnName": "reservedQty",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "created_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAt",
+            "columnName": "updated_at",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "isDeleted",
+            "columnName": "is_deleted",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "companyId",
+            "columnName": "companyId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "instanceId",
+            "columnName": "instanceId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastSyncedAt",
+            "columnName": "lastSyncedAt",
+            "affinity": "INTEGER"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "instanceId",
+            "companyId",
+            "warehouseId",
+            "itemId"
+          ]
+        }
+      },
+      {
+        "tableName": "pricing_rules",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`pricingRuleId` TEXT NOT NULL, `priority` INTEGER NOT NULL, `condition` TEXT, `territory` TEXT, `forPriceList` TEXT NOT NULL, `otherItemCode` TEXT, `otherItemGroup` TEXT, `validFrom` TEXT, `validUntil` TEXT, `syncStatus` TEXT, `remote_modified` TEXT, `remote_name` TEXT, `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `created_at` INTEGER NOT NULL, `updated_at` INTEGER, `is_deleted` INTEGER NOT NULL, `companyId` TEXT NOT NULL, `instanceId` TEXT NOT NULL, `lastSyncedAt` INTEGER)",
+        "fields": [
+          {
+            "fieldPath": "pricingRuleId",
+            "columnName": "pricingRuleId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "priority",
+            "columnName": "priority",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "condition",
+            "columnName": "condition",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "territory",
+            "columnName": "territory",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "forPriceList",
+            "columnName": "forPriceList",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "otherItemCode",
+            "columnName": "otherItemCode",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "otherItemGroup",
+            "columnName": "otherItemGroup",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "validFrom",
+            "columnName": "validFrom",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "validUntil",
+            "columnName": "validUntil",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "syncStatus",
+            "columnName": "syncStatus",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "remoteModified",
+            "columnName": "remote_modified",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "remoteName",
+            "columnName": "remote_name",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "created_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAt",
+            "columnName": "updated_at",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "isDeleted",
+            "columnName": "is_deleted",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "companyId",
+            "columnName": "companyId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "instanceId",
+            "columnName": "instanceId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastSyncedAt",
+            "columnName": "lastSyncedAt",
+            "affinity": "INTEGER"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_pricing_rules_instanceId_companyId_pricingRuleId",
+            "unique": false,
+            "columnNames": [
+              "instanceId",
+              "companyId",
+              "pricingRuleId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_pricing_rules_instanceId_companyId_pricingRuleId` ON `${TABLE_NAME}` (`instanceId`, `companyId`, `pricingRuleId`)"
+          }
+        ]
+      },
+      {
+        "tableName": "sales_invoices",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`invoiceId` TEXT NOT NULL, `territoryId` TEXT NOT NULL, `namingSeries` TEXT NOT NULL, `docStatus` TEXT NOT NULL, `status` TEXT NOT NULL, `postingDate` TEXT NOT NULL, `postingTime` TEXT NOT NULL, `customerId` TEXT NOT NULL, `customerName` TEXT NOT NULL, `company` TEXT NOT NULL, `territory` TEXT NOT NULL, `salesPerson` TEXT NOT NULL, `currency` TEXT NOT NULL, `conversionRate` REAL NOT NULL, `total` REAL NOT NULL, `totalTaxesAndCharges` REAL NOT NULL, `grandTotal` REAL NOT NULL, `roundedTotal` REAL, `outstandingAmount` REAL NOT NULL, `isPos` INTEGER NOT NULL, `dueDate` TEXT NOT NULL, `paymentTerms` TEXT, `updateStock` INTEGER NOT NULL, `setWarehouse` TEXT, `priceList` TEXT, `disableRoundedTotal` INTEGER NOT NULL, `syncStatus` TEXT, `remote_modified` TEXT, `remote_name` TEXT, `id` INTEGER NOT NULL, `created_at` INTEGER NOT NULL, `updated_at` INTEGER, `is_deleted` INTEGER NOT NULL, `companyId` TEXT NOT NULL, `instanceId` TEXT NOT NULL, `lastSyncedAt` INTEGER, PRIMARY KEY(`instanceId`, `companyId`, `invoiceId`))",
+        "fields": [
+          {
+            "fieldPath": "invoiceId",
+            "columnName": "invoiceId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "territoryId",
+            "columnName": "territoryId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "namingSeries",
+            "columnName": "namingSeries",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "docStatus",
+            "columnName": "docStatus",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "status",
+            "columnName": "status",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "postingDate",
+            "columnName": "postingDate",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "postingTime",
+            "columnName": "postingTime",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "customerId",
+            "columnName": "customerId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "customerName",
+            "columnName": "customerName",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "company",
+            "columnName": "company",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "territory",
+            "columnName": "territory",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "salesPerson",
+            "columnName": "salesPerson",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "currency",
+            "columnName": "currency",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "conversionRate",
+            "columnName": "conversionRate",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "total",
+            "columnName": "total",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "totalTaxesAndCharges",
+            "columnName": "totalTaxesAndCharges",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "grandTotal",
+            "columnName": "grandTotal",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "roundedTotal",
+            "columnName": "roundedTotal",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "outstandingAmount",
+            "columnName": "outstandingAmount",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "isPos",
+            "columnName": "isPos",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "dueDate",
+            "columnName": "dueDate",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "paymentTerms",
+            "columnName": "paymentTerms",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "updateStock",
+            "columnName": "updateStock",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "setWarehouse",
+            "columnName": "setWarehouse",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "priceList",
+            "columnName": "priceList",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "disableRoundedTotal",
+            "columnName": "disableRoundedTotal",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "syncStatus",
+            "columnName": "syncStatus",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "remoteModified",
+            "columnName": "remote_modified",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "remoteName",
+            "columnName": "remote_name",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "created_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAt",
+            "columnName": "updated_at",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "isDeleted",
+            "columnName": "is_deleted",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "companyId",
+            "columnName": "companyId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "instanceId",
+            "columnName": "instanceId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastSyncedAt",
+            "columnName": "lastSyncedAt",
+            "affinity": "INTEGER"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "instanceId",
+            "companyId",
+            "invoiceId"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_sales_invoices_instanceId_companyId_territoryId_postingDate",
+            "unique": false,
+            "columnNames": [
+              "instanceId",
+              "companyId",
+              "territoryId",
+              "postingDate"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_sales_invoices_instanceId_companyId_territoryId_postingDate` ON `${TABLE_NAME}` (`instanceId`, `companyId`, `territoryId`, `postingDate`)"
+          },
+          {
+            "name": "index_sales_invoices_instanceId_companyId_customerId_status",
+            "unique": false,
+            "columnNames": [
+              "instanceId",
+              "companyId",
+              "customerId",
+              "status"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_sales_invoices_instanceId_companyId_customerId_status` ON `${TABLE_NAME}` (`instanceId`, `companyId`, `customerId`, `status`)"
+          },
+          {
+            "name": "index_sales_invoices_instanceId_companyId_syncStatus",
+            "unique": false,
+            "columnNames": [
+              "instanceId",
+              "companyId",
+              "syncStatus"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_sales_invoices_instanceId_companyId_syncStatus` ON `${TABLE_NAME}` (`instanceId`, `companyId`, `syncStatus`)"
+          }
+        ]
+      },
+      {
+        "tableName": "sales_invoice_items",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`invoiceId` TEXT NOT NULL, `rowId` INTEGER NOT NULL, `itemCode` TEXT NOT NULL, `itemName` TEXT NOT NULL, `qty` REAL NOT NULL, `uom` TEXT NOT NULL, `rate` REAL NOT NULL, `amount` REAL NOT NULL, `warehouse` TEXT NOT NULL, `priceListRate` REAL NOT NULL, `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `created_at` INTEGER NOT NULL, `updated_at` INTEGER, `is_deleted` INTEGER NOT NULL, `companyId` TEXT NOT NULL, `instanceId` TEXT NOT NULL, `lastSyncedAt` INTEGER)",
+        "fields": [
+          {
+            "fieldPath": "invoiceId",
+            "columnName": "invoiceId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "rowId",
+            "columnName": "rowId",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "itemCode",
+            "columnName": "itemCode",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "itemName",
+            "columnName": "itemName",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "qty",
+            "columnName": "qty",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "uom",
+            "columnName": "uom",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "rate",
+            "columnName": "rate",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "amount",
+            "columnName": "amount",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "warehouse",
+            "columnName": "warehouse",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "priceListRate",
+            "columnName": "priceListRate",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "created_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAt",
+            "columnName": "updated_at",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "isDeleted",
+            "columnName": "is_deleted",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "companyId",
+            "columnName": "companyId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "instanceId",
+            "columnName": "instanceId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastSyncedAt",
+            "columnName": "lastSyncedAt",
+            "affinity": "INTEGER"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_sales_invoice_items_instanceId_companyId_invoiceId",
+            "unique": false,
+            "columnNames": [
+              "instanceId",
+              "companyId",
+              "invoiceId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_sales_invoice_items_instanceId_companyId_invoiceId` ON `${TABLE_NAME}` (`instanceId`, `companyId`, `invoiceId`)"
+          },
+          {
+            "name": "index_sales_invoice_items_invoiceId",
+            "unique": false,
+            "columnNames": [
+              "invoiceId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_sales_invoice_items_invoiceId` ON `${TABLE_NAME}` (`invoiceId`)"
+          }
+        ]
+      },
+      {
+        "tableName": "sales_invoice_payments",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`paymentId` TEXT NOT NULL, `invoiceId` TEXT NOT NULL, `paymentMode` TEXT NOT NULL, `amount` REAL NOT NULL, `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `created_at` INTEGER NOT NULL, `updated_at` INTEGER, `is_deleted` INTEGER NOT NULL, `companyId` TEXT NOT NULL, `instanceId` TEXT NOT NULL, `lastSyncedAt` INTEGER)",
+        "fields": [
+          {
+            "fieldPath": "paymentId",
+            "columnName": "paymentId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "invoiceId",
+            "columnName": "invoiceId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "paymentMode",
+            "columnName": "paymentMode",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "amount",
+            "columnName": "amount",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "created_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAt",
+            "columnName": "updated_at",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "isDeleted",
+            "columnName": "is_deleted",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "companyId",
+            "columnName": "companyId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "instanceId",
+            "columnName": "instanceId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastSyncedAt",
+            "columnName": "lastSyncedAt",
+            "affinity": "INTEGER"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_sales_invoice_payments_instanceId_companyId_invoiceId",
+            "unique": false,
+            "columnNames": [
+              "instanceId",
+              "companyId",
+              "invoiceId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_sales_invoice_payments_instanceId_companyId_invoiceId` ON `${TABLE_NAME}` (`instanceId`, `companyId`, `invoiceId`)"
+          },
+          {
+            "name": "index_sales_invoice_payments_invoiceId",
+            "unique": false,
+            "columnNames": [
+              "invoiceId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_sales_invoice_payments_invoiceId` ON `${TABLE_NAME}` (`invoiceId`)"
+          }
+        ]
+      },
+      {
+        "tableName": "sales_tax_and_charges",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`invoiceId` TEXT NOT NULL, `chargeType` TEXT NOT NULL, `accountHead` TEXT NOT NULL, `rate` REAL NOT NULL, `taxAmount` REAL NOT NULL, `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `created_at` INTEGER NOT NULL, `updated_at` INTEGER, `is_deleted` INTEGER NOT NULL, `companyId` TEXT NOT NULL, `instanceId` TEXT NOT NULL, `lastSyncedAt` INTEGER)",
+        "fields": [
+          {
+            "fieldPath": "invoiceId",
+            "columnName": "invoiceId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "chargeType",
+            "columnName": "chargeType",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "accountHead",
+            "columnName": "accountHead",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "rate",
+            "columnName": "rate",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "taxAmount",
+            "columnName": "taxAmount",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "created_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAt",
+            "columnName": "updated_at",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "isDeleted",
+            "columnName": "is_deleted",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "companyId",
+            "columnName": "companyId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "instanceId",
+            "columnName": "instanceId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastSyncedAt",
+            "columnName": "lastSyncedAt",
+            "affinity": "INTEGER"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        }
+      },
+      {
+        "tableName": "quotations",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`quotationId` TEXT NOT NULL, `transactionDate` TEXT NOT NULL, `validUntil` TEXT, `company` TEXT NOT NULL, `partyName` TEXT NOT NULL, `customerName` TEXT NOT NULL, `territory` TEXT, `status` TEXT NOT NULL, `priceListCurrency` TEXT NOT NULL, `sellingPriceList` TEXT, `netTotal` REAL NOT NULL, `grandTotal` REAL NOT NULL, `syncStatus` TEXT, `remote_modified` TEXT, `remote_name` TEXT, `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `created_at` INTEGER NOT NULL, `updated_at` INTEGER, `is_deleted` INTEGER NOT NULL, `companyId` TEXT NOT NULL, `instanceId` TEXT NOT NULL, `lastSyncedAt` INTEGER)",
+        "fields": [
+          {
+            "fieldPath": "quotationId",
+            "columnName": "quotationId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "transactionDate",
+            "columnName": "transactionDate",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "validUntil",
+            "columnName": "validUntil",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "company",
+            "columnName": "company",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "partyName",
+            "columnName": "partyName",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "customerName",
+            "columnName": "customerName",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "territory",
+            "columnName": "territory",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "status",
+            "columnName": "status",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "priceListCurrency",
+            "columnName": "priceListCurrency",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sellingPriceList",
+            "columnName": "sellingPriceList",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "netTotal",
+            "columnName": "netTotal",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "grandTotal",
+            "columnName": "grandTotal",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "syncStatus",
+            "columnName": "syncStatus",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "remoteModified",
+            "columnName": "remote_modified",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "remoteName",
+            "columnName": "remote_name",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "created_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAt",
+            "columnName": "updated_at",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "isDeleted",
+            "columnName": "is_deleted",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "companyId",
+            "columnName": "companyId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "instanceId",
+            "columnName": "instanceId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastSyncedAt",
+            "columnName": "lastSyncedAt",
+            "affinity": "INTEGER"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_quotations_instanceId_companyId_quotationId",
+            "unique": false,
+            "columnNames": [
+              "instanceId",
+              "companyId",
+              "quotationId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_quotations_instanceId_companyId_quotationId` ON `${TABLE_NAME}` (`instanceId`, `companyId`, `quotationId`)"
+          }
+        ]
+      },
+      {
+        "tableName": "quotation_items",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`quotationId` TEXT NOT NULL, `rowId` INTEGER NOT NULL, `itemCode` TEXT NOT NULL, `itemName` TEXT NOT NULL, `qty` REAL NOT NULL, `uom` TEXT NOT NULL, `rate` REAL NOT NULL, `amount` REAL NOT NULL, `warehouse` TEXT, `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `created_at` INTEGER NOT NULL, `updated_at` INTEGER, `is_deleted` INTEGER NOT NULL, `companyId` TEXT NOT NULL, `instanceId` TEXT NOT NULL, `lastSyncedAt` INTEGER)",
+        "fields": [
+          {
+            "fieldPath": "quotationId",
+            "columnName": "quotationId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "rowId",
+            "columnName": "rowId",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "itemCode",
+            "columnName": "itemCode",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "itemName",
+            "columnName": "itemName",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "qty",
+            "columnName": "qty",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "uom",
+            "columnName": "uom",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "rate",
+            "columnName": "rate",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "amount",
+            "columnName": "amount",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "warehouse",
+            "columnName": "warehouse",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "created_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAt",
+            "columnName": "updated_at",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "isDeleted",
+            "columnName": "is_deleted",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "companyId",
+            "columnName": "companyId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "instanceId",
+            "columnName": "instanceId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastSyncedAt",
+            "columnName": "lastSyncedAt",
+            "affinity": "INTEGER"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_quotation_items_instanceId_companyId_quotationId",
+            "unique": false,
+            "columnNames": [
+              "instanceId",
+              "companyId",
+              "quotationId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_quotation_items_instanceId_companyId_quotationId` ON `${TABLE_NAME}` (`instanceId`, `companyId`, `quotationId`)"
+          }
+        ]
+      },
+      {
+        "tableName": "quotation_taxes",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`quotationId` TEXT NOT NULL, `chargeType` TEXT NOT NULL, `accountHead` TEXT NOT NULL, `rate` REAL NOT NULL, `taxAmount` REAL NOT NULL, `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `created_at` INTEGER NOT NULL, `updated_at` INTEGER, `is_deleted` INTEGER NOT NULL, `companyId` TEXT NOT NULL, `instanceId` TEXT NOT NULL, `lastSyncedAt` INTEGER)",
+        "fields": [
+          {
+            "fieldPath": "quotationId",
+            "columnName": "quotationId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "chargeType",
+            "columnName": "chargeType",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "accountHead",
+            "columnName": "accountHead",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "rate",
+            "columnName": "rate",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "taxAmount",
+            "columnName": "taxAmount",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "created_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAt",
+            "columnName": "updated_at",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "isDeleted",
+            "columnName": "is_deleted",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "companyId",
+            "columnName": "companyId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "instanceId",
+            "columnName": "instanceId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastSyncedAt",
+            "columnName": "lastSyncedAt",
+            "affinity": "INTEGER"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_quotation_taxes_instanceId_companyId_quotationId",
+            "unique": false,
+            "columnNames": [
+              "instanceId",
+              "companyId",
+              "quotationId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_quotation_taxes_instanceId_companyId_quotationId` ON `${TABLE_NAME}` (`instanceId`, `companyId`, `quotationId`)"
+          }
+        ]
+      },
+      {
+        "tableName": "quotation_customer_links",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`quotationId` TEXT NOT NULL, `partyName` TEXT NOT NULL, `customerName` TEXT NOT NULL, `contactId` TEXT, `addressId` TEXT, `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `created_at` INTEGER NOT NULL, `updated_at` INTEGER, `is_deleted` INTEGER NOT NULL, `companyId` TEXT NOT NULL, `instanceId` TEXT NOT NULL, `lastSyncedAt` INTEGER)",
+        "fields": [
+          {
+            "fieldPath": "quotationId",
+            "columnName": "quotationId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "partyName",
+            "columnName": "partyName",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "customerName",
+            "columnName": "customerName",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "contactId",
+            "columnName": "contactId",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "addressId",
+            "columnName": "addressId",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "created_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAt",
+            "columnName": "updated_at",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "isDeleted",
+            "columnName": "is_deleted",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "companyId",
+            "columnName": "companyId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "instanceId",
+            "columnName": "instanceId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastSyncedAt",
+            "columnName": "lastSyncedAt",
+            "affinity": "INTEGER"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_quotation_customer_links_instanceId_companyId_quotationId",
+            "unique": false,
+            "columnNames": [
+              "instanceId",
+              "companyId",
+              "quotationId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_quotation_customer_links_instanceId_companyId_quotationId` ON `${TABLE_NAME}` (`instanceId`, `companyId`, `quotationId`)"
+          }
+        ]
+      },
+      {
+        "tableName": "sales_orders",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`salesOrderId` TEXT NOT NULL, `transactionDate` TEXT NOT NULL, `deliveryDate` TEXT, `company` TEXT NOT NULL, `customerId` TEXT NOT NULL, `customerName` TEXT NOT NULL, `territory` TEXT, `status` TEXT NOT NULL, `deliveryStatus` TEXT, `billingStatus` TEXT, `priceListCurrency` TEXT NOT NULL, `sellingPriceList` TEXT, `netTotal` REAL NOT NULL, `grandTotal` REAL NOT NULL, `syncStatus` TEXT, `remote_modified` TEXT, `remote_name` TEXT, `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `created_at` INTEGER NOT NULL, `updated_at` INTEGER, `is_deleted` INTEGER NOT NULL, `companyId` TEXT NOT NULL, `instanceId` TEXT NOT NULL, `lastSyncedAt` INTEGER)",
+        "fields": [
+          {
+            "fieldPath": "salesOrderId",
+            "columnName": "salesOrderId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "transactionDate",
+            "columnName": "transactionDate",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "deliveryDate",
+            "columnName": "deliveryDate",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "company",
+            "columnName": "company",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "customerId",
+            "columnName": "customerId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "customerName",
+            "columnName": "customerName",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "territory",
+            "columnName": "territory",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "status",
+            "columnName": "status",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "deliveryStatus",
+            "columnName": "deliveryStatus",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "billingStatus",
+            "columnName": "billingStatus",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "priceListCurrency",
+            "columnName": "priceListCurrency",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sellingPriceList",
+            "columnName": "sellingPriceList",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "netTotal",
+            "columnName": "netTotal",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "grandTotal",
+            "columnName": "grandTotal",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "syncStatus",
+            "columnName": "syncStatus",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "remoteModified",
+            "columnName": "remote_modified",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "remoteName",
+            "columnName": "remote_name",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "created_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAt",
+            "columnName": "updated_at",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "isDeleted",
+            "columnName": "is_deleted",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "companyId",
+            "columnName": "companyId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "instanceId",
+            "columnName": "instanceId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastSyncedAt",
+            "columnName": "lastSyncedAt",
+            "affinity": "INTEGER"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_sales_orders_instanceId_companyId_salesOrderId",
+            "unique": false,
+            "columnNames": [
+              "instanceId",
+              "companyId",
+              "salesOrderId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_sales_orders_instanceId_companyId_salesOrderId` ON `${TABLE_NAME}` (`instanceId`, `companyId`, `salesOrderId`)"
+          }
+        ]
+      },
+      {
+        "tableName": "sales_order_items",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`salesOrderId` TEXT NOT NULL, `rowId` INTEGER NOT NULL, `itemCode` TEXT NOT NULL, `itemName` TEXT NOT NULL, `qty` REAL NOT NULL, `uom` TEXT NOT NULL, `rate` REAL NOT NULL, `amount` REAL NOT NULL, `warehouse` TEXT, `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `created_at` INTEGER NOT NULL, `updated_at` INTEGER, `is_deleted` INTEGER NOT NULL, `companyId` TEXT NOT NULL, `instanceId` TEXT NOT NULL, `lastSyncedAt` INTEGER)",
+        "fields": [
+          {
+            "fieldPath": "salesOrderId",
+            "columnName": "salesOrderId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "rowId",
+            "columnName": "rowId",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "itemCode",
+            "columnName": "itemCode",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "itemName",
+            "columnName": "itemName",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "qty",
+            "columnName": "qty",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "uom",
+            "columnName": "uom",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "rate",
+            "columnName": "rate",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "amount",
+            "columnName": "amount",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "warehouse",
+            "columnName": "warehouse",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "created_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAt",
+            "columnName": "updated_at",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "isDeleted",
+            "columnName": "is_deleted",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "companyId",
+            "columnName": "companyId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "instanceId",
+            "columnName": "instanceId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastSyncedAt",
+            "columnName": "lastSyncedAt",
+            "affinity": "INTEGER"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_sales_order_items_instanceId_companyId_salesOrderId",
+            "unique": false,
+            "columnNames": [
+              "instanceId",
+              "companyId",
+              "salesOrderId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_sales_order_items_instanceId_companyId_salesOrderId` ON `${TABLE_NAME}` (`instanceId`, `companyId`, `salesOrderId`)"
+          }
+        ]
+      },
+      {
+        "tableName": "delivery_notes",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`deliveryNoteId` TEXT NOT NULL, `postingDate` TEXT NOT NULL, `company` TEXT NOT NULL, `customerId` TEXT NOT NULL, `customerName` TEXT NOT NULL, `territory` TEXT, `status` TEXT NOT NULL, `setWarehouse` TEXT, `syncStatus` TEXT, `remote_modified` TEXT, `remote_name` TEXT, `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `created_at` INTEGER NOT NULL, `updated_at` INTEGER, `is_deleted` INTEGER NOT NULL, `companyId` TEXT NOT NULL, `instanceId` TEXT NOT NULL, `lastSyncedAt` INTEGER)",
+        "fields": [
+          {
+            "fieldPath": "deliveryNoteId",
+            "columnName": "deliveryNoteId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "postingDate",
+            "columnName": "postingDate",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "company",
+            "columnName": "company",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "customerId",
+            "columnName": "customerId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "customerName",
+            "columnName": "customerName",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "territory",
+            "columnName": "territory",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "status",
+            "columnName": "status",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "setWarehouse",
+            "columnName": "setWarehouse",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "syncStatus",
+            "columnName": "syncStatus",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "remoteModified",
+            "columnName": "remote_modified",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "remoteName",
+            "columnName": "remote_name",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "created_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAt",
+            "columnName": "updated_at",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "isDeleted",
+            "columnName": "is_deleted",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "companyId",
+            "columnName": "companyId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "instanceId",
+            "columnName": "instanceId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastSyncedAt",
+            "columnName": "lastSyncedAt",
+            "affinity": "INTEGER"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_delivery_notes_instanceId_companyId_deliveryNoteId",
+            "unique": false,
+            "columnNames": [
+              "instanceId",
+              "companyId",
+              "deliveryNoteId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_delivery_notes_instanceId_companyId_deliveryNoteId` ON `${TABLE_NAME}` (`instanceId`, `companyId`, `deliveryNoteId`)"
+          }
+        ]
+      },
+      {
+        "tableName": "delivery_note_items",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`deliveryNoteId` TEXT NOT NULL, `rowId` INTEGER NOT NULL, `itemCode` TEXT NOT NULL, `itemName` TEXT NOT NULL, `qty` REAL NOT NULL, `uom` TEXT NOT NULL, `rate` REAL NOT NULL, `amount` REAL NOT NULL, `warehouse` TEXT, `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `created_at` INTEGER NOT NULL, `updated_at` INTEGER, `is_deleted` INTEGER NOT NULL, `companyId` TEXT NOT NULL, `instanceId` TEXT NOT NULL, `lastSyncedAt` INTEGER)",
+        "fields": [
+          {
+            "fieldPath": "deliveryNoteId",
+            "columnName": "deliveryNoteId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "rowId",
+            "columnName": "rowId",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "itemCode",
+            "columnName": "itemCode",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "itemName",
+            "columnName": "itemName",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "qty",
+            "columnName": "qty",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "uom",
+            "columnName": "uom",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "rate",
+            "columnName": "rate",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "amount",
+            "columnName": "amount",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "warehouse",
+            "columnName": "warehouse",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "created_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAt",
+            "columnName": "updated_at",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "isDeleted",
+            "columnName": "is_deleted",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "companyId",
+            "columnName": "companyId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "instanceId",
+            "columnName": "instanceId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastSyncedAt",
+            "columnName": "lastSyncedAt",
+            "affinity": "INTEGER"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_delivery_note_items_instanceId_companyId_deliveryNoteId",
+            "unique": false,
+            "columnNames": [
+              "instanceId",
+              "companyId",
+              "deliveryNoteId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_delivery_note_items_instanceId_companyId_deliveryNoteId` ON `${TABLE_NAME}` (`instanceId`, `companyId`, `deliveryNoteId`)"
+          }
+        ]
+      },
+      {
+        "tableName": "delivery_note_links",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`deliveryNoteId` TEXT NOT NULL, `salesOrderId` TEXT, `salesInvoiceId` TEXT, `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `created_at` INTEGER NOT NULL, `updated_at` INTEGER, `is_deleted` INTEGER NOT NULL, `companyId` TEXT NOT NULL, `instanceId` TEXT NOT NULL, `lastSyncedAt` INTEGER)",
+        "fields": [
+          {
+            "fieldPath": "deliveryNoteId",
+            "columnName": "deliveryNoteId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "salesOrderId",
+            "columnName": "salesOrderId",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "salesInvoiceId",
+            "columnName": "salesInvoiceId",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "created_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAt",
+            "columnName": "updated_at",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "isDeleted",
+            "columnName": "is_deleted",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "companyId",
+            "columnName": "companyId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "instanceId",
+            "columnName": "instanceId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastSyncedAt",
+            "columnName": "lastSyncedAt",
+            "affinity": "INTEGER"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_delivery_note_links_instanceId_companyId_deliveryNoteId",
+            "unique": false,
+            "columnNames": [
+              "instanceId",
+              "companyId",
+              "deliveryNoteId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_delivery_note_links_instanceId_companyId_deliveryNoteId` ON `${TABLE_NAME}` (`instanceId`, `companyId`, `deliveryNoteId`)"
+          }
+        ]
+      },
+      {
+        "tableName": "payment_entries",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`paymentEntryId` TEXT NOT NULL, `postingDate` TEXT NOT NULL, `company` TEXT NOT NULL, `territory` TEXT, `paymentType` TEXT NOT NULL, `modeOfPayment` TEXT NOT NULL, `partyType` TEXT NOT NULL, `partyId` TEXT NOT NULL, `paidAmount` REAL NOT NULL, `receivedAmount` REAL NOT NULL, `unallocatedAmount` REAL, `syncStatus` TEXT, `remote_modified` TEXT, `remote_name` TEXT, `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `created_at` INTEGER NOT NULL, `updated_at` INTEGER, `is_deleted` INTEGER NOT NULL, `companyId` TEXT NOT NULL, `instanceId` TEXT NOT NULL, `lastSyncedAt` INTEGER)",
+        "fields": [
+          {
+            "fieldPath": "paymentEntryId",
+            "columnName": "paymentEntryId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "postingDate",
+            "columnName": "postingDate",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "company",
+            "columnName": "company",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "territory",
+            "columnName": "territory",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "paymentType",
+            "columnName": "paymentType",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "modeOfPayment",
+            "columnName": "modeOfPayment",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "partyType",
+            "columnName": "partyType",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "partyId",
+            "columnName": "partyId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "paidAmount",
+            "columnName": "paidAmount",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "receivedAmount",
+            "columnName": "receivedAmount",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "unallocatedAmount",
+            "columnName": "unallocatedAmount",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "syncStatus",
+            "columnName": "syncStatus",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "remoteModified",
+            "columnName": "remote_modified",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "remoteName",
+            "columnName": "remote_name",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "created_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAt",
+            "columnName": "updated_at",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "isDeleted",
+            "columnName": "is_deleted",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "companyId",
+            "columnName": "companyId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "instanceId",
+            "columnName": "instanceId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastSyncedAt",
+            "columnName": "lastSyncedAt",
+            "affinity": "INTEGER"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_payment_entries_instanceId_companyId_paymentEntryId",
+            "unique": false,
+            "columnNames": [
+              "instanceId",
+              "companyId",
+              "paymentEntryId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_payment_entries_instanceId_companyId_paymentEntryId` ON `${TABLE_NAME}` (`instanceId`, `companyId`, `paymentEntryId`)"
+          }
+        ]
+      },
+      {
+        "tableName": "payment_entry_references",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`paymentEntryId` TEXT NOT NULL, `referenceDoctype` TEXT NOT NULL, `referenceName` TEXT NOT NULL, `totalAmount` REAL NOT NULL, `outstandingAmount` REAL NOT NULL, `allocatedAmount` REAL NOT NULL, `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `created_at` INTEGER NOT NULL, `updated_at` INTEGER, `is_deleted` INTEGER NOT NULL, `companyId` TEXT NOT NULL, `instanceId` TEXT NOT NULL, `lastSyncedAt` INTEGER)",
+        "fields": [
+          {
+            "fieldPath": "paymentEntryId",
+            "columnName": "paymentEntryId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "referenceDoctype",
+            "columnName": "referenceDoctype",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "referenceName",
+            "columnName": "referenceName",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "totalAmount",
+            "columnName": "totalAmount",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "outstandingAmount",
+            "columnName": "outstandingAmount",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "allocatedAmount",
+            "columnName": "allocatedAmount",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "created_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAt",
+            "columnName": "updated_at",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "isDeleted",
+            "columnName": "is_deleted",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "companyId",
+            "columnName": "companyId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "instanceId",
+            "columnName": "instanceId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastSyncedAt",
+            "columnName": "lastSyncedAt",
+            "affinity": "INTEGER"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_payment_entry_references_instanceId_companyId_paymentEntryId",
+            "unique": false,
+            "columnNames": [
+              "instanceId",
+              "companyId",
+              "paymentEntryId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_payment_entry_references_instanceId_companyId_paymentEntryId` ON `${TABLE_NAME}` (`instanceId`, `companyId`, `paymentEntryId`)"
+          }
+        ]
+      },
+      {
+        "tableName": "sync_state",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`docType` TEXT NOT NULL DEFAULT '', `lastFullSyncAt` INTEGER, `pendingInvoices` INTEGER NOT NULL DEFAULT 0, `failedInvoices` INTEGER NOT NULL DEFAULT 0, `lastPullAt` INTEGER DEFAULT NULL, `lastPushAt` INTEGER DEFAULT NULL, `lastError` TEXT DEFAULT NULL, `isSyncInProgress` INTEGER NOT NULL, `id` INTEGER NOT NULL, `created_at` INTEGER NOT NULL, `updated_at` INTEGER, `is_deleted` INTEGER NOT NULL, `companyId` TEXT NOT NULL, `instanceId` TEXT NOT NULL, `lastSyncedAt` INTEGER, PRIMARY KEY(`instanceId`, `companyId`, `docType`))",
+        "fields": [
+          {
+            "fieldPath": "docType",
+            "columnName": "docType",
+            "affinity": "TEXT",
+            "notNull": true,
+            "defaultValue": "''"
+          },
+          {
+            "fieldPath": "lastFullSyncAt",
+            "columnName": "lastFullSyncAt",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "pendingCount",
+            "columnName": "pendingInvoices",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "0"
+          },
+          {
+            "fieldPath": "failedCount",
+            "columnName": "failedInvoices",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "0"
+          },
+          {
+            "fieldPath": "lastPullAt",
+            "columnName": "lastPullAt",
+            "affinity": "INTEGER",
+            "defaultValue": "NULL"
+          },
+          {
+            "fieldPath": "lastPushAt",
+            "columnName": "lastPushAt",
+            "affinity": "INTEGER",
+            "defaultValue": "NULL"
+          },
+          {
+            "fieldPath": "lastError",
+            "columnName": "lastError",
+            "affinity": "TEXT",
+            "defaultValue": "NULL"
+          },
+          {
+            "fieldPath": "isSyncInProgress",
+            "columnName": "isSyncInProgress",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "created_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAt",
+            "columnName": "updated_at",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "isDeleted",
+            "columnName": "is_deleted",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "companyId",
+            "columnName": "companyId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "instanceId",
+            "columnName": "instanceId",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastSyncedAt",
+            "columnName": "lastSyncedAt",
+            "affinity": "INTEGER"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "instanceId",
+            "companyId",
+            "docType"
+          ]
+        }
       }
     ],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
-      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '54e6c884b4a72e522fcb464202e0772d')"
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '14db4a880e57dc49d6eec984222dd166')"
     ]
   }
 }

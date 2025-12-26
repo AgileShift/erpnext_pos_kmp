@@ -2,6 +2,7 @@ package com.erpnext.pos.remoteSource.oauth
 
 import com.erpnext.pos.randomUrlSafe
 import com.erpnext.pos.remoteSource.dto.LoginInfo
+import com.erpnext.pos.utils.oauth.OAuthRedirect
 import kotlin.collections.ifEmpty
 
 data class AuthRequest(val url: String, val state: String, val pkce: Pkce)
@@ -25,7 +26,7 @@ fun buildAuthorizeRequest(
     val query = listOf(
         "response_type" to "code",
         "client_id" to cfg.clientId,
-        "redirect_uri" to cfg.redirectUrl,
+        "redirect_uri" to OAuthRedirect.redirectUri(),
         "scope" to (scopeOverride ?: cfg.scopes).joinToString(" "),
         "state" to state,
         //"code_challenge_method" to pkce.method.lowercase(),

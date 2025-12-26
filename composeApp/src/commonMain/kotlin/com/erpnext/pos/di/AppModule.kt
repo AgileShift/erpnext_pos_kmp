@@ -110,7 +110,7 @@ val appModule = module {
     //endregion
 
     //region Login DI
-    single { LoginViewModel(get(), get(), get(), get(), get()) }
+    single { LoginViewModel(get(), get(named("apiService")), get(), get(), get()) }
     //endregion
 
     //region Splash DI

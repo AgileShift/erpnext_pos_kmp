@@ -97,6 +97,7 @@ import com.erpnext.pos.localSource.entities.v2.UserEntity as UserEntityV2
         SalesPersonEntity::class,
         SalesTeamEntity::class,
         TerritoryEntity::class,
+        //====== V2 ======
         CustomerEntityV2::class,
         CustomerAddressEntity::class,
         CustomerContactEntity::class,
@@ -124,11 +125,11 @@ import com.erpnext.pos.localSource.entities.v2.UserEntity as UserEntityV2
         PaymentEntryEntity::class,
         PaymentEntryReferenceEntity::class,
         SyncStateEntity::class
-    ], version = 8,
+    ], version = 1,
     exportSchema = true,
-    autoMigrations = [
-        AutoMigration(from = 4, to = 7)
-    ]
+    /*autoMigrations = [
+        AutoMigration(from = 1, to = 2),
+    ]*/
 )
 @ConstructedBy(AppDatabaseConstructor::class)
 abstract class AppDatabase : RoomDatabase() {

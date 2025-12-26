@@ -22,7 +22,14 @@ val desktopModule = module {
     single<AuthNavigator> { DesktopAuthNavigator() }
     single { NetworkMonitor() }
     single { TimeProvider() }
-    single { (builder: DatabaseBuilder) -> builder.build() }
+
+    // DB Builder First
+    // 1) registro el builder
+    single { DatabaseBuilder() }
+    // 2) registro el AppDatabase usando el builder
+    single<AppDatabase> { get<DatabaseBuilder>().build() }
+
+    // DAO after builder
     single { get<AppDatabase>().itemDao() }
     single { get<AppDatabase>().userDao() }
     single { get<AppDatabase>().posProfileDao() }
