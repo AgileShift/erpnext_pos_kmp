@@ -13,6 +13,7 @@ import com.erpnext.pos.localSource.entities.v2.QuotationCustomerLinkEntity
 import com.erpnext.pos.localSource.entities.v2.QuotationEntity
 import com.erpnext.pos.localSource.entities.v2.QuotationItemEntity
 import com.erpnext.pos.localSource.entities.v2.QuotationTaxEntity
+import com.erpnext.pos.localSource.entities.v2.SalesInvoiceEntity
 import com.erpnext.pos.localSource.entities.v2.SalesOrderEntity
 import com.erpnext.pos.localSource.entities.v2.SalesOrderItemEntity
 import com.erpnext.pos.remoteSource.dto.v2.CustomerAddressDto
@@ -33,6 +34,7 @@ import com.erpnext.pos.remoteSource.dto.v2.QuotationHeaderDto
 import com.erpnext.pos.remoteSource.dto.v2.QuotationItemDto
 import com.erpnext.pos.remoteSource.dto.v2.QuotationSnapshot
 import com.erpnext.pos.remoteSource.dto.v2.QuotationTaxDto
+import com.erpnext.pos.remoteSource.dto.v2.SalesInvoiceSnapshot
 import com.erpnext.pos.remoteSource.dto.v2.SalesOrderHeaderDto
 import com.erpnext.pos.remoteSource.dto.v2.SalesOrderItemDto
 import com.erpnext.pos.remoteSource.dto.v2.SalesOrderSnapshot
@@ -418,4 +420,48 @@ fun PricingRuleSnapshot.toEntity(instanceId: String, companyId: String) =
     ).apply {
         this.instanceId = instanceId
         this.companyId = companyId
+    }
+
+fun SalesInvoiceSnapshot.toEntity(instanceId: String, companyId: String) =
+    SalesInvoiceEntity(
+        invoiceId = invoiceId,
+        territoryId = territory ?: "",
+        namingSeries = "REMOTE",
+        docStatus = docStatus.toDocStatus(),
+        status = status ?: "Draft",
+        postingDate = postingDate,
+        postingTime = "00:00:00",
+        customerId = customerId,
+        customerName = customerName ?: contactDisplay ?: customerId,
+        company = company,
+        territory = territory ?: "",
+        salesPerson = "",
+        currency = currency ?: "NIO",
+        conversionRate = 1f,
+        total = netTotal,
+        totalTaxesAndCharges = (grandTotal - netTotal).toFloat(),
+        grandTotal = grandTotal,
+        roundedTotal = null,
+        outstandingAmount = outstandingAmount ?: 0.0,
+        isPos = isPos,
+        dueDate = dueDate ?: postingDate,
+        paymentTerms = null,
+        updateStock = true,
+        setWarehouse = null,
+        priceList = null,
+        disableRoundedTotal = false,
+        syncStatus = null,
+        remoteModified = modified,
+        remoteName = invoiceId
+    ).apply {
+        this.instanceId = instanceId
+        this.companyId = companyId
+    }
+
+private fun Int?.toDocStatus(): String =
+    when (this) {
+        1 -> "Submitted"
+        2 -> "Cancelled"
+        0 -> "Draft"
+        else -> "Draft"
     }
