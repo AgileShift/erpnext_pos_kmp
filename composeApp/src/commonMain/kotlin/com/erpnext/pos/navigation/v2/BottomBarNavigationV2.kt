@@ -41,6 +41,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.unit.Dp
+import com.erpnext.pos.base.getPlatformName
 import com.erpnext.pos.navigation.NavRoute
 import com.erpnext.pos.utils.view.SnackbarController
 import com.erpnext.pos.utils.view.SnackbarPosition
@@ -77,14 +79,19 @@ fun BottomBarWithCenterFab(
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
 
+    val isDektop = getPlatformName() == "Desktop"
     val navBarSize = 76.dp
     val fabSize = 64.dp
+    val barMaxWidth = if (isDektop) 720.dp else Dp.Unspecified
+    val barHorizontalPadding = if (isDektop) 24.dp else 14.dp
+    val barVerticalPadding = if (isDektop) 12.dp else 8.dp
 
     Box(
         modifier = modifier
             //.shadow(elevation = 4.dp, RoundedCornerShape(24.dp))
             .fillMaxWidth()
-            .padding(start = 0.dp, end = 0.dp, top = 0.dp, bottom = 16.dp)
+            .padding(vertical = barVerticalPadding, horizontal = barHorizontalPadding)
+            .widthIn(max = barMaxWidth)
             .height(navBarSize)
     ) {
         // Barra
