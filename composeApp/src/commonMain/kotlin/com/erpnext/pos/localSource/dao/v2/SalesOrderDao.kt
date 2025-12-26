@@ -106,6 +106,21 @@ interface SalesOrderDao {
 
     @Query(
         """
+        SELECT DISTINCT salesOrderId
+        FROM sales_order_items
+        WHERE instanceId = :instanceId
+          AND companyId = :companyId
+          AND salesOrderId IN (:salesOrderIds)
+    """
+    )
+    suspend fun getSalesOrderIdsWithItems(
+        instanceId: String,
+        companyId: String,
+        salesOrderIds: List<String>
+    ): List<String>
+
+    @Query(
+        """
         SELECT * FROM sales_orders
         WHERE instanceId = :instanceId
           AND companyId = :companyId

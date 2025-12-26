@@ -7,6 +7,7 @@ import com.erpnext.pos.localSource.entities.v2.SalesOrderEntity
 import com.erpnext.pos.localSource.entities.v2.SalesOrderItemEntity
 import com.erpnext.pos.remoteSource.api.v2.APIServiceV2
 import com.erpnext.pos.remoteSource.dto.v2.SalesOrderCreateDto
+import com.erpnext.pos.remoteSource.dto.v2.SalesOrderDetailDto
 import com.erpnext.pos.remoteSource.dto.v2.SalesOrderItemCreateDto
 import com.erpnext.pos.remoteSource.dto.v2.SalesOrderSnapshot
 import com.erpnext.pos.remoteSource.mapper.v2.toEntity
@@ -20,6 +21,9 @@ class SalesOrderRepository(
     private val customerRepository: CustomerRepository,
     private val api: APIServiceV2
 ) {
+    private companion object {
+        val DETAIL_ELIGIBLE_STATUSES = setOf("To Deliver", "To Bill", "To Deliver and Bill")
+    }
 
     suspend fun pull(ctx: SyncContext): Boolean {
         val orders = api.list<SalesOrderSnapshot>(
@@ -29,6 +33,27 @@ class SalesOrderRepository(
         if (orders.isEmpty()) return false
         val entities = orders.map { it.toEntity(ctx.instanceId, ctx.companyId) }
         salesOrderDao.upsertSalesOrders(entities)
+
+        val orderIds = orders
+            .filter { it.status in DETAIL_ELIGIBLE_STATUSES }
+            .map { it.salesOrderId }
+        val existing = salesOrderDao.getSalesOrderIdsWithItems(
+            ctx.instanceId,
+            ctx.companyId,
+            orderIds
+        ).toSet()
+        val missing = orderIds.filterNot { it in existing }
+
+        missing.forEach { orderId ->
+            val detail = api.getDoc<SalesOrderDetailDto>(ERPDocType.SalesOrder, orderId)
+            if (detail.items.isNotEmpty()) {
+                salesOrderDao.upsertItems(
+                    detail.items.map { item ->
+                        item.toEntity(orderId, ctx.instanceId, ctx.companyId)
+                    }
+                )
+            }
+        }
         return true
     }
 

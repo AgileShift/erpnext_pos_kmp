@@ -6,6 +6,7 @@ import com.erpnext.pos.remoteSource.oauth.OAuthConfig
 import com.erpnext.pos.remoteSource.oauth.TokenStore
 import com.erpnext.pos.remoteSource.oauth.toBearerToken
 import com.erpnext.pos.remoteSource.sdk.Filter
+import com.erpnext.pos.remoteSource.sdk.getERPSingle
 import com.erpnext.pos.remoteSource.sdk.getERPList
 import com.erpnext.pos.remoteSource.sdk.postERP
 import com.erpnext.pos.remoteSource.sdk.v2.ERPDocType
@@ -91,6 +92,19 @@ class APIServiceV2(
             doctype = doctype.path,
             payload = payload,
             baseUrl = requireBaseUrl()
+        )
+    }
+
+    suspend inline fun <reified T> getDoc(
+        doctype: ERPDocType,
+        name: String,
+        fields: List<String> = emptyList()
+    ): T {
+        return clientOAuth.getERPSingle(
+            doctype = doctype.path,
+            name = name,
+            baseUrl = requireBaseUrl(),
+            fields = fields
         )
     }
 

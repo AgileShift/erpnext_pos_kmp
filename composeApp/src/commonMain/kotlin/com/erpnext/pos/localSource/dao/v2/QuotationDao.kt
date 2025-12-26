@@ -132,6 +132,21 @@ interface QuotationDao {
 
     @Query(
         """
+        SELECT DISTINCT quotationId
+        FROM quotation_items
+        WHERE instanceId = :instanceId
+          AND companyId = :companyId
+          AND quotationId IN (:quotationIds)
+    """
+    )
+    suspend fun getQuotationIdsWithItems(
+        instanceId: String,
+        companyId: String,
+        quotationIds: List<String>
+    ): List<String>
+
+    @Query(
+        """
         SELECT * FROM quotation_taxes
         WHERE instanceId = :instanceId
           AND companyId = :companyId

@@ -119,6 +119,21 @@ interface DeliveryNoteDao {
 
     @Query(
         """
+        SELECT DISTINCT deliveryNoteId
+        FROM delivery_note_items
+        WHERE instanceId = :instanceId
+          AND companyId = :companyId
+          AND deliveryNoteId IN (:deliveryNoteIds)
+    """
+    )
+    suspend fun getDeliveryNoteIdsWithItems(
+        instanceId: String,
+        companyId: String,
+        deliveryNoteIds: List<String>
+    ): List<String>
+
+    @Query(
+        """
         SELECT * FROM delivery_note_links
         WHERE instanceId = :instanceId
           AND companyId = :companyId
