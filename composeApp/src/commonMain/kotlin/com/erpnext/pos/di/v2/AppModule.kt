@@ -3,6 +3,7 @@ package com.erpnext.pos.di.v2
 import com.erpnext.pos.data.AppDatabase
 import com.erpnext.pos.data.repositories.v2.CatalogRepository
 import com.erpnext.pos.data.repositories.v2.CatalogSyncRepository
+import com.erpnext.pos.data.repositories.v2.ContextRepository
 import com.erpnext.pos.data.repositories.v2.CustomerRepository
 import com.erpnext.pos.data.repositories.v2.DeliveryNoteRepository
 import com.erpnext.pos.data.repositories.v2.InventoryRepository
@@ -34,9 +35,11 @@ val appModulev2 = module {
     single { get<AppDatabase>().salesOrderDaoV2() }
     single { get<AppDatabase>().deliveryNoteDaoV2() }
     single { get<AppDatabase>().paymentEntryDaoV2() }
+    single { get<AppDatabase>().posContextDaoV2() }
 
     single { CatalogRepository(get()) }
     single { CatalogSyncRepository(get(), get()) }
+    single { ContextRepository(get(), get()) }
     single { InventoryRepository(get()) }
     single { CustomerRepository(get(), get(), get(), get(), get(), get(), get()) }
     single { QuotationRepository(get(), get(), get()) }

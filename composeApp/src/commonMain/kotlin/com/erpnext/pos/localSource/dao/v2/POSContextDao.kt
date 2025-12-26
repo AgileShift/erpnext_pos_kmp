@@ -1,10 +1,14 @@
 package com.erpnext.pos.localSource.dao.v2
 
 import androidx.room.Dao
+import androidx.room.Insert
+import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Transaction
 import com.erpnext.pos.localSource.entities.v2.CompanyEntity
 import com.erpnext.pos.localSource.entities.v2.EmployeeEntity
+import com.erpnext.pos.localSource.entities.v2.POSPaymentMethodEntity
+import com.erpnext.pos.localSource.entities.v2.POSProfileEntity
 import com.erpnext.pos.localSource.entities.v2.SalesPersonEntity
 import com.erpnext.pos.localSource.entities.v2.TerritoryEntity
 import com.erpnext.pos.localSource.entities.v2.UserEntity
@@ -23,6 +27,9 @@ interface POSContextDao {
     )
     suspend fun getCompany(instanceId: String, companyId: String): CompanyEntity?
 
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertCompany(company: CompanyEntity)
+
     @Query(
         """
         SELECT *
@@ -32,6 +39,9 @@ interface POSContextDao {
     """
     )
     suspend fun getUser(instanceId: String, companyId: String, userId: String): UserEntity?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertUser(user: UserEntity)
 
     @Query(
         """
@@ -47,6 +57,9 @@ interface POSContextDao {
         userId: String
     ): EmployeeEntity?
 
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertEmployee(employee: EmployeeEntity)
+
     @Query(
         """
         SELECT *
@@ -61,6 +74,9 @@ interface POSContextDao {
         employeeId: String
     ): SalesPersonEntity?
 
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertSalesPerson(salesPerson: SalesPersonEntity)
+
     @Query(
         """
         SELECT *
@@ -74,6 +90,9 @@ interface POSContextDao {
         companyId: String,
         salesPersonId: String
     ): TerritoryEntity?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertTerritory(territory: TerritoryEntity)
 
     @Transaction
     suspend fun getPosProfileWithPayments(
@@ -100,7 +119,10 @@ interface POSContextDao {
         instanceId: String,
         companyId: String,
         posProfileId: String
-    ): com.erpnext.pos.localSource.entities.v2.POSProfileEntity?
+    ): POSProfileEntity?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertPosProfile(profile: POSProfileEntity)
 
     @Query(
         """
@@ -115,5 +137,19 @@ interface POSContextDao {
         instanceId: String,
         companyId: String,
         posProfileId: String
-    ): List<com.erpnext.pos.localSource.entities.v2.POSPaymentMethodEntity>
+    ): List<POSPaymentMethodEntity>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertPaymentMethods(methods: List<POSPaymentMethodEntity>)
+
+    @Transaction
+    suspend fun upsertPosProfileWithPayments(
+        profile: POSProfileEntity,
+        paymentMethods: List<POSPaymentMethodEntity>
+    ) {
+        upsertPosProfile(profile)
+        if (paymentMethods.isNotEmpty()) {
+            upsertPaymentMethods(paymentMethods)
+        }
+    }
 }
