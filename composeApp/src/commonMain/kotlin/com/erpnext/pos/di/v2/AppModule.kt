@@ -1,5 +1,6 @@
 package com.erpnext.pos.di.v2
 
+import com.erpnext.pos.data.adapters.local.SalesInvoiceLocalAdapter
 import com.erpnext.pos.data.AppDatabase
 import com.erpnext.pos.data.repositories.v2.CatalogRepository
 import com.erpnext.pos.data.repositories.v2.CatalogSyncRepository
@@ -9,17 +10,25 @@ import com.erpnext.pos.data.repositories.v2.DeliveryNoteRepository
 import com.erpnext.pos.data.repositories.v2.InventoryRepository
 import com.erpnext.pos.data.repositories.v2.PaymentEntryRepository
 import com.erpnext.pos.data.repositories.v2.QuotationRepository
+import com.erpnext.pos.data.repositories.v2.SalesInvoiceRemoteRepository
+import com.erpnext.pos.data.repositories.v2.SalesInvoiceRepository
 import com.erpnext.pos.data.repositories.v2.SalesOrderRepository
 import com.erpnext.pos.data.repositories.v2.SyncRepository
+import com.erpnext.pos.domain.sync.SyncUnit
 import com.erpnext.pos.domain.usecases.v2.CreateCustomerOfflineUseCase
 import com.erpnext.pos.domain.usecases.v2.CreateDeliveryNoteOfflineUseCase
 import com.erpnext.pos.domain.usecases.v2.CreatePaymentEntryOfflineUseCase
 import com.erpnext.pos.domain.usecases.v2.CreateQuotationOfflineUseCase
 import com.erpnext.pos.domain.usecases.v2.CreateSalesOrderOfflineUseCase
+import com.erpnext.pos.domain.usecases.v2.sync.BinSyncUnit
 import com.erpnext.pos.domain.usecases.v2.sync.CustomerSyncUnit
 import com.erpnext.pos.domain.usecases.v2.sync.DeliveryNoteSyncUnit
+import com.erpnext.pos.domain.usecases.v2.sync.ItemGroupSyncUnit
+import com.erpnext.pos.domain.usecases.v2.sync.ItemPriceSyncUnit
+import com.erpnext.pos.domain.usecases.v2.sync.ItemSyncUnit
 import com.erpnext.pos.domain.usecases.v2.sync.PaymentEntrySyncUnit
 import com.erpnext.pos.domain.usecases.v2.sync.QuotationSyncUnit
+import com.erpnext.pos.domain.usecases.v2.sync.SalesInvoiceSyncUnit
 import com.erpnext.pos.domain.usecases.v2.sync.SalesOrderSyncUnit
 import com.erpnext.pos.remoteSource.api.v2.APIServiceV2
 import com.erpnext.pos.domain.utils.UUIDGenerator
@@ -42,6 +51,9 @@ val appModulev2 = module {
     single { ContextRepository(get(), get()) }
     single { InventoryRepository(get()) }
     single { CustomerRepository(get(), get(), get(), get(), get(), get(), get()) }
+    single { SalesInvoiceLocalAdapter(get()) }
+    single { SalesInvoiceRemoteRepository(get(), get()) }
+    single { SalesInvoiceRepository(get(), get(), get(), get()) }
     single { QuotationRepository(get(), get(), get()) }
     single { SalesOrderRepository(get(), get(), get()) }
     single { DeliveryNoteRepository(get(), get(), get()) }
@@ -57,9 +69,29 @@ val appModulev2 = module {
     single { CreatePaymentEntryOfflineUseCase(get(), get(), get()) }
     single { CreateCustomerOfflineUseCase(get(), get()) }
 
+    factory { ItemGroupSyncUnit(get(), get()) }
+    factory { ItemSyncUnit(get(), get()) }
+    factory { ItemPriceSyncUnit(get(), get()) }
+    factory { BinSyncUnit(get(), get()) }
     factory { CustomerSyncUnit(get(), get(), get()) }
+    factory { SalesInvoiceSyncUnit(get(), get()) }
     factory { QuotationSyncUnit(get(), get(), get()) }
     factory { SalesOrderSyncUnit(get(), get(), get()) }
     factory { DeliveryNoteSyncUnit(get(), get(), get()) }
     factory { PaymentEntrySyncUnit(get(), get(), get()) }
+
+    factory<List<SyncUnit>> {
+        listOf(
+            get<ItemGroupSyncUnit>(),
+            get<ItemSyncUnit>(),
+            get<ItemPriceSyncUnit>(),
+            get<BinSyncUnit>(),
+            get<CustomerSyncUnit>(),
+            get<SalesInvoiceSyncUnit>(),
+            get<QuotationSyncUnit>(),
+            get<SalesOrderSyncUnit>(),
+            get<DeliveryNoteSyncUnit>(),
+            get<PaymentEntrySyncUnit>()
+        )
+    }
 }
