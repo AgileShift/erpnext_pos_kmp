@@ -4,6 +4,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
+import org.koin.compose.KoinApplication
+import org.koin.core.logger.Level
 
 fun main() = application {
 
@@ -18,6 +20,14 @@ fun main() = application {
         title = "ERPNext POS",
         state = state,
     ) {
-        App()
+        KoinApplication(application = {
+            printLogger(Level.DEBUG)
+            modules(
+                _root_ide_package_.com.erpnext.pos.di.appModule,
+                desktopModule
+            )
+        }) {
+            AppNavigation()
+        }
     }
 }

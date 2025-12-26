@@ -49,7 +49,7 @@ interface SalesInvoiceDao {
 
     @Transaction
     @Query("SELECT * FROM tabSalesInvoice ORDER BY posting_date DESC")
-    fun getAllInvoices(): List<SalesInvoiceWithItemsAndPayments>
+    suspend fun getAllInvoices(): List<SalesInvoiceWithItemsAndPayments>
 
     @Transaction
     @Query("SELECT * FROM tabSalesInvoice WHERE invoice_name = :invoiceName LIMIT 1")

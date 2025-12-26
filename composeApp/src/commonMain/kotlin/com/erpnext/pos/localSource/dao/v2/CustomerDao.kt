@@ -38,9 +38,9 @@ interface CustomerDao {
     ): List<CustomerWithContactsAndAddresses> {
         return getCustomersForTerritory(instanceId, companyId, territoryId).map { customer ->
             CustomerWithContactsAndAddresses(
-                customer = customer,
-                contacts = getContactsForCustomer(instanceId, companyId, customer.customerId),
-                addresses = getAddressesForCustomer(instanceId, companyId, customer.customerId)
+                customer = customer.customer,
+                contacts = getContactsForCustomer(instanceId, companyId, customer.customer.customerId),
+                addresses = getAddressesForCustomer(instanceId, companyId, customer.customer.customerId)
             )
         }
     }

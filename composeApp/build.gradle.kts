@@ -129,6 +129,8 @@ kotlin {
             implementation(libs.ktor.client.cio)
             implementation(libs.kotlinx.coroutines.swing)
             implementation(libs.sqldelight.jvm)
+
+            implementation("com.github.javakeyring:java-keyring:1.0.4")
         }
         iosMain.dependencies {
             implementation(libs.androidx.room.runtime)

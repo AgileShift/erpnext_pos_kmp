@@ -7,7 +7,6 @@ import androidx.room.Entity
     primaryKeys = ["instanceId", "companyId"]
 )
 data class CompanyEntity(
-    val companyId: String,
     val companyName: String,
     var abbr: String,
     var defaultCurrency: String,
@@ -18,6 +17,4 @@ data class CompanyEntity(
     var parentCompanyId: String? = null,
     var companyLogo: String? = null,
     var letterHead: String?,
-    var lastSyncedAt: Long? = null,
-    var instanceId: String? = null
-)
+) : BaseEntity()

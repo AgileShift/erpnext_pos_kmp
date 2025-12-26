@@ -127,9 +127,7 @@ import com.erpnext.pos.localSource.entities.v2.UserEntity as UserEntityV2
     ], version = 7,
     exportSchema = true,
     autoMigrations = [
-        AutoMigration(from = 4, to = 5),
-        AutoMigration(from = 5, to = 6),
-        AutoMigration(from = 6, to = 7)
+        AutoMigration(from = 4, to = 7),
     ]
 )
 @ConstructedBy(AppDatabaseConstructor::class)

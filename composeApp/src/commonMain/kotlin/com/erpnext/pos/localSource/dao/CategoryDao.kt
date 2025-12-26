@@ -10,14 +10,14 @@ import kotlinx.coroutines.flow.Flow
 @Dao
 interface CategoryDao {
     @Insert(onConflict = REPLACE)
-    fun insertAll(entities: List<CategoryEntity>)
+    suspend fun insertAll(entities: List<CategoryEntity>)
 
     @Query("SELECT * FROM tabCategory")
     fun getAll(): Flow<List<CategoryEntity>>
 
     @Query("SELECT COUNT(*) FROM tabcategory")
-    fun count(): Int
+    suspend fun count(): Int
 
     @Query("DELETE FROM tabCategory")
-    fun deleteAll()
+    suspend fun deleteAll()
 }

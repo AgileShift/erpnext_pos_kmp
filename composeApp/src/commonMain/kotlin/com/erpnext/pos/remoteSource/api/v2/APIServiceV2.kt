@@ -32,7 +32,7 @@ class APIServiceV2(
     private val store: TokenStore,
     private val authStore: AuthInfoStore
 ) {
-    private val clientOAuth = client
+    val clientOAuth = client
         .config {
             install(Auth) {
                 bearer {
@@ -61,7 +61,7 @@ class APIServiceV2(
             }
         }
 
-    private fun requireBaseUrl(): String {
+    suspend fun requireBaseUrl(): String {
         return authStore.getCurrentSite()
             ?: error("Missing ERPNext site URL in AuthInfoStore")
     }

@@ -116,7 +116,12 @@ interface SalesInvoiceDao {
         territoryId: String,
         fromDate: String
     ): List<SalesInvoiceWithItemsAndPayments> {
-        return getInvoiceHeadersForRoute(instanceId, companyId, territoryId, fromDate).map { invoice ->
+        return getInvoiceHeadersForRoute(
+            instanceId,
+            companyId,
+            territoryId,
+            fromDate
+        ).map { invoice ->
             SalesInvoiceWithItemsAndPayments(
                 invoice = invoice,
                 items = getInvoiceItems(instanceId, companyId, invoice.invoiceId),
@@ -252,7 +257,7 @@ interface SalesInvoiceDao {
                 remote_name = :remoteName,
                 remote_modified = :remoteModified,
                 lastSyncedAt = :syncedAd,
-                updated_at = :updatedAt
+                updated_at = :syncedAd
             WHERE instanceId = :instanceId 
                 AND companyId = :companyId 
                 AND invoiceId = :localInvoiceId

@@ -79,19 +79,19 @@ class SalesOrderRepository(
             val customerId = customerRepository.resolveRemoteCustomerId(
                 instanceId,
                 companyId,
-                snapshot.order.customerId
+                snapshot.salesOrder.customerId
             )
             PendingSync(
-                localId = snapshot.order.salesOrderId,
+                localId = snapshot.salesOrder.salesOrderId,
                 payload = SalesOrderCreateDto(
-                    company = snapshot.order.company,
-                    transactionDate = snapshot.order.transactionDate,
+                    company = snapshot.salesOrder.company,
+                    transactionDate = snapshot.salesOrder.transactionDate,
                     customerId = customerId,
-                    deliveryDate = snapshot.order.deliveryDate,
-                    customerName = snapshot.order.customerName,
-                    territory = snapshot.order.territory,
-                    sellingPriceList = snapshot.order.sellingPriceList,
-                    currency = snapshot.order.priceListCurrency,
+                    deliveryDate = snapshot.salesOrder.deliveryDate,
+                    customerName = snapshot.salesOrder.customerName,
+                    territory = snapshot.salesOrder.territory,
+                    sellingPriceList = snapshot.salesOrder.sellingPriceList,
+                    currency = snapshot.salesOrder.priceListCurrency,
                     items = snapshot.items.map { item ->
                         SalesOrderItemCreateDto(
                             itemCode = item.itemCode,

@@ -82,17 +82,17 @@ class DeliveryNoteRepository(
             val customerId = customerRepository.resolveRemoteCustomerId(
                 instanceId,
                 companyId,
-                snapshot.note.customerId
+                snapshot.deliveryNote.customerId
             )
             PendingSync(
-                localId = snapshot.note.deliveryNoteId,
+                localId = snapshot.deliveryNote.deliveryNoteId,
                 payload = DeliveryNoteCreateDto(
-                    company = snapshot.note.company,
-                    postingDate = snapshot.note.postingDate,
+                    company = snapshot.deliveryNote.company,
+                    postingDate = snapshot.deliveryNote.postingDate,
                     customerId = customerId,
-                    customerName = snapshot.note.customerName,
-                    territory = snapshot.note.territory,
-                    setWarehouse = snapshot.note.setWarehouse,
+                    customerName = snapshot.deliveryNote.customerName,
+                    territory = snapshot.deliveryNote.territory,
+                    setWarehouse = snapshot.deliveryNote.setWarehouse,
                     items = snapshot.items.map { item ->
                         DeliveryNoteItemCreateDto(
                             itemCode = item.itemCode,

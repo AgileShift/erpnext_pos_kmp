@@ -62,6 +62,7 @@ import okio.Path.Companion.toPath
 import org.koin.core.context.startKoin
 import org.koin.core.module.Module
 import org.koin.core.parameter.parametersOf
+import org.koin.core.qualifier.named
 import org.koin.dsl.KoinAppDeclaration
 import org.koin.dsl.module
 
@@ -89,7 +90,7 @@ val appModule = module {
         }
     }
 
-    single {
+    single(named("apiService")) {
         APIService(
             client = get(), authStore = get(), store = get()
         )
@@ -104,7 +105,7 @@ val appModule = module {
             "./prefs.preferences_pb".toPath()
         }
     }
-    single<CashBoxManager> { CashBoxManager(get(), get(), get(), get(), get(), get()) }
+    single<CashBoxManager> { CashBoxManager(get(named("apiService")), get(), get(), get(), get(), get()) }
     single<SyncManager> { SyncManager(get(), get(), get(), get()) }
     //endregion
 
@@ -113,11 +114,11 @@ val appModule = module {
     //endregion
 
     //region Splash DI
-    single { SplashViewModel(get(), get(), get(), get()) }
+    single { SplashViewModel(get(), get(), get(), get(named("apiService"))) }
     //endregion
 
     //region Inventory
-    single { InventoryRemoteSource(get()) }
+    single { InventoryRemoteSource(get(named("apiService"))) }
     single { InventoryLocalSource(get(), get()) }
     single { InventoryRepository(get(), get(), get()) }
     single { InventoryViewModel(get(), get(), get()) }
@@ -125,33 +126,33 @@ val appModule = module {
 
     //region POS Profile
     single { POSProfileLocalSource(get(), get()) }
-    single { POSProfileRemoteSource(get(), get(), get()) }
+    single { POSProfileRemoteSource(get(named("apiService")), get(), get()) }
     single<IPOSRepository> { POSProfileRepository(get(), get()) }
     single { POSProfileViewModel(get(), get(), get()) }
     //endregion
 
     //region Customer
-    single { CustomerRemoteSource(get()) }
+    single { CustomerRemoteSource(get(named("apiService"))) }
     single { CustomerLocalSource(get(), get()) }
     single { CustomerRepository(get(), get(), get()) }
     single { CustomerViewModel(get(), get(), get(), get()) }
     //endregion
 
     //region Home
-    single { UserRemoteSource(get(), get()) }
+    single { UserRemoteSource(get(named("apiService")), get()) }
     single { HomeViewModel(get(), get(), get(), get(), get(), get(), get()) }
     single<IUserRepository> { UserRepository(get()) }
     //endregion
 
     //region Invoices
-    single { SalesInvoiceRemoteSource(get(), get()) }
+    single { SalesInvoiceRemoteSource(get(named("apiService")), get()) }
     single { InvoiceViewModel(get(), get()) }
     single { SalesInvoiceRepository(get(), get(), get()) }
     //endregion
 
     //region Checkout
     single { BillingViewModel(get(), get(), get()) }
-    single { SalesInvoiceRemoteSource(get(), get()) }
+    single { SalesInvoiceRemoteSource(get(named("apiService")), get()) }
     single { InvoiceLocalSource(get()) }
     single { CheckoutRepository(get(), get()) }
     //endregion
@@ -161,7 +162,7 @@ val appModule = module {
     //endregion
 
     //region UseCases DI
-    single { LogoutUseCase(get()) }
+    single { LogoutUseCase(get(named("apiService"))) }
     single { FetchBillingProductsWithPriceUseCase(get()) }
     single { CheckCustomerCreditUseCase(get()) }
     single { FetchPendingInvoiceUseCase(get()) }
@@ -180,7 +181,7 @@ fun initKoin(
 ) {
     startKoin {
         config?.invoke(this)
-        modules(appModule + appModulev2 + modules)
+        modules(appModule + modules)
         koin.get<AppDatabase> { parametersOf(builder) }
     }
 }

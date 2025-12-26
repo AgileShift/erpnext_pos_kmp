@@ -21,6 +21,8 @@ import com.erpnext.pos.domain.usecases.v2.sync.QuotationSyncUnit
 import com.erpnext.pos.domain.usecases.v2.sync.SalesOrderSyncUnit
 import com.erpnext.pos.remoteSource.api.v2.APIServiceV2
 import com.erpnext.pos.domain.utils.UUIDGenerator
+import org.koin.core.qualifier.Qualifier
+import org.koin.core.qualifier.named
 import org.koin.dsl.module
 
 val appModulev2 = module {
@@ -42,7 +44,7 @@ val appModulev2 = module {
     single { DeliveryNoteRepository(get(), get()) }
     single { PaymentEntryRepository(get(), get()) }
     single { SyncRepository(get(), get()) }
-    single { APIServiceV2(get(), get(), get()) }
+    single(named("apiServiceV2")) { APIServiceV2(get(), get(), get()) }
 
     factory { UUIDGenerator() }
 
@@ -52,9 +54,9 @@ val appModulev2 = module {
     single { CreatePaymentEntryOfflineUseCase(get(), get(), get()) }
     single { CreateCustomerOfflineUseCase(get(), get()) }
 
-    factory { CustomerSyncUnit(get(), get(), get()) }
-    factory { QuotationSyncUnit(get(), get(), get()) }
-    factory { SalesOrderSyncUnit(get(), get(), get()) }
-    factory { DeliveryNoteSyncUnit(get(), get(), get()) }
-    factory { PaymentEntrySyncUnit(get(), get(), get()) }
+    factory { CustomerSyncUnit(get(), get(named("apiServiceV2")), get()) }
+    factory { QuotationSyncUnit(get(), get(named("apiServiceV2")), get()) }
+    factory { SalesOrderSyncUnit(get(), get(named("apiServiceV2")), get()) }
+    factory { DeliveryNoteSyncUnit(get(), get(named("apiServiceV2")), get()) }
+    factory { PaymentEntrySyncUnit(get(), get(named("apiServiceV2")), get()) }
 }
