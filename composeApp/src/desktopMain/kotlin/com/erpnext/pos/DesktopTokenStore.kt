@@ -1,5 +1,6 @@
 package com.erpnext.pos
 
+import com.erpnext.pos.base.getPlatformName
 import com.erpnext.pos.remoteSource.dto.LoginInfo
 import com.erpnext.pos.remoteSource.dto.TokenResponse
 import com.erpnext.pos.remoteSource.oauth.AuthInfoStore
@@ -102,9 +103,9 @@ class DesktopTokenStore(
     // ------------------------------------------------------------
     // TokenStore
     // ------------------------------------------------------------
-    override suspend fun save(tokens: TokenResponse) = mutex.withLock {
+    override suspend fun save(tokens: TokenResponse) {
         clear()
-        if (tokens.id_token.isNullOrEmpty()) return@withLock
+        if (tokens.id_token.isNullOrEmpty()) return
 
         val claims = decodePayload(tokens.id_token)
         val userId = claims?.get("email").toString()
@@ -159,10 +160,12 @@ class DesktopTokenStore(
     // ------------------------------------------------------------
     // AuthInfoStore
     // ------------------------------------------------------------
-    override suspend fun loadAuthInfoByUrl(url: String?): LoginInfo {
+    override suspend fun loadAuthInfoByUrl(url: String?, platform: String?): LoginInfo {
         val currentUrl = url?.takeIf { it.isNotBlank() } ?: getCurrentSite()
         val sitesInfo = loadAuthInfo()
-        return sitesInfo.first { it.url == currentUrl }
+        return if (getPlatformName() == "Desktop")
+            sitesInfo.first { it.url == currentUrl && it.redirectUrl.contains("127.0.0.1") }
+        else sitesInfo.first { it.url == currentUrl }
     }
 
     override suspend fun loadAuthInfo(): MutableList<LoginInfo> {

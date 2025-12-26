@@ -24,7 +24,7 @@ interface TokenStore {
 
 interface AuthInfoStore {
     suspend fun loadAuthInfo(): MutableList<LoginInfo>
-    suspend fun loadAuthInfoByUrl(url: String? = null): LoginInfo
+    suspend fun loadAuthInfoByUrl(url: String? = null, platform: String? = null): LoginInfo
     suspend fun saveAuthInfo(info: LoginInfo)
     suspend fun getCurrentSite(): String?
     suspend fun clearAuthInfo()

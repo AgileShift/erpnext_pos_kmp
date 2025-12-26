@@ -1,6 +1,7 @@
 package com.erpnext.pos.remoteSource.api
 
 import com.erpnext.pos.BuildKonfig
+import com.erpnext.pos.base.getPlatformName
 import com.erpnext.pos.remoteSource.dto.BinDto
 import com.erpnext.pos.remoteSource.dto.CategoryDto
 import com.erpnext.pos.remoteSource.dto.CustomerDto
@@ -113,11 +114,6 @@ class APIService(
         returnedState: String
     ): TokenResponse? {
         try {
-            print("OAuthDebug - Client ID: ${oauthConfig.clientId}")
-            print("OAuthDebug - Code: $code")
-            print("OAuthDebug - Redirect URI: ${oauthConfig.redirectUrl}")
-            print("OAuthDebug - Code Verifier: ${pkce.verifier}")
-
             require(expectedState == returnedState) { "CSRF state mismatch" }
             val res = client.post(oauthConfig.tokenUrl) {
                 contentType(ContentType.Application.FormUrlEncoded)
@@ -259,11 +255,25 @@ class APIService(
 
     //TODO: Cuando tenga el API lo cambiamos
     suspend fun getLoginWithSite(site: String): LoginInfo {
-        return LoginInfo(
-            BuildKonfig.BASE_URL, BuildKonfig.REDIRECT_URI,
-            BuildKonfig.CLIENT_ID, BuildKonfig.CLIENT_SECRET, listOf("all", "openid"),
-            "ERP-POS Clothing Center"
-        )
+        return if (getPlatformName() == "Desktop") {
+            LoginInfo(
+                BuildKonfig.BASE_URL,
+                BuildKonfig.DESKTOP_REDIRECT_URI,
+                BuildKonfig.DESKTOP_CLIENT_ID,
+                BuildKonfig.DESKTOP_CLIENT_SECRET,
+                listOf("all", "openid"),
+                "ERP-POS Clothing Center - Desktop"
+            )
+        } else {
+            LoginInfo(
+                BuildKonfig.BASE_URL,
+                BuildKonfig.REDIRECT_URI,
+                BuildKonfig.CLIENT_ID,
+                BuildKonfig.CLIENT_SECRET,
+                listOf("all", "openid"),
+                "ERP-POS Clothing Center"
+            )
+        }
         /*return  clientOAuth.get("") {
              contentType(ContentType.Application.Json)
              setBody(site)

@@ -49,14 +49,9 @@ class LoginViewModel(
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 val oAuthConfig = authStore.loadAuthInfoByUrl().toOAuthConfig()
-                val resolvedConfig = if (getPlatformName() == "Desktop") {
-                    oAuthConfig.copy(redirectUrl = DESKTOP_REDIRECT_URI)
-                } else {
-                    oAuthConfig
-                }
-                val authRequest = buildAuthorizeRequest(resolvedConfig)
+                val authRequest = buildAuthorizeRequest(oAuthConfig)
                 val tokens = oauthService.exchangeCode(
-                    resolvedConfig,
+                    oAuthConfig,
                     code,
                     authRequest.pkce,
                     authRequest.state,
@@ -98,6 +93,7 @@ class LoginViewModel(
                 } else {
                     buildAuthorizeRequest(oauthConfig)
                 }
+                print("URL -> ${request.url}")
                 doLogin(request.url)
                 if (isDesktop) {
                     val code = receiver?.awaitCode(request.state) ?: ""

@@ -157,6 +157,22 @@ buildkonfig {
         buildConfigField(
             STRING, "REDIRECT_URI", properties["REDIRECT_URL"].toString().replace("\"", "")
         )
+        buildConfigField(
+            STRING,
+            "DESKTOP_REDIRECT_URI",
+            properties["DESKTOP_REDIRECT_URL"].toString().replace("\"", "")
+        )
+        buildConfigField(
+            STRING,
+            "DESKTOP_CLIENT_ID",
+            properties["DESKTOP_CLIENT_ID"].toString().replace("\"", "")
+        )
+        buildConfigField(
+            STRING,
+            "DESKTOP_CLIENT_SECRET",
+            properties["DESKTOP_CLIENT_SECRET"].toString().replace("\"", "")
+        )
+
     }
 
     defaultConfigs("staging") {

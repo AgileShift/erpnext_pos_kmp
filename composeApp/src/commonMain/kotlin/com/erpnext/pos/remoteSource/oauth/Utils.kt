@@ -3,6 +3,7 @@ package com.erpnext.pos.remoteSource.oauth
 import com.erpnext.pos.randomUrlSafe
 import com.erpnext.pos.remoteSource.dto.LoginInfo
 import com.erpnext.pos.utils.oauth.OAuthRedirect
+import io.ktor.http.encodeURLParameter
 import kotlin.collections.ifEmpty
 
 data class AuthRequest(val url: String, val state: String, val pkce: Pkce)
@@ -29,10 +30,10 @@ fun buildAuthorizeRequest(
         "redirect_uri" to cfg.redirectUrl,
         "scope" to (scopeOverride ?: cfg.scopes).joinToString(" "),
         "state" to state,
-        "code_challenge_method" to pkce.method.lowercase(),
-        "code_challenge" to pkce.challenge
+        //"code_challenge_method" to pkce.method.lowercase(),
+        //"code_challenge" to pkce.challenge
     ).joinToString("&") { "${it.first}=${encode(it.second)}" }
     return AuthRequest("${cfg.authorizeUrl}?$query", state, pkce)
 }
 
-private fun encode(v: String) = v.encodeToByteArray().decodeToString()
+private fun encode(v: String) = v.encodeURLParameter() // v.encodeToByteArray().decodeToString()
