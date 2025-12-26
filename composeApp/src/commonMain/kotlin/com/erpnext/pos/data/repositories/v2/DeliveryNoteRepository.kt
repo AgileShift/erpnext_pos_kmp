@@ -8,6 +8,7 @@ import com.erpnext.pos.localSource.entities.v2.DeliveryNoteItemEntity
 import com.erpnext.pos.localSource.entities.v2.DeliveryNoteLinkEntity
 import com.erpnext.pos.remoteSource.api.v2.APIServiceV2
 import com.erpnext.pos.remoteSource.dto.v2.DeliveryNoteCreateDto
+import com.erpnext.pos.remoteSource.dto.v2.DeliveryNoteDetailDto
 import com.erpnext.pos.remoteSource.dto.v2.DeliveryNoteItemCreateDto
 import com.erpnext.pos.remoteSource.dto.v2.DeliveryNoteSnapshot
 import com.erpnext.pos.remoteSource.mapper.v2.toEntity
@@ -21,6 +22,10 @@ class DeliveryNoteRepository(
     private val customerRepository: CustomerRepository,
     private val api: APIServiceV2
 ) {
+    private companion object {
+        // Only delivery notes pending billing require offline item detail.
+        val DETAIL_ELIGIBLE_STATUSES = setOf("To Bill")
+    }
 
     suspend fun pull(ctx: SyncContext): Boolean {
         val notes = api.list<DeliveryNoteSnapshot>(
@@ -30,6 +35,41 @@ class DeliveryNoteRepository(
         if (notes.isEmpty()) return false
         val entities = notes.map { it.toEntity(ctx.instanceId, ctx.companyId) }
         deliveryNoteDao.upsertDeliveryNotes(entities)
+
+        val noteIds = notes
+            .filter { it.status in DETAIL_ELIGIBLE_STATUSES }
+            .map { it.deliveryNoteId }
+        val existing = deliveryNoteDao.getDeliveryNoteIdsWithItems(
+            ctx.instanceId,
+            ctx.companyId,
+            noteIds
+        ).toSet()
+        val missing = noteIds.filterNot { it in existing }
+
+        missing.forEach { noteId ->
+            val detail = api.getDoc<DeliveryNoteDetailDto>(ERPDocType.DeliveryNote, noteId)
+            if (detail.items.isNotEmpty()) {
+                deliveryNoteDao.upsertItems(
+                    detail.items.map { item ->
+                        item.toEntity(noteId, ctx.instanceId, ctx.companyId)
+                    }
+                )
+                val links = detail.items.mapNotNull { item ->
+                    if (item.salesOrderId == null && item.salesInvoiceId == null) return@mapNotNull null
+                    DeliveryNoteLinkEntity(
+                        deliveryNoteId = noteId,
+                        salesOrderId = item.salesOrderId,
+                        salesInvoiceId = item.salesInvoiceId
+                    ).apply {
+                        instanceId = ctx.instanceId
+                        companyId = ctx.companyId
+                    }
+                }.distinctBy { "${it.deliveryNoteId}|${it.salesOrderId}|${it.salesInvoiceId}" }
+                if (links.isNotEmpty()) {
+                    deliveryNoteDao.upsertLinks(links)
+                }
+            }
+        }
         return true
     }
 
