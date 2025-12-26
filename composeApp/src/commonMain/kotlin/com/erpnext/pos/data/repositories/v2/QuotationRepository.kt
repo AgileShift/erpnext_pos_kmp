@@ -27,7 +27,8 @@ class QuotationRepository(
     private val api: APIServiceV2
 ) {
     private companion object {
-        val DETAIL_ELIGIBLE_STATUSES = setOf("Open", "Partially Ordered")
+        // ERPNext v15/16 Quotation status options: Draft, Open, Replied, Partially Ordered, Ordered, Lost, Cancelled, Expired.
+        val DETAIL_ELIGIBLE_STATUSES = setOf("Draft", "Open", "Replied", "Partially Ordered")
     }
 
     suspend fun pull(ctx: SyncContext): Boolean {
