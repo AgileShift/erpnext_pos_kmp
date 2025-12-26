@@ -9,6 +9,7 @@ import com.erpnext.pos.localSource.entities.v2.QuotationItemEntity
 import com.erpnext.pos.localSource.entities.v2.QuotationTaxEntity
 import com.erpnext.pos.remoteSource.api.v2.APIServiceV2
 import com.erpnext.pos.remoteSource.dto.v2.QuotationCreateDto
+import com.erpnext.pos.remoteSource.dto.v2.QuotationDetailDto
 import com.erpnext.pos.remoteSource.dto.v2.QuotationItemCreateDto
 import com.erpnext.pos.remoteSource.dto.v2.QuotationSnapshot
 import com.erpnext.pos.remoteSource.dto.v2.QuotationTaxCreateDto
@@ -23,6 +24,9 @@ class QuotationRepository(
     private val customerRepository: CustomerRepository,
     private val api: APIServiceV2
 ) {
+    private companion object {
+        val DETAIL_ELIGIBLE_STATUSES = setOf("Open", "Partially Ordered")
+    }
 
     suspend fun pull(ctx: SyncContext): Boolean {
         val quotations = api.list<QuotationSnapshot>(
@@ -32,6 +36,34 @@ class QuotationRepository(
         if (quotations.isEmpty()) return false
         val entities = quotations.map { it.toEntity(ctx.instanceId, ctx.companyId) }
         quotationDao.upsertQuotations(entities)
+
+        val quotationIds = quotations
+            .filter { it.status in DETAIL_ELIGIBLE_STATUSES }
+            .map { it.quotationId }
+        val existing = quotationDao.getQuotationIdsWithItems(
+            ctx.instanceId,
+            ctx.companyId,
+            quotationIds
+        ).toSet()
+        val missing = quotationIds.filterNot { it in existing }
+
+        missing.forEach { quotationId ->
+            val detail = api.getDoc<QuotationDetailDto>(ERPDocType.Quotation, quotationId)
+            if (detail.items.isNotEmpty()) {
+                quotationDao.upsertItems(
+                    detail.items.map { item ->
+                        item.toEntity(quotationId, ctx.instanceId, ctx.companyId)
+                    }
+                )
+            }
+            if (detail.taxes.isNotEmpty()) {
+                quotationDao.upsertTaxes(
+                    detail.taxes.map { tax ->
+                        tax.toEntity(quotationId, ctx.instanceId, ctx.companyId)
+                    }
+                )
+            }
+        }
         return true
     }
 
