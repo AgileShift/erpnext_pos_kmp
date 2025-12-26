@@ -3,6 +3,7 @@ package com.erpnext.pos.utils.oauth
 import com.sun.net.httpserver.HttpServer
 import kotlinx.coroutines.CompletableDeferred
 import java.net.InetSocketAddress
+import java.net.URI
 import java.net.URLDecoder
 import java.nio.charset.StandardCharsets
 
@@ -11,13 +12,19 @@ actual class OAuthCallbackReceiver {
     private var deferred: CompletableDeferred<Map<String, String>>? = null
     private var redirect: String = ""
 
-    actual fun start(): String {
+    actual fun start(redirectUrl: String): String {
         if (server != null) return redirect
 
         deferred = CompletableDeferred()
 
-        val s = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
-        s.createContext("/oauth2redirect") { ex ->
+        val redirectUri = URI.create(redirectUrl)
+        val host = redirectUri.host ?: error("Redirect URL must include a host")
+        val port = redirectUri.port
+        require(port != -1) { "Redirect URL must include a fixed port" }
+        val path = redirectUri.path.ifBlank { "/" }
+
+        val s = HttpServer.create(InetSocketAddress(host, port), 0)
+        s.createContext(path) { ex ->
             val params = parseQuery(ex.requestURI.rawQuery.orEmpty())
             val html = """
                 <html><body>
@@ -36,7 +43,7 @@ actual class OAuthCallbackReceiver {
         s.start()
 
         server = s
-        redirect = "http://127.0.0.1:${s.address.port}/oauth2redirect"
+        redirect = redirectUrl
         return redirect
     }
 

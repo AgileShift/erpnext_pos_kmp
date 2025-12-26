@@ -85,18 +85,20 @@ class LoginViewModel(
 
     fun onSiteSelected(site: Site) {
         _stateFlow.update { LoginState.Loading }
-        try {
-            viewModelScope.launch {
-                val receiver = OAuthCallbackReceiver()
-                val redirectUri = receiver.start()
-
+        viewModelScope.launch {
+            val receiver = OAuthCallbackReceiver()
+            try {
                 val oauthConfig = authStore.loadAuthInfoByUrl(site.url).toOAuthConfig()
+                val redirectUri = receiver.start(oauthConfig.redirectUrl)
                 val request = buildAuthorizeRequest(oauthConfig.copy(redirectUrl = redirectUri))
                 doLogin(request.url)
-                //_stateFlow.update { LoginState.Success() }
+                val code = receiver.awaitCode(request.state)
+                onAuthCodeReceived(code)
+            } catch (e: Exception) {
+                _stateFlow.update { LoginState.Error(e.message.toString()) }
+            } finally {
+                receiver.stop()
             }
-        } catch (e: Exception) {
-            _stateFlow.update { LoginState.Error(e.message.toString()) }
         }
     }
 
