@@ -1,7 +1,6 @@
 package com.erpnext.pos.views.login
 
 import androidx.lifecycle.viewModelScope
-import com.erpnext.pos.Platform
 import com.erpnext.pos.base.BaseViewModel
 import com.erpnext.pos.base.getPlatformName
 import com.erpnext.pos.navigation.AuthNavigator
@@ -15,13 +14,11 @@ import com.erpnext.pos.remoteSource.oauth.toOAuthConfig
 import com.erpnext.pos.utils.TokenUtils
 import com.erpnext.pos.utils.oauth.OAuthCallbackReceiver
 import com.erpnext.pos.views.CashBoxManager
-import io.ktor.util.logging.Logger
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.IO
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
@@ -52,9 +49,14 @@ class LoginViewModel(
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 val oAuthConfig = authStore.loadAuthInfoByUrl().toOAuthConfig()
-                val authRequest = buildAuthorizeRequest(oAuthConfig)
+                val resolvedConfig = if (getPlatformName() == "Desktop") {
+                    oAuthConfig.copy(redirectUrl = DESKTOP_REDIRECT_URI)
+                } else {
+                    oAuthConfig
+                }
+                val authRequest = buildAuthorizeRequest(resolvedConfig)
                 val tokens = oauthService.exchangeCode(
-                    oAuthConfig,
+                    resolvedConfig,
                     code,
                     authRequest.pkce,
                     authRequest.state,
@@ -85,18 +87,27 @@ class LoginViewModel(
 
     fun onSiteSelected(site: Site) {
         _stateFlow.update { LoginState.Loading }
-        try {
-            viewModelScope.launch {
-                val receiver = OAuthCallbackReceiver()
-                val redirectUri = receiver.start()
-
+        viewModelScope.launch {
+            val isDesktop = getPlatformName() == "Desktop"
+            val receiver = if (isDesktop) OAuthCallbackReceiver() else null
+            try {
                 val oauthConfig = authStore.loadAuthInfoByUrl(site.url).toOAuthConfig()
-                val request = buildAuthorizeRequest(oauthConfig.copy(redirectUrl = redirectUri))
+                val request = if (isDesktop) {
+                    val redirectUri = receiver?.start(DESKTOP_REDIRECT_URI) ?: DESKTOP_REDIRECT_URI
+                    buildAuthorizeRequest(oauthConfig.copy(redirectUrl = redirectUri))
+                } else {
+                    buildAuthorizeRequest(oauthConfig)
+                }
                 doLogin(request.url)
-                //_stateFlow.update { LoginState.Success() }
+                if (isDesktop) {
+                    val code = receiver?.awaitCode(request.state) ?: ""
+                    onAuthCodeReceived(code)
+                }
+            } catch (e: Exception) {
+                _stateFlow.update { LoginState.Error(e.message.toString()) }
+            } finally {
+                receiver?.stop()
             }
-        } catch (e: Exception) {
-            _stateFlow.update { LoginState.Error(e.message.toString()) }
         }
     }
 
@@ -124,5 +135,9 @@ class LoginViewModel(
         if (isAuth)
             navManager.navigateTo(NavRoute.Home)
         _stateFlow.update { LoginState.Success() }
+    }
+
+    private companion object {
+        const val DESKTOP_REDIRECT_URI = "http://127.0.0.1:8070/oauth2redirect"
     }
 }

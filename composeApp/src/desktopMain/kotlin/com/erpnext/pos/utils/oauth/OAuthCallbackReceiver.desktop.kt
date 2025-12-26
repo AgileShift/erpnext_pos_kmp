@@ -11,13 +11,13 @@ actual class OAuthCallbackReceiver {
     private var deferred: CompletableDeferred<Map<String, String>>? = null
     private var redirect: String = ""
 
-    actual fun start(): String {
+    actual fun start(redirectUrl: String): String {
         if (server != null) return redirect
 
         deferred = CompletableDeferred()
 
-        val s = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
-        s.createContext("/oauth2redirect") { ex ->
+        val s = HttpServer.create(InetSocketAddress(HOST, PORT), 0)
+        s.createContext(PATH) { ex ->
             val params = parseQuery(ex.requestURI.rawQuery.orEmpty())
             val html = """
                 <html><body>
@@ -36,7 +36,7 @@ actual class OAuthCallbackReceiver {
         s.start()
 
         server = s
-        redirect = "http://127.0.0.1:${s.address.port}/oauth2redirect"
+        redirect = REDIRECT_URL
         return redirect
     }
 
@@ -61,4 +61,11 @@ actual class OAuthCallbackReceiver {
                 val (k, v) = part.split("=", limit = 2)
                 URLDecoder.decode(k, "UTF-8") to URLDecoder.decode(v, "UTF-8")
             }
+
+    private companion object {
+        const val HOST = "127.0.0.1"
+        const val PORT = 8070
+        const val PATH = "/oauth2redirect"
+        const val REDIRECT_URL = "http://127.0.0.1:8070/oauth2redirect"
+    }
 }
