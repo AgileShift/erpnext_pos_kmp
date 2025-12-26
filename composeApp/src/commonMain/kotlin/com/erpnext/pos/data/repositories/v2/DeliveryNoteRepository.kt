@@ -23,7 +23,8 @@ class DeliveryNoteRepository(
     private val api: APIServiceV2
 ) {
     private companion object {
-        val DETAIL_ELIGIBLE_STATUSES = setOf("To Bill")
+        // ERPNext v15/16 Delivery Note status options: Draft, To Bill, Completed, Return Issued, Cancelled, Closed.
+        val DETAIL_ELIGIBLE_STATUSES = setOf("Draft", "To Bill")
     }
 
     suspend fun pull(ctx: SyncContext): Boolean {
@@ -45,8 +46,14 @@ class DeliveryNoteRepository(
         ).toSet()
         val missing = noteIds.filterNot { it in existing }
 
-        missing.forEach { noteId ->
-            val detail = api.getDoc<DeliveryNoteDetailDto>(ERPDocType.DeliveryNote, noteId)
+        val details = if (missing.isEmpty()) {
+            emptyList()
+        } else {
+            api.getDocsInBatches<DeliveryNoteDetailDto>(ERPDocType.DeliveryNote, missing)
+        }
+
+        details.forEach { detail ->
+            val noteId = detail.deliveryNoteId
             if (detail.items.isNotEmpty()) {
                 deliveryNoteDao.upsertItems(
                     detail.items.map { item ->

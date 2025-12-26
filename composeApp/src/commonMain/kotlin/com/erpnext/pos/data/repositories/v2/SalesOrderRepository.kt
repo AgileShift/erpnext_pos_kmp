@@ -24,7 +24,8 @@ class SalesOrderRepository(
     private val api: APIServiceV2
 ) {
     private companion object {
-        val DETAIL_ELIGIBLE_STATUSES = setOf("To Deliver", "To Bill", "To Deliver and Bill")
+        // ERPNext v15/16 Sales Order status options: Draft, On Hold, To Deliver and Bill, To Bill, To Deliver, Completed, Cancelled, Closed.
+        val DETAIL_ELIGIBLE_STATUSES = setOf("Draft", "On Hold", "To Deliver", "To Bill", "To Deliver and Bill")
     }
 
     suspend fun pull(ctx: SyncContext): Boolean {
@@ -46,8 +47,14 @@ class SalesOrderRepository(
         ).toSet()
         val missing = orderIds.filterNot { it in existing }
 
-        missing.forEach { orderId ->
-            val detail = api.getDoc<SalesOrderDetailDto>(ERPDocType.SalesOrder, orderId)
+        val details = if (missing.isEmpty()) {
+            emptyList()
+        } else {
+            api.getDocsInBatches<SalesOrderDetailDto>(ERPDocType.SalesOrder, missing)
+        }
+
+        details.forEach { detail ->
+            val orderId = detail.salesOrderId
             if (detail.items.isNotEmpty()) {
                 salesOrderDao.upsertItems(
                     detail.items.map { item ->

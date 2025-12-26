@@ -3,6 +3,7 @@ package com.erpnext.pos.utils.oauth
 import com.sun.net.httpserver.HttpServer
 import kotlinx.coroutines.CompletableDeferred
 import java.net.InetSocketAddress
+import java.net.URI
 import java.net.URLDecoder
 import java.nio.charset.StandardCharsets
 
@@ -37,6 +38,7 @@ actual class OAuthCallbackReceiver {
 
         server = s
         redirect = REDIRECT_URL
+
         return redirect
     }
 
@@ -55,12 +57,10 @@ actual class OAuthCallbackReceiver {
     }
 
     private fun parseQuery(q: String): Map<String, String> =
-        q.split("&")
-            .filter { it.isNotBlank() }
-            .associate { part ->
-                val (k, v) = part.split("=", limit = 2)
-                URLDecoder.decode(k, "UTF-8") to URLDecoder.decode(v, "UTF-8")
-            }
+        q.split("&").filter { it.isNotBlank() }.associate { part ->
+            val (k, v) = part.split("=", limit = 2)
+            URLDecoder.decode(k, "UTF-8") to URLDecoder.decode(v, "UTF-8")
+        }
 
     private companion object {
         const val HOST = "127.0.0.1"
