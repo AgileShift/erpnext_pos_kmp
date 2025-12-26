@@ -26,11 +26,11 @@ fun buildAuthorizeRequest(
     val query = listOf(
         "response_type" to "code",
         "client_id" to cfg.clientId,
-        "redirect_uri" to OAuthRedirect.redirectUri(),
+        "redirect_uri" to cfg.redirectUrl,
         "scope" to (scopeOverride ?: cfg.scopes).joinToString(" "),
         "state" to state,
-        //"code_challenge_method" to pkce.method.lowercase(),
-        //"code_challenge" to pkce.challenge
+        "code_challenge_method" to pkce.method.lowercase(),
+        "code_challenge" to pkce.challenge
     ).joinToString("&") { "${it.first}=${encode(it.second)}" }
     return AuthRequest("${cfg.authorizeUrl}?$query", state, pkce)
 }
