@@ -11,9 +11,13 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -31,6 +35,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -38,9 +43,46 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.erpnext.pos.base.getPlatformName
 import com.erpnext.pos.domain.models.CustomerBO
 import com.erpnext.pos.utils.toCurrencySymbol
 import org.jetbrains.compose.ui.tooling.preview.Preview
+
+private enum class CustomerQuickActionType {
+    PendingInvoices,
+    CreateQuotation,
+    CreateSalesOrder,
+    RegisterPayment
+}
+
+private data class CustomerQuickAction(
+    val type: CustomerQuickActionType,
+    val label: String,
+    val icon: ImageVector
+)
+
+private fun customerQuickActions(): List<CustomerQuickAction> = listOf(
+    CustomerQuickAction(
+        type = CustomerQuickActionType.PendingInvoices,
+        label = "Ver facturas pendientes",
+        icon = Icons.Filled.ReceiptLong
+    ),
+    CustomerQuickAction(
+        type = CustomerQuickActionType.CreateQuotation,
+        label = "Crear cotización",
+        icon = Icons.Filled.Description
+    ),
+    CustomerQuickAction(
+        type = CustomerQuickActionType.CreateSalesOrder,
+        label = "Crear orden de venta",
+        icon = Icons.Filled.PointOfSale
+    ),
+    CustomerQuickAction(
+        type = CustomerQuickActionType.RegisterPayment,
+        label = "Registrar pago",
+        icon = Icons.Filled.Payments
+    )
+)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -54,10 +96,12 @@ fun CustomerListScreen(
 
     var searchQuery by remember { mutableStateOf("") }
     var selectedState by remember { mutableStateOf("Todos") }
+    var quickActionsCustomer by remember { mutableStateOf<CustomerBO?>(null) }
 
     val customers = remember(state) {
         if (state is CustomerState.Success) state.customers else emptyList()
     }
+    val isDesktop = getPlatformName() == "Desktop"
 
     val filterElevation by animateDpAsState(
         targetValue = if (customers.isNotEmpty()) 4.dp else 0.dp,
@@ -78,102 +122,130 @@ fun CustomerListScreen(
             )
         }
     ) { paddingValues ->
-        Column(
+        BoxWithConstraints(
             modifier = Modifier
                 .padding(paddingValues)
                 .fillMaxSize()
         ) {
-            // Filtros y búsqueda
-            Surface(
-                modifier = Modifier.fillMaxWidth(),
-                tonalElevation = filterElevation,
-                shadowElevation = filterElevation
+            val isWideLayout = maxWidth >= 840.dp || isDesktop
+            val contentPadding = if (isWideLayout) 24.dp else 16.dp
+
+            Column(
+                modifier = Modifier.fillMaxSize()
             ) {
-                CustomerFilters(
-                    searchQuery = searchQuery,
-                    selectedState = selectedState,
-                    onQueryChange = {
-                        searchQuery = it
-                        actions.onSearchQueryChanged(it)
-                    },
-                    onStateChange = {
-                        selectedState = it ?: "Todos"
-                        actions.onStateSelected(it)
-                    },
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-                )
-            }
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            // Contenido principal según estado
-            // Slot-based rendering: estructura fija con visibilidad dinámica
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(16.dp)
-            ) {
-
-                // SLOT: LISTA DE CLIENTES
-                androidx.compose.animation.AnimatedVisibility(
-                    visible = state is CustomerState.Success &&
-                            (state.customers.isNotEmpty()),
-                    enter = fadeIn(),
-                    exit = fadeOut()
+                // Filtros y búsqueda
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    tonalElevation = filterElevation,
+                    shadowElevation = filterElevation
                 ) {
-                    val filtered = customers.filter { customer ->
-                        customer.customerName.contains(searchQuery, ignoreCase = true) ||
-                                (customer.mobileNo ?: "").contains(searchQuery)
+                    CustomerFilters(
+                        searchQuery = searchQuery,
+                        selectedState = selectedState,
+                        isWideLayout = isWideLayout,
+                        onQueryChange = {
+                            searchQuery = it
+                            actions.onSearchQueryChanged(it)
+                        },
+                        onStateChange = {
+                            selectedState = it ?: "Todos"
+                            actions.onStateSelected(it)
+                        },
+                        modifier = Modifier.padding(horizontal = contentPadding, vertical = 8.dp)
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Contenido principal según estado
+                // Slot-based rendering: estructura fija con visibilidad dinámica
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(contentPadding)
+                ) {
+
+                    // SLOT: LISTA DE CLIENTES
+                    androidx.compose.animation.AnimatedVisibility(
+                        visible = state is CustomerState.Success &&
+                                (state.customers.isNotEmpty()),
+                        enter = fadeIn(),
+                        exit = fadeOut()
+                    ) {
+                        val filtered = customers.filter { customer ->
+                            customer.customerName.contains(searchQuery, ignoreCase = true) ||
+                                    (customer.mobileNo ?: "").contains(searchQuery)
+                        }
+
+                        if (filtered.isEmpty()) {
+                            EmptyStateMessage(
+                                message = if (searchQuery.isEmpty())
+                                    "No hay clientes disponibles."
+                                else
+                                    "No se encontraron clientes que coincidan con tu búsqueda.",
+                                icon = Icons.Filled.People
+                            )
+                        } else {
+                            CustomerListContent(
+                                customers = filtered,
+                                actions = actions,
+                                isWideLayout = isWideLayout,
+                                isDesktop = isDesktop,
+                                onOpenQuickActions = { quickActionsCustomer = it },
+                                onQuickAction = { customer, actionType ->
+                                    handleQuickAction(actions, customer, actionType)
+                                }
+                            )
+                        }
                     }
 
-                    if (filtered.isEmpty()) {
+                    // SLOT: LOADING
+                    androidx.compose.animation.AnimatedVisibility(
+                        visible = state is CustomerState.Loading,
+                        enter = fadeIn(),
+                        exit = fadeOut()
+                    ) {
+                        CustomerShimmerList()
+                    }
+
+                    // SLOT: EMPTY
+                    androidx.compose.animation.AnimatedVisibility(
+                        visible = state is CustomerState.Empty,
+                        enter = fadeIn(),
+                        exit = fadeOut()
+                    ) {
                         EmptyStateMessage(
-                            message = if (searchQuery.isEmpty())
-                                "No hay clientes disponibles."
-                            else
-                                "No se encontraron clientes que coincidan con tu búsqueda.",
+                            message = "No hay clientes disponibles.",
                             icon = Icons.Filled.People
                         )
-                    } else {
-                        CustomerListContent(filtered, actions)
+                    }
+
+                    // SLOT: ERROR
+                    androidx.compose.animation.AnimatedVisibility(
+                        visible = state is CustomerState.Error,
+                        enter = fadeIn(),
+                        exit = fadeOut()
+                    ) {
+                        FullScreenErrorMessage(
+                            errorMessage = (state as CustomerState.Error).message,
+                            onRetry = actions.fetchAll
+                        )
                     }
                 }
 
-                // SLOT: LOADING
-                androidx.compose.animation.AnimatedVisibility(
-                    visible = state is CustomerState.Loading,
-                    enter = fadeIn(),
-                    exit = fadeOut()
-                ) {
-                    CustomerShimmerList()
-                }
-
-                // SLOT: EMPTY
-                androidx.compose.animation.AnimatedVisibility(
-                    visible = state is CustomerState.Empty,
-                    enter = fadeIn(),
-                    exit = fadeOut()
-                ) {
-                    EmptyStateMessage(
-                        message = "No hay clientes disponibles.",
-                        icon = Icons.Filled.People
-                    )
-                }
-
-                // SLOT: ERROR
-                androidx.compose.animation.AnimatedVisibility(
-                    visible = state is CustomerState.Error,
-                    enter = fadeIn(),
-                    exit = fadeOut()
-                ) {
-                    FullScreenErrorMessage(
-                        errorMessage = (state as CustomerState.Error).message,
-                        onRetry = actions.fetchAll
-                    )
-                }
             }
-
         }
+    }
+
+    quickActionsCustomer?.let { customer ->
+        CustomerQuickActionsSheet(
+            customer = customer,
+            onDismiss = { quickActionsCustomer = null },
+            onActionSelected = { actionType ->
+                handleQuickAction(actions, customer, actionType)
+                quickActionsCustomer = null
+            }
+        )
     }
 }
 
@@ -181,32 +253,62 @@ fun CustomerListScreen(
 private fun CustomerFilters(
     searchQuery: String,
     selectedState: String,
+    isWideLayout: Boolean,
     states: List<String> = listOf("Pendientes", "Sin Pendientes"),
     onQueryChange: (String) -> Unit,
     onStateChange: (String?) -> Unit,
     modifier: Modifier = Modifier
 ) {
     Column(modifier = modifier) {
-        LazyRow(
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            item {
-                val isSelected = selectedState == "Todos"
-                FilterChipItem("Todos", isSelected) { onStateChange("Todos") }
-            }
-            items(states) { state ->
-                val isSelected = selectedState == state
-                FilterChipItem(state, isSelected) { onStateChange(state) }
-            }
-        }
-        Spacer(modifier = Modifier.height(8.dp))
+        if (isWideLayout) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                LazyRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.weight(1f)
+                ) {
+                    item {
+                        val isSelected = selectedState == "Todos"
+                        FilterChipItem("Todos", isSelected) { onStateChange("Todos") }
+                    }
+                    items(states) { state ->
+                        val isSelected = selectedState == state
+                        FilterChipItem(state, isSelected) { onStateChange(state) }
+                    }
+                }
 
-        SearchTextField(
-            searchQuery = searchQuery,
-            onSearchQueryChange = onQueryChange,
-            placeholderText = "Buscar cliente por nombre o teléfono..."
-        )
+                SearchTextField(
+                    searchQuery = searchQuery,
+                    onSearchQueryChange = onQueryChange,
+                    placeholderText = "Buscar cliente por nombre o teléfono...",
+                    modifier = Modifier.weight(1.2f)
+                )
+            }
+        } else {
+            LazyRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                item {
+                    val isSelected = selectedState == "Todos"
+                    FilterChipItem("Todos", isSelected) { onStateChange("Todos") }
+                }
+                items(states) { state ->
+                    val isSelected = selectedState == state
+                    FilterChipItem(state, isSelected) { onStateChange(state) }
+                }
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+
+            SearchTextField(
+                searchQuery = searchQuery,
+                onSearchQueryChange = onQueryChange,
+                placeholderText = "Buscar cliente por nombre o teléfono..."
+            )
+        }
     }
 }
 
@@ -301,25 +403,82 @@ private fun FilterChipItem(label: String, selected: Boolean, onClick: () -> Unit
 @Composable
 private fun CustomerListContent(
     customers: List<CustomerBO>,
-    actions: CustomerAction
+    actions: CustomerAction,
+    isWideLayout: Boolean,
+    isDesktop: Boolean,
+    onOpenQuickActions: (CustomerBO) -> Unit,
+    onQuickAction: (CustomerBO, CustomerQuickActionType) -> Unit
 ) {
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        items(customers, key = { it.name }) { customer ->
-            CustomerItem(customer) { actions.toDetails(customer.name) }
+    val spacing = if (isWideLayout) 16.dp else 12.dp
+    if (isWideLayout) {
+        LazyVerticalGrid(
+            columns = GridCells.Adaptive(minSize = 360.dp),
+            modifier = Modifier.fillMaxSize(),
+            verticalArrangement = Arrangement.spacedBy(spacing),
+            horizontalArrangement = Arrangement.spacedBy(spacing),
+            contentPadding = PaddingValues(horizontal = 4.dp, vertical = 8.dp)
+        ) {
+            items(customers, key = { it.name }) { customer ->
+                CustomerItem(
+                    customer = customer,
+                    isDesktop = isDesktop,
+                    onClick = { actions.toDetails(customer.name) },
+                    onOpenQuickActions = { onOpenQuickActions(customer) },
+                    onQuickAction = { actionType -> onQuickAction(customer, actionType) }
+                )
+            }
+        }
+    } else {
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(horizontal = 0.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(spacing)
+        ) {
+            items(customers, key = { it.name }) { customer ->
+                CustomerItem(
+                    customer = customer,
+                    isDesktop = isDesktop,
+                    onClick = { actions.toDetails(customer.name) },
+                    onOpenQuickActions = { onOpenQuickActions(customer) },
+                    onQuickAction = { actionType -> onQuickAction(customer, actionType) }
+                )
+            }
         }
     }
 }
 
 @Composable
-fun CustomerItem(customer: CustomerBO, onClick: () -> Unit) {
+fun CustomerItem(
+    customer: CustomerBO,
+    isDesktop: Boolean,
+    onClick: () -> Unit,
+    onOpenQuickActions: () -> Unit,
+    onQuickAction: (CustomerQuickActionType) -> Unit
+) {
     val isOverLimit = (customer.availableCredit ?: 0.0) < 0 || (customer.currentBalance ?: 0.0) > 0
+    var isMenuExpanded by remember { mutableStateOf(false) }
+    val quickActions = remember { customerQuickActions() }
 
     Card(
-        modifier = Modifier.fillMaxWidth().clickable { onClick() },
+        modifier = Modifier
+            .fillMaxWidth()
+            .pointerInput(customer.name, isDesktop) {
+                if (!isDesktop) {
+                    var totalDrag = 0f
+                    detectHorizontalDragGestures(
+                        onDragEnd = {
+                            if (kotlin.math.abs(totalDrag) > 64) {
+                                onOpenQuickActions()
+                            }
+                            totalDrag = 0f
+                        },
+                        onHorizontalDrag = { _, dragAmount ->
+                            totalDrag += dragAmount
+                        }
+                    )
+                }
+            }
+            .clickable { onClick() },
         elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(
@@ -402,6 +561,40 @@ fun CustomerItem(customer: CustomerBO, onClick: () -> Unit) {
                     style = MaterialTheme.typography.bodySmall,
                     color = if (isOverLimit) MaterialTheme.colorScheme.error.copy(alpha = 0.7f) else MaterialTheme.colorScheme.onSurfaceVariant
                 )
+
+                Spacer(modifier = Modifier.height(6.dp))
+
+                IconButton(onClick = {
+                    if (isDesktop) {
+                        isMenuExpanded = true
+                    } else {
+                        onOpenQuickActions()
+                    }
+                }) {
+                    Icon(
+                        Icons.Filled.MoreVert,
+                        contentDescription = "Más acciones",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+
+                DropdownMenu(
+                    expanded = isDesktop && isMenuExpanded,
+                    onDismissRequest = { isMenuExpanded = false }
+                ) {
+                    quickActions.forEach { action ->
+                        DropdownMenuItem(
+                            text = { Text(action.label) },
+                            leadingIcon = {
+                                Icon(action.icon, contentDescription = null)
+                            },
+                            onClick = {
+                                isMenuExpanded = false
+                                onQuickAction(action.type)
+                            }
+                        )
+                    }
+                }
             }
         }
     }
@@ -423,6 +616,93 @@ fun CustomerShimmerList() {
                     .shimmerBackground(RoundedCornerShape(16.dp))
             )
         }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun CustomerQuickActionsSheet(
+    customer: CustomerBO,
+    onDismiss: () -> Unit,
+    onActionSelected: (CustomerQuickActionType) -> Unit
+) {
+    val quickActions = remember { customerQuickActions() }
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        dragHandle = { BottomSheetDefaults.DragHandle() }
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 24.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            Text(
+                text = customer.customerName,
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.SemiBold
+            )
+            CustomerOutstandingSummary(customer)
+
+            Divider()
+
+            quickActions.forEach { action ->
+                ListItem(
+                    headlineContent = { Text(action.label) },
+                    leadingContent = { Icon(action.icon, contentDescription = null) },
+                    modifier = Modifier.clickable { onActionSelected(action.type) }
+                )
+            }
+            Spacer(modifier = Modifier.height(12.dp))
+        }
+    }
+}
+
+@Composable
+private fun CustomerOutstandingSummary(customer: CustomerBO) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(
+                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                RoundedCornerShape(12.dp)
+            )
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Text(
+            text = "Resumen de pendientes",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.SemiBold
+        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text("Facturas pendientes")
+            Text("${customer.pendingInvoices}")
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text("Monto pendiente")
+            Text("${customer.currency.toCurrencySymbol()}${customer.currentBalance}")
+        }
+    }
+}
+
+private fun handleQuickAction(
+    actions: CustomerAction,
+    customer: CustomerBO,
+    actionType: CustomerQuickActionType
+) {
+    when (actionType) {
+        CustomerQuickActionType.PendingInvoices -> actions.onViewPendingInvoices(customer)
+        CustomerQuickActionType.CreateQuotation -> actions.onCreateQuotation(customer)
+        CustomerQuickActionType.CreateSalesOrder -> actions.onCreateSalesOrder(customer)
+        CustomerQuickActionType.RegisterPayment -> actions.onRegisterPayment(customer)
     }
 }
 
@@ -588,7 +868,12 @@ fun CustomerItemPreview() {
                 currentBalance = 13450.0,
                 pendingInvoices = 2,
                 availableCredit = 0.0
-            ), onClick = {})
+            ),
+            isDesktop = false,
+            onClick = {},
+            onOpenQuickActions = {},
+            onQuickAction = {}
+        )
     }
 }
 
@@ -606,6 +891,11 @@ fun CustomerItemOverLimitPreview() {
                 currentBalance = 0.0,
                 pendingInvoices = 0,
                 availableCredit = -500.0  // Sobre límite para rojo
-            ), onClick = {})
+            ),
+            isDesktop = false,
+            onClick = {},
+            onOpenQuickActions = {},
+            onQuickAction = {}
+        )
     }
 }
