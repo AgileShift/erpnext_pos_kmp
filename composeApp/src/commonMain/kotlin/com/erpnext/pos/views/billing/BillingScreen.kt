@@ -656,7 +656,7 @@ private fun BillingScreenPreview() {
                 ),
                 paidAmount = 100.0,
                 balanceDue = 245.0,
-                exchangeRate = 36.6243
+                exchangeRate = 1.0
             ), action = BillingAction()
         )
     }

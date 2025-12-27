@@ -52,7 +52,7 @@ class BillingViewModel(
                             customers = customers,
                             productSearchResults = products,
                             currency = currency,
-                            exchangeRate = 36.6243
+                            exchangeRate = contextProvider.getContext()?.exchangeRate ?: 1.0
                         )
                     }
                 }
