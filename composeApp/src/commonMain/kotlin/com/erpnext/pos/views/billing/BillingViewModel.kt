@@ -131,7 +131,7 @@ class BillingViewModel(
                 if (it.itemCode == item.itemCode) it.copy(quantity = it.quantity + 1) else it
             }
         }
-        _state.update { current.copy(cartItems = updated).recalculateTotals() }
+        _state.update { current.copy(cartItems = updated).recalculateCartTotals() }
     }
 
     fun onQuantityChanged(itemCode: String, newQuantity: Double) {
@@ -140,13 +140,13 @@ class BillingViewModel(
             if (it.itemCode == itemCode) it.copy(quantity = newQuantity.coerceAtLeast(0.0)) else it
         }.filter { it.quantity > 0.0 }
 
-        _state.update { current.copy(cartItems = updated).recalculateTotals() }
+        _state.update { current.copy(cartItems = updated).recalculateCartTotals() }
     }
 
     fun onRemoveItem(itemCode: String) {
         val current = _state.value as? BillingState.Success ?: return
         val updated = current.cartItems.filterNot { it.itemCode == itemCode }
-        _state.update { current.copy(cartItems = updated).recalculateTotals() }
+        _state.update { current.copy(cartItems = updated).recalculateCartTotals() }
     }
 
     fun onFinalizeSale() {
@@ -222,15 +222,4 @@ class BillingViewModel(
         navManager.navigateTo(NavRoute.NavigateUp)
     }
 
-    private fun BillingState.Success.recalculateTotals(): BillingState.Success {
-        val newSubtotal = cartItems.sumOf { it.price * it.quantity }
-        val newTaxes = 0.0
-        val newDiscount = 0.0
-        return copy(
-            subtotal = newSubtotal,
-            taxes = newTaxes,
-            discount = newDiscount,
-            total = newSubtotal + newTaxes - newDiscount
-        )
-    }
 }
