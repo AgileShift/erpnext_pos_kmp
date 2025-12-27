@@ -8,6 +8,7 @@ import com.erpnext.pos.localSource.dao.POSOpeningEntryDao
 import com.erpnext.pos.localSource.dao.POSProfileDao
 import com.erpnext.pos.localSource.dao.UserDao
 import com.erpnext.pos.localSource.entities.CashboxEntity
+import com.erpnext.pos.localSource.preferences.ExchangeRatePreferences
 import com.erpnext.pos.remoteSource.api.APIService
 import com.erpnext.pos.remoteSource.dto.BalanceDetailsDto
 import com.erpnext.pos.remoteSource.dto.POSClosingEntryDto
@@ -51,7 +52,8 @@ class CashBoxManager(
     private val openingDao: POSOpeningEntryDao,
     private val closingDao: POSClosingEntryDao,
     private val cashboxDao: CashboxDao,
-    private val userDao: UserDao
+    private val userDao: UserDao,
+    private val exchangeRatePreferences: ExchangeRatePreferences
 ) {
 
     //Contexto actual del POS cargado en memoria
@@ -65,6 +67,7 @@ class CashBoxManager(
         val profile = profileDao.getActiveProfile() ?: return@withContext null
         val activeCashbox = cashboxDao.getActiveEntry(user.email, profile.profileName)
             .firstOrNull()
+        val exchangeRate = resolveExchangeRate(profile.currency)
 
         _cashboxState.update { activeCashbox != null }
 
@@ -82,7 +85,7 @@ class CashBoxManager(
             expenseAccount = profile.expenseAccount,
             branch = profile.branch,
             currency = profile.currency,
-            exchangeRate = 36.6243
+            exchangeRate = exchangeRate
         )
         currentContext
     }
@@ -133,6 +136,7 @@ class CashBoxManager(
 
         _cashboxState.update { true }
 
+        val exchangeRate = resolveExchangeRate(profile.currency)
         currentContext = POSContext(
             username = user.username ?: user.name,
             profileName = newEntry.posProfile,
@@ -147,7 +151,7 @@ class CashBoxManager(
             expenseAccount = profile.expenseAccount,
             branch = profile.branch,
             currency = profile.currency,
-            exchangeRate = 36.6243
+            exchangeRate = exchangeRate
         )
         currentContext!!
     }
@@ -194,4 +198,22 @@ class CashBoxManager(
 
     fun requireContext(): POSContext =
         currentContext ?: error("POS context not initialized. Call initializeContext() first.")
+
+    suspend fun updateManualExchangeRate(rate: Double) {
+        exchangeRatePreferences.saveManualRate(rate)
+        currentContext = currentContext?.copy(exchangeRate = rate)
+    }
+
+    private suspend fun resolveExchangeRate(baseCurrency: String): Double {
+        if (baseCurrency.equals("USD", ignoreCase = true)) return 1.0
+        val apiRate = api.getExchangeRate(
+            fromCurrency = "USD",
+            toCurrency = baseCurrency
+        )
+        if (apiRate != null && apiRate > 0.0) {
+            return apiRate
+        }
+        return exchangeRatePreferences.loadManualRate()
+            ?: ExchangeRatePreferences.DEFAULT_MANUAL_RATE
+    }
 }

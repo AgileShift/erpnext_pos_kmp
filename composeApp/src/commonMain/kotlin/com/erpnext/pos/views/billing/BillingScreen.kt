@@ -34,6 +34,8 @@ import com.erpnext.pos.utils.formatAmount
 import com.erpnext.pos.utils.toCurrencySymbol
 import com.erpnext.pos.views.billing.BillingAction
 import com.erpnext.pos.views.billing.BillingState
+import com.erpnext.pos.views.billing.PaymentLine
+import com.erpnext.pos.views.billing.PaymentModeOption
 import org.jetbrains.compose.ui.tooling.preview.Preview
 
 
@@ -710,7 +712,7 @@ private fun BillingScreenPreview() {
                 ),
                 paidAmount = 100.0,
                 balanceDue = 245.0,
-                exchangeRate = 36.6243
+                exchangeRate = 1.0
             ), action = BillingAction()
         )
     }

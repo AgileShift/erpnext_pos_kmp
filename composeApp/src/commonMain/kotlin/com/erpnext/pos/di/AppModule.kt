@@ -28,6 +28,7 @@ import com.erpnext.pos.localSource.datasources.CustomerLocalSource
 import com.erpnext.pos.localSource.datasources.InventoryLocalSource
 import com.erpnext.pos.localSource.datasources.InvoiceLocalSource
 import com.erpnext.pos.localSource.datasources.POSProfileLocalSource
+import com.erpnext.pos.localSource.preferences.ExchangeRatePreferences
 import com.erpnext.pos.navigation.NavigationManager
 import com.erpnext.pos.remoteSource.api.APIService
 import com.erpnext.pos.remoteSource.api.defaultEngine
@@ -110,9 +111,11 @@ val appModule = module {
             "./prefs.preferences_pb".toPath()
         }
     }
+    single { ExchangeRatePreferences(get()) }
     single<CashBoxManager> {
         CashBoxManager(
             get(named("apiService")),
+            get(),
             get(),
             get(),
             get(),
