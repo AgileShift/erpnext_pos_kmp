@@ -78,6 +78,8 @@ data class BillingAction(
     val onProductAdded: (ItemBO) -> Unit = {},
     val onQuantityChanged: (itemCode: String, newQuantity: Double) -> Unit = { _, _ -> },
     val onRemoveItem: (itemCode: String) -> Unit = {},
+    val onAddPaymentLine: (PaymentLine) -> Unit = {},
+    val onRemovePaymentLine: (index: Int) -> Unit = {},
     val onFinalizeSale: () -> Unit = {},
     val onBack: () -> Unit = {},
 )

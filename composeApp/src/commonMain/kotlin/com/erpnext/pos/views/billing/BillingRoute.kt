@@ -28,6 +28,8 @@ fun rememberBillingActions(coordinator: BillingCoordinator): BillingAction {
             onProductAdded = coordinator::onProductAdded,
             onQuantityChanged = coordinator::onQuantityChanged,
             onRemoveItem = coordinator::onRemoveItem,
+            onAddPaymentLine = coordinator::onAddPaymentLine,
+            onRemovePaymentLine = coordinator::onRemovePaymentLine,
             onFinalizeSale = coordinator::onFinalizeSale,
             onBack = coordinator::onBack
         )
