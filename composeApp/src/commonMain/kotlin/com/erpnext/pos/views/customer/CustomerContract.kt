@@ -16,5 +16,9 @@ data class CustomerAction(
     val onRefresh: () -> Unit = {},
     val checkCredit: (String, Double, (Boolean, String) -> Unit) -> Unit = { _, _, _ ->  },
     val fetchAll: () -> Unit = {},
-    val toDetails: (String) -> Unit = {}
+    val toDetails: (String) -> Unit = {},
+    val onViewPendingInvoices: (CustomerBO) -> Unit = {},
+    val onCreateQuotation: (CustomerBO) -> Unit = {},
+    val onCreateSalesOrder: (CustomerBO) -> Unit = {},
+    val onRegisterPayment: (CustomerBO) -> Unit = {}
 )
