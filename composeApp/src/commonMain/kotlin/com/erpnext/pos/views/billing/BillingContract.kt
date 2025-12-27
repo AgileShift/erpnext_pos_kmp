@@ -9,7 +9,8 @@ data class PaymentLine(
     val enteredAmount: Double,
     val currency: String,
     val exchangeRate: Double,
-    val baseAmount: Double
+    val baseAmount: Double,
+    val reference: String? = null
 )
 
 /**
@@ -35,8 +36,36 @@ sealed interface BillingState {
         val subtotal: Double = 0.0,
         val taxes: Double = 0.0,
         val discount: Double = 0.0,
-        val total: Double = 0.0
-    ) : BillingState
+        val total: Double = 0.0,
+        val paymentLines: List<PaymentLine> = emptyList(),
+        val paidAmount: Double = 0.0,
+        val balanceDue: Double = 0.0
+    ) : BillingState {
+        fun recalculateCartTotals(): Success {
+            val newSubtotal = cartItems.sumOf { it.price * it.quantity }
+            val newTaxes = 0.0
+            val newDiscount = 0.0
+            val newTotal = newSubtotal + newTaxes - newDiscount
+            return copy(
+                subtotal = newSubtotal,
+                taxes = newTaxes,
+                discount = newDiscount,
+                total = newTotal
+            ).recalculatePaymentTotals()
+        }
+
+        fun recalculatePaymentTotals(): Success {
+            val newPaidAmount = paymentLines.sumOf { it.baseAmount }
+            return copy(
+                paidAmount = newPaidAmount,
+                balanceDue = total - newPaidAmount
+            )
+        }
+
+        fun withPaymentLines(lines: List<PaymentLine>): Success {
+            return copy(paymentLines = lines).recalculatePaymentTotals()
+        }
+    }
 
     data class Error(val message: String) : BillingState
     object Empty : BillingState
