@@ -11,6 +11,7 @@ import com.erpnext.pos.navigation.NavRoute
 import com.erpnext.pos.navigation.NavigationManager
 import com.erpnext.pos.remoteSource.dto.SalesInvoiceDto
 import com.erpnext.pos.remoteSource.dto.SalesInvoiceItemDto
+import com.erpnext.pos.remoteSource.dto.SalesInvoicePaymentDto
 import com.erpnext.pos.remoteSource.mapper.toEntity
 import com.erpnext.pos.utils.toCurrencySymbol
 import com.erpnext.pos.utils.view.DateTimeProvider
@@ -200,6 +201,25 @@ class BillingViewModel(
             }
 
             val subtotal = items.sumOf { it.amount }
+            val total = current.total.takeIf { it > 0.0 } ?: subtotal
+            val payments = current.paymentLines.map { line ->
+                SalesInvoicePaymentDto(
+                    modeOfPayment = line.modeOfPayment,
+                    amount = line.baseAmount,
+                    type = "Receive"
+                )
+            }
+            val paidAmount = payments.sumOf { it.amount }
+            val outstandingAmount = (total - paidAmount).coerceAtLeast(0.0)
+            val status = when {
+                paidAmount <= 0.0 -> "Unpaid"
+                outstandingAmount <= 0.0 -> "Paid"
+                else -> "Partly Paid"
+            }
+            val paymentMetadata = current.paymentLines.joinToString(separator = "; ") { line ->
+                "Payment currency: ${line.currency}, Exchange rate: ${line.exchangeRate}"
+            }.takeIf { it.isNotBlank() }
+            val primaryPaymentLine = current.paymentLines.firstOrNull()
             val invoiceDto = SalesInvoiceDto(
                 customer = customer.name,
                 customerName = customer.customerName,
@@ -207,16 +227,19 @@ class BillingViewModel(
                 company = context.company,
                 postingDate = DateTimeProvider.todayDate(),
                 dueDate = DateTimeProvider.todayDate(),
-                status = "Unpaid",
-                grandTotal = subtotal,
-                outstandingAmount = subtotal,
+                status = status,
+                grandTotal = total,
+                outstandingAmount = outstandingAmount,
                 totalTaxesAndCharges = 0.0,
-                netTotal = subtotal,
-                paidAmount = 0.0,
+                netTotal = total,
+                paidAmount = paidAmount,
                 items = items,
-                payments = emptyList(),
+                payments = payments,
                 posProfile = context.profileName,
-                currency = context.currency
+                currency = context.currency,
+                remarks = paymentMetadata,
+                customPaymentCurrency = primaryPaymentLine?.currency,
+                customExchangeRate = primaryPaymentLine?.exchangeRate
             )
 
             val created = invoiceRepository.createRemoteInvoice(invoiceDto)

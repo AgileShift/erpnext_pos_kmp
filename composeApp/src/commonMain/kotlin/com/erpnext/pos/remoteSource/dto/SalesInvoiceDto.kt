@@ -44,6 +44,10 @@ data class SalesInvoiceDto(
     @SerialName("payments")
     val payments: List<SalesInvoicePaymentDto> = emptyList(),
     val remarks: String? = null,
+    @SerialName("custom_payment_currency")
+    val customPaymentCurrency: String? = null,
+    @SerialName("custom_exchange_rate")
+    val customExchangeRate: Double? = null,
     @SerialName("is_pos")
     @Serializable(IntAsBooleanSerializer::class)
     val isPos: Boolean = true,
