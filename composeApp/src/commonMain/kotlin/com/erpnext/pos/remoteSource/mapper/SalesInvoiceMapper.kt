@@ -63,6 +63,7 @@ fun POSInvoicePaymentEntity.toDto(): SalesInvoicePaymentDto {
     return SalesInvoicePaymentDto(
         modeOfPayment = modeOfPayment,
         amount = amount,
+        paymentReference = paymentReference,
         type = "Receive"
     )
 }
@@ -135,6 +136,7 @@ fun SalesInvoiceDto.toEntity(): SalesInvoiceWithItemsAndPayments {
             parentInvoice = name ?: "",
             modeOfPayment = dto.modeOfPayment,
             amount = dto.amount,
+            paymentReference = dto.paymentReference,
             createdAt = now
         )
     }

@@ -90,5 +90,7 @@ data class SalesInvoicePaymentDto(
     @SerialName("mode_of_payment")
     val modeOfPayment: String,
     val amount: Double,
+    @SerialName("payment_reference")
+    val paymentReference: String? = null,
     val type: String? = "Receive"
 )

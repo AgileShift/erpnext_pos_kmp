@@ -246,12 +246,16 @@ class CashBoxManager(
     }
 
     private suspend fun resolvePaymentModes(profileName: String): List<POSPaymentModeOption> {
+        val modeTypes = runCatching { modeOfPaymentDao.getAllModes() }
+            .getOrElse { emptyList() }
+            .associateBy { it.modeOfPayment }
         val profileModes = runCatching { modeOfPaymentDao.getAll(profileName) }
             .getOrElse { emptyList() }
             .map { mode ->
                 POSPaymentModeOption(
                     name = mode.name,
                     modeOfPayment = mode.modeOfPayment,
+                    type = modeTypes[mode.modeOfPayment]?.type,
                     isDefault = mode.default
                 )
             }
@@ -267,6 +271,7 @@ class CashBoxManager(
                 POSPaymentModeOption(
                     name = mode.name,
                     modeOfPayment = mode.modeOfPayment,
+                    type = modeTypes[mode.modeOfPayment]?.type,
                     currency = mode.currency?.takeIf { it.isNotBlank() },
                     isDefault = mode.isDefault == true
                 )
@@ -277,7 +282,10 @@ class CashBoxManager(
 
         val enriched = baseModes.mapNotNull { option ->
             val active = activeByName[option.modeOfPayment] ?: return@mapNotNull null
-            option.copy(currency = active.currency?.takeIf { it.isNotBlank() })
+            option.copy(
+                type = option.type ?: modeTypes[option.modeOfPayment]?.type,
+                currency = active.currency?.takeIf { it.isNotBlank() }
+            )
         }
         return if (enriched.isEmpty()) baseModes else enriched
     }
