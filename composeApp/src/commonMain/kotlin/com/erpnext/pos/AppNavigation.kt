@@ -85,6 +85,10 @@ fun AppNavigation() {
                             is NavRoute.Login -> navController.navigate(NavRoute.Login.path)
                             is NavRoute.Home -> navController.navigate(NavRoute.Home.path)
                             is NavRoute.Billing -> navController.navigate(NavRoute.Billing.path)
+                            is NavRoute.Credits -> navController.navigate(NavRoute.Credits.path)
+                            is NavRoute.Quotation -> navController.navigate(NavRoute.Quotation.path)
+                            is NavRoute.SalesOrder -> navController.navigate(NavRoute.SalesOrder.path)
+                            is NavRoute.DeliveryNote -> navController.navigate(NavRoute.DeliveryNote.path)
                             else -> {}
                         }
                     }

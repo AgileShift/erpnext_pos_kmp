@@ -3,10 +3,13 @@ package com.erpnext.pos.navigation
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Inventory2
+import androidx.compose.material.icons.filled.LocalShipping
 import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.PointOfSale
+import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material.icons.filled.Receipt
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Description
 import androidx.compose.ui.graphics.vector.ImageVector
 
 sealed class NavRoute(
@@ -21,5 +24,8 @@ sealed class NavRoute(
     object Billing : NavRoute("sale", "Ventas", Icons.Filled.PointOfSale)
     object Customer : NavRoute("customer", "Clientes", Icons.Filled.People)
     object Credits : NavRoute("credits", "Créditos", Icons.Filled.Receipt)
+    object Quotation : NavRoute("quotation", "Cotizaciones", Icons.Filled.Description)
+    object SalesOrder : NavRoute("sales-order", "Orden de venta", Icons.Filled.ShoppingCart)
+    object DeliveryNote : NavRoute("delivery-note", "Nota de entrega", Icons.Filled.LocalShipping)
     object Settings : NavRoute("settings", "Configuración", Icons.Filled.Settings)
 }
