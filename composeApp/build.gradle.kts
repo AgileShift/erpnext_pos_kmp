@@ -130,7 +130,8 @@ kotlin {
             implementation(libs.kotlinx.coroutines.swing)
             implementation(libs.sqldelight.jvm)
 
-            implementation("com.github.javakeyring:java-keyring:1.0.4")
+            implementation(libs.java.keyring)
+            implementation(libs.logback.classic)
         }
         iosMain.dependencies {
             implementation(libs.androidx.room.runtime)

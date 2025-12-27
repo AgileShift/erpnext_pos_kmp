@@ -48,7 +48,7 @@ import com.erpnext.pos.domain.models.CustomerBO
 import com.erpnext.pos.utils.toCurrencySymbol
 import org.jetbrains.compose.ui.tooling.preview.Preview
 
-private enum class CustomerQuickActionType {
+enum class CustomerQuickActionType {
     PendingInvoices,
     CreateQuotation,
     CreateSalesOrder,

@@ -12,7 +12,7 @@ fun main() = application {
     // Default Desktop Size
     val state = rememberWindowState(
         width = 1200.dp,
-        height = 900.dp,
+        height = 780.dp,
     )
 
     Window(

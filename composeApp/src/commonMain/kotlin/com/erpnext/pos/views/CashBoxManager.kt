@@ -38,9 +38,9 @@ data class POSContext(
     val priceList: String?,
     val isCashBoxOpen: Boolean,
     val cashboxId: Long?,
-    val incomeAccount: String,
-    val expenseAccount: String,
-    val branch: String,
+    val incomeAccount: String?,
+    val expenseAccount: String?,
+    val branch: String?,
     val currency: String,
 )
 

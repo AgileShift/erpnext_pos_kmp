@@ -41,7 +41,6 @@ fun SalesInvoiceWithItemsAndPayments.toDto(): SalesInvoiceDto {
         netTotal = invoice.netTotal,
         paidAmount = invoice.paidAmount,
         posProfile = invoice.posProfile,
-        route = invoice.route
     )
 }
 

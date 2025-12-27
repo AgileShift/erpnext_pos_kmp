@@ -23,15 +23,15 @@ data class POSProfileEntity(
 
     @ColumnInfo(name = "currency") var currency: String,
 
-    @ColumnInfo("income_account") var incomeAccount: String,
+    @ColumnInfo("income_account") var incomeAccount: String? = null,
 
-    @ColumnInfo("expense_account") var expenseAccount: String,
+    @ColumnInfo("expense_account") var expenseAccount: String? = null,
 
-    @ColumnInfo("branch") var branch: String,
+    @ColumnInfo("branch") var branch: String? = null,
 
     @ColumnInfo("apply_discount_on") var applyDiscountOn: String,
 
-    @ColumnInfo("cost_center") var costCenter: String,
+    @ColumnInfo("cost_center") var costCenter: String? = null,
 
     @ColumnInfo("selling_price_list") var sellingPriceList: String,
 

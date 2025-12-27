@@ -226,9 +226,10 @@ class APIService(
 
     suspend fun getPOSProfileDetails(profileId: String): POSProfileDto {
         val url = authStore.getCurrentSite()
+        val fields = ERPDocType.POSProfileDetails.getFields()
         return clientOAuth.getERPSingle(
-            doctype = ERPDocType.POSProfileDetails.path,
-            fields = ERPDocType.POSProfileDetails.getFields(),
+            doctype = ERPDocType.POSProfile.path,
+            fields = fields,
             name = profileId.encodeURLParameter(),
             baseUrl = url,
         )
@@ -242,8 +243,6 @@ class APIService(
                 fields = ERPDocType.POSProfile.getFields(),
                 baseUrl = url,
                 filters = filters {
-                    if (!assignedTo.isNullOrEmpty())
-                        "custom_asignado_a" eq assignedTo
                     "disabled" eq false
                 }
             )
@@ -254,6 +253,7 @@ class APIService(
     }
 
     //TODO: Cuando tenga el API lo cambiamos
+    //TODO: Tenemos que discriminar desde el API la plataforma
     suspend fun getLoginWithSite(site: String): LoginInfo {
         return if (getPlatformName() == "Desktop") {
             LoginInfo(

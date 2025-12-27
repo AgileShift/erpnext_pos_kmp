@@ -14,7 +14,7 @@ enum class ERPDocType(val path: String) {
     PurchaseInvoice("Purchase Invoice"),
     StockEntry("Stock Entry"),
     POSProfile("POS Profile"),
-    POSProfileDetails("POS Profile"),
+    POSProfileDetails("POS Profile Detail"),
     POSOpeningEntry("POS Opening Entry"),
     POSClosingEntry("POS Closing Entry")
 }
@@ -117,7 +117,6 @@ val fields: List<DocTypeFields> = listOf(
             "is_pos",
             "pos_profile",
             "docstatus",
-            "route",
             "contact_display",
             "contact_mobile",
             "party_account_currency",

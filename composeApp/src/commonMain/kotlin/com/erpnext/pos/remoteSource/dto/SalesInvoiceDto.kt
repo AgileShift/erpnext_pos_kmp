@@ -52,8 +52,6 @@ data class SalesInvoiceDto(
     val posProfile: String? = null,
     @SerialName("party_account_currency")
     val currency: String? = null,
-    @SerialName("route")
-    val route: String? = null,
 )
 
 @Serializable

@@ -16,21 +16,22 @@ data class POSProfileDto(
     val profileName: String,
     @SerialName("warehouse")
     val warehouse: String,
-    val route: String?,
+    @SerialName("route")
+    val route: String? = null,
     val country: String,
     val company: String,
     val currency: String,
     @SerialName("income_account")
-    val incomeAccount: String,
+    val incomeAccount: String? = null,
     @SerialName("expense_account")
-    val expenseAccount: String,
+    val expenseAccount: String? = null,
     @SerialName("payments")
     val payments: List<PaymentModesDto>,
-    val branch: String,
+    val branch: String? = null,
     @SerialName("apply_discount_on")
     val applyDiscountOn: String,
     @SerialName("cost_center")
-    val costCenter: String,
+    val costCenter: String? = null,
     @SerialName("selling_price_list")
     val sellingPriceList: String
 )

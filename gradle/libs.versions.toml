@@ -13,6 +13,7 @@ androidx-testExt = "1.3.0"
 androidx-datastore = "1.2.0"
 coilCompose = "2.7.0"
 coilKt = "2.4.0"
+javaKeyring = "1.0.4"
 junit = "4.13.2"
 
 firebase-bom = "34.7.0"
@@ -24,6 +25,7 @@ composeMultiplatform = "1.9.3"
 composeNagivation = "2.9.1"
 
 kotlinxDatetime = "0.7.1"
+logbackClassic = "1.5.23"
 materialIconsExtended = "1.7.3"
 
 kotlin = "2.3.0"
@@ -60,6 +62,7 @@ androidx-datastore-preferences = { module = "androidx.datastore:datastore-prefer
 androidx-paging-compose = { module = "androidx.paging:paging-compose", version.ref = "pagingVersion" }
 androidx-paging-common = { module = "androidx.paging:paging-common", version.ref = "pagingVersion" }
 androidx-testExt-junit = { module = "androidx.test.ext:junit", version.ref = "androidx-testExt" }
+java-keyring = { module = "com.github.javakeyring:java-keyring", version.ref = "javaKeyring" }
 junit = { module = "junit:junit", version.ref = "junit" }
 
 androidx-lifecycle-viewmodel = { module = "org.jetbrains.androidx.lifecycle:lifecycle-viewmodel", version.ref = "androidx-lifecycle" }
@@ -67,6 +70,7 @@ androidx-lifecycle-runtimeCompose = { module = "org.jetbrains.androidx.lifecycle
 androidx-navigation-compose = { module = "org.jetbrains.androidx.navigation:navigation-compose", version.ref = "composeNagivation" }
 
 kotlinx-datetime = { module = "org.jetbrains.kotlinx:kotlinx-datetime", version.ref = "kotlinxDatetime" }
+logback-classic = { module = "ch.qos.logback:logback-classic", version.ref = "logbackClassic" }
 material-icons-extended = { module = "org.jetbrains.compose.material:material-icons-extended", version.ref = "materialIconsExtended" }
 
 kotlin-test = { module = "org.jetbrains.kotlin:kotlin-test", version.ref = "kotlin" }

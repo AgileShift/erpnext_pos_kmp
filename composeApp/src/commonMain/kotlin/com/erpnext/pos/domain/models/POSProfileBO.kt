@@ -7,12 +7,12 @@ data class POSProfileBO(
     val disabled: Boolean = false,
     val company: String = "",
     val route: String? = "",
-    val incomeAccount: String = "",
-    val expenseAccount: String = "",
-    val costCenter: String = "",
+    val incomeAccount: String? = "",
+    val expenseAccount: String? = "",
+    val costCenter: String? = "",
     val sellingPriceList: String = "",
     val applyDiscountOn: String = "",
-    val branch: String = "",
+    val branch: String? = "",
     val currency: String = "",
     val paymentModes: List<PaymentModesBO>
 )

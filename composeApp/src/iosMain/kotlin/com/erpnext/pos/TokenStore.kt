@@ -24,7 +24,7 @@ private fun keychainSet(key: String, value: String): Boolean {
     // delete existing
     SecItemDelete(query.toCFDictionary())
     val status = SecItemAdd(query.toCFDictionary(), null)
-    return status == errSecSuccessL
+    return status == errSecSuccess
 }
 
 @OptIn(ExperimentalForeignApi::class)
