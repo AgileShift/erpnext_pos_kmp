@@ -12,6 +12,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -19,12 +21,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.runtime.saveable.rememberSaveable
 import coil3.compose.AsyncImage
 import coil3.compose.LocalPlatformContext
 import coil3.compose.SubcomposeAsyncImage
@@ -55,7 +57,7 @@ fun BillingScreen(
 ) {
     //val snackbar = koinInject<SnackbarController>()
 
-    Scaffold(
+    BottomSheetScaffold(
         topBar = {
             TopAppBar(
                 title = {
@@ -69,7 +71,20 @@ fun BillingScreen(
                         )
                     }
                 })
-        }) { padding ->
+        },
+        sheetPeekHeight = 140.dp,
+        sheetDragHandle = { BottomSheetDefaults.DragHandle() },
+        sheetContent = {
+            if (state is BillingState.Success) {
+                TotalsPaymentsSheet(
+                    state = state,
+                    action = action
+                )
+            } else {
+                Spacer(Modifier.height(1.dp))
+            }
+        }
+    ) { padding ->
 
         when (state) {
             is BillingState.Loading -> {
@@ -80,76 +95,50 @@ fun BillingScreen(
 
             is BillingState.Success -> {
                 Column(
-                    modifier = Modifier.padding(padding).padding(16.dp).fillMaxSize()
+                    modifier = Modifier
+                        .padding(padding)
+                        .fillMaxSize()
+                        .padding(horizontal = 16.dp, vertical = 8.dp)
                 ) {
-                    // Customer Selection Dropdown
-                    CustomerSelector(
-                        customers = state.customers,
-                        query = state.customerSearchQuery,
-                        onQueryChange = action.onCustomerSearchQueryChange,
-                        onCustomerSelected = action.onCustomerSelected
-                    )
-
-                    Spacer(Modifier.height(16.dp))
-
-                    // Product Search
-                    ProductSelector(
-                        query = state.productSearchQuery,
-                        onQueryChange = action.onProductSearchQueryChange,
-                        results = state.productSearchResults,
-                        onProductAdded = action.onProductAdded
-                    )
-
-                    Spacer(Modifier.height(16.dp))
-
-                    // Cart Items Header
-                    Row(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
-                        Text("Artículo", Modifier.weight(2f))
-                        Text("Cant.", Modifier.weight(1.2f), textAlign = TextAlign.Center)
-                        Text("Tarifa", Modifier.weight(1f), textAlign = TextAlign.End)
-                        Text("SubTotal", Modifier.weight(1f), textAlign = TextAlign.End)
-                        Spacer(Modifier.width(40.dp)) // For delete icon
-                    }
-                    HorizontalDivider()
-
-                    // Cart Items List
-                    LazyColumn(modifier = Modifier.weight(1f)) {
-                        items(state.cartItems, key = { it.itemCode }) { item ->
-                            CartItemRow(
-                                item = item, onQuantityChanged = { newQuantity ->
-                                    action.onQuantityChanged(item.itemCode, newQuantity)
-                                }, onRemoveItem = { action.onRemoveItem(item.itemCode) },
-                                currency = state.currency ?: item.currency ?: "C$"
+                    CollapsibleSection(
+                        title = "Cliente + Productos",
+                        defaultExpanded = true
+                    ) {
+                        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                            CustomerSelector(
+                                customers = state.customers,
+                                query = state.customerSearchQuery,
+                                onQueryChange = action.onCustomerSearchQueryChange,
+                                onCustomerSelected = action.onCustomerSelected
                             )
-                            HorizontalDivider()
+
+                            ProductSelector(
+                                query = state.productSearchQuery,
+                                onQueryChange = action.onProductSearchQueryChange,
+                                results = state.productSearchResults,
+                                onProductAdded = action.onProductAdded
+                            )
                         }
                     }
 
-                    // Sale Summary
-                    Spacer(Modifier.height(16.dp))
-                    SummaryRow("Subtotal", state.currency.toString(), state.subtotal)
-                    SummaryRow("Impuestos", state.currency.toString(), state.taxes)
-                    SummaryRow("Descuento", state.currency.toString(), state.discount)
-                    HorizontalDivider()
-                    SummaryRow("Total", state.currency.toString(), state.total, bold = true)
+                    Spacer(Modifier.height(8.dp))
 
-                    Spacer(Modifier.height(16.dp))
+                    CollapsibleSection(
+                        title = "Carrito",
+                        defaultExpanded = true
+                    ) {
+                        CartList(
+                            cartItems = state.cartItems,
+                            currency = state.currency ?: "USD",
+                            onQuantityChanged = { itemCode, newQuantity ->
+                                action.onQuantityChanged(itemCode, newQuantity)
+                            },
+                            onRemoveItem = action.onRemoveItem
+                        )
+                    }
 
-                    PaymentSection(
-                        baseCurrency = state.currency ?: "USD",
-                        paymentLines = state.paymentLines,
-                        paymentModes = state.paymentModes,
-                        paidAmount = state.paidAmount,
-                        totalAmount = state.total,
-                        balanceDue = state.balanceDue,
-                        paymentErrorMessage = state.paymentErrorMessage,
-                        onAddPaymentLine = action.onAddPaymentLine,
-                        onRemovePaymentLine = action.onRemovePaymentLine
-                    )
+                    Spacer(Modifier.height(12.dp))
 
-                    Spacer(Modifier.height(16.dp))
-
-                    // Finalize Button
                     Button(
                         onClick = action.onFinalizeSale,
                         modifier = Modifier.fillMaxWidth(),
@@ -317,6 +306,85 @@ private fun ProductSelector(
 }
 
 @Composable
+private fun CollapsibleSection(
+    title: String,
+    defaultExpanded: Boolean,
+    content: @Composable () -> Unit
+) {
+    var expanded by rememberSaveable { mutableStateOf(defaultExpanded) }
+    Surface(
+        tonalElevation = 1.dp,
+        shape = MaterialTheme.shapes.medium
+    ) {
+        Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp)) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 4.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(title, style = MaterialTheme.typography.titleSmall)
+                IconButton(
+                    onClick = { expanded = !expanded },
+                    modifier = Modifier.size(28.dp)
+                ) {
+                    Icon(
+                        imageVector = if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                        contentDescription = if (expanded) "Collapse section" else "Expand section"
+                    )
+                }
+            }
+            if (expanded) {
+                Spacer(Modifier.height(8.dp))
+                content()
+            }
+        }
+    }
+}
+
+@Composable
+private fun CartList(
+    cartItems: List<CartItem>,
+    currency: String,
+    onQuantityChanged: (String, Double) -> Unit,
+    onRemoveItem: (String) -> Unit
+) {
+    if (cartItems.isEmpty()) {
+        Text(
+            "Carrito vacío",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        return
+    }
+
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Text(
+            "Items (${cartItems.size})",
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Spacer(Modifier.height(6.dp))
+        LazyColumn(
+            modifier = Modifier.fillMaxWidth().heightIn(min = 120.dp, max = 360.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            items(cartItems, key = { it.itemCode }) { item ->
+                CartItemRow(
+                    item = item,
+                    onQuantityChanged = { newQuantity ->
+                        onQuantityChanged(item.itemCode, newQuantity)
+                    },
+                    onRemoveItem = { onRemoveItem(item.itemCode) },
+                    currency = item.currency ?: currency
+                )
+            }
+        }
+    }
+}
+
+@Composable
 private fun CartItemRow(
     item: CartItem,
     onQuantityChanged: (Double) -> Unit,
@@ -326,58 +394,68 @@ private fun CartItemRow(
     val subtotal = item.price * item.quantity
     val displayQty = item.quantity.formatQty()
 
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
-        verticalAlignment = Alignment.CenterVertically
+    Surface(
+        tonalElevation = 1.dp,
+        shape = MaterialTheme.shapes.small
     ) {
-        Text(item.name, Modifier.weight(2f), style = MaterialTheme.typography.bodyMedium)
-
         Row(
             modifier = Modifier
-                .weight(1.2f)
-                .padding(vertical = 6.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.Center
+                .fillMaxWidth()
+                .padding(horizontal = 8.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            IconButton(
-                onClick = { onQuantityChanged(item.quantity - 1.0) },
-                modifier = Modifier.size(18.dp)
-            ) {
-                Icon(
-                    Icons.Default.Remove,
-                    tint = MaterialTheme.colorScheme.error,
-                    contentDescription = "Decrease quantity"
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    item.name,
+                    style = MaterialTheme.typography.bodyMedium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    text = "Qty $displayQty • ${formatAmount(currency.toCurrencySymbol(), item.price)}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
             }
             Text(
-                text = displayQty,
-                modifier = Modifier.padding(horizontal = 10.dp),
-                textAlign = TextAlign.Center,
-                style = MaterialTheme.typography.bodyMedium
+                text = formatAmount(currency.toCurrencySymbol(), subtotal),
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.padding(horizontal = 8.dp)
             )
-            IconButton(
-                onClick = { onQuantityChanged(item.quantity + 1.0) },
-                modifier = Modifier.size(18.dp)
-            ) {
-                Icon(
-                    Icons.Default.Add,
-                    contentDescription = "Increase quantity"
-                )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                IconButton(
+                    onClick = { onQuantityChanged(item.quantity - 1.0) },
+                    modifier = Modifier.size(26.dp)
+                ) {
+                    Icon(
+                        Icons.Default.Remove,
+                        tint = MaterialTheme.colorScheme.error,
+                        contentDescription = "Decrease quantity"
+                    )
+                }
+                IconButton(
+                    onClick = { onQuantityChanged(item.quantity + 1.0) },
+                    modifier = Modifier.size(26.dp)
+                ) {
+                    Icon(
+                        Icons.Default.Add,
+                        contentDescription = "Increase quantity"
+                    )
+                }
+                IconButton(
+                    onClick = onRemoveItem,
+                    modifier = Modifier.size(26.dp)
+                ) {
+                    Icon(
+                        Icons.Default.Delete,
+                        contentDescription = "Eliminar",
+                        tint = MaterialTheme.colorScheme.error
+                    )
+                }
             }
-        }
-
-        Text(
-            text = formatAmount(currency.toCurrencySymbol(), item.price),
-            modifier = Modifier.weight(1f),
-            textAlign = TextAlign.End
-        )
-        Text(
-            text = formatAmount(currency.toCurrencySymbol(), subtotal),
-            modifier = Modifier.weight(1f),
-            textAlign = TextAlign.End
-        )
-        IconButton(onClick = onRemoveItem, modifier = Modifier.width(40.dp)) {
-            Icon(Icons.Default.Delete, "Eliminar", tint = MaterialTheme.colorScheme.error)
         }
     }
 }
@@ -398,6 +476,57 @@ private fun SummaryRow(label: String, symbol: String, amount: Double, bold: Bool
             fontWeight = if (bold) FontWeight.Bold else FontWeight.Normal,
             style = MaterialTheme.typography.bodyLarge
         )
+    }
+}
+
+@Composable
+private fun TotalsPaymentsSheet(
+    state: BillingState.Success,
+    action: BillingAction
+) {
+    LazyColumn(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        item {
+            Text(
+                "Totales + Pagos",
+                style = MaterialTheme.typography.titleMedium
+            )
+        }
+        item {
+            val currency = state.currency ?: "USD"
+            CollapsibleSection(title = "Totales + Descuentos + Envío", defaultExpanded = true) {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    SummaryRow("Subtotal", currency, state.subtotal)
+                    SummaryRow("Impuestos", currency, state.taxes)
+                    SummaryRow("Descuento", currency, state.discount)
+                    SummaryRow("Envío", currency, state.shippingAmount)
+                    HorizontalDivider()
+                    SummaryRow("Total", currency, state.total, bold = true)
+                }
+            }
+        }
+        item {
+            CollapsibleSection(title = "Pagos", defaultExpanded = true) {
+                PaymentSection(
+                    baseCurrency = state.currency ?: "USD",
+                    paymentLines = state.paymentLines,
+                    paymentModes = state.paymentModes,
+                    paidAmount = state.paidAmount,
+                    totalAmount = state.total,
+                    balanceDue = state.balanceDue,
+                    paymentErrorMessage = state.paymentErrorMessage,
+                    onAddPaymentLine = action.onAddPaymentLine,
+                    onRemovePaymentLine = action.onRemovePaymentLine
+                )
+            }
+        }
+        item {
+            Spacer(Modifier.height(8.dp))
+        }
     }
 }
 
@@ -431,8 +560,6 @@ private fun PaymentSection(
             }
         }
     }
-
-    Text("Pagos", style = MaterialTheme.typography.titleMedium)
 
     if (paymentLines.isEmpty()) {
         Text(
@@ -692,7 +819,8 @@ private fun BillingScreenPreview() {
                 taxes = 45.0,
                 currency = "USD",
                 discount = 0.0,
-                total = 345.0,
+                shippingAmount = 10.0,
+                total = 355.0,
                 paymentLines = listOf(
                     PaymentLine(
                         modeOfPayment = "Cash",
@@ -711,7 +839,7 @@ private fun BillingScreenPreview() {
                     )
                 ),
                 paidAmount = 100.0,
-                balanceDue = 245.0,
+                balanceDue = 255.0,
                 exchangeRate = 1.0
             ), action = BillingAction()
         )
