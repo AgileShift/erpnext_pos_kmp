@@ -10,10 +10,13 @@ import com.erpnext.pos.navigation.NavRoute
 import com.erpnext.pos.navigation.NavigationManager
 import com.erpnext.pos.views.billing.BillingRoute
 import com.erpnext.pos.views.customer.CustomerRoute
+import com.erpnext.pos.views.deliverynote.DeliveryNoteRoute
 import com.erpnext.pos.views.home.HomeRoute
 import com.erpnext.pos.views.inventory.InventoryRoute
 import com.erpnext.pos.views.invoice.InvoiceRoute
 import com.erpnext.pos.views.login.LoginRoute
+import com.erpnext.pos.views.quotation.QuotationRoute
+import com.erpnext.pos.views.salesorder.SalesOrderRoute
 import com.erpnext.pos.views.settings.SettingsRoute
 import com.erpnext.pos.views.splash.SplashRoute
 import org.koin.compose.koinInject
@@ -47,6 +50,15 @@ object NavGraph {
             }
             composable(NavRoute.Credits.path) {
                 InvoiceRoute()
+            }
+            composable(NavRoute.Quotation.path) {
+                QuotationRoute()
+            }
+            composable(NavRoute.SalesOrder.path) {
+                SalesOrderRoute()
+            }
+            composable(NavRoute.DeliveryNote.path) {
+                DeliveryNoteRoute()
             }
             composable(NavRoute.Settings.path) {
                 SettingsRoute()

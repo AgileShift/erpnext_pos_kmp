@@ -20,5 +20,7 @@ data class CustomerAction(
     val onViewPendingInvoices: (CustomerBO) -> Unit = {},
     val onCreateQuotation: (CustomerBO) -> Unit = {},
     val onCreateSalesOrder: (CustomerBO) -> Unit = {},
+    val onCreateDeliveryNote: (CustomerBO) -> Unit = {},
+    val onCreateInvoice: (CustomerBO) -> Unit = {},
     val onRegisterPayment: (CustomerBO) -> Unit = {}
 )
