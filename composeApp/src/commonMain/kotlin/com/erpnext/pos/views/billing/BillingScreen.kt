@@ -80,7 +80,6 @@ fun BillingScreen(
                     // Customer Selection Dropdown
                     CustomerSelector(
                         customers = state.customers,
-                        selectedCustomer = state.selectedCustomer,
                         query = state.customerSearchQuery,
                         onQueryChange = action.onCustomerSearchQueryChange,
                         onCustomerSelected = action.onCustomerSelected
@@ -161,26 +160,38 @@ fun BillingScreen(
 @Composable
 private fun CustomerSelector(
     customers: List<CustomerBO>,
-    selectedCustomer: CustomerBO?,
     query: String,
     onQueryChange: (String) -> Unit,
     onCustomerSelected: (CustomerBO) -> Unit
 ) {
     var expanded by remember { mutableStateOf(false) }
+    val hasCustomers = customers.isNotEmpty()
 
     Text("Cliente", style = MaterialTheme.typography.titleMedium)
     ExposedDropdownMenuBox(
-        expanded = expanded, onExpandedChange = { expanded = !expanded }) {
+        expanded = expanded && hasCustomers,
+        onExpandedChange = { expanded = !expanded }
+    ) {
         OutlinedTextField(
-            value = selectedCustomer?.customerName ?: query,
-            onValueChange = onQueryChange,
-            modifier = Modifier.fillMaxWidth().menuAnchor(),
+            value = query,
+            onValueChange = {
+                onQueryChange(it)
+                expanded = true
+            },
+            modifier = Modifier
+                .fillMaxWidth()
+                .menuAnchor()
+                .onFocusChanged { focusState ->
+                    expanded = focusState.isFocused
+                },
             label = { Text("Buscar o Seleccionar Cliente") },
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
             singleLine = true
         )
         ExposedDropdownMenu(
-            expanded = expanded, onDismissRequest = { expanded = false }) {
+            expanded = expanded && hasCustomers,
+            onDismissRequest = { expanded = false }
+        ) {
             customers.forEach { customer ->
                 DropdownMenuItem(
                     text = { Text("${customer.name} - ${customer.customerName}") },
@@ -211,14 +222,15 @@ private fun ProductSelector(
     ) {
         OutlinedTextField(
             value = query,
-            onValueChange = onQueryChange,
+            onValueChange = {
+                onQueryChange(it)
+                expanded = true
+            },
             modifier = Modifier
                 .fillMaxWidth()
                 .menuAnchor()
                 .onFocusChanged { focusState ->
-                    if (!focusState.isFocused) {
-                        expanded = false
-                    }
+                    expanded = focusState.isFocused
                 },
             label = { Text("Buscar por nombre o código") },
             singleLine = true,
@@ -274,7 +286,7 @@ private fun ProductSelector(
                     },
                     onClick = {
                         onProductAdded(item)
-                        //onQueryChange("")
+                        onQueryChange("")
                         expanded = false
                     }
                 )
