@@ -4,6 +4,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.navigation.NavHostController
+import androidx.navigation.navArgument
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import com.erpnext.pos.navigation.NavRoute
@@ -19,6 +20,7 @@ import com.erpnext.pos.views.quotation.QuotationRoute
 import com.erpnext.pos.views.salesorder.SalesOrderRoute
 import com.erpnext.pos.views.settings.SettingsRoute
 import com.erpnext.pos.views.splash.SplashRoute
+import com.erpnext.pos.views.paymententry.PaymentEntryRoute
 import org.koin.compose.koinInject
 
 @ExperimentalMaterial3Api
@@ -62,6 +64,17 @@ object NavGraph {
             }
             composable(NavRoute.Settings.path) {
                 SettingsRoute()
+            }
+            composable(
+                route = "payment-entry?invoiceId={invoiceId}",
+                arguments = listOf(
+                    navArgument("invoiceId") {
+                        defaultValue = ""
+                        nullable = true
+                    }
+                )
+            ) { entry ->
+                PaymentEntryRoute(entry.arguments?.getString("invoiceId"))
             }
         }
     }

@@ -40,7 +40,6 @@ import androidx.paging.LoadState
 import androidx.paging.compose.collectAsLazyPagingItems
 import androidx.paging.compose.itemKey
 import com.erpnext.pos.domain.models.SalesInvoiceBO
-import com.erpnext.pos.views.home.HomeState
 import com.erpnext.pos.views.invoice.components.EmptyState
 import com.erpnext.pos.views.invoice.components.ErrorState
 import com.erpnext.pos.views.invoice.components.LoadingState
@@ -126,7 +125,7 @@ fun InvoiceListScreen(action: InvoiceAction) {
                 ) { index ->
                     val item = lazyPagingItems[index]
                     if (item != null) {
-                        InvoiceItem(item, onClick = { /* TODO */ })
+                        InvoiceItem(item, onClick = { action.onItemClick(it.invoiceId) })
                     }
                 }
 

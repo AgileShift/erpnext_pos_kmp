@@ -6,6 +6,7 @@ import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material.icons.filled.LocalShipping
 import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.PointOfSale
+import androidx.compose.material.icons.filled.Payments
 import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material.icons.filled.Receipt
 import androidx.compose.material.icons.filled.Settings
@@ -28,5 +29,14 @@ sealed class NavRoute(
     object SalesOrder : NavRoute("sales-order", "Orden de venta", Icons.Filled.ShoppingCart)
     object DeliveryNote : NavRoute("delivery-note", "Nota de entrega", Icons.Filled.LocalShipping)
     object Settings : NavRoute("settings", "Configuración", Icons.Filled.Settings)
+    data class PaymentEntry(val invoiceId: String? = null) : NavRoute(
+        path = if (invoiceId.isNullOrBlank()) {
+            "payment-entry"
+        } else {
+            "payment-entry?invoiceId=$invoiceId"
+        },
+        title = "Payment Entry",
+        icon = Icons.Filled.Payments
+    )
     object NavigateUp : NavRoute("navigate-up", "Navigate Up", Icons.Filled.Home)
 }

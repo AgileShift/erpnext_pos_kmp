@@ -56,6 +56,13 @@ class SalesInvoiceRepository(
         localSource.saveInvoiceLocally(invoice, items, payments)
     }
 
+    override suspend fun applyLocalPayment(
+        invoice: SalesInvoiceEntity,
+        payments: List<POSInvoicePaymentEntity>
+    ) {
+        localSource.applyPayments(invoice, payments)
+    }
+
     override suspend fun markAsSynced(invoiceName: String) {
         localSource.markAsSynced(invoiceName)
     }

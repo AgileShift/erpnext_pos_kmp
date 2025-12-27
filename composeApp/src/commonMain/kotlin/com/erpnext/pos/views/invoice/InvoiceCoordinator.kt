@@ -14,7 +14,7 @@ class InvoiceCoordinator(
 
     fun onSearchQueryChanged(customerId: String) = viewModel.onSearchQueryChanged(customerId)
     fun onDateSelected(date: String) = viewModel.onDateSelected(date)
-    fun onItemClick(invoiceId: String) {}
+    fun onItemClick(invoiceId: String) = viewModel.onInvoiceSelected(invoiceId)
     fun goToBilling() = viewModel.goToBilling()
 
     fun onRefresh() {}

@@ -57,6 +57,10 @@ class InvoiceViewModel(
         navManager.navigateTo(NavRoute.Billing)
     }
 
+    fun onInvoiceSelected(invoiceId: String) {
+        navManager.navigateTo(NavRoute.PaymentEntry(invoiceId))
+    }
+
     private fun PendingInvoiceInput.applyLocalSearch(
         paging: PagingData<SalesInvoiceBO>
     ): PagingData<SalesInvoiceBO> {

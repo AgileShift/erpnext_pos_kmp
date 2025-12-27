@@ -39,7 +39,7 @@ fun rememberCustomerActions(
             onCreateSalesOrder = { navManager.navigateTo(NavRoute.SalesOrder) },
             onCreateDeliveryNote = { navManager.navigateTo(NavRoute.DeliveryNote) },
             onCreateInvoice = { navManager.navigateTo(NavRoute.Billing) },
-            onRegisterPayment = { navManager.navigateTo(NavRoute.Credits) }
+            onRegisterPayment = { navManager.navigateTo(NavRoute.PaymentEntry()) }
         )
     }
 }

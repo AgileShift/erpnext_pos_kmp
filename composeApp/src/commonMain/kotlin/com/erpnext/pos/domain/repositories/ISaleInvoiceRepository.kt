@@ -24,6 +24,10 @@ interface ISaleInvoiceRepository {
         items: List<SalesInvoiceItemEntity>,
         payments: List<POSInvoicePaymentEntity> = emptyList()
     )
+    suspend fun applyLocalPayment(
+        invoice: SalesInvoiceEntity,
+        payments: List<POSInvoicePaymentEntity>
+    )
 
     suspend fun markAsSynced(invoiceName: String)
     suspend fun markAsFailed(invoiceName: String)
