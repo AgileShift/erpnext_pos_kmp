@@ -36,15 +36,16 @@ fun POSProfileDto.toEntity(): POSProfileEntity {
 }
 
 @JvmName("ListPaymentModesDtoToEntity")
-fun List<PaymentModesDto>.toEntity(): List<PaymentModesEntity> {
-    return this.map { it.toEntity() }
+fun List<PaymentModesDto>.toEntity(profileId: String): List<PaymentModesEntity> {
+    return this.map { it.toEntity(profileId) }
 }
 
-fun PaymentModesDto.toEntity(): PaymentModesEntity {
+fun PaymentModesDto.toEntity(profileId: String): PaymentModesEntity {
     return PaymentModesEntity(
         name = this.name,
         default = this.default,
-        modeOfPayment = this.modeOfPayment
+        modeOfPayment = this.modeOfPayment,
+        profileId = profileId
     )
 }
 

@@ -22,10 +22,5 @@ class POSProfileRepository(
     }
 
     override suspend fun sync() {
-        val openingPos = localSource.getOpeningEntryPendingSync()
-        val closingPos = localSource.getClosingEntryPendingSync()
-
-        combine(openingPos, closingPos) { pendingOpen, pendingClose->
-        }
     }
 }

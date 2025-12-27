@@ -44,17 +44,18 @@ class BillingViewModel(
 
     fun loadInitialData() {
         executeUseCase(action = {
+            val context = contextProvider.requireContext()
+
             customersUseCase.invoke(null).collectLatest { c ->
                 customers = c
                 itemsUseCase.invoke(null).collectLatest { i ->
                     products = i.filter { it.price > 0.0 && it.actualQty > 0.0 }
                     val currency = contextProvider.getContext()?.currency ?: "USD"
-                    val paymentModes = modeOfPaymentDao.getAll().map { mode ->
+                    val paymentModes = modeOfPaymentDao.getAll(context.profileName).map { mode ->
                         PaymentModeOption(
                             name = mode.name,
                             modeOfPayment = mode.modeOfPayment,
-                            currency = mode.currency,
-                            isDefault = mode.isDefault
+                            isDefault = mode.default
                         )
                     }.ifEmpty {
                         listOf(

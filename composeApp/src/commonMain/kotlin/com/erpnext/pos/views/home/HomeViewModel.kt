@@ -59,7 +59,6 @@ class HomeViewModel(
             userInfo = fetchUserInfoUseCase.invoke(null)
             posProfiles = fetchPosProfileUseCase.invoke(userInfo.email)
             _stateFlow.update { HomeState.POSProfiles(posProfiles, userInfo) }
-
         }, exceptionHandler = { e ->
             _stateFlow.update { HomeState.Error(e.message ?: "Error") }
         })

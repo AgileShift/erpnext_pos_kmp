@@ -7,7 +7,8 @@ import androidx.sqlite.driver.bundled.BundledSQLiteDriver
 
 actual class DatabaseBuilder {
     actual fun build(): AppDatabase {
-        val dbPath = File(System.getProperty("java.io.tmpdir"), "erpnext_pos.db")
+        val dbPath = File(System.getProperty("user.home"), "erpnext_pos.db")
+        print("Database Path -> ${dbPath}")
         return Room.databaseBuilder<AppDatabase>(
             name = dbPath.absolutePath
         ).setDriver(BundledSQLiteDriver())

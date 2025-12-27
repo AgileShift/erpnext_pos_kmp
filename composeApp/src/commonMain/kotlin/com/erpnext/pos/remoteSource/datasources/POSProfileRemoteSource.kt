@@ -23,7 +23,7 @@ class POSProfileRemoteSource(
     suspend fun getPOSProfileDetails(profileId: String): POSProfileDto {
         val profiles = api.getPOSProfileDetails(profileId)
         posProfileDao.insertAll(listOf(profiles.toEntity()))
-        paymentModesDao.insertAll(profiles.payments.toEntity())
+        paymentModesDao.insertAll(profiles.payments.toEntity(profileId))
         return profiles
     }
 

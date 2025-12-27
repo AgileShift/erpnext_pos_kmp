@@ -3,9 +3,10 @@ package com.erpnext.pos.localSource.dao
 import androidx.room.Dao
 import androidx.room.Query
 import com.erpnext.pos.localSource.entities.ModeOfPaymentEntity
+import com.erpnext.pos.localSource.entities.PaymentModesEntity
 
 @Dao
 interface ModeOfPaymentDao {
-    @Query("SELECT * FROM tabModeOfPayment WHERE enabled = 1 ORDER BY mode_of_payment ASC")
-    suspend fun getAll(): List<ModeOfPaymentEntity>
+    @Query("SELECT * FROM tabpaymentmodes WHERE profileId = :profileId ORDER BY mode_of_payment ASC")
+    suspend fun getAll(profileId: String): List<PaymentModesEntity>
 }
