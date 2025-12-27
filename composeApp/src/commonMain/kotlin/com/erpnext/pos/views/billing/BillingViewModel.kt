@@ -38,6 +38,18 @@ class BillingViewModel(
     private var customers: List<CustomerBO> = emptyList()
     private var products: List<ItemBO> = emptyList()
 
+    private enum class DiscountSource {
+        None,
+        Manual,
+        Code
+    }
+
+    private data class DiscountInfo(
+        val amount: Double,
+        val percent: Double?,
+        val source: DiscountSource
+    )
+
     init {
         loadInitialData()
     }
@@ -159,7 +171,7 @@ class BillingViewModel(
                 if (it.itemCode == item.itemCode) it.copy(quantity = it.quantity + 1) else it
             }
         }
-        _state.update { current.copy(cartItems = updated).recalculateCartTotals() }
+        _state.update { recalculateTotals(current.copy(cartItems = updated)) }
     }
 
     fun onQuantityChanged(itemCode: String, newQuantity: Double) {
@@ -168,13 +180,13 @@ class BillingViewModel(
             if (it.itemCode == itemCode) it.copy(quantity = newQuantity.coerceAtLeast(0.0)) else it
         }.filter { it.quantity > 0.0 }
 
-        _state.update { current.copy(cartItems = updated).recalculateCartTotals() }
+        _state.update { recalculateTotals(current.copy(cartItems = updated)) }
     }
 
     fun onRemoveItem(itemCode: String) {
         val current = _state.value as? BillingState.Success ?: return
         val updated = current.cartItems.filterNot { it.itemCode == itemCode }
-        _state.update { current.copy(cartItems = updated).recalculateCartTotals() }
+        _state.update { recalculateTotals(current.copy(cartItems = updated)) }
     }
 
     fun onAddPaymentLine(line: PaymentLine) {
@@ -230,6 +242,11 @@ class BillingViewModel(
         _state.update { current.copy() }
 
         executeUseCase(action = {
+            val subtotal = current.cartItems.sumOf { it.price * it.quantity }
+            val discountInfo = resolveDiscountInfo(current, subtotal)
+            val shippingAmount = current.shippingAmount.coerceAtLeast(0.0)
+            val discountPercent = discountInfo.percent?.takeIf { it > 0.0 }
+            val discountAmount = discountInfo.amount
             val items = current.cartItems.map { cart ->
                 SalesInvoiceItemDto(
                     itemCode = cart.itemCode,
@@ -237,13 +254,41 @@ class BillingViewModel(
                     qty = cart.quantity,
                     rate = cart.price,
                     amount = cart.quantity * cart.price,
+                    discountPercentage = discountPercent,
                     warehouse = context.warehouse,
                     incomeAccount = context.incomeAccount
                 )
+            }.toMutableList()
+
+            if (discountPercent == null && discountAmount > 0.0) {
+                items.add(
+                    SalesInvoiceItemDto(
+                        itemCode = DISCOUNT_ITEM_CODE,
+                        itemName = "Discount",
+                        qty = 1.0,
+                        rate = -discountAmount,
+                        amount = -discountAmount,
+                        warehouse = context.warehouse,
+                        incomeAccount = context.incomeAccount
+                    )
+                )
             }
 
-            val subtotal = items.sumOf { it.amount }
-            val total = current.total.takeIf { it > 0.0 } ?: subtotal
+            if (shippingAmount > 0.0) {
+                items.add(
+                    SalesInvoiceItemDto(
+                        itemCode = SHIPPING_ITEM_CODE,
+                        itemName = "Shipping Charge",
+                        qty = 1.0,
+                        rate = shippingAmount,
+                        amount = shippingAmount,
+                        warehouse = context.warehouse,
+                        incomeAccount = context.incomeAccount
+                    )
+                )
+            }
+
+            val total = (subtotal - discountAmount + shippingAmount).coerceAtLeast(0.0)
             val payments = current.paymentLines.map { line ->
                 SalesInvoicePaymentDto(
                     modeOfPayment = line.modeOfPayment,
@@ -258,9 +303,19 @@ class BillingViewModel(
                 outstandingAmount <= 0.0 -> "Paid"
                 else -> "Partly Paid"
             }
-            val paymentMetadata = current.paymentLines.joinToString(separator = "; ") { line ->
-                "Payment currency: ${line.currency}, Exchange rate: ${line.exchangeRate}"
-            }.takeIf { it.isNotBlank() }
+            val paymentMetadata = buildList {
+                addAll(
+                    current.paymentLines.map { line ->
+                        "Payment currency: ${line.currency}, Exchange rate: ${line.exchangeRate}"
+                    }
+                )
+                if (current.discountCode.isNotBlank()) {
+                    add("Discount code: ${current.discountCode}")
+                }
+                if (shippingAmount > 0.0) {
+                    add("Shipping: $shippingAmount")
+                }
+            }.joinToString(separator = "; ").takeIf { it.isNotBlank() }
             val primaryPaymentLine = current.paymentLines.firstOrNull()
             val invoiceDto = SalesInvoiceDto(
                 customer = customer.name,
@@ -290,17 +345,21 @@ class BillingViewModel(
                 invoice = entity.invoice, items = entity.items, payments = entity.payments
             )
 
-            _state.update {
-                current.copy(
-                    selectedCustomer = null,
-                    cartItems = emptyList(),
-                    subtotal = 0.0,
-                    taxes = 0.0,
-                    discount = 0.0,
-                    total = 0.0
-                )
-            }
-        }, exceptionHandler = { e ->
+                _state.update {
+                    current.copy(
+                        selectedCustomer = null,
+                        cartItems = emptyList(),
+                        subtotal = 0.0,
+                        taxes = 0.0,
+                        discount = 0.0,
+                        discountCode = "",
+                        manualDiscountAmount = 0.0,
+                        manualDiscountPercent = 0.0,
+                        shippingAmount = 0.0,
+                        total = 0.0
+                    )
+                }
+            }, exceptionHandler = { e ->
             _state.update { BillingState.Error(e.message ?: "Unable to create invoice.") }
         })
     }
@@ -309,6 +368,54 @@ class BillingViewModel(
         navManager.navigateTo(NavRoute.NavigateUp)
     }
 
+    private fun recalculateTotals(current: BillingState.Success): BillingState.Success {
+        val subtotal = current.cartItems.sumOf { it.price * it.quantity }
+        val taxes = 0.0
+        val discountInfo = resolveDiscountInfo(current, subtotal)
+        val shippingAmount = current.shippingAmount.coerceAtLeast(0.0)
+        val total = (subtotal + taxes - discountInfo.amount + shippingAmount).coerceAtLeast(0.0)
+        return current.copy(
+            subtotal = subtotal,
+            taxes = taxes,
+            discount = discountInfo.amount,
+            total = total
+        ).recalculatePaymentTotals()
+    }
+
+    private fun resolveDiscountInfo(
+        current: BillingState.Success,
+        subtotal: Double
+    ): DiscountInfo {
+        val hasPercent = current.manualDiscountPercent > 0.0
+        val hasAmount = current.manualDiscountAmount > 0.0
+        val source = when {
+            current.discountCode.isNotBlank() -> DiscountSource.Code
+            hasPercent || hasAmount -> DiscountSource.Manual
+            else -> DiscountSource.None
+        }
+        val percent = current.manualDiscountPercent.takeIf { it > 0.0 }?.coerceAtMost(100.0)
+        val amount = when {
+            percent != null -> subtotal * (percent / 100.0)
+            hasAmount -> current.manualDiscountAmount
+            else -> 0.0
+        }.coerceIn(0.0, subtotal)
+
+        val effectiveAmount = when (source) {
+            DiscountSource.None -> 0.0
+            DiscountSource.Manual -> amount
+            DiscountSource.Code -> amount
+        }
+        return DiscountInfo(
+            amount = effectiveAmount,
+            percent = percent.takeIf { effectiveAmount > 0.0 },
+            source = source
+        )
+    }
+
+    companion object {
+        private const val DISCOUNT_ITEM_CODE = "Discount"
+        private const val SHIPPING_ITEM_CODE = "Shipping Charge"
+    }
 }
 
 private fun PaymentLine.toBaseAmount(): PaymentLine {
