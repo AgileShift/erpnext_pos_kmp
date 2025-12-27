@@ -40,11 +40,14 @@ import com.erpnext.pos.utils.view.SnackbarController
 import com.erpnext.pos.views.CashBoxManager
 import com.erpnext.pos.views.billing.BillingViewModel
 import com.erpnext.pos.views.customer.CustomerViewModel
+import com.erpnext.pos.views.deliverynote.DeliveryNoteViewModel
 import com.erpnext.pos.views.home.HomeViewModel
 import com.erpnext.pos.views.home.POSProfileViewModel
 import com.erpnext.pos.views.inventory.InventoryViewModel
 import com.erpnext.pos.views.invoice.InvoiceViewModel
 import com.erpnext.pos.views.login.LoginViewModel
+import com.erpnext.pos.views.quotation.QuotationViewModel
+import com.erpnext.pos.views.salesorder.SalesOrderViewModel
 import com.erpnext.pos.views.settings.SettingsViewModel
 import com.erpnext.pos.views.splash.SplashViewModel
 import io.ktor.client.HttpClient
@@ -148,6 +151,12 @@ val appModule = module {
     single { SalesInvoiceRemoteSource(get(named("apiService")), get()) }
     single { InvoiceViewModel(get(), get()) }
     single { SalesInvoiceRepository(get(), get(), get()) }
+    //endregion
+
+    //region Quotation/Sales Order/Delivery Note
+    single { QuotationViewModel() }
+    single { SalesOrderViewModel() }
+    single { DeliveryNoteViewModel() }
     //endregion
 
     //region Checkout

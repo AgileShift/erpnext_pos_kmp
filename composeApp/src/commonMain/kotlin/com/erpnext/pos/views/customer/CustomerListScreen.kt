@@ -52,6 +52,8 @@ enum class CustomerQuickActionType {
     PendingInvoices,
     CreateQuotation,
     CreateSalesOrder,
+    CreateDeliveryNote,
+    CreateInvoice,
     RegisterPayment
 }
 
@@ -76,6 +78,16 @@ private fun customerQuickActions(): List<CustomerQuickAction> = listOf(
         type = CustomerQuickActionType.CreateSalesOrder,
         label = "Crear orden de venta",
         icon = Icons.Filled.PointOfSale
+    ),
+    CustomerQuickAction(
+        type = CustomerQuickActionType.CreateDeliveryNote,
+        label = "Crear nota de entrega",
+        icon = Icons.Filled.LocalShipping
+    ),
+    CustomerQuickAction(
+        type = CustomerQuickActionType.CreateInvoice,
+        label = "Crear factura",
+        icon = Icons.Filled.Receipt
     ),
     CustomerQuickAction(
         type = CustomerQuickActionType.RegisterPayment,
@@ -702,6 +714,8 @@ private fun handleQuickAction(
         CustomerQuickActionType.PendingInvoices -> actions.onViewPendingInvoices(customer)
         CustomerQuickActionType.CreateQuotation -> actions.onCreateQuotation(customer)
         CustomerQuickActionType.CreateSalesOrder -> actions.onCreateSalesOrder(customer)
+        CustomerQuickActionType.CreateDeliveryNote -> actions.onCreateDeliveryNote(customer)
+        CustomerQuickActionType.CreateInvoice -> actions.onCreateInvoice(customer)
         CustomerQuickActionType.RegisterPayment -> actions.onRegisterPayment(customer)
     }
 }
