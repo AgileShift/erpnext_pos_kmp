@@ -10,13 +10,16 @@ import com.erpnext.pos.domain.models.ItemBO
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -170,7 +173,7 @@ private fun CustomerSelector(
     Text("Cliente", style = MaterialTheme.typography.titleMedium)
     ExposedDropdownMenuBox(
         expanded = expanded && hasCustomers,
-        onExpandedChange = { expanded = !expanded }
+        onExpandedChange = { expanded = it }
     ) {
         OutlinedTextField(
             value = query,
@@ -180,7 +183,7 @@ private fun CustomerSelector(
             },
             modifier = Modifier
                 .fillMaxWidth()
-                .menuAnchor()
+                .menuAnchor(MenuAnchorType.PrimaryEditable)
                 .onFocusChanged { focusState ->
                     expanded = focusState.isFocused
                 },
@@ -218,7 +221,7 @@ private fun ProductSelector(
     Text("Producto", style = MaterialTheme.typography.titleMedium)
     ExposedDropdownMenuBox(
         expanded = expanded && hasResults,
-        onExpandedChange = { expanded = !expanded }
+        onExpandedChange = { expanded = it }
     ) {
         OutlinedTextField(
             value = query,
@@ -228,7 +231,7 @@ private fun ProductSelector(
             },
             modifier = Modifier
                 .fillMaxWidth()
-                .menuAnchor()
+                .menuAnchor(MenuAnchorType.PrimaryEditable)
                 .onFocusChanged { focusState ->
                     expanded = focusState.isFocused
                 },
@@ -303,6 +306,7 @@ private fun CartItemRow(
     currency: String
 ) {
     val subtotal = item.price * item.quantity
+    val displayQty = item.quantity.formatQty()
 
     Row(
         modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
@@ -310,16 +314,39 @@ private fun CartItemRow(
     ) {
         Text(item.name, Modifier.weight(2f), style = MaterialTheme.typography.bodyMedium)
 
-        OutlinedTextField(
-            value = item.quantity.toString(),
-            onValueChange = { qty ->
-                onQuantityChanged(qty.toDoubleOrNull() ?: 0.0)
-            },
-            modifier = Modifier.weight(1.2f).padding(horizontal = 4.dp),
-            singleLine = true,
-            textStyle = LocalTextStyle.current.copy(textAlign = TextAlign.Center),
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
-        )
+        Row(
+            modifier = Modifier
+                .weight(1.2f)
+                .padding(vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center
+        ) {
+            IconButton(
+                onClick = { onQuantityChanged(item.quantity - 1.0) },
+                modifier = Modifier.size(18.dp)
+            ) {
+                Icon(
+                    Icons.Default.Remove,
+                    tint = MaterialTheme.colorScheme.error,
+                    contentDescription = "Decrease quantity"
+                )
+            }
+            Text(
+                text = displayQty,
+                modifier = Modifier.padding(horizontal = 10.dp),
+                textAlign = TextAlign.Center,
+                style = MaterialTheme.typography.bodyMedium
+            )
+            IconButton(
+                onClick = { onQuantityChanged(item.quantity + 1.0) },
+                modifier = Modifier.size(18.dp)
+            ) {
+                Icon(
+                    Icons.Default.Add,
+                    contentDescription = "Increase quantity"
+                )
+            }
+        }
 
         Text(
             text = formatAmount(currency.toCurrencySymbol(), item.price),
@@ -353,6 +380,14 @@ private fun SummaryRow(label: String, symbol: String, amount: Double, bold: Bool
             fontWeight = if (bold) FontWeight.Bold else FontWeight.Normal,
             style = MaterialTheme.typography.bodyLarge
         )
+    }
+}
+
+private fun Double.formatQty(): String {
+    return if (this % 1.0 == 0.0) {
+        this.toInt().toString()
+    } else {
+        this.toString()
     }
 }
 

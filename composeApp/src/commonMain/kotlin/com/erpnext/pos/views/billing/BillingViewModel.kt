@@ -44,12 +44,12 @@ class BillingViewModel(
             customersUseCase.invoke(null).collectLatest { c ->
                 customers = c
                 itemsUseCase.invoke(null).collectLatest { i ->
-                    products = i
+                    products = i.filter { it.price > 0.0 && it.actualQty > 0.0 }
                     val currency = contextProvider.getContext()?.currency ?: "USD"
                     _state.update {
                         BillingState.Success(
-                            customers = c,
-                            productSearchResults = i,
+                            customers = customers,
+                            productSearchResults = products,
                             currency = currency,
                             exchangeRate = 36.6243
                         )
@@ -68,8 +68,7 @@ class BillingViewModel(
         } else {
             customers.filter {
                 it.customerName.contains(query, ignoreCase = true) || it.name.contains(
-                    query,
-                    ignoreCase = true
+                    query, ignoreCase = true
                 )
             }
         }
@@ -89,8 +88,7 @@ class BillingViewModel(
         val current = _state.value as? BillingState.Success ?: return
         _state.update {
             current.copy(
-                selectedCustomer = customer,
-                customerSearchQuery = customer.customerName
+                selectedCustomer = customer, customerSearchQuery = customer.customerName
             )
         }
     }
@@ -101,14 +99,15 @@ class BillingViewModel(
             products
         } else {
             products.filter {
-                (it.name.contains(query, ignoreCase = true)
-                    || it.itemCode.contains(query, ignoreCase = true)) && it.actualQty > 0
+                (it.name.contains(query, ignoreCase = true) || it.itemCode.contains(
+                    query,
+                    ignoreCase = true
+                ))
             }
         }
         _state.update {
             current.copy(
-                productSearchQuery = query,
-                productSearchResults = filtered
+                productSearchQuery = query, productSearchResults = filtered
             )
         }
     }
@@ -124,8 +123,8 @@ class BillingViewModel(
                 currency = item.currency?.toCurrencySymbol()
                     ?: current.currency?.toCurrencySymbol(),
                 quantity = 1.0,
-                price = if (item.currency.equals("USD")) item.price * (exchangeRate
-                    ?: 0.0) else item.price
+                price = if (item.currency.equals(current.currency)) item.price else item.price * (exchangeRate
+                    ?: 0.0)
             )
         } else {
             current.cartItems.map {

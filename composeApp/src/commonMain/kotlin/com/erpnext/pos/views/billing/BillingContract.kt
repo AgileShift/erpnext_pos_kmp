@@ -4,6 +4,14 @@ import CartItem
 import com.erpnext.pos.domain.models.CustomerBO
 import com.erpnext.pos.domain.models.ItemBO
 
+data class PaymentLine(
+    val modeOfPayment: String,
+    val enteredAmount: Double,
+    val currency: String,
+    val exchangeRate: Double,
+    val baseAmount: Double
+)
+
 /**
  * Data classes for state and actions, assuming a more robust structure.
  * You should move these to your state and action files accordingly.
