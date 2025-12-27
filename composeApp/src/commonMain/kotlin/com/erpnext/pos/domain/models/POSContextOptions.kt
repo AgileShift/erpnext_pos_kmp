@@ -1,0 +1,15 @@
+package com.erpnext.pos.domain.models
+
+data class POSCurrencyOption(
+    val code: String,
+    val name: String,
+    val symbol: String? = null,
+    val numberFormat: String? = null
+)
+
+data class POSPaymentModeOption(
+    val name: String,
+    val modeOfPayment: String,
+    val currency: String? = null,
+    val isDefault: Boolean = false
+)

@@ -3,6 +3,8 @@ package com.erpnext.pos.views.billing
 import CartItem
 import com.erpnext.pos.domain.models.CustomerBO
 import com.erpnext.pos.domain.models.ItemBO
+import com.erpnext.pos.domain.models.POSCurrencyOption
+import com.erpnext.pos.domain.models.POSPaymentModeOption
 
 data class PaymentLine(
     val modeOfPayment: String,
@@ -11,13 +13,6 @@ data class PaymentLine(
     val exchangeRate: Double,
     val baseAmount: Double,
     val reference: String? = null
-)
-
-data class PaymentModeOption(
-    val name: String,
-    val modeOfPayment: String,
-    val currency: String? = null,
-    val isDefault: Boolean = false
 )
 
 /**
@@ -49,7 +44,8 @@ sealed interface BillingState {
         val shippingAmount: Double = 0.0,
         val total: Double = 0.0,
         val paymentLines: List<PaymentLine> = emptyList(),
-        val paymentModes: List<PaymentModeOption> = emptyList(),
+        val paymentModes: List<POSPaymentModeOption> = emptyList(),
+        val allowedCurrencies: List<POSCurrencyOption> = emptyList(),
         val paidAmount: Double = 0.0,
         val balanceDue: Double = 0.0,
         val paymentErrorMessage: String? = null

@@ -1,7 +1,10 @@
 package com.erpnext.pos.views
 
+import com.erpnext.pos.domain.models.POSCurrencyOption
+import com.erpnext.pos.domain.models.POSPaymentModeOption
 import com.erpnext.pos.domain.models.POSProfileSimpleBO
 import com.erpnext.pos.domain.models.PaymentModesBO
+import com.erpnext.pos.localSource.dao.ModeOfPaymentDao
 import com.erpnext.pos.localSource.dao.CashboxDao
 import com.erpnext.pos.localSource.dao.POSClosingEntryDao
 import com.erpnext.pos.localSource.dao.POSOpeningEntryDao
@@ -43,7 +46,9 @@ data class POSContext(
     val expenseAccount: String?,
     val branch: String?,
     val currency: String,
-    val exchangeRate: Double
+    val exchangeRate: Double,
+    val allowedCurrencies: List<POSCurrencyOption>,
+    val paymentModes: List<POSPaymentModeOption>
 )
 
 class CashBoxManager(
@@ -53,7 +58,8 @@ class CashBoxManager(
     private val closingDao: POSClosingEntryDao,
     private val cashboxDao: CashboxDao,
     private val userDao: UserDao,
-    private val exchangeRatePreferences: ExchangeRatePreferences
+    private val exchangeRatePreferences: ExchangeRatePreferences,
+    private val modeOfPaymentDao: ModeOfPaymentDao
 ) {
 
     //Contexto actual del POS cargado en memoria
@@ -68,6 +74,8 @@ class CashBoxManager(
         val activeCashbox = cashboxDao.getActiveEntry(user.email, profile.profileName)
             .firstOrNull()
         val exchangeRate = resolveExchangeRate(profile.currency)
+        val allowedCurrencies = resolveSupportedCurrencies(profile.currency)
+        val paymentModes = resolvePaymentModes(profile.profileName)
 
         _cashboxState.update { activeCashbox != null }
 
@@ -85,7 +93,9 @@ class CashBoxManager(
             expenseAccount = profile.expenseAccount,
             branch = profile.branch,
             currency = profile.currency,
-            exchangeRate = exchangeRate
+            exchangeRate = exchangeRate,
+            allowedCurrencies = allowedCurrencies,
+            paymentModes = paymentModes
         )
         currentContext
     }
@@ -137,6 +147,8 @@ class CashBoxManager(
         _cashboxState.update { true }
 
         val exchangeRate = resolveExchangeRate(profile.currency)
+        val allowedCurrencies = resolveSupportedCurrencies(profile.currency)
+        val paymentModes = resolvePaymentModes(profile.profileName)
         currentContext = POSContext(
             username = user.username ?: user.name,
             profileName = newEntry.posProfile,
@@ -151,7 +163,9 @@ class CashBoxManager(
             expenseAccount = profile.expenseAccount,
             branch = profile.branch,
             currency = profile.currency,
-            exchangeRate = exchangeRate
+            exchangeRate = exchangeRate,
+            allowedCurrencies = allowedCurrencies,
+            paymentModes = paymentModes
         )
         currentContext!!
     }
@@ -198,6 +212,75 @@ class CashBoxManager(
 
     fun requireContext(): POSContext =
         currentContext ?: error("POS context not initialized. Call initializeContext() first.")
+
+    private suspend fun resolveSupportedCurrencies(baseCurrency: String): List<POSCurrencyOption> {
+        val currencies = runCatching { api.getEnabledCurrencies() }.getOrElse { emptyList() }
+        val mapped = currencies.map { currency ->
+            POSCurrencyOption(
+                code = currency.name,
+                name = currency.currencyName ?: currency.name,
+                symbol = currency.symbol,
+                numberFormat = currency.numberFormat
+            )
+        }
+        val normalizedBase = baseCurrency.trim()
+        val withBase = if (mapped.any { it.code.equals(normalizedBase, ignoreCase = true) }) {
+            mapped
+        } else {
+            mapped + POSCurrencyOption(
+                code = normalizedBase,
+                name = normalizedBase
+            )
+        }
+        val distinct = withBase.distinctBy { it.code.uppercase() }
+        return if (distinct.isEmpty()) {
+            listOf(
+                POSCurrencyOption(
+                    code = normalizedBase,
+                    name = normalizedBase
+                )
+            )
+        } else {
+            distinct
+        }
+    }
+
+    private suspend fun resolvePaymentModes(profileName: String): List<POSPaymentModeOption> {
+        val profileModes = runCatching { modeOfPaymentDao.getAll(profileName) }
+            .getOrElse { emptyList() }
+            .map { mode ->
+                POSPaymentModeOption(
+                    name = mode.name,
+                    modeOfPayment = mode.modeOfPayment,
+                    isDefault = mode.default
+                )
+            }
+        val activeModes = runCatching { api.getActiveModeOfPayment() }.getOrElse { emptyList() }
+        val activeByName = activeModes.associateBy { it.modeOfPayment }
+
+        if (profileModes.isEmpty() && activeModes.isEmpty()) return emptyList()
+
+        val baseModes = if (profileModes.isNotEmpty()) {
+            profileModes
+        } else {
+            activeModes.map { mode ->
+                POSPaymentModeOption(
+                    name = mode.name,
+                    modeOfPayment = mode.modeOfPayment,
+                    currency = mode.currency?.takeIf { it.isNotBlank() },
+                    isDefault = mode.isDefault == true
+                )
+            }
+        }
+
+        if (activeByName.isEmpty()) return baseModes
+
+        val enriched = baseModes.mapNotNull { option ->
+            val active = activeByName[option.modeOfPayment] ?: return@mapNotNull null
+            option.copy(currency = active.currency?.takeIf { it.isNotBlank() })
+        }
+        return if (enriched.isEmpty()) baseModes else enriched
+    }
 
     suspend fun updateManualExchangeRate(rate: Double) {
         exchangeRatePreferences.saveManualRate(rate)

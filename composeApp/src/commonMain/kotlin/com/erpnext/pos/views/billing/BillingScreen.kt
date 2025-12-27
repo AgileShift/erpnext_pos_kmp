@@ -37,7 +37,8 @@ import com.erpnext.pos.utils.toCurrencySymbol
 import com.erpnext.pos.views.billing.BillingAction
 import com.erpnext.pos.views.billing.BillingState
 import com.erpnext.pos.views.billing.PaymentLine
-import com.erpnext.pos.views.billing.PaymentModeOption
+import com.erpnext.pos.domain.models.POSCurrencyOption
+import com.erpnext.pos.domain.models.POSPaymentModeOption
 import org.jetbrains.compose.ui.tooling.preview.Preview
 
 
@@ -515,6 +516,7 @@ private fun TotalsPaymentsSheet(
                     baseCurrency = state.currency ?: "USD",
                     paymentLines = state.paymentLines,
                     paymentModes = state.paymentModes,
+                    allowedCurrencies = state.allowedCurrencies,
                     paidAmount = state.paidAmount,
                     totalAmount = state.total,
                     balanceDue = state.balanceDue,
@@ -534,7 +536,8 @@ private fun TotalsPaymentsSheet(
 private fun PaymentSection(
     baseCurrency: String,
     paymentLines: List<PaymentLine>,
-    paymentModes: List<PaymentModeOption>,
+    paymentModes: List<POSPaymentModeOption>,
+    allowedCurrencies: List<POSCurrencyOption>,
     paidAmount: Double,
     totalAmount: Double,
     balanceDue: Double,
@@ -543,21 +546,42 @@ private fun PaymentSection(
     onRemovePaymentLine: (Int) -> Unit
 ) {
     val modeOptions = remember(paymentModes) { paymentModes.map { it.modeOfPayment }.distinct() }
-    var selectedMode by remember(modeOptions) { mutableStateOf(modeOptions.firstOrNull() ?: "") }
-    var selectedCurrency by remember(baseCurrency) { mutableStateOf(baseCurrency) }
+    val defaultMode = paymentModes.firstOrNull { it.isDefault }?.modeOfPayment
+        ?: modeOptions.firstOrNull().orEmpty()
+    var selectedMode by remember(modeOptions, defaultMode) { mutableStateOf(defaultMode) }
+    val allowedCodes = remember(allowedCurrencies, baseCurrency) {
+        val codes = allowedCurrencies.map { it.code }.filter { it.isNotBlank() }
+        if (codes.isEmpty()) listOf(baseCurrency) else codes
+    }
+    var selectedCurrency by remember(allowedCodes, baseCurrency) {
+        mutableStateOf(allowedCodes.firstOrNull() ?: baseCurrency)
+    }
     var amountInput by remember { mutableStateOf("") }
     var rateInput by remember { mutableStateOf("1.0") }
     val modeCurrency = paymentModes.firstOrNull { it.modeOfPayment == selectedMode }?.currency
-    val currencyOptions = remember(baseCurrency, modeCurrency) {
-        listOfNotNull(baseCurrency, "USD", "EUR", modeCurrency).distinct()
+    val currencyOptions = remember(allowedCodes, baseCurrency, modeCurrency) {
+        val baseOptions = allowedCodes.ifEmpty { listOf(baseCurrency) }
+        val filtered = if (!modeCurrency.isNullOrBlank()) {
+            baseOptions.filter { it.equals(modeCurrency, ignoreCase = true) }
+        } else {
+            baseOptions
+        }
+        val ensuredBase = if (filtered.any { it.equals(baseCurrency, ignoreCase = true) }) {
+            filtered
+        } else {
+            filtered + baseCurrency
+        }
+        ensuredBase.distinct()
     }
 
-    LaunchedEffect(modeCurrency, baseCurrency) {
-        if (!modeCurrency.isNullOrBlank()) {
-            selectedCurrency = modeCurrency
-            if (modeCurrency == baseCurrency) {
-                rateInput = "1.0"
-            }
+    LaunchedEffect(modeCurrency, currencyOptions, baseCurrency) {
+        val preferredCurrency = modeCurrency ?: baseCurrency
+        val resolved = currencyOptions.firstOrNull {
+            it.equals(preferredCurrency, ignoreCase = true)
+        } ?: currencyOptions.firstOrNull() ?: baseCurrency
+        selectedCurrency = resolved
+        if (resolved.equals(baseCurrency, ignoreCase = true)) {
+            rateInput = "1.0"
         }
     }
 
@@ -831,11 +855,18 @@ private fun BillingScreenPreview() {
                     )
                 ),
                 paymentModes = listOf(
-                    PaymentModeOption(
+                    POSPaymentModeOption(
                         name = "Cash",
                         modeOfPayment = "Cash",
                         currency = "USD",
                         isDefault = true
+                    )
+                ),
+                allowedCurrencies = listOf(
+                    POSCurrencyOption(
+                        code = "USD",
+                        name = "US Dollar",
+                        symbol = "$"
                     )
                 ),
                 paidAmount = 100.0,
