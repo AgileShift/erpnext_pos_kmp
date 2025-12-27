@@ -73,16 +73,26 @@ class BillingViewModel(
                 )
             }
         }
+        val updatedSelection = current.selectedCustomer?.takeIf {
+            it.customerName.equals(query, ignoreCase = true)
+        }
         _state.update {
             current.copy(
-                customerSearchQuery = query, customers = filtered
+                customerSearchQuery = query,
+                customers = filtered,
+                selectedCustomer = updatedSelection
             )
         }
     }
 
     fun onCustomerSelected(customer: CustomerBO) {
         val current = _state.value as? BillingState.Success ?: return
-        _state.update { current.copy(selectedCustomer = customer) }
+        _state.update {
+            current.copy(
+                selectedCustomer = customer,
+                customerSearchQuery = customer.customerName
+            )
+        }
     }
 
     fun onProductSearchQueryChange(query: String) {
@@ -91,10 +101,8 @@ class BillingViewModel(
             products
         } else {
             products.filter {
-                it.name.contains(query, ignoreCase = true) or it.itemCode.contains(
-                    query,
-                    ignoreCase = true
-                ) and (it.actualQty > 0)
+                (it.name.contains(query, ignoreCase = true)
+                    || it.itemCode.contains(query, ignoreCase = true)) && it.actualQty > 0
             }
         }
         _state.update {
