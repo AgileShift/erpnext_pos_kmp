@@ -133,6 +133,17 @@ fun BillingScreen(
 
                     Spacer(Modifier.height(16.dp))
 
+                    PaymentSection(
+                        baseCurrency = state.currency ?: "USD",
+                        paymentLines = state.paymentLines,
+                        paidAmount = state.paidAmount,
+                        balanceDue = state.balanceDue,
+                        onAddPaymentLine = action.onAddPaymentLine,
+                        onRemovePaymentLine = action.onRemovePaymentLine
+                    )
+
+                    Spacer(Modifier.height(16.dp))
+
                     // Finalize Button
                     Button(
                         onClick = action.onFinalizeSale,
@@ -383,6 +394,212 @@ private fun SummaryRow(label: String, symbol: String, amount: Double, bold: Bool
     }
 }
 
+@Composable
+private fun PaymentSection(
+    baseCurrency: String,
+    paymentLines: List<PaymentLine>,
+    paidAmount: Double,
+    balanceDue: Double,
+    onAddPaymentLine: (PaymentLine) -> Unit,
+    onRemovePaymentLine: (Int) -> Unit
+) {
+    val modeOptions = remember { listOf("Cash", "Card", "Transfer") }
+    val currencyOptions = remember(baseCurrency) {
+        listOf(baseCurrency, "USD", "EUR").distinct()
+    }
+    var selectedMode by remember { mutableStateOf(modeOptions.first()) }
+    var selectedCurrency by remember(baseCurrency) { mutableStateOf(baseCurrency) }
+    var amountInput by remember { mutableStateOf("") }
+    var rateInput by remember { mutableStateOf("1.0") }
+
+    Text("Pagos", style = MaterialTheme.typography.titleMedium)
+
+    if (paymentLines.isEmpty()) {
+        Text(
+            "Sin pagos registrados",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    } else {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            paymentLines.forEachIndexed { index, line ->
+                Surface(
+                    tonalElevation = 2.dp,
+                    shape = MaterialTheme.shapes.medium
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(12.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(line.modeOfPayment, fontWeight = FontWeight.SemiBold)
+                            Text(
+                                "Amount: ${
+                                    formatAmount(
+                                        line.currency.toCurrencySymbol(),
+                                        line.enteredAmount
+                                    )
+                                }"
+                            )
+                            Text(
+                                "Base: ${formatAmount(baseCurrency.toCurrencySymbol(), line.baseAmount)}"
+                            )
+                            Text("Rate: ${line.exchangeRate}")
+                        }
+                        IconButton(onClick = { onRemovePaymentLine(index) }) {
+                            Icon(
+                                Icons.Default.Delete,
+                                contentDescription = "Eliminar línea de pago",
+                                tint = MaterialTheme.colorScheme.error
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    Spacer(Modifier.height(12.dp))
+
+    Text("Modo de pago", style = MaterialTheme.typography.bodyMedium)
+    var modeExpanded by remember { mutableStateOf(false) }
+    ExposedDropdownMenuBox(
+        expanded = modeExpanded,
+        onExpandedChange = { modeExpanded = it }
+    ) {
+        OutlinedTextField(
+            value = selectedMode,
+            onValueChange = {},
+            readOnly = true,
+            modifier = Modifier
+                .fillMaxWidth()
+                .menuAnchor(MenuAnchorType.PrimaryNotEditable),
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = modeExpanded) }
+        )
+        ExposedDropdownMenu(
+            expanded = modeExpanded,
+            onDismissRequest = { modeExpanded = false }
+        ) {
+            modeOptions.forEach { mode ->
+                DropdownMenuItem(
+                    text = { Text(mode) },
+                    onClick = {
+                        selectedMode = mode
+                        modeExpanded = false
+                    }
+                )
+            }
+        }
+    }
+
+    Spacer(Modifier.height(12.dp))
+
+    Text("Moneda", style = MaterialTheme.typography.bodyMedium)
+    var currencyExpanded by remember { mutableStateOf(false) }
+    ExposedDropdownMenuBox(
+        expanded = currencyExpanded,
+        onExpandedChange = { currencyExpanded = it }
+    ) {
+        OutlinedTextField(
+            value = selectedCurrency,
+            onValueChange = {},
+            readOnly = true,
+            modifier = Modifier
+                .fillMaxWidth()
+                .menuAnchor(MenuAnchorType.PrimaryNotEditable),
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = currencyExpanded) }
+        )
+        ExposedDropdownMenu(
+            expanded = currencyExpanded,
+            onDismissRequest = { currencyExpanded = false }
+        ) {
+            currencyOptions.forEach { currency ->
+                DropdownMenuItem(
+                    text = { Text(currency) },
+                    onClick = {
+                        selectedCurrency = currency
+                        if (currency == baseCurrency) {
+                            rateInput = "1.0"
+                        }
+                        currencyExpanded = false
+                    }
+                )
+            }
+        }
+    }
+
+    Spacer(Modifier.height(12.dp))
+
+    OutlinedTextField(
+        value = amountInput,
+        onValueChange = { amountInput = it },
+        label = { Text("Monto") },
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+        modifier = Modifier.fillMaxWidth()
+    )
+
+    Spacer(Modifier.height(12.dp))
+
+    OutlinedTextField(
+        value = rateInput,
+        onValueChange = { rateInput = it },
+        label = { Text("Tasa de cambio") },
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+        enabled = selectedCurrency != baseCurrency,
+        modifier = Modifier.fillMaxWidth()
+    )
+
+    Spacer(Modifier.height(12.dp))
+
+    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        val amountValue = amountInput.toDoubleOrNull()
+        val rateValue = rateInput.toDoubleOrNull()
+        val canAdd = amountValue != null && amountValue > 0.0 && (rateValue != null && rateValue > 0.0)
+
+        Button(
+            onClick = {
+                val amount = amountValue ?: return@Button
+                val rate = if (selectedCurrency == baseCurrency) 1.0 else rateValue ?: 1.0
+                onAddPaymentLine(
+                    PaymentLine(
+                        modeOfPayment = selectedMode,
+                        enteredAmount = amount,
+                        currency = selectedCurrency,
+                        exchangeRate = rate,
+                        baseAmount = amount * rate
+                    )
+                )
+                amountInput = ""
+                if (selectedCurrency == baseCurrency) {
+                    rateInput = "1.0"
+                }
+            },
+            modifier = Modifier.weight(1f),
+            enabled = canAdd
+        ) {
+            Text("Agregar pago")
+        }
+
+        OutlinedButton(
+            onClick = {
+                if (paymentLines.isNotEmpty()) {
+                    onRemovePaymentLine(paymentLines.lastIndex)
+                }
+            },
+            modifier = Modifier.weight(1f),
+            enabled = paymentLines.isNotEmpty()
+        ) {
+            Text("Eliminar")
+        }
+    }
+
+    Spacer(Modifier.height(12.dp))
+
+    SummaryRow("Pagado (base)", baseCurrency, paidAmount, bold = true)
+    SummaryRow("Saldo (base)", baseCurrency, balanceDue, bold = true)
+}
+
 private fun Double.formatQty(): String {
     return if (this % 1.0 == 0.0) {
         this.toInt().toString()
@@ -428,6 +645,17 @@ private fun BillingScreenPreview() {
                 currency = "USD",
                 discount = 0.0,
                 total = 345.0,
+                paymentLines = listOf(
+                    PaymentLine(
+                        modeOfPayment = "Cash",
+                        enteredAmount = 100.0,
+                        currency = "USD",
+                        exchangeRate = 1.0,
+                        baseAmount = 100.0
+                    )
+                ),
+                paidAmount = 100.0,
+                balanceDue = 245.0,
                 exchangeRate = 36.6243
             ), action = BillingAction()
         )

@@ -16,6 +16,8 @@ class BillingCoordinator(val viewModel: BillingViewModel) {
     fun onQuantityChanged(itemCode: String, newQuantity: Double) =
         viewModel.onQuantityChanged(itemCode, newQuantity)
     fun onRemoveItem(itemCode: String) = viewModel.onRemoveItem(itemCode)
+    fun onAddPaymentLine(line: PaymentLine) = viewModel.onAddPaymentLine(line)
+    fun onRemovePaymentLine(index: Int) = viewModel.onRemovePaymentLine(index)
     fun onFinalizeSale() = viewModel.onFinalizeSale()
     fun onBack() = viewModel.onBack()
 }
