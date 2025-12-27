@@ -1,14 +1,22 @@
 package com.erpnext.pos.views.salesorder
 
 import com.erpnext.pos.base.BaseViewModel
+import com.erpnext.pos.navigation.NavRoute
+import com.erpnext.pos.navigation.NavigationManager
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 
-class SalesOrderViewModel : BaseViewModel() {
+class SalesOrderViewModel(
+    private val navManager: NavigationManager
+) : BaseViewModel() {
     private val _stateFlow = MutableStateFlow<SalesOrderState>(SalesOrderState.Ready)
     val stateFlow: StateFlow<SalesOrderState> = _stateFlow
 
     fun onRefresh() {
         _stateFlow.value = SalesOrderState.Ready
+    }
+
+    fun onBack() {
+        navManager.navigateTo(NavRoute.NavigateUp)
     }
 }

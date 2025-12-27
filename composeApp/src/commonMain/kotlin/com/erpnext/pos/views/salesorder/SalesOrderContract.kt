@@ -7,5 +7,6 @@ sealed class SalesOrderState {
 }
 
 data class SalesOrderAction(
+    val onBack: () -> Unit = {},
     val onRefresh: () -> Unit = {}
 )

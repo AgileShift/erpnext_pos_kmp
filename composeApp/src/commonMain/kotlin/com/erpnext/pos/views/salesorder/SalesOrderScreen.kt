@@ -1,13 +1,17 @@
 @file:OptIn(ExperimentalMaterial3Api::class)
 
-package com.erpnext.pos.views.salesorder
-
+import com.erpnext.pos.views.salesorder.SalesOrderAction
+import com.erpnext.pos.views.salesorder.SalesOrderState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -24,7 +28,19 @@ fun SalesOrderScreen(
     action: SalesOrderAction
 ) {
     Scaffold(
-        topBar = { TopAppBar(title = { Text("Sales Orders") }) }
+        topBar = {
+            TopAppBar(
+                title = { Text("Sales Orders") },
+                navigationIcon = {
+                    IconButton(onClick = action.onBack) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Back"
+                        )
+                    }
+                }
+            )
+        }
     ) { padding ->
         Column(
             modifier = Modifier
@@ -41,6 +57,7 @@ fun SalesOrderScreen(
                     style = MaterialTheme.typography.bodyLarge,
                     textAlign = TextAlign.Center
                 )
+
                 SalesOrderState.Ready -> Text(
                     text = "Sales order view is ready to be wired.",
                     style = MaterialTheme.typography.bodyLarge,

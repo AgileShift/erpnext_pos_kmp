@@ -1,5 +1,6 @@
 package com.erpnext.pos.views.salesorder
 
+import SalesOrderScreen
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -19,6 +20,7 @@ fun SalesOrderRoute(
 fun rememberSalesOrderActions(coordinator: SalesOrderCoordinator): SalesOrderAction {
     return remember(coordinator) {
         SalesOrderAction(
+            onBack = coordinator::onBack,
             onRefresh = coordinator::onRefresh
         )
     }

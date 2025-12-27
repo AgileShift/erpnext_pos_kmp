@@ -7,5 +7,6 @@ sealed class DeliveryNoteState {
 }
 
 data class DeliveryNoteAction(
+    val onBack: () -> Unit = {},
     val onRefresh: () -> Unit = {}
 )

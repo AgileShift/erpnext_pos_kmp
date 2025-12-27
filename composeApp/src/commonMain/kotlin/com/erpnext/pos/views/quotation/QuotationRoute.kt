@@ -19,6 +19,7 @@ fun QuotationRoute(
 fun rememberQuotationActions(coordinator: QuotationCoordinator): QuotationAction {
     return remember(coordinator) {
         QuotationAction(
+            onBack = coordinator::onBack,
             onRefresh = coordinator::onRefresh
         )
     }

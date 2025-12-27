@@ -28,4 +28,5 @@ sealed class NavRoute(
     object SalesOrder : NavRoute("sales-order", "Orden de venta", Icons.Filled.ShoppingCart)
     object DeliveryNote : NavRoute("delivery-note", "Nota de entrega", Icons.Filled.LocalShipping)
     object Settings : NavRoute("settings", "Configuración", Icons.Filled.Settings)
+    object NavigateUp : NavRoute("navigate-up", "Navigate Up", Icons.Filled.Home)
 }

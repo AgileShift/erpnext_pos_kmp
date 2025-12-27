@@ -19,6 +19,7 @@ fun DeliveryNoteRoute(
 fun rememberDeliveryNoteActions(coordinator: DeliveryNoteCoordinator): DeliveryNoteAction {
     return remember(coordinator) {
         DeliveryNoteAction(
+            onBack = coordinator::onBack,
             onRefresh = coordinator::onRefresh
         )
     }

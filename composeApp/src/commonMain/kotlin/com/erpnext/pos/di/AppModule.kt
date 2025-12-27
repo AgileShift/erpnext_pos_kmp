@@ -154,9 +154,9 @@ val appModule = module {
     //endregion
 
     //region Quotation/Sales Order/Delivery Note
-    single { QuotationViewModel() }
-    single { SalesOrderViewModel() }
-    single { DeliveryNoteViewModel() }
+    single { QuotationViewModel(get()) }
+    single { SalesOrderViewModel(get()) }
+    single { DeliveryNoteViewModel(get()) }
     //endregion
 
     //region Checkout

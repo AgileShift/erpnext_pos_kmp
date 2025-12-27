@@ -10,6 +10,7 @@ class SalesOrderCoordinator(
     val screenStateFlow = viewModel.stateFlow
 
     fun onRefresh() = viewModel.onRefresh()
+    fun onBack() = viewModel.onBack()
 }
 
 @Composable

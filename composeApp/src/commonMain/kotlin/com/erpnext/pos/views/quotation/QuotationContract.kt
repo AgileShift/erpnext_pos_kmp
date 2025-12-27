@@ -7,5 +7,6 @@ sealed class QuotationState {
 }
 
 data class QuotationAction(
+    val onBack: () -> Unit = {},
     val onRefresh: () -> Unit = {}
 )
