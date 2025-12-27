@@ -7,6 +7,7 @@ import androidx.navigation.NavHostController
 import androidx.navigation.navArgument
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import androidx.savedstate.read
 import com.erpnext.pos.navigation.NavRoute
 import com.erpnext.pos.navigation.NavigationManager
 import com.erpnext.pos.views.billing.BillingRoute
@@ -74,7 +75,7 @@ object NavGraph {
                     }
                 )
             ) { entry ->
-                PaymentEntryRoute(entry.arguments?.getString("invoiceId"))
+                PaymentEntryRoute(entry.arguments?.read { getString("invoiceId") })
             }
         }
     }

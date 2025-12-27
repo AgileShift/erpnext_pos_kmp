@@ -24,8 +24,7 @@ class BillingViewModel(
     private val invoiceRepository: SalesInvoiceRepository
 ) : BaseViewModel() {
 
-    private val _state: MutableStateFlow<BillingState> =
-        MutableStateFlow(BillingState.Loading)
+    private val _state: MutableStateFlow<BillingState> = MutableStateFlow(BillingState.Loading)
     val state = _state.asStateFlow()
 
     private var customers: List<CustomerBO> = emptyList()
@@ -36,29 +35,22 @@ class BillingViewModel(
     }
 
     fun loadInitialData() {
-        executeUseCase(
-            action = {
-                customersUseCase.invoke(null)
-                    .collectLatest { c ->
-                        customers = c
-                        itemsUseCase.invoke(null)
-                            .collectLatest { i ->
-                                products = i
-                                val currency = contextProvider.getContext()?.currency ?: "USD"
-                                _state.update {
-                                    BillingState.Success(
-                                        customers = c,
-                                        productSearchResults = i,
-                                        currency = currency
-                                    )
-                                }
+        executeUseCase(action = {
+            customersUseCase.invoke(null).collectLatest { c ->
+                    customers = c
+                    itemsUseCase.invoke(null).collectLatest { i ->
+                            products = i
+                            val currency = contextProvider.getContext()?.currency ?: "USD"
+                            _state.update {
+                                BillingState.Success(
+                                    customers = c, productSearchResults = i, currency = currency
+                                )
                             }
-                    }
-            },
-            exceptionHandler = {
-                _state.value = BillingState.Error(it.message ?: "Unknown error")
-            }
-        )
+                        }
+                }
+        }, exceptionHandler = {
+            _state.value = BillingState.Error(it.message ?: "Unknown error")
+        })
     }
 
     fun onCustomerSearchQueryChange(query: String) {
@@ -67,14 +59,15 @@ class BillingViewModel(
             customers
         } else {
             customers.filter {
-                it.customerName.contains(query, ignoreCase = true) ||
-                    it.name.contains(query, ignoreCase = true)
+                it.customerName.contains(query, ignoreCase = true) || it.name.contains(
+                    query,
+                    ignoreCase = true
+                )
             }
         }
         _state.update {
             current.copy(
-                customerSearchQuery = query,
-                customers = filtered
+                customerSearchQuery = query, customers = filtered
             )
         }
     }
@@ -90,14 +83,15 @@ class BillingViewModel(
             products
         } else {
             products.filter {
-                it.name.contains(query, ignoreCase = true) ||
-                    it.itemCode.contains(query, ignoreCase = true)
+                it.name.contains(query, ignoreCase = true) || it.itemCode.contains(
+                    query,
+                    ignoreCase = true
+                )
             }
         }
         _state.update {
             current.copy(
-                productSearchQuery = query,
-                productSearchResults = filtered
+                productSearchQuery = query, productSearchResults = filtered
             )
         }
     }
@@ -147,68 +141,62 @@ class BillingViewModel(
             return
         }
 
-        val context = contextProvider.getContext()
-            ?: error("POS context not initialized.")
+        val context = contextProvider.getContext() ?: error("POS context not initialized.")
 
         _state.update { current.copy() }
 
-        executeUseCase(
-            action = {
-                val items = current.cartItems.map { cart ->
-                    SalesInvoiceItemDto(
-                        itemCode = cart.itemCode,
-                        itemName = cart.name,
-                        qty = cart.quantity,
-                        rate = cart.price,
-                        amount = cart.quantity * cart.price,
-                        warehouse = context.warehouse,
-                        incomeAccount = context.incomeAccount
-                    )
-                }
-
-                val subtotal = items.sumOf { it.amount }
-                val invoiceDto = SalesInvoiceDto(
-                    customer = customer.name,
-                    customerName = customer.customerName,
-                    customerPhone = customer.mobileNo,
-                    company = context.company,
-                    postingDate = DateTimeProvider.todayDate(),
-                    dueDate = DateTimeProvider.todayDate(),
-                    status = "Unpaid",
-                    grandTotal = subtotal,
-                    outstandingAmount = subtotal,
-                    totalTaxesAndCharges = 0.0,
-                    netTotal = subtotal,
-                    paidAmount = 0.0,
-                    items = items,
-                    payments = emptyList(),
-                    posProfile = context.profileName,
-                    currency = context.currency
+        executeUseCase(action = {
+            val items = current.cartItems.map { cart ->
+                SalesInvoiceItemDto(
+                    itemCode = cart.itemCode,
+                    itemName = cart.name,
+                    qty = cart.quantity,
+                    rate = cart.price,
+                    amount = cart.quantity * cart.price,
+                    warehouse = context.warehouse,
+                    incomeAccount = context.incomeAccount
                 )
-
-                val created = invoiceRepository.createRemoteInvoice(invoiceDto)
-                val entity = created.toEntity()
-                invoiceRepository.saveInvoiceLocally(
-                    invoice = entity.invoice,
-                    items = entity.items,
-                    payments = entity.payments
-                )
-
-                _state.update {
-                    current.copy(
-                        selectedCustomer = null,
-                        cartItems = emptyList(),
-                        subtotal = 0.0,
-                        taxes = 0.0,
-                        discount = 0.0,
-                        total = 0.0
-                    )
-                }
-            },
-            exceptionHandler = {
-                _state.update { BillingState.Error(it.message ?: "Unable to create invoice.") }
             }
-        )
+
+            val subtotal = items.sumOf { it.amount }
+            val invoiceDto = SalesInvoiceDto(
+                customer = customer.name,
+                customerName = customer.customerName,
+                customerPhone = customer.mobileNo,
+                company = context.company,
+                postingDate = DateTimeProvider.todayDate(),
+                dueDate = DateTimeProvider.todayDate(),
+                status = "Unpaid",
+                grandTotal = subtotal,
+                outstandingAmount = subtotal,
+                totalTaxesAndCharges = 0.0,
+                netTotal = subtotal,
+                paidAmount = 0.0,
+                items = items,
+                payments = emptyList(),
+                posProfile = context.profileName,
+                currency = context.currency
+            )
+
+            val created = invoiceRepository.createRemoteInvoice(invoiceDto)
+            val entity = created.toEntity()
+            invoiceRepository.saveInvoiceLocally(
+                invoice = entity.invoice, items = entity.items, payments = entity.payments
+            )
+
+            _state.update {
+                current.copy(
+                    selectedCustomer = null,
+                    cartItems = emptyList(),
+                    subtotal = 0.0,
+                    taxes = 0.0,
+                    discount = 0.0,
+                    total = 0.0
+                )
+            }
+        }, exceptionHandler = { e ->
+            _state.update { BillingState.Error(e.message ?: "Unable to create invoice.") }
+        })
     }
 
     private fun BillingState.Success.recalculateTotals(): BillingState.Success {
