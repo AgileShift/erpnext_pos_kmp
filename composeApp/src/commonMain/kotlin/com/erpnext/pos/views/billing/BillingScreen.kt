@@ -174,7 +174,14 @@ private fun CustomerSelector(
         OutlinedTextField(
             value = selectedCustomer?.customerName ?: query,
             onValueChange = onQueryChange,
-            modifier = Modifier.fillMaxWidth().menuAnchor(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .menuAnchor()
+                .onFocusChanged { focusState ->
+                    if (!focusState.isFocused) {
+                        expanded = false
+                    }
+                },
             label = { Text("Buscar o Seleccionar Cliente") },
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
             singleLine = true
