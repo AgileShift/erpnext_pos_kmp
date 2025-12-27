@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -15,9 +16,12 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 
 @Composable
-fun SalesOrderScreen() {
+fun SalesOrderScreen(
+    state: SalesOrderState,
+    action: SalesOrderAction
+) {
     Scaffold(
-        topBar = { TopAppBar(title = { Text("Orden de venta") }) }
+        topBar = { TopAppBar(title = { Text("Sales Orders") }) }
     ) { padding ->
         Column(
             modifier = Modifier
@@ -27,11 +31,19 @@ fun SalesOrderScreen() {
             verticalArrangement = Arrangement.Center,
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Text(
-                text = "Aquí podrás crear y revisar órdenes de venta.",
-                style = MaterialTheme.typography.bodyLarge,
-                textAlign = TextAlign.Center
-            )
+            when (state) {
+                SalesOrderState.Loading -> CircularProgressIndicator()
+                is SalesOrderState.Error -> Text(
+                    text = state.message,
+                    style = MaterialTheme.typography.bodyLarge,
+                    textAlign = TextAlign.Center
+                )
+                SalesOrderState.Ready -> Text(
+                    text = "Sales order view is ready to be wired.",
+                    style = MaterialTheme.typography.bodyLarge,
+                    textAlign = TextAlign.Center
+                )
+            }
         }
     }
 }

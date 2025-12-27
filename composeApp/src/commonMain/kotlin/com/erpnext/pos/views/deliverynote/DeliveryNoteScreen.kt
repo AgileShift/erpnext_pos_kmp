@@ -4,6 +4,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -15,9 +16,12 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 
 @Composable
-fun DeliveryNoteScreen() {
+fun DeliveryNoteScreen(
+    state: DeliveryNoteState,
+    action: DeliveryNoteAction
+) {
     Scaffold(
-        topBar = { TopAppBar(title = { Text("Nota de entrega") }) }
+        topBar = { TopAppBar(title = { Text("Delivery Notes") }) }
     ) { padding ->
         Column(
             modifier = Modifier
@@ -27,11 +31,19 @@ fun DeliveryNoteScreen() {
             verticalArrangement = Arrangement.Center,
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Text(
-                text = "Aquí podrás crear y revisar notas de entrega.",
-                style = MaterialTheme.typography.bodyLarge,
-                textAlign = TextAlign.Center
-            )
+            when (state) {
+                DeliveryNoteState.Loading -> CircularProgressIndicator()
+                is DeliveryNoteState.Error -> Text(
+                    text = state.message,
+                    style = MaterialTheme.typography.bodyLarge,
+                    textAlign = TextAlign.Center
+                )
+                DeliveryNoteState.Ready -> Text(
+                    text = "Delivery note view is ready to be wired.",
+                    style = MaterialTheme.typography.bodyLarge,
+                    textAlign = TextAlign.Center
+                )
+            }
         }
     }
 }
