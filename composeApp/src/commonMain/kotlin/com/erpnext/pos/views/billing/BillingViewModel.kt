@@ -149,6 +149,28 @@ class BillingViewModel(
         _state.update { current.copy(cartItems = updated).recalculateCartTotals() }
     }
 
+    fun onAddPaymentLine(line: PaymentLine) {
+        val current = _state.value as? BillingState.Success ?: return
+        val updated = current.paymentLines + line.toBaseAmount()
+        _state.update { current.withPaymentLines(updated) }
+    }
+
+    fun onUpdatePaymentLine(index: Int, line: PaymentLine) {
+        val current = _state.value as? BillingState.Success ?: return
+        if (index !in current.paymentLines.indices) return
+        val updated = current.paymentLines.mapIndexed { idx, existing ->
+            if (idx == index) line.toBaseAmount() else existing
+        }
+        _state.update { current.withPaymentLines(updated) }
+    }
+
+    fun onRemovePaymentLine(index: Int) {
+        val current = _state.value as? BillingState.Success ?: return
+        if (index !in current.paymentLines.indices) return
+        val updated = current.paymentLines.filterIndexed { idx, _ -> idx != index }
+        _state.update { current.withPaymentLines(updated) }
+    }
+
     fun onFinalizeSale() {
         val current = _state.value as? BillingState.Success ?: return
         val customer = current.selectedCustomer ?: run {
@@ -222,4 +244,8 @@ class BillingViewModel(
         navManager.navigateTo(NavRoute.NavigateUp)
     }
 
+}
+
+private fun PaymentLine.toBaseAmount(): PaymentLine {
+    return copy(baseAmount = enteredAmount * exchangeRate)
 }
