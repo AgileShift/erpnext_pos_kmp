@@ -46,8 +46,9 @@ sealed interface BillingState {
         val paymentLines: List<PaymentLine> = emptyList(),
         val paymentModes: List<POSPaymentModeOption> = emptyList(),
         val allowedCurrencies: List<POSCurrencyOption> = emptyList(),
-        val paidAmount: Double = 0.0,
-        val balanceDue: Double = 0.0,
+        val paidAmountBase: Double = 0.0,
+        val balanceDueBase: Double = 0.0,
+        val changeDueBase: Double = 0.0,
         val paymentErrorMessage: String? = null
     ) : BillingState {
         fun recalculateCartTotals(): Success {
@@ -65,10 +66,13 @@ sealed interface BillingState {
         }
 
         fun recalculatePaymentTotals(): Success {
-            val newPaidAmount = paymentLines.sumOf { it.baseAmount }
+            val newPaidAmountBase = paymentLines.sumOf { it.baseAmount }
+            val newBalanceDueBase = (total - newPaidAmountBase).coerceAtLeast(0.0)
+            val newChangeDueBase = (newPaidAmountBase - total).coerceAtLeast(0.0)
             return copy(
-                paidAmount = newPaidAmount,
-                balanceDue = (total - newPaidAmount).coerceAtLeast(0.0)
+                paidAmountBase = newPaidAmountBase,
+                balanceDueBase = newBalanceDueBase,
+                changeDueBase = newChangeDueBase
             )
         }
 
