@@ -5,6 +5,7 @@ import com.erpnext.pos.base.getPlatformName
 import com.erpnext.pos.remoteSource.dto.BinDto
 import com.erpnext.pos.remoteSource.dto.CategoryDto
 import com.erpnext.pos.remoteSource.dto.CustomerDto
+import com.erpnext.pos.remoteSource.dto.ExchangeRateResponse
 import com.erpnext.pos.remoteSource.dto.ItemDetailDto
 import com.erpnext.pos.remoteSource.dto.ItemDto
 import com.erpnext.pos.remoteSource.dto.ItemPriceDto
@@ -41,8 +42,10 @@ import io.ktor.client.engine.HttpClientEngine
 import io.ktor.client.plugins.auth.Auth
 import io.ktor.client.plugins.auth.providers.BearerTokens
 import io.ktor.client.plugins.auth.providers.bearer
+import io.ktor.client.request.get
 import io.ktor.client.request.forms.FormDataContent
 import io.ktor.client.request.post
+import io.ktor.client.request.parameter
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.ContentType
@@ -168,6 +171,23 @@ class APIService(
             userId,
             url
         )
+    }
+
+    suspend fun getExchangeRate(
+        fromCurrency: String,
+        toCurrency: String,
+        date: String? = null
+    ): Double? {
+        val url = authStore.getCurrentSite() ?: return null
+        val endpoint = "$url/api/method/erpnext.setup.utils.get_exchange_rate"
+        return runCatching {
+            val response = clientOAuth.get(endpoint) {
+                parameter("from_currency", fromCurrency)
+                parameter("to_currency", toCurrency)
+                date?.let { parameter("date", it) }
+            }
+            response.body<ExchangeRateResponse>().message
+        }.getOrNull()
     }
 
     suspend fun revoke() {
