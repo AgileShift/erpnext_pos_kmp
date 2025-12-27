@@ -42,6 +42,7 @@ data class POSContext(
     val expenseAccount: String?,
     val branch: String?,
     val currency: String,
+    val exchangeRate: Double
 )
 
 class CashBoxManager(
@@ -80,7 +81,8 @@ class CashBoxManager(
             incomeAccount = profile.incomeAccount,
             expenseAccount = profile.expenseAccount,
             branch = profile.branch,
-            currency = profile.currency
+            currency = profile.currency,
+            exchangeRate = 36.6243
         )
         currentContext
     }
@@ -144,7 +146,8 @@ class CashBoxManager(
             incomeAccount = profile.incomeAccount,
             expenseAccount = profile.expenseAccount,
             branch = profile.branch,
-            currency = profile.currency
+            currency = profile.currency,
+            exchangeRate = 36.6243
         )
         currentContext!!
     }
@@ -162,9 +165,9 @@ class CashBoxManager(
             user = user.email,
             company = ctx.company,
             postingDate = getTimeMillis().toErpDateTime(),
-            periodStartDate = entry?.cashbox?.periodStartDate ?: "",
+            periodStartDate = entry.cashbox.periodStartDate,
             periodEndDate = getTimeMillis().toErpDateTime(),
-            balanceDetails = entry?.details?.toDto()!!
+            balanceDetails = entry.details.toDto()
         )
         val pce = api.closeCashbox(dto)
 

@@ -110,7 +110,16 @@ val appModule = module {
             "./prefs.preferences_pb".toPath()
         }
     }
-    single<CashBoxManager> { CashBoxManager(get(named("apiService")), get(), get(), get(), get(), get()) }
+    single<CashBoxManager> {
+        CashBoxManager(
+            get(named("apiService")),
+            get(),
+            get(),
+            get(),
+            get(),
+            get()
+        )
+    }
     single<SyncManager> { SyncManager(get(), get(), get(), get()) }
     //endregion
 
@@ -163,7 +172,7 @@ val appModule = module {
     //endregion
 
     //region Checkout
-    single { BillingViewModel(get(), get(), get(), get()) }
+    single { BillingViewModel(get(), get(), get(), get(), get()) }
     single { SalesInvoiceRemoteSource(get(named("apiService")), get()) }
     single { InvoiceLocalSource(get()) }
     single { CheckoutRepository(get(), get()) }

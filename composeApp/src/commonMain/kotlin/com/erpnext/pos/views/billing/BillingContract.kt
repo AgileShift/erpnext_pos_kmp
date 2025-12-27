@@ -21,7 +21,8 @@ sealed interface BillingState {
         val productSearchResults: List<ItemBO> = emptyList(),
 
         // Cart-related state
-        val currency: String? = "C$",
+        val currency: String?,
+        val exchangeRate: Double?,
         val cartItems: List<CartItem> = emptyList(),
         val subtotal: Double = 0.0,
         val taxes: Double = 0.0,
@@ -40,5 +41,6 @@ data class BillingAction(
     val onProductAdded: (ItemBO) -> Unit = {},
     val onQuantityChanged: (itemCode: String, newQuantity: Double) -> Unit = { _, _ -> },
     val onRemoveItem: (itemCode: String) -> Unit = {},
-    val onFinalizeSale: () -> Unit = {}
+    val onFinalizeSale: () -> Unit = {},
+    val onBack: () -> Unit = {},
 )

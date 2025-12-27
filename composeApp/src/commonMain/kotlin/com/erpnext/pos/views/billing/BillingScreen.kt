@@ -1,6 +1,5 @@
 @file:OptIn(ExperimentalMaterial3Api::class)
 
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -10,32 +9,35 @@ import com.erpnext.pos.domain.models.CustomerBO
 import com.erpnext.pos.domain.models.ItemBO
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import coil3.compose.AsyncImage
+import coil3.compose.LocalPlatformContext
+import coil3.compose.SubcomposeAsyncImage
+import coil3.request.ImageRequest
+import coil3.request.crossfade
 import com.erpnext.pos.utils.formatAmount
 import com.erpnext.pos.utils.toCurrencySymbol
-import com.erpnext.pos.utils.view.SnackbarController
-import com.erpnext.pos.utils.view.SnackbarPosition
-import com.erpnext.pos.utils.view.SnackbarType
 import com.erpnext.pos.views.billing.BillingAction
 import com.erpnext.pos.views.billing.BillingState
 import org.jetbrains.compose.ui.tooling.preview.Preview
-import org.koin.compose.koinInject
-import kotlin.math.exp
 
 
 data class CartItem(
     val itemCode: String,
     val name: String,
-    val currency: String? = "C$",
+    val currency: String?,
     val quantity: Double,
     val price: Double
 )
@@ -49,7 +51,20 @@ fun BillingScreen(
     //val snackbar = koinInject<SnackbarController>()
 
     Scaffold(
-        topBar = { TopAppBar(title = { Text("Nueva Venta") }) }) { padding ->
+        topBar = {
+            TopAppBar(
+                title = {
+                    Text("Nueva Factura")
+                },
+                navigationIcon = {
+                    IconButton(onClick = action.onBack) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Back"
+                        )
+                    }
+                })
+        }) { padding ->
 
         when (state) {
             is BillingState.Loading -> {
@@ -74,10 +89,11 @@ fun BillingScreen(
                     Spacer(Modifier.height(16.dp))
 
                     // Product Search
-                    ProductSearch(
+                    ProductSelector(
                         query = state.productSearchQuery,
                         onQueryChange = action.onProductSearchQueryChange,
                         results = state.productSearchResults,
+                        currency = state.currency ?: "USD",
                         onProductAdded = action.onProductAdded
                     )
 
@@ -96,9 +112,12 @@ fun BillingScreen(
                     // Cart Items List
                     LazyColumn(modifier = Modifier.weight(1f)) {
                         items(state.cartItems, key = { it.itemCode }) { item ->
-                            CartItemRow(item = item, onQuantityChanged = { newQuantity ->
-                                action.onQuantityChanged(item.itemCode, newQuantity)
-                            }, onRemoveItem = { action.onRemoveItem(item.itemCode) })
+                            CartItemRow(
+                                item = item, onQuantityChanged = { newQuantity ->
+                                    action.onQuantityChanged(item.itemCode, newQuantity)
+                                }, onRemoveItem = { action.onRemoveItem(item.itemCode) },
+                                currency = state.currency ?: item.currency ?: "C$"
+                            )
                             HorizontalDivider()
                         }
                     }
@@ -176,39 +195,87 @@ private fun CustomerSelector(
 }
 
 @Composable
-private fun ProductSearch(
+private fun ProductSelector(
     query: String,
     onQueryChange: (String) -> Unit,
     results: List<ItemBO>,
+    currency: String,
     onProductAdded: (ItemBO) -> Unit
 ) {
     var expanded by remember { mutableStateOf(false) }
+    val hasResults = results.isNotEmpty()
+    val context = LocalPlatformContext.current
 
     Text("Producto", style = MaterialTheme.typography.titleMedium)
     ExposedDropdownMenuBox(
-        expanded = expanded,
-        onExpandedChange = { expanded != expanded }
+        expanded = expanded && hasResults,
+        onExpandedChange = { expanded = it }
     ) {
         OutlinedTextField(
             value = query,
-            onValueChange = onQueryChange,
-            modifier = Modifier.fillMaxWidth().menuAnchor(),
+            onValueChange = {
+                onQueryChange(it)
+                expanded = true
+            },
+            modifier = Modifier
+                .fillMaxWidth()
+                .menuAnchor()
+                .onFocusChanged { focusState ->
+                    if (!focusState.isFocused) {
+                        expanded = false
+                    }
+                },
             label = { Text("Buscar por nombre o código") },
             singleLine = true,
+            readOnly = false,
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) }
         )
 
         ExposedDropdownMenu(
-            expanded = expanded,
+            expanded = expanded && hasResults,
             onDismissRequest = { expanded = false }
         ) {
             results.forEach { item ->
                 DropdownMenuItem(
                     text = {
-                        Column {
-                            Text(item.name)
-                            Text(text = "Codigo: ${item.itemCode} · Precio: ${formatAmount(item.currency ?: "USD", item.price)}",
-                                style = MaterialTheme.typography.bodySmall)
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            SubcomposeAsyncImage(
+                                model = remember(item.image) {
+                                    ImageRequest.Builder(context)
+                                        .data(item.image?.ifBlank { "https://placehold.co/64x64" })
+                                        .crossfade(true)
+                                        .build()
+                                },
+                                contentDescription = item.name,
+                                modifier = Modifier
+                                    .size(40.dp)
+                                    .clip(MaterialTheme.shapes.small),
+                                contentScale = ContentScale.Crop,
+                                loading = { CircularProgressIndicator(modifier = Modifier.size(16.dp)) },
+                                error = {
+                                    AsyncImage(
+                                        model = "https://placehold.co/64x64",
+                                        contentDescription = "placeholder",
+                                        modifier = Modifier.size(40.dp)
+                                    )
+                                }
+                            )
+                            Column {
+                                Text(item.name)
+                                Text(
+                                    text = "Codigo: ${item.itemCode}",
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                                Text(
+                                    "Precio: ${formatAmount(item.currency ?: "USD", item.price)}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            }
                         }
                     },
                     onClick = {
@@ -224,7 +291,10 @@ private fun ProductSearch(
 
 @Composable
 private fun CartItemRow(
-    item: CartItem, onQuantityChanged: (Double) -> Unit, onRemoveItem: () -> Unit
+    item: CartItem,
+    onQuantityChanged: (Double) -> Unit,
+    onRemoveItem: () -> Unit,
+    currency: String
 ) {
     val subtotal = item.price * item.quantity
 
@@ -246,12 +316,12 @@ private fun CartItemRow(
         )
 
         Text(
-            text = formatAmount(item.currency.toString(), item.price),
+            text = formatAmount(currency.toCurrencySymbol(), item.price),
             modifier = Modifier.weight(1f),
             textAlign = TextAlign.End
         )
         Text(
-            text = formatAmount(item.currency.toString(), subtotal),
+            text = formatAmount(currency.toCurrencySymbol(), subtotal),
             modifier = Modifier.weight(1f),
             textAlign = TextAlign.End
         )
@@ -314,8 +384,10 @@ private fun BillingScreenPreview() {
                 cartItems = sampleCart,
                 subtotal = 300.0,
                 taxes = 45.0,
+                currency = "USD",
                 discount = 0.0,
-                total = 345.0
+                total = 345.0,
+                exchangeRate = 36.6243
             ), action = BillingAction()
         )
     }

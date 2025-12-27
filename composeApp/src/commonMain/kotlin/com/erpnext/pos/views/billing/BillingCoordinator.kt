@@ -17,6 +17,7 @@ class BillingCoordinator(val viewModel: BillingViewModel) {
         viewModel.onQuantityChanged(itemCode, newQuantity)
     fun onRemoveItem(itemCode: String) = viewModel.onRemoveItem(itemCode)
     fun onFinalizeSale() = viewModel.onFinalizeSale()
+    fun onBack() = viewModel.onBack()
 }
 
 @Composable

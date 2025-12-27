@@ -7,9 +7,12 @@ import com.erpnext.pos.domain.models.ItemBO
 import com.erpnext.pos.domain.usecases.FetchBillingProductsWithPriceUseCase
 import com.erpnext.pos.domain.usecases.FetchCustomersUseCase
 import com.erpnext.pos.data.repositories.SalesInvoiceRepository
+import com.erpnext.pos.navigation.NavRoute
+import com.erpnext.pos.navigation.NavigationManager
 import com.erpnext.pos.remoteSource.dto.SalesInvoiceDto
 import com.erpnext.pos.remoteSource.dto.SalesInvoiceItemDto
 import com.erpnext.pos.remoteSource.mapper.toEntity
+import com.erpnext.pos.utils.toCurrencySymbol
 import com.erpnext.pos.utils.view.DateTimeProvider
 import com.erpnext.pos.views.CashBoxManager
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -21,7 +24,8 @@ class BillingViewModel(
     val customersUseCase: FetchCustomersUseCase,
     val itemsUseCase: FetchBillingProductsWithPriceUseCase,
     val contextProvider: CashBoxManager,
-    private val invoiceRepository: SalesInvoiceRepository
+    private val invoiceRepository: SalesInvoiceRepository,
+    private val navManager: NavigationManager
 ) : BaseViewModel() {
 
     private val _state: MutableStateFlow<BillingState> = MutableStateFlow(BillingState.Loading)
@@ -37,17 +41,20 @@ class BillingViewModel(
     fun loadInitialData() {
         executeUseCase(action = {
             customersUseCase.invoke(null).collectLatest { c ->
-                    customers = c
-                    itemsUseCase.invoke(null).collectLatest { i ->
-                            products = i
-                            val currency = contextProvider.getContext()?.currency ?: "USD"
-                            _state.update {
-                                BillingState.Success(
-                                    customers = c, productSearchResults = i, currency = currency
-                                )
-                            }
-                        }
+                customers = c
+                itemsUseCase.invoke(null).collectLatest { i ->
+                    products = i
+                    val currency = contextProvider.getContext()?.currency ?: "USD"
+                    _state.update {
+                        BillingState.Success(
+                            customers = c,
+                            productSearchResults = i,
+                            currency = currency,
+                            exchangeRate = 36.6243
+                        )
+                    }
                 }
+            }
         }, exceptionHandler = {
             _state.value = BillingState.Error(it.message ?: "Unknown error")
         })
@@ -91,7 +98,8 @@ class BillingViewModel(
         }
         _state.update {
             current.copy(
-                productSearchQuery = query, productSearchResults = filtered
+                productSearchQuery = query,
+                productSearchResults = filtered
             )
         }
     }
@@ -99,13 +107,16 @@ class BillingViewModel(
     fun onProductAdded(item: ItemBO) {
         val current = _state.value as? BillingState.Success ?: return
         val existing = current.cartItems.firstOrNull { it.itemCode == item.itemCode }
+        val exchangeRate = current.exchangeRate
         val updated = if (existing == null) {
             current.cartItems + CartItem(
                 itemCode = item.itemCode,
                 name = item.name,
-                currency = item.currency ?: current.currency,
+                currency = item.currency?.toCurrencySymbol()
+                    ?: current.currency?.toCurrencySymbol(),
                 quantity = 1.0,
-                price = item.price
+                price = if (item.currency.equals("USD")) item.price * (exchangeRate
+                    ?: 0.0) else item.price
             )
         } else {
             current.cartItems.map {
@@ -197,6 +208,10 @@ class BillingViewModel(
         }, exceptionHandler = { e ->
             _state.update { BillingState.Error(e.message ?: "Unable to create invoice.") }
         })
+    }
+
+    fun onBack() {
+        navManager.navigateTo(NavRoute.NavigateUp)
     }
 
     private fun BillingState.Success.recalculateTotals(): BillingState.Success {
