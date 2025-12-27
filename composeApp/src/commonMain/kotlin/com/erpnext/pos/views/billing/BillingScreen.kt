@@ -1,3 +1,5 @@
+@file:OptIn(ExperimentalMaterial3Api::class)
+
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -27,6 +29,7 @@ import com.erpnext.pos.views.billing.BillingAction
 import com.erpnext.pos.views.billing.BillingState
 import org.jetbrains.compose.ui.tooling.preview.Preview
 import org.koin.compose.koinInject
+import kotlin.math.exp
 
 
 data class CartItem(
@@ -43,7 +46,7 @@ fun BillingScreen(
     state: BillingState,
     action: BillingAction
 ) {
-    val snackbar = koinInject<SnackbarController>()
+    //val snackbar = koinInject<SnackbarController>()
 
     Scaffold(
         topBar = { TopAppBar(title = { Text("Nueva Venta") }) }) { padding ->
@@ -122,15 +125,15 @@ fun BillingScreen(
             }
 
             is BillingState.Empty -> {
-                snackbar.show(
+                /*snackbar.show(
                     "No hay productos en el carrito",
                     SnackbarType.Info,
                     SnackbarPosition.Top
-                )
+                )*/
             }
 
             is BillingState.Error -> {
-                snackbar.show(state.message, SnackbarType.Error, SnackbarPosition.Top)
+                //snackbar.show(state.message, SnackbarType.Error, SnackbarPosition.Top)
             }
         }
     }
@@ -179,28 +182,41 @@ private fun ProductSearch(
     results: List<ItemBO>,
     onProductAdded: (ItemBO) -> Unit
 ) {
-    Column {
+    var expanded by remember { mutableStateOf(false) }
+
+    Text("Producto", style = MaterialTheme.typography.titleMedium)
+    ExposedDropdownMenuBox(
+        expanded = expanded,
+        onExpandedChange = { expanded != expanded }
+    ) {
         OutlinedTextField(
             value = query,
             onValueChange = onQueryChange,
-            modifier = Modifier.fillMaxWidth(),
-            label = { Text("Buscar producto por nombre o código") },
-            singleLine = true
+            modifier = Modifier.fillMaxWidth().menuAnchor(),
+            label = { Text("Buscar por nombre o código") },
+            singleLine = true,
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) }
         )
 
-        if (results.isNotEmpty()) {
-            LazyColumn(modifier = Modifier.heightIn(max = 200.dp)) {
-                items(results, key = { it.itemCode }) { item ->
-                    ListItem(
-                        headlineContent = { Text(item.name) },
-                        supportingContent = { Text("Código: ${item.itemCode}") },
-                        trailingContent = {
-                            IconButton(onClick = { onProductAdded(item) }) {
-                                Icon(Icons.Default.Add, contentDescription = "Agregar producto")
-                            }
-                        },
-                        modifier = Modifier.clickable { onProductAdded(item) })
-                }
+        ExposedDropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false }
+        ) {
+            results.forEach { item ->
+                DropdownMenuItem(
+                    text = {
+                        Column {
+                            Text(item.name)
+                            Text(text = "Codigo: ${item.itemCode} · Precio: ${formatAmount(item.currency ?: "USD", item.price)}",
+                                style = MaterialTheme.typography.bodySmall)
+                        }
+                    },
+                    onClick = {
+                        onProductAdded(item)
+                        onQueryChange("")
+                        expanded = false
+                    }
+                )
             }
         }
     }

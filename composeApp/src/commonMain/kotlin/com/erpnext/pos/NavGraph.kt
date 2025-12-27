@@ -2,14 +2,12 @@ package com.erpnext.pos
 
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.navigation.NavHostController
 import androidx.navigation.navArgument
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.savedstate.read
 import com.erpnext.pos.navigation.NavRoute
-import com.erpnext.pos.navigation.NavigationManager
 import com.erpnext.pos.views.billing.BillingRoute
 import com.erpnext.pos.views.customer.CustomerRoute
 import com.erpnext.pos.views.deliverynote.DeliveryNoteRoute
@@ -22,7 +20,6 @@ import com.erpnext.pos.views.salesorder.SalesOrderRoute
 import com.erpnext.pos.views.settings.SettingsRoute
 import com.erpnext.pos.views.splash.SplashRoute
 import com.erpnext.pos.views.paymententry.PaymentEntryRoute
-import org.koin.compose.koinInject
 
 @ExperimentalMaterial3Api
 object NavGraph {
