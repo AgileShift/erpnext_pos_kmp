@@ -13,6 +13,13 @@ data class PaymentLine(
     val reference: String? = null
 )
 
+data class PaymentModeOption(
+    val name: String,
+    val modeOfPayment: String,
+    val currency: String? = null,
+    val isDefault: Boolean = false
+)
+
 /**
  * Data classes for state and actions, assuming a more robust structure.
  * You should move these to your state and action files accordingly.
@@ -38,8 +45,10 @@ sealed interface BillingState {
         val discount: Double = 0.0,
         val total: Double = 0.0,
         val paymentLines: List<PaymentLine> = emptyList(),
+        val paymentModes: List<PaymentModeOption> = emptyList(),
         val paidAmount: Double = 0.0,
-        val balanceDue: Double = 0.0
+        val balanceDue: Double = 0.0,
+        val paymentErrorMessage: String? = null
     ) : BillingState {
         fun recalculateCartTotals(): Success {
             val newSubtotal = cartItems.sumOf { it.price * it.quantity }
@@ -58,12 +67,12 @@ sealed interface BillingState {
             val newPaidAmount = paymentLines.sumOf { it.baseAmount }
             return copy(
                 paidAmount = newPaidAmount,
-                balanceDue = total - newPaidAmount
+                balanceDue = (total - newPaidAmount).coerceAtLeast(0.0)
             )
         }
 
         fun withPaymentLines(lines: List<PaymentLine>): Success {
-            return copy(paymentLines = lines).recalculatePaymentTotals()
+            return copy(paymentLines = lines, paymentErrorMessage = null).recalculatePaymentTotals()
         }
     }
 

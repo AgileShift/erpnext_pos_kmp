@@ -136,8 +136,11 @@ fun BillingScreen(
                     PaymentSection(
                         baseCurrency = state.currency ?: "USD",
                         paymentLines = state.paymentLines,
+                        paymentModes = state.paymentModes,
                         paidAmount = state.paidAmount,
+                        totalAmount = state.total,
                         balanceDue = state.balanceDue,
+                        paymentErrorMessage = state.paymentErrorMessage,
                         onAddPaymentLine = action.onAddPaymentLine,
                         onRemovePaymentLine = action.onRemovePaymentLine
                     )
@@ -148,7 +151,9 @@ fun BillingScreen(
                     Button(
                         onClick = action.onFinalizeSale,
                         modifier = Modifier.fillMaxWidth(),
-                        enabled = state.selectedCustomer != null && state.cartItems.isNotEmpty()
+                        enabled = state.selectedCustomer != null &&
+                            state.cartItems.isNotEmpty() &&
+                            state.paidAmount >= state.total
                     ) {
                         Text("Finalizar venta")
                     }
@@ -398,19 +403,32 @@ private fun SummaryRow(label: String, symbol: String, amount: Double, bold: Bool
 private fun PaymentSection(
     baseCurrency: String,
     paymentLines: List<PaymentLine>,
+    paymentModes: List<PaymentModeOption>,
     paidAmount: Double,
+    totalAmount: Double,
     balanceDue: Double,
+    paymentErrorMessage: String?,
     onAddPaymentLine: (PaymentLine) -> Unit,
     onRemovePaymentLine: (Int) -> Unit
 ) {
-    val modeOptions = remember { listOf("Cash", "Card", "Transfer") }
-    val currencyOptions = remember(baseCurrency) {
-        listOf(baseCurrency, "USD", "EUR").distinct()
-    }
-    var selectedMode by remember { mutableStateOf(modeOptions.first()) }
+    val modeOptions = remember(paymentModes) { paymentModes.map { it.modeOfPayment }.distinct() }
+    var selectedMode by remember(modeOptions) { mutableStateOf(modeOptions.firstOrNull() ?: "") }
     var selectedCurrency by remember(baseCurrency) { mutableStateOf(baseCurrency) }
     var amountInput by remember { mutableStateOf("") }
     var rateInput by remember { mutableStateOf("1.0") }
+    val modeCurrency = paymentModes.firstOrNull { it.modeOfPayment == selectedMode }?.currency
+    val currencyOptions = remember(baseCurrency, modeCurrency) {
+        listOfNotNull(baseCurrency, "USD", "EUR", modeCurrency).distinct()
+    }
+
+    LaunchedEffect(modeCurrency, baseCurrency) {
+        if (!modeCurrency.isNullOrBlank()) {
+            selectedCurrency = modeCurrency
+            if (modeCurrency == baseCurrency) {
+                rateInput = "1.0"
+            }
+        }
+    }
 
     Text("Pagos", style = MaterialTheme.typography.titleMedium)
 
@@ -555,7 +573,13 @@ private fun PaymentSection(
     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         val amountValue = amountInput.toDoubleOrNull()
         val rateValue = rateInput.toDoubleOrNull()
-        val canAdd = amountValue != null && amountValue > 0.0 && (rateValue != null && rateValue > 0.0)
+        val currencyAllowed = modeCurrency == null ||
+            modeCurrency.equals(selectedCurrency, ignoreCase = true)
+        val canAdd = amountValue != null &&
+            amountValue > 0.0 &&
+            (rateValue != null && rateValue > 0.0) &&
+            currencyAllowed &&
+            selectedMode.isNotBlank()
 
         Button(
             onClick = {
@@ -594,10 +618,32 @@ private fun PaymentSection(
         }
     }
 
+    if (!modeCurrency.isNullOrBlank() &&
+        !modeCurrency.equals(selectedCurrency, ignoreCase = true)
+    ) {
+        Text(
+            text = "Currency must be $modeCurrency for $selectedMode.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.error
+        )
+    }
+
+    if (!paymentErrorMessage.isNullOrBlank()) {
+        Text(
+            text = paymentErrorMessage,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.error
+        )
+    }
+
     Spacer(Modifier.height(12.dp))
 
     SummaryRow("Pagado (base)", baseCurrency, paidAmount, bold = true)
     SummaryRow("Saldo (base)", baseCurrency, balanceDue, bold = true)
+    val changeDue = (paidAmount - totalAmount).coerceAtLeast(0.0)
+    if (changeDue > 0.0) {
+        SummaryRow("Change due", baseCurrency, changeDue, bold = true)
+    }
 }
 
 private fun Double.formatQty(): String {
@@ -652,6 +698,14 @@ private fun BillingScreenPreview() {
                         currency = "USD",
                         exchangeRate = 1.0,
                         baseAmount = 100.0
+                    )
+                ),
+                paymentModes = listOf(
+                    PaymentModeOption(
+                        name = "Cash",
+                        modeOfPayment = "Cash",
+                        currency = "USD",
+                        isDefault = true
                     )
                 ),
                 paidAmount = 100.0,
