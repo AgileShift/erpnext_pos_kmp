@@ -4,12 +4,14 @@ import com.erpnext.pos.BuildKonfig
 import com.erpnext.pos.base.getPlatformName
 import com.erpnext.pos.remoteSource.dto.BinDto
 import com.erpnext.pos.remoteSource.dto.CategoryDto
+import com.erpnext.pos.remoteSource.dto.CurrencyDto
 import com.erpnext.pos.remoteSource.dto.CustomerDto
 import com.erpnext.pos.remoteSource.dto.ExchangeRateResponse
 import com.erpnext.pos.remoteSource.dto.ItemDetailDto
 import com.erpnext.pos.remoteSource.dto.ItemDto
 import com.erpnext.pos.remoteSource.dto.ItemPriceDto
 import com.erpnext.pos.remoteSource.dto.LoginInfo
+import com.erpnext.pos.remoteSource.dto.ModeOfPaymentDto
 import com.erpnext.pos.remoteSource.dto.OutstandingInfo
 import com.erpnext.pos.remoteSource.dto.POSClosingEntryDto
 import com.erpnext.pos.remoteSource.dto.POSClosingEntryResponse
@@ -203,6 +205,30 @@ class APIService(
             }))
         }
         store.clear()
+    }
+
+    suspend fun getEnabledCurrencies(): List<CurrencyDto> {
+        val url = authStore.getCurrentSite() ?: return emptyList()
+        return clientOAuth.getERPList(
+            doctype = "Currency",
+            fields = listOf("name", "currency_name", "symbol", "number_format"),
+            baseUrl = url,
+            filters = filters {
+                "enabled" eq 1
+            }
+        )
+    }
+
+    suspend fun getActiveModeOfPayment(): List<ModeOfPaymentDto> {
+        val url = authStore.getCurrentSite() ?: return emptyList()
+        return clientOAuth.getERPList(
+            doctype = "Mode of Payment",
+            fields = listOf("name", "mode_of_payment", "currency", "is_default", "enabled"),
+            baseUrl = url,
+            filters = filters {
+                "enabled" eq 1
+            }
+        )
     }
 
     suspend fun getCategories(): List<CategoryDto> {

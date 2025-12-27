@@ -16,6 +16,7 @@ import com.erpnext.pos.remoteSource.dto.SalesInvoicePaymentDto
 import com.erpnext.pos.remoteSource.mapper.toEntity
 import com.erpnext.pos.utils.toCurrencySymbol
 import com.erpnext.pos.utils.view.DateTimeProvider
+import com.erpnext.pos.domain.models.POSPaymentModeOption
 import com.erpnext.pos.views.CashBoxManager
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -62,24 +63,26 @@ class BillingViewModel(
                 customers = c
                 itemsUseCase.invoke(null).collectLatest { i ->
                     products = i.filter { it.price > 0.0 && it.actualQty > 0.0 }
-                    val currency = contextProvider.getContext()?.currency ?: "USD"
-                    val paymentModes = modeOfPaymentDao.getAll(context.profileName).map { mode ->
-                        PaymentModeOption(
-                            name = mode.name,
-                            modeOfPayment = mode.modeOfPayment,
-                            isDefault = mode.default
-                        )
+                    val currency = context.currency.ifBlank { "USD" }
+                    val paymentModes = context.paymentModes.ifEmpty {
+                        modeOfPaymentDao.getAll(context.profileName).map { mode ->
+                            POSPaymentModeOption(
+                                name = mode.name,
+                                modeOfPayment = mode.modeOfPayment,
+                                isDefault = mode.default
+                            )
+                        }
                     }.ifEmpty {
                         listOf(
-                            PaymentModeOption(
+                            POSPaymentModeOption(
                                 name = "Cash",
                                 modeOfPayment = "Cash"
                             ),
-                            PaymentModeOption(
+                            POSPaymentModeOption(
                                 name = "Card",
                                 modeOfPayment = "Card"
                             ),
-                            PaymentModeOption(
+                            POSPaymentModeOption(
                                 name = "Transfer",
                                 modeOfPayment = "Transfer"
                             )
@@ -91,6 +94,7 @@ class BillingViewModel(
                             productSearchResults = products,
                             currency = currency,
                             paymentModes = paymentModes,
+                            allowedCurrencies = context.allowedCurrencies,
                             exchangeRate = contextProvider.getContext()?.exchangeRate ?: 1.0
                         )
                     }
