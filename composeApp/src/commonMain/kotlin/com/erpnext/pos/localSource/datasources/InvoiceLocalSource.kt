@@ -26,6 +26,10 @@ interface IInvoiceLocalSource {
     suspend fun countAllPendingSync(): Int
     suspend fun getOldestItem(): SalesInvoiceEntity?
     suspend fun deleteByInvoiceId(name: String)
+    suspend fun applyPayments(
+        invoice: SalesInvoiceEntity,
+        payments: List<POSInvoicePaymentEntity>
+    )
 }
 
 class InvoiceLocalSource(
@@ -75,4 +79,11 @@ class InvoiceLocalSource(
     override suspend fun countAllPendingSync(): Int = salesInvoiceDao.countAllSyncPending()
 
     override suspend fun deleteByInvoiceId(name: String) = salesInvoiceDao.deleteByInvoiceId(name)
+
+    override suspend fun applyPayments(
+        invoice: SalesInvoiceEntity,
+        payments: List<POSInvoicePaymentEntity>
+    ) {
+        salesInvoiceDao.applyPayments(invoice, payments)
+    }
 }

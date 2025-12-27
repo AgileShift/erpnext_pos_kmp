@@ -486,6 +486,8 @@ class APIService(
                 baseUrl = url,
                 filters = filters {
                     "pos_profile" eq posProfile
+                    "status" `in` listOf("Unpaid", "Overdue")
+                    "outstanding_amount" gt 0
                 }
             )
         } catch (e: Exception) {

@@ -100,6 +100,8 @@ interface SalesInvoiceDao {
         SELECT * FROM tabSalesInvoice 
         WHERE (:query IS NULL OR customer_name LIKE '%' || :query || '%' OR invoice_name LIKE '%' || :query || '%')
         AND ((:date IS NULL OR posting_date == :date)) 
+        AND status IN ('Unpaid', 'Overdue')
+        AND outstanding_amount > 0
         ORDER BY posting_date DESC 
     """
     )
@@ -107,6 +109,18 @@ interface SalesInvoiceDao {
         query: String?,
         date: String?,
     ): PagingSource<Int, SalesInvoiceWithItemsAndPayments>
+
+    @Update
+    suspend fun updateInvoice(invoice: SalesInvoiceEntity)
+
+    @Transaction
+    suspend fun applyPayments(
+        invoice: SalesInvoiceEntity,
+        payments: List<POSInvoicePaymentEntity>
+    ) {
+        updateInvoice(invoice)
+        insertPayments(payments)
+    }
 
     @Query("SELECT COUNT(*) FROM tabSalesInvoice")
     suspend fun countAll(): Int

@@ -89,6 +89,7 @@ fun AppNavigation() {
                             is NavRoute.Quotation -> navController.navigate(NavRoute.Quotation.path)
                             is NavRoute.SalesOrder -> navController.navigate(NavRoute.SalesOrder.path)
                             is NavRoute.DeliveryNote -> navController.navigate(NavRoute.DeliveryNote.path)
+                            is NavRoute.PaymentEntry -> navController.navigate(event.path)
                             is NavRoute.NavigateUp -> navController.popBackStack()
                             else -> {}
                         }

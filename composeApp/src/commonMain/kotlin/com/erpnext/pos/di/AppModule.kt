@@ -23,6 +23,7 @@ import com.erpnext.pos.domain.usecases.FetchPosProfileInfoUseCase
 import com.erpnext.pos.domain.usecases.FetchPosProfileUseCase
 import com.erpnext.pos.domain.usecases.FetchUserInfoUseCase
 import com.erpnext.pos.domain.usecases.LogoutUseCase
+import com.erpnext.pos.domain.usecases.RegisterInvoicePaymentUseCase
 import com.erpnext.pos.localSource.datasources.CustomerLocalSource
 import com.erpnext.pos.localSource.datasources.InventoryLocalSource
 import com.erpnext.pos.localSource.datasources.InvoiceLocalSource
@@ -50,6 +51,7 @@ import com.erpnext.pos.views.quotation.QuotationViewModel
 import com.erpnext.pos.views.salesorder.SalesOrderViewModel
 import com.erpnext.pos.views.settings.SettingsViewModel
 import com.erpnext.pos.views.splash.SplashViewModel
+import com.erpnext.pos.views.paymententry.PaymentEntryViewModel
 import io.ktor.client.HttpClient
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.plugins.logging.LogLevel
@@ -157,10 +159,11 @@ val appModule = module {
     single { QuotationViewModel(get()) }
     single { SalesOrderViewModel(get()) }
     single { DeliveryNoteViewModel(get()) }
+    single { PaymentEntryViewModel(get(), get()) }
     //endregion
 
     //region Checkout
-    single { BillingViewModel(get(), get(), get()) }
+    single { BillingViewModel(get(), get(), get(), get()) }
     single { SalesInvoiceRemoteSource(get(named("apiService")), get()) }
     single { InvoiceLocalSource(get()) }
     single { CheckoutRepository(get(), get()) }
@@ -182,6 +185,7 @@ val appModule = module {
     single { FetchPosProfileUseCase(get()) }
     single { FetchPosProfileInfoUseCase(get()) }
     single { FetchUserInfoUseCase(get()) }
+    single { RegisterInvoicePaymentUseCase(get()) }
     //endregion
 }
 

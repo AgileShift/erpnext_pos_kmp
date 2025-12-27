@@ -21,6 +21,14 @@ fun BillingRoute(
 @Composable
 fun rememberBillingActions(coordinator: BillingCoordinator): BillingAction {
     return remember(coordinator) {
-        BillingAction()
+        BillingAction(
+            onCustomerSearchQueryChange = coordinator::onCustomerSearchQueryChange,
+            onCustomerSelected = coordinator::onCustomerSelected,
+            onProductSearchQueryChange = coordinator::onProductSearchQueryChange,
+            onProductAdded = coordinator::onProductAdded,
+            onQuantityChanged = coordinator::onQuantityChanged,
+            onRemoveItem = coordinator::onRemoveItem,
+            onFinalizeSale = coordinator::onFinalizeSale
+        )
     }
 }
