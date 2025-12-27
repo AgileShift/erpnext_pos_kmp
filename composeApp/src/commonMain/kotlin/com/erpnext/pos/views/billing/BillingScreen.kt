@@ -93,7 +93,6 @@ fun BillingScreen(
                         query = state.productSearchQuery,
                         onQueryChange = action.onProductSearchQueryChange,
                         results = state.productSearchResults,
-                        currency = state.currency ?: "USD",
                         onProductAdded = action.onProductAdded
                     )
 
@@ -199,7 +198,6 @@ private fun ProductSelector(
     query: String,
     onQueryChange: (String) -> Unit,
     results: List<ItemBO>,
-    currency: String,
     onProductAdded: (ItemBO) -> Unit
 ) {
     var expanded by remember { mutableStateOf(false) }
@@ -209,14 +207,11 @@ private fun ProductSelector(
     Text("Producto", style = MaterialTheme.typography.titleMedium)
     ExposedDropdownMenuBox(
         expanded = expanded && hasResults,
-        onExpandedChange = { expanded = it }
+        onExpandedChange = { expanded = !expanded }
     ) {
         OutlinedTextField(
             value = query,
-            onValueChange = {
-                onQueryChange(it)
-                expanded = true
-            },
+            onValueChange = onQueryChange,
             modifier = Modifier
                 .fillMaxWidth()
                 .menuAnchor()
@@ -227,7 +222,6 @@ private fun ProductSelector(
                 },
             label = { Text("Buscar por nombre o código") },
             singleLine = true,
-            readOnly = false,
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) }
         )
 
@@ -280,7 +274,7 @@ private fun ProductSelector(
                     },
                     onClick = {
                         onProductAdded(item)
-                        onQueryChange("")
+                        //onQueryChange("")
                         expanded = false
                     }
                 )

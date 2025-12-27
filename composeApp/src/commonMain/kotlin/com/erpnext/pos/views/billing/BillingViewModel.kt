@@ -19,6 +19,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.update
+import kotlin.collections.filter
 
 class BillingViewModel(
     val customersUseCase: FetchCustomersUseCase,
@@ -90,10 +91,10 @@ class BillingViewModel(
             products
         } else {
             products.filter {
-                it.name.contains(query, ignoreCase = true) || it.itemCode.contains(
+                it.name.contains(query, ignoreCase = true) or it.itemCode.contains(
                     query,
                     ignoreCase = true
-                )
+                ) and (it.actualQty > 0)
             }
         }
         _state.update {
