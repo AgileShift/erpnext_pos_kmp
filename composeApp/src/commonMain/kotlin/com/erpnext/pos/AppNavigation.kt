@@ -26,7 +26,6 @@ fun shouldShowBottomBar(currentRoute: String): Boolean {
     return currentRoute !in listOf(NavRoute.Login.path, NavRoute.Splash.path)
 }
 
-//TODO: Que es mejor, hacer un remember o inject con Koin?
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AppNavigation() {
