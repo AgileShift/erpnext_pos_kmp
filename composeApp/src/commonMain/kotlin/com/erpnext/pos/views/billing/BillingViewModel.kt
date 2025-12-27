@@ -236,7 +236,7 @@ class BillingViewModel(
             _state.update { BillingState.Error("Add at least one item to the cart.") }
             return
         }
-        if (current.paidAmount < current.total) {
+        if (current.paidAmountBase < current.total) {
             _state.update { BillingState.Error("Paid amount must cover the total before finalizing the sale.") }
             return
         }

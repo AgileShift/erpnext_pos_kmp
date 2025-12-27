@@ -145,7 +145,7 @@ fun BillingScreen(
                         modifier = Modifier.fillMaxWidth(),
                         enabled = state.selectedCustomer != null &&
                             state.cartItems.isNotEmpty() &&
-                            state.paidAmount >= state.total
+                            state.paidAmountBase >= state.total
                     ) {
                         Text("Finalizar venta")
                     }
@@ -517,9 +517,10 @@ private fun TotalsPaymentsSheet(
                     paymentLines = state.paymentLines,
                     paymentModes = state.paymentModes,
                     allowedCurrencies = state.allowedCurrencies,
-                    paidAmount = state.paidAmount,
+                    paidAmountBase = state.paidAmountBase,
                     totalAmount = state.total,
-                    balanceDue = state.balanceDue,
+                    balanceDueBase = state.balanceDueBase,
+                    changeDueBase = state.changeDueBase,
                     paymentErrorMessage = state.paymentErrorMessage,
                     onAddPaymentLine = action.onAddPaymentLine,
                     onRemovePaymentLine = action.onRemovePaymentLine
@@ -538,9 +539,10 @@ private fun PaymentSection(
     paymentLines: List<PaymentLine>,
     paymentModes: List<POSPaymentModeOption>,
     allowedCurrencies: List<POSCurrencyOption>,
-    paidAmount: Double,
+    paidAmountBase: Double,
     totalAmount: Double,
-    balanceDue: Double,
+    balanceDueBase: Double,
+    changeDueBase: Double,
     paymentErrorMessage: String?,
     onAddPaymentLine: (PaymentLine) -> Unit,
     onRemovePaymentLine: (Int) -> Unit
@@ -791,12 +793,9 @@ private fun PaymentSection(
 
     Spacer(Modifier.height(12.dp))
 
-    SummaryRow("Pagado (base)", baseCurrency, paidAmount, bold = true)
-    SummaryRow("Saldo (base)", baseCurrency, balanceDue, bold = true)
-    val changeDue = (paidAmount - totalAmount).coerceAtLeast(0.0)
-    if (changeDue > 0.0) {
-        SummaryRow("Change due", baseCurrency, changeDue, bold = true)
-    }
+    SummaryRow("Pagado (base)", baseCurrency, paidAmountBase, bold = true)
+    SummaryRow("Balance pendiente", baseCurrency, balanceDueBase, bold = true)
+    SummaryRow("Cambio", baseCurrency, changeDueBase, bold = true)
 }
 
 private fun Double.formatQty(): String {
@@ -869,8 +868,9 @@ private fun BillingScreenPreview() {
                         symbol = "$"
                     )
                 ),
-                paidAmount = 100.0,
-                balanceDue = 255.0,
+                paidAmountBase = 100.0,
+                balanceDueBase = 255.0,
+                changeDueBase = 0.0,
                 exchangeRate = 1.0
             ), action = BillingAction()
         )
