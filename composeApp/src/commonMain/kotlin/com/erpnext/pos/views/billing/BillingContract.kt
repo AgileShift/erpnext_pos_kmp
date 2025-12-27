@@ -12,7 +12,7 @@ data class PaymentLine(
     val currency: String,
     val exchangeRate: Double,
     val baseAmount: Double,
-    val reference: String? = null
+    val referenceNumber: String? = null
 )
 
 /**

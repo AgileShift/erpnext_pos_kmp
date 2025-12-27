@@ -551,6 +551,10 @@ private fun PaymentSection(
     val defaultMode = paymentModes.firstOrNull { it.isDefault }?.modeOfPayment
         ?: modeOptions.firstOrNull().orEmpty()
     var selectedMode by remember(modeOptions, defaultMode) { mutableStateOf(defaultMode) }
+    val selectedModeOption = paymentModes.firstOrNull { it.modeOfPayment == selectedMode }
+    val requiresReference = remember(selectedModeOption) {
+        requiresReference(selectedModeOption)
+    }
     val allowedCodes = remember(allowedCurrencies, baseCurrency) {
         val codes = allowedCurrencies.map { it.code }.filter { it.isNotBlank() }
         if (codes.isEmpty()) listOf(baseCurrency) else codes
@@ -560,6 +564,7 @@ private fun PaymentSection(
     }
     var amountInput by remember { mutableStateOf("") }
     var rateInput by remember { mutableStateOf("1.0") }
+    var referenceInput by remember { mutableStateOf("") }
     val modeCurrency = paymentModes.firstOrNull { it.modeOfPayment == selectedMode }?.currency
     val currencyOptions = remember(allowedCodes, baseCurrency, modeCurrency) {
         val baseOptions = allowedCodes.ifEmpty { listOf(baseCurrency) }
@@ -585,6 +590,10 @@ private fun PaymentSection(
         if (resolved.equals(baseCurrency, ignoreCase = true)) {
             rateInput = "1.0"
         }
+    }
+
+    LaunchedEffect(selectedMode) {
+        referenceInput = ""
     }
 
     if (paymentLines.isEmpty()) {
@@ -619,6 +628,9 @@ private fun PaymentSection(
                                 "Base: ${formatAmount(baseCurrency.toCurrencySymbol(), line.baseAmount)}"
                             )
                             Text("Rate: ${line.exchangeRate}")
+                            if (!line.referenceNumber.isNullOrBlank()) {
+                                Text("Reference: ${line.referenceNumber}")
+                            }
                         }
                         IconButton(onClick = { onRemovePaymentLine(index) }) {
                             Icon(
@@ -725,6 +737,23 @@ private fun PaymentSection(
 
     Spacer(Modifier.height(12.dp))
 
+    if (requiresReference) {
+        OutlinedTextField(
+            value = referenceInput,
+            onValueChange = { referenceInput = it },
+            label = { Text("Reference number") },
+            supportingText = {
+                if (referenceInput.isBlank()) {
+                    Text("Required for ${selectedMode} payments.")
+                }
+            },
+            isError = referenceInput.isBlank(),
+            modifier = Modifier.fillMaxWidth()
+        )
+
+        Spacer(Modifier.height(12.dp))
+    }
+
     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         val amountValue = amountInput.toDoubleOrNull()
         val rateValue = rateInput.toDoubleOrNull()
@@ -734,7 +763,8 @@ private fun PaymentSection(
             amountValue > 0.0 &&
             (rateValue != null && rateValue > 0.0) &&
             currencyAllowed &&
-            selectedMode.isNotBlank()
+            selectedMode.isNotBlank() &&
+            (!requiresReference || referenceInput.isNotBlank())
 
         Button(
             onClick = {
@@ -746,10 +776,12 @@ private fun PaymentSection(
                         enteredAmount = amount,
                         currency = selectedCurrency,
                         exchangeRate = rate,
-                        baseAmount = amount * rate
+                        baseAmount = amount * rate,
+                        referenceNumber = referenceInput.takeIf { it.isNotBlank() }
                     )
                 )
                 amountInput = ""
+                referenceInput = ""
                 if (selectedCurrency == baseCurrency) {
                     rateInput = "1.0"
                 }
@@ -804,6 +836,14 @@ private fun Double.formatQty(): String {
     } else {
         this.toString()
     }
+}
+
+private fun requiresReference(option: POSPaymentModeOption?): Boolean {
+    val type = option?.type?.trim().orEmpty()
+    return type.equals("Bank", ignoreCase = true) ||
+        type.equals("Card", ignoreCase = true) ||
+        option?.modeOfPayment?.contains("bank", ignoreCase = true) == true ||
+        option?.modeOfPayment?.contains("card", ignoreCase = true) == true
 }
 
 @Preview

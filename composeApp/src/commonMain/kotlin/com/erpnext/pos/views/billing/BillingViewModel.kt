@@ -64,11 +64,15 @@ class BillingViewModel(
                 itemsUseCase.invoke(null).collectLatest { i ->
                     products = i.filter { it.price > 0.0 && it.actualQty > 0.0 }
                     val currency = context.currency.ifBlank { "USD" }
+                    val modeTypes = runCatching { modeOfPaymentDao.getAllModes() }
+                        .getOrElse { emptyList() }
+                        .associateBy { it.modeOfPayment }
                     val paymentModes = context.paymentModes.ifEmpty {
                         modeOfPaymentDao.getAll(context.profileName).map { mode ->
                             POSPaymentModeOption(
                                 name = mode.name,
                                 modeOfPayment = mode.modeOfPayment,
+                                type = modeTypes[mode.modeOfPayment]?.type,
                                 isDefault = mode.default
                             )
                         }
@@ -76,15 +80,18 @@ class BillingViewModel(
                         listOf(
                             POSPaymentModeOption(
                                 name = "Cash",
-                                modeOfPayment = "Cash"
+                                modeOfPayment = "Cash",
+                                type = "Cash"
                             ),
                             POSPaymentModeOption(
                                 name = "Card",
-                                modeOfPayment = "Card"
+                                modeOfPayment = "Card",
+                                type = "Card"
                             ),
                             POSPaymentModeOption(
                                 name = "Transfer",
-                                modeOfPayment = "Transfer"
+                                modeOfPayment = "Transfer",
+                                type = "Bank"
                             )
                         )
                     }
@@ -195,10 +202,21 @@ class BillingViewModel(
 
     fun onAddPaymentLine(line: PaymentLine) {
         val current = _state.value as? BillingState.Success ?: return
-        val modeCurrency = current.paymentModes.firstOrNull {
+        val modeOption = current.paymentModes.firstOrNull {
             it.modeOfPayment == line.modeOfPayment
-        }?.currency
-        if (modeCurrency != null && !modeCurrency.equals(line.currency, ignoreCase = true)) {
+        }
+        if (requiresReference(modeOption) && line.referenceNumber.isNullOrBlank()) {
+            _state.update {
+                current.copy(
+                    paymentErrorMessage = "Reference number is required for ${line.modeOfPayment} payments."
+                )
+            }
+            return
+        }
+        val modeCurrencyValue = modeOption?.currency
+        if (modeCurrencyValue != null &&
+            !modeCurrencyValue.equals(line.currency, ignoreCase = true)
+        ) {
             _state.update {
                 current.copy(
                     paymentErrorMessage = "Currency ${line.currency} is not allowed for ${line.modeOfPayment}."
@@ -297,6 +315,7 @@ class BillingViewModel(
                 SalesInvoicePaymentDto(
                     modeOfPayment = line.modeOfPayment,
                     amount = line.baseAmount,
+                    paymentReference = line.referenceNumber?.takeIf { it.isNotBlank() },
                     type = "Receive"
                 )
             }
@@ -311,6 +330,13 @@ class BillingViewModel(
                 addAll(
                     current.paymentLines.map { line ->
                         "Payment currency: ${line.currency}, Exchange rate: ${line.exchangeRate}"
+                    }
+                )
+                addAll(
+                    current.paymentLines.mapNotNull { line ->
+                        line.referenceNumber?.takeIf { it.isNotBlank() }?.let {
+                            "Reference (${line.modeOfPayment}): $it"
+                        }
                     }
                 )
                 if (current.discountCode.isNotBlank()) {
@@ -419,6 +445,14 @@ class BillingViewModel(
     companion object {
         private const val DISCOUNT_ITEM_CODE = "Discount"
         private const val SHIPPING_ITEM_CODE = "Shipping Charge"
+    }
+
+    private fun requiresReference(mode: POSPaymentModeOption?): Boolean {
+        val type = mode?.type?.trim().orEmpty()
+        return type.equals("Bank", ignoreCase = true) ||
+            type.equals("Card", ignoreCase = true) ||
+            mode?.modeOfPayment?.contains("bank", ignoreCase = true) == true ||
+            mode?.modeOfPayment?.contains("card", ignoreCase = true) == true
     }
 }
 
