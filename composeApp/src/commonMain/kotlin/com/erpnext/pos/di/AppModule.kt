@@ -175,7 +175,7 @@ val appModule = module {
     //endregion
 
     //region Checkout
-    single { BillingViewModel(get(), get(), get(), get(), get()) }
+    single { BillingViewModel(get(), get(), get(), get(), get(), get()) }
     single { SalesInvoiceRemoteSource(get(named("apiService")), get()) }
     single { InvoiceLocalSource(get()) }
     single { CheckoutRepository(get(), get()) }

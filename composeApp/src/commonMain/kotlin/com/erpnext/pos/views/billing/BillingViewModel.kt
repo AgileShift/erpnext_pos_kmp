@@ -7,6 +7,7 @@ import com.erpnext.pos.domain.models.ItemBO
 import com.erpnext.pos.domain.usecases.FetchBillingProductsWithPriceUseCase
 import com.erpnext.pos.domain.usecases.FetchCustomersUseCase
 import com.erpnext.pos.data.repositories.SalesInvoiceRepository
+import com.erpnext.pos.localSource.dao.ModeOfPaymentDao
 import com.erpnext.pos.navigation.NavRoute
 import com.erpnext.pos.navigation.NavigationManager
 import com.erpnext.pos.remoteSource.dto.SalesInvoiceDto
@@ -27,6 +28,7 @@ class BillingViewModel(
     val itemsUseCase: FetchBillingProductsWithPriceUseCase,
     val contextProvider: CashBoxManager,
     private val invoiceRepository: SalesInvoiceRepository,
+    private val modeOfPaymentDao: ModeOfPaymentDao,
     private val navManager: NavigationManager
 ) : BaseViewModel() {
 
@@ -47,11 +49,35 @@ class BillingViewModel(
                 itemsUseCase.invoke(null).collectLatest { i ->
                     products = i.filter { it.price > 0.0 && it.actualQty > 0.0 }
                     val currency = contextProvider.getContext()?.currency ?: "USD"
+                    val paymentModes = modeOfPaymentDao.getAll().map { mode ->
+                        PaymentModeOption(
+                            name = mode.name,
+                            modeOfPayment = mode.modeOfPayment,
+                            currency = mode.currency,
+                            isDefault = mode.isDefault
+                        )
+                    }.ifEmpty {
+                        listOf(
+                            PaymentModeOption(
+                                name = "Cash",
+                                modeOfPayment = "Cash"
+                            ),
+                            PaymentModeOption(
+                                name = "Card",
+                                modeOfPayment = "Card"
+                            ),
+                            PaymentModeOption(
+                                name = "Transfer",
+                                modeOfPayment = "Transfer"
+                            )
+                        )
+                    }
                     _state.update {
                         BillingState.Success(
                             customers = customers,
                             productSearchResults = products,
                             currency = currency,
+                            paymentModes = paymentModes,
                             exchangeRate = contextProvider.getContext()?.exchangeRate ?: 1.0
                         )
                     }
@@ -152,6 +178,17 @@ class BillingViewModel(
 
     fun onAddPaymentLine(line: PaymentLine) {
         val current = _state.value as? BillingState.Success ?: return
+        val modeCurrency = current.paymentModes.firstOrNull {
+            it.modeOfPayment == line.modeOfPayment
+        }?.currency
+        if (modeCurrency != null && !modeCurrency.equals(line.currency, ignoreCase = true)) {
+            _state.update {
+                current.copy(
+                    paymentErrorMessage = "Currency ${line.currency} is not allowed for ${line.modeOfPayment}."
+                )
+            }
+            return
+        }
         val updated = current.paymentLines + line.toBaseAmount()
         _state.update { current.withPaymentLines(updated) }
     }
@@ -180,6 +217,10 @@ class BillingViewModel(
         }
         if (current.cartItems.isEmpty()) {
             _state.update { BillingState.Error("Add at least one item to the cart.") }
+            return
+        }
+        if (current.paidAmount < current.total) {
+            _state.update { BillingState.Error("Paid amount must cover the total before finalizing the sale.") }
             return
         }
 

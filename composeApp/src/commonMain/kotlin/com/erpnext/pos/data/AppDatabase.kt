@@ -9,6 +9,7 @@ import com.erpnext.pos.localSource.dao.CashboxDao
 import com.erpnext.pos.localSource.dao.CategoryDao
 import com.erpnext.pos.localSource.dao.CustomerDao
 import com.erpnext.pos.localSource.dao.ItemDao
+import com.erpnext.pos.localSource.dao.ModeOfPaymentDao
 import com.erpnext.pos.localSource.dao.POSClosingEntryDao
 import com.erpnext.pos.localSource.dao.POSOpeningEntryDao
 import com.erpnext.pos.localSource.dao.POSProfileDao
@@ -33,6 +34,7 @@ import com.erpnext.pos.localSource.entities.CashboxEntity
 import com.erpnext.pos.localSource.entities.CategoryEntity
 import com.erpnext.pos.localSource.entities.CustomerEntity
 import com.erpnext.pos.localSource.entities.ItemEntity
+import com.erpnext.pos.localSource.entities.ModeOfPaymentEntity
 import com.erpnext.pos.localSource.entities.POSClosingEntryEntity
 import com.erpnext.pos.localSource.entities.POSInvoicePaymentEntity
 import com.erpnext.pos.localSource.entities.POSOpeningEntryEntity
@@ -83,6 +85,7 @@ import com.erpnext.pos.localSource.entities.v2.UserEntity as UserEntityV2
         ItemEntity::class,
         POSProfileEntity::class,
         PaymentModesEntity::class,
+        ModeOfPaymentEntity::class,
         POSInvoicePaymentEntity::class,
         CashboxEntity::class,
         BalanceDetailsEntity::class,
@@ -129,11 +132,11 @@ import com.erpnext.pos.localSource.entities.v2.UserEntity as UserEntityV2
         PaymentScheduleEntity::class,
         SyncStateEntity::class
     ],
-    version = 3,
+    version = 4,
     exportSchema = true,
-    /*autoMigrations = [
-        AutoMigration(from = 1, to = 2),
-    ]*/
+    autoMigrations = [
+        AutoMigration(from = 3, to = 4),
+    ]
 )
 @ConstructedBy(AppDatabaseConstructor::class)
 abstract class AppDatabase : RoomDatabase() {
@@ -141,6 +144,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun itemDao(): ItemDao
     abstract fun posProfileDao(): POSProfileDao
     abstract fun paymentModesDao(): PaymentModesDao
+    abstract fun modeOfPaymentDao(): ModeOfPaymentDao
     abstract fun cashboxDao(): CashboxDao
     abstract fun customerDao(): CustomerDao
     abstract fun categoryDao(): CategoryDao
