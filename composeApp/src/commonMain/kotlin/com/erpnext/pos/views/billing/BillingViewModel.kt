@@ -13,9 +13,13 @@ import com.erpnext.pos.navigation.NavRoute
 import com.erpnext.pos.navigation.NavigationManager
 import com.erpnext.pos.remoteSource.dto.SalesInvoiceDto
 import com.erpnext.pos.remoteSource.dto.SalesInvoiceItemDto
-import com.erpnext.pos.remoteSource.dto.SalesInvoicePaymentDto
 import com.erpnext.pos.remoteSource.dto.SalesInvoicePaymentScheduleDto
 import com.erpnext.pos.remoteSource.mapper.toEntity
+import com.erpnext.pos.remoteSource.api.APIService
+import com.erpnext.pos.remoteSource.api.v2.APIServiceV2
+import com.erpnext.pos.remoteSource.dto.v2.PaymentEntryCreateDto
+import com.erpnext.pos.remoteSource.dto.v2.PaymentEntryReferenceCreateDto
+import com.erpnext.pos.remoteSource.sdk.v2.ERPDocType
 import com.erpnext.pos.utils.toCurrencySymbol
 import com.erpnext.pos.utils.view.DateTimeProvider
 import com.erpnext.pos.domain.models.POSPaymentModeOption
@@ -24,7 +28,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.update
-import kotlin.collections.filter
 
 class BillingViewModel(
     val customersUseCase: FetchCustomersUseCase,
@@ -33,7 +36,9 @@ class BillingViewModel(
     private val invoiceRepository: SalesInvoiceRepository,
     private val modeOfPaymentDao: ModeOfPaymentDao,
     private val paymentTermsUseCase: FetchPaymentTermsUseCase,
-    private val navManager: NavigationManager
+    private val navManager: NavigationManager,
+    private val api: APIService,
+    private val apiV2: APIServiceV2
 ) : BaseViewModel() {
 
     private val _state: MutableStateFlow<BillingState> = MutableStateFlow(BillingState.Loading)
@@ -100,6 +105,13 @@ class BillingViewModel(
                             )
                         )
                     }
+                    val exchangeRateByCurrency = buildMap {
+                        val baseCurrency = currency.uppercase()
+                        put(baseCurrency, 1.0)
+                        if (!baseCurrency.equals("USD", ignoreCase = true)) {
+                            put("USD", context.exchangeRate)
+                        }
+                    }
                     _state.update {
                         BillingState.Success(
                             customers = customers,
@@ -108,7 +120,8 @@ class BillingViewModel(
                             paymentModes = paymentModes,
                             allowedCurrencies = context.allowedCurrencies,
                             exchangeRate = contextProvider.getContext()?.exchangeRate ?: 1.0,
-                            paymentTerms = paymentTerms
+                            paymentTerms = paymentTerms,
+                            exchangeRateByCurrency = exchangeRateByCurrency
                         )
                     }
                 }
@@ -248,8 +261,10 @@ class BillingViewModel(
         _state.update {
             current.copy(
                 isCreditSale = isCreditSale,
-                selectedPaymentTerm = if (isCreditSale) current.selectedPaymentTerm else null
-            )
+                selectedPaymentTerm = if (isCreditSale) current.selectedPaymentTerm else null,
+                paymentLines = if (isCreditSale) emptyList() else current.paymentLines,
+                paymentErrorMessage = null
+            ).recalculatePaymentTotals()
         }
     }
 
@@ -260,6 +275,97 @@ class BillingViewModel(
                 selectedPaymentTerm = term
             )
         }
+    }
+
+    fun onDiscountCodeChanged(code: String) {
+        val current = _state.value as? BillingState.Success ?: return
+        _state.update {
+            recalculateTotals(
+                current.copy(
+                    discountCode = code,
+                    manualDiscountAmount = if (code.isNotBlank()) 0.0 else current.manualDiscountAmount,
+                    manualDiscountPercent = if (code.isNotBlank()) 0.0 else current.manualDiscountPercent
+                )
+            )
+        }
+    }
+
+    fun onManualDiscountAmountChanged(value: String) {
+        val current = _state.value as? BillingState.Success ?: return
+        val amount = value.toDoubleOrNull()?.coerceAtLeast(0.0) ?: 0.0
+        _state.update {
+            recalculateTotals(
+                current.copy(
+                    manualDiscountAmount = amount,
+                    manualDiscountPercent = if (amount > 0.0) 0.0 else current.manualDiscountPercent
+                )
+            )
+        }
+    }
+
+    fun onManualDiscountPercentChanged(value: String) {
+        val current = _state.value as? BillingState.Success ?: return
+        val percent = value.toDoubleOrNull()?.coerceAtLeast(0.0) ?: 0.0
+        _state.update {
+            recalculateTotals(
+                current.copy(
+                    manualDiscountPercent = percent,
+                    manualDiscountAmount = if (percent > 0.0) 0.0 else current.manualDiscountAmount
+                )
+            )
+        }
+    }
+
+    fun onShippingAmountChanged(value: String) {
+        val current = _state.value as? BillingState.Success ?: return
+        val amount = value.toDoubleOrNull()?.coerceAtLeast(0.0) ?: 0.0
+        _state.update {
+            recalculateTotals(current.copy(shippingAmount = amount))
+        }
+    }
+
+    fun onPaymentCurrencySelected(currency: String) {
+        val current = _state.value as? BillingState.Success ?: return
+        val baseCurrency = current.currency?.takeIf { it.isNotBlank() } ?: return
+        val normalized = currency.trim().uppercase()
+        if (normalized.equals(baseCurrency, ignoreCase = true)) {
+            if (current.exchangeRateByCurrency[normalized] == 1.0) return
+            _state.update {
+                current.copy(
+                    exchangeRateByCurrency = current.exchangeRateByCurrency + (normalized to 1.0)
+                )
+            }
+            return
+        }
+        if (current.exchangeRateByCurrency.containsKey(normalized)) return
+
+        executeUseCase(
+            action = {
+                val directRate = api.getExchangeRate(
+                    fromCurrency = normalized,
+                    toCurrency = baseCurrency
+                )
+                val reverseRate = api.getExchangeRate(
+                    fromCurrency = baseCurrency,
+                    toCurrency = normalized
+                )?.takeIf { it > 0.0 }?.let { 1 / it }
+                val rate = directRate ?: reverseRate
+                if (rate != null && rate > 0.0) {
+                    _state.update {
+                        current.copy(
+                            exchangeRateByCurrency = current.exchangeRateByCurrency + (normalized to rate)
+                        )
+                    }
+                }
+            },
+            exceptionHandler = { }
+        )
+    }
+
+    fun onClearSuccessMessage() {
+        val current = _state.value as? BillingState.Success ?: return
+        if (current.successMessage == null) return
+        _state.update { current.copy(successMessage = null) }
     }
 
     fun onFinalizeSale() {
@@ -291,6 +397,7 @@ class BillingViewModel(
             val shippingAmount = current.shippingAmount.coerceAtLeast(0.0)
             val discountPercent = discountInfo.percent?.takeIf { it > 0.0 }
             val discountAmount = discountInfo.amount
+            val paymentLines = if (current.isCreditSale) emptyList() else current.paymentLines
             val items = current.cartItems.map { cart ->
                 SalesInvoiceItemDto(
                     itemCode = cart.itemCode,
@@ -333,25 +440,12 @@ class BillingViewModel(
             }
 
             val total = (subtotal - discountAmount + shippingAmount).coerceAtLeast(0.0)
-            val payments = current.paymentLines.map { line ->
-                val baseAmount = line.enteredAmount * line.exchangeRate
-                SalesInvoicePaymentDto(
-                    modeOfPayment = line.modeOfPayment,
-                    amount = baseAmount,
-                    paymentReference = line.referenceNumber?.takeIf { it.isNotBlank() },
-                    type = "Receive"
-                )
-            }
-            val paidAmount = payments.sumOf { it.amount }
-            val outstandingAmount = (total - paidAmount).coerceAtLeast(0.0)
-            val status = when {
-                paidAmount <= 0.0 -> "Unpaid"
-                outstandingAmount <= 0.0 -> "Paid"
-                else -> "Partial"
-            }
+            val paidAmount = 0.0
+            val outstandingAmount = total
+            val status = "Unpaid"
             val paymentMetadata = buildList {
                 addAll(
-                    current.paymentLines.mapNotNull { line ->
+                    paymentLines.mapNotNull { line ->
                         if (line.currency.equals(context.currency, ignoreCase = true)) {
                             null
                         } else {
@@ -360,7 +454,7 @@ class BillingViewModel(
                     }
                 )
                 addAll(
-                    current.paymentLines.mapNotNull { line ->
+                    paymentLines.mapNotNull { line ->
                         line.referenceNumber?.takeIf { it.isNotBlank() }?.let {
                             "Reference (${line.modeOfPayment}): $it"
                         }
@@ -373,7 +467,6 @@ class BillingViewModel(
                     add("Shipping: $shippingAmount")
                 }
             }.joinToString(separator = "; ").takeIf { it.isNotBlank() }
-            val primaryPaymentLine = current.paymentLines.firstOrNull()
             val postingDate = DateTimeProvider.todayDate()
             val dueDate = if (current.isCreditSale) {
                 val term = current.selectedPaymentTerm
@@ -416,13 +509,7 @@ class BillingViewModel(
                 paymentTerms = current.selectedPaymentTerm?.name,
                 posProfile = context.profileName,
                 currency = context.currency,
-                remarks = paymentMetadata,
-                customPaymentCurrency = primaryPaymentLine?.currency?.takeIf {
-                    !it.equals(context.currency, ignoreCase = true)
-                },
-                customExchangeRate = primaryPaymentLine?.exchangeRate?.takeIf {
-                    primaryPaymentLine?.currency?.equals(context.currency, ignoreCase = true) == false
-                }
+                remarks = paymentMetadata
             )
 
             val created = invoiceRepository.createRemoteInvoice(invoiceDto)
@@ -430,6 +517,35 @@ class BillingViewModel(
             invoiceRepository.saveInvoiceLocally(
                 invoice = entity.invoice, items = entity.items, payments = entity.payments
             )
+
+            if (!current.isCreditSale && paymentLines.isNotEmpty()) {
+                val invoiceId = created.name
+                    ?: error("Invoice ID was not returned after creation.")
+                paymentLines.forEach { line ->
+                    val baseAmount = line.enteredAmount * line.exchangeRate
+                    val paymentEntry = PaymentEntryCreateDto(
+                        company = context.company,
+                        postingDate = postingDate,
+                        paymentType = "Receive",
+                        partyType = "Customer",
+                        partyId = customer.name,
+                        modeOfPayment = line.modeOfPayment,
+                        paidAmount = baseAmount,
+                        receivedAmount = baseAmount,
+                        referenceNo = line.referenceNumber?.takeIf { it.isNotBlank() },
+                        references = listOf(
+                            PaymentEntryReferenceCreateDto(
+                                referenceDoctype = "Sales Invoice",
+                                referenceName = invoiceId,
+                                totalAmount = total,
+                                outstandingAmount = outstandingAmount,
+                                allocatedAmount = baseAmount
+                            )
+                        )
+                    )
+                    apiV2.createDoc(ERPDocType.PaymentEntry, paymentEntry)
+                }
+            }
 
             _state.update {
                 current.copy(
@@ -444,7 +560,17 @@ class BillingViewModel(
                     shippingAmount = 0.0,
                     total = 0.0,
                     isCreditSale = false,
-                    selectedPaymentTerm = null
+                    selectedPaymentTerm = null,
+                    customerSearchQuery = "",
+                    productSearchQuery = "",
+                    customers = customers,
+                    productSearchResults = products,
+                    paymentLines = emptyList(),
+                    paidAmountBase = 0.0,
+                    balanceDueBase = 0.0,
+                    changeDueBase = 0.0,
+                    paymentErrorMessage = null,
+                    successMessage = "Invoice ${created.name ?: ""} created successfully."
                 )
             }
         }, exceptionHandler = { e ->

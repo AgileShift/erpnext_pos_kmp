@@ -50,10 +50,12 @@ sealed interface BillingState {
         val paymentLines: List<PaymentLine> = emptyList(),
         val paymentModes: List<POSPaymentModeOption> = emptyList(),
         val allowedCurrencies: List<POSCurrencyOption> = emptyList(),
+        val exchangeRateByCurrency: Map<String, Double> = emptyMap(),
         val paidAmountBase: Double = 0.0,
         val balanceDueBase: Double = 0.0,
         val changeDueBase: Double = 0.0,
-        val paymentErrorMessage: String? = null
+        val paymentErrorMessage: String? = null,
+        val successMessage: String? = null
     ) : BillingState {
         fun recalculateCartTotals(): Success {
             val newSubtotal = cartItems.sumOf { it.price * it.quantity }
@@ -117,5 +119,11 @@ data class BillingAction(
     val onFinalizeSale: () -> Unit = {},
     val onCreditSaleChanged: (Boolean) -> Unit = {},
     val onPaymentTermSelected: (PaymentTermBO?) -> Unit = {},
+    val onDiscountCodeChanged: (String) -> Unit = {},
+    val onManualDiscountAmountChanged: (String) -> Unit = {},
+    val onManualDiscountPercentChanged: (String) -> Unit = {},
+    val onShippingAmountChanged: (String) -> Unit = {},
+    val onPaymentCurrencySelected: (String) -> Unit = {},
+    val onClearSuccessMessage: () -> Unit = {},
     val onBack: () -> Unit = {},
 )

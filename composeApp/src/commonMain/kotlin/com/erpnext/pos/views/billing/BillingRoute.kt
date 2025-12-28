@@ -33,6 +33,12 @@ fun rememberBillingActions(coordinator: BillingCoordinator): BillingAction {
             onFinalizeSale = coordinator::onFinalizeSale,
             onCreditSaleChanged = coordinator::onCreditSaleChanged,
             onPaymentTermSelected = coordinator::onPaymentTermSelected,
+            onDiscountCodeChanged = coordinator::onDiscountCodeChanged,
+            onManualDiscountAmountChanged = coordinator::onManualDiscountAmountChanged,
+            onManualDiscountPercentChanged = coordinator::onManualDiscountPercentChanged,
+            onShippingAmountChanged = coordinator::onShippingAmountChanged,
+            onPaymentCurrencySelected = coordinator::onPaymentCurrencySelected,
+            onClearSuccessMessage = coordinator::onClearSuccessMessage,
             onBack = coordinator::onBack
         )
     }

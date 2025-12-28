@@ -25,6 +25,8 @@ data class PaymentEntryCreateDto(
     val paidFrom: String? = null,
     @SerialName("paid_to")
     val paidTo: String? = null,
+    @SerialName("reference_no")
+    val referenceNo: String? = null,
     @SerialName("references")
     val references: List<PaymentEntryReferenceCreateDto> = emptyList()
 )

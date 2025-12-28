@@ -22,6 +22,12 @@ class BillingCoordinator(val viewModel: BillingViewModel) {
     fun onCreditSaleChanged(isCreditSale: Boolean) = viewModel.onCreditSaleChanged(isCreditSale)
     fun onPaymentTermSelected(term: com.erpnext.pos.domain.models.PaymentTermBO?) =
         viewModel.onPaymentTermSelected(term)
+    fun onDiscountCodeChanged(code: String) = viewModel.onDiscountCodeChanged(code)
+    fun onManualDiscountAmountChanged(value: String) = viewModel.onManualDiscountAmountChanged(value)
+    fun onManualDiscountPercentChanged(value: String) = viewModel.onManualDiscountPercentChanged(value)
+    fun onShippingAmountChanged(value: String) = viewModel.onShippingAmountChanged(value)
+    fun onPaymentCurrencySelected(currency: String) = viewModel.onPaymentCurrencySelected(currency)
+    fun onClearSuccessMessage() = viewModel.onClearSuccessMessage()
     fun onBack() = viewModel.onBack()
 }
 
