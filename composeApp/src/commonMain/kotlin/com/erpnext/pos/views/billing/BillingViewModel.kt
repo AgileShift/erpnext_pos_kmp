@@ -184,6 +184,15 @@ class BillingViewModel(
         val current = _state.value as? BillingState.Success ?: return
         val existing = current.cartItems.firstOrNull { it.itemCode == item.itemCode }
         val exchangeRate = current.exchangeRate
+        val maxQty = item.actualQty
+        if (existing != null && existing.quantity + 1 > maxQty) {
+            _state.update {
+                current.copy(
+                    cartErrorMessage = buildQtyErrorMessage(item.name, maxQty)
+                )
+            }
+            return
+        }
         val updated = if (existing == null) {
             current.cartItems + CartItem(
                 itemCode = item.itemCode,
@@ -199,22 +208,38 @@ class BillingViewModel(
                 if (it.itemCode == item.itemCode) it.copy(quantity = it.quantity + 1) else it
             }
         }
-        _state.update { recalculateTotals(current.copy(cartItems = updated)) }
+        _state.update {
+            recalculateTotals(current.copy(cartItems = updated, cartErrorMessage = null))
+        }
     }
 
     fun onQuantityChanged(itemCode: String, newQuantity: Double) {
         val current = _state.value as? BillingState.Success ?: return
+        val product = products.firstOrNull { it.itemCode == itemCode }
+        val maxQty = product?.actualQty
+        if (maxQty != null && newQuantity > maxQty) {
+            _state.update {
+                current.copy(
+                    cartErrorMessage = buildQtyErrorMessage(product.name, maxQty)
+                )
+            }
+            return
+        }
         val updated = current.cartItems.map {
             if (it.itemCode == itemCode) it.copy(quantity = newQuantity.coerceAtLeast(0.0)) else it
         }.filter { it.quantity > 0.0 }
 
-        _state.update { recalculateTotals(current.copy(cartItems = updated)) }
+        _state.update {
+            recalculateTotals(current.copy(cartItems = updated, cartErrorMessage = null))
+        }
     }
 
     fun onRemoveItem(itemCode: String) {
         val current = _state.value as? BillingState.Success ?: return
         val updated = current.cartItems.filterNot { it.itemCode == itemCode }
-        _state.update { recalculateTotals(current.copy(cartItems = updated)) }
+        _state.update {
+            recalculateTotals(current.copy(cartItems = updated, cartErrorMessage = null))
+        }
     }
 
     fun onAddPaymentLine(line: PaymentLine) {
@@ -567,6 +592,7 @@ class BillingViewModel(
                     balanceDueBase = 0.0,
                     changeDueBase = 0.0,
                     paymentErrorMessage = null,
+                    cartErrorMessage = null,
                     successMessage = "Invoice ${created.name ?: ""} created successfully."
                 )
             }
@@ -608,6 +634,18 @@ class BillingViewModel(
             discount = totals.discount,
             total = totals.total
         ).recalculatePaymentTotals()
+    }
+
+    private fun buildQtyErrorMessage(itemName: String, maxQty: Double): String {
+        return "Only ${formatQty(maxQty)} available for $itemName."
+    }
+
+    private fun formatQty(value: Double): String {
+        return if (value % 1.0 == 0.0) {
+            value.toLong().toString()
+        } else {
+            value.toString()
+        }
     }
 
     companion object {
