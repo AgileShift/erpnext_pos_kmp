@@ -41,6 +41,8 @@ data class SalesInvoiceCreateDto(
     val totalTaxesAndCharges: Float? = null,
     @SerialName("grand_total")
     val grandTotal: Double? = null,
+    @SerialName("posa_delivery_charges")
+    val posaDeliveryCharges: String? = null,
     @SerialName("items")
     val items: List<SalesInvoiceItemCreateDto>,
     @SerialName("payments")

@@ -7,6 +7,7 @@ import com.erpnext.pos.data.repositories.v2.CatalogSyncRepository
 import com.erpnext.pos.data.repositories.v2.ContextRepository
 import com.erpnext.pos.data.repositories.v2.CustomerRepository
 import com.erpnext.pos.data.repositories.v2.DeliveryNoteRepository
+import com.erpnext.pos.data.repositories.v2.DeliveryChargesRepository
 import com.erpnext.pos.data.repositories.v2.InventoryRepository
 import com.erpnext.pos.data.repositories.v2.PaymentEntryRepository
 import com.erpnext.pos.data.repositories.v2.QuotationRepository
@@ -60,6 +61,7 @@ val appModulev2 = module {
     single { QuotationRepository(get(), get(), get(), get()) }
     single { SalesOrderRepository(get(), get(), get(), get()) }
     single { DeliveryNoteRepository(get(), get(), get()) }
+    single { DeliveryChargesRepository(get(named("apiServiceV2"))) }
     single { PaymentEntryRepository(get(), get(), get()) }
     single { SyncRepository(get(), get()) }
     single(named("apiServiceV2")) { APIServiceV2(get(), get(), get()) }

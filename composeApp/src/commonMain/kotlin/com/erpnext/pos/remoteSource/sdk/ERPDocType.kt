@@ -18,7 +18,8 @@ enum class ERPDocType(val path: String) {
     POSProfileDetails("POS Profile Detail"),
     POSOpeningEntry("POS Opening Entry"),
     POSClosingEntry("POS Closing Entry"),
-    PaymentTerm("Payment Term")
+    PaymentTerm("Payment Term"),
+    DeliveryCharges("Delivery Charges")
 }
 
 val fields: List<DocTypeFields> = listOf(
@@ -142,6 +143,13 @@ val fields: List<DocTypeFields> = listOf(
             "description",
             "discount_validity",
             "discount_validity_based_on"
+        )
+    ),
+    DocTypeFields(
+        ERPDocType.DeliveryCharges,
+        listOf(
+            "label",
+            "default_rate"
         )
     )
 )

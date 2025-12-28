@@ -2,6 +2,7 @@ package com.erpnext.pos.views.billing
 
 import CartItem
 import com.erpnext.pos.domain.models.CustomerBO
+import com.erpnext.pos.domain.models.DeliveryChargeBO
 import com.erpnext.pos.domain.models.ItemBO
 import com.erpnext.pos.domain.models.POSCurrencyOption
 import com.erpnext.pos.domain.models.POSPaymentModeOption
@@ -43,6 +44,8 @@ sealed interface BillingState {
         val manualDiscountAmount: Double = 0.0,
         val manualDiscountPercent: Double = 0.0,
         val shippingAmount: Double = 0.0,
+        val deliveryCharges: List<DeliveryChargeBO> = emptyList(),
+        val selectedDeliveryCharge: DeliveryChargeBO? = null,
         val total: Double = 0.0,
         val isCreditSale: Boolean = false,
         val paymentTerms: List<PaymentTermBO> = emptyList(),
@@ -122,7 +125,7 @@ data class BillingAction(
     val onDiscountCodeChanged: (String) -> Unit = {},
     val onManualDiscountAmountChanged: (String) -> Unit = {},
     val onManualDiscountPercentChanged: (String) -> Unit = {},
-    val onShippingAmountChanged: (String) -> Unit = {},
+    val onDeliveryChargeSelected: (DeliveryChargeBO?) -> Unit = {},
     val onPaymentCurrencySelected: (String) -> Unit = {},
     val onClearSuccessMessage: () -> Unit = {},
     val onBack: () -> Unit = {},
