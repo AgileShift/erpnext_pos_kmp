@@ -45,6 +45,8 @@ data class SalesInvoiceDto(
     val payments: List<SalesInvoicePaymentDto> = emptyList(),
     @SerialName("payment_schedule")
     val paymentSchedule: List<SalesInvoicePaymentScheduleDto> = emptyList(),
+    @SerialName("payment_terms")
+    val paymentTerms: String? = null,
     val remarks: String? = null,
     @SerialName("custom_payment_currency")
     val customPaymentCurrency: String? = null,
