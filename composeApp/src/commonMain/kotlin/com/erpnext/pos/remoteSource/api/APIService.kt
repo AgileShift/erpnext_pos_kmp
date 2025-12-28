@@ -245,7 +245,7 @@ class APIService(
         val url = authStore.getCurrentSite() ?: return emptyList()
         return clientOAuth.getERPList(
             doctype = "Mode of Payment",
-            fields = listOf("name", "mode_of_payment", "currency", "is_default", "enabled"),
+            fields = listOf("name", "mode_of_payment", "enabled"),
             baseUrl = url,
             filters = filters {
                 "enabled" eq 1
@@ -567,7 +567,7 @@ class APIService(
     //region Invoice - Checkout
     suspend fun createSalesInvoice(data: SalesInvoiceDto): SalesInvoiceDto {
         val url = authStore.getCurrentSite()
-        return client.postERP(
+        return clientOAuth.postERP(
             doctype = ERPDocType.SalesInvoice.path,
             payload = data,
             baseUrl = url,
@@ -576,7 +576,7 @@ class APIService(
 
     suspend fun getSalesInvoiceByName(name: String): SalesInvoiceDto {
         val url = authStore.getCurrentSite()
-        return client.getERPSingle(
+        return clientOAuth.getERPSingle(
             doctype = ERPDocType.SalesInvoice.path,
             name = name,
             baseUrl = url,
@@ -585,7 +585,7 @@ class APIService(
 
     suspend fun updateSalesInvoice(name: String, data: SalesInvoiceDto): SalesInvoiceDto {
         val url = authStore.getCurrentSite()
-        return client.putERP(
+        return clientOAuth.putERP(
             doctype = ERPDocType.SalesInvoice.path,
             name = name,
             payload = data,

@@ -79,7 +79,6 @@ class BillingViewModel(
                                 name = mode.name,
                                 modeOfPayment = mode.modeOfPayment,
                                 type = modeTypes[mode.modeOfPayment]?.type,
-                                isDefault = mode.default
                             )
                         }
                     }.ifEmpty {
@@ -220,17 +219,7 @@ class BillingViewModel(
             }
             return
         }
-        val modeCurrencyValue = modeOption?.currency
-        if (modeCurrencyValue != null &&
-            !modeCurrencyValue.equals(line.currency, ignoreCase = true)
-        ) {
-            _state.update {
-                current.copy(
-                    paymentErrorMessage = "Currency ${line.currency} is not allowed for ${line.modeOfPayment}."
-                )
-            }
-            return
-        }
+
         val updated = current.paymentLines + line.toBaseAmount()
         _state.update { current.withPaymentLines(updated) }
     }

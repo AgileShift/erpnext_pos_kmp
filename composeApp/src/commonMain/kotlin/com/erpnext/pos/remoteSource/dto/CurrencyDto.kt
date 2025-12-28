@@ -16,6 +16,6 @@ data class ModeOfPaymentDto(
     val name: String,
     @SerialName("mode_of_payment") val modeOfPayment: String,
     val currency: String? = null,
-    @SerialName("is_default") val isDefault: Boolean? = null,
-    @Serializable(with = IntAsBooleanSerializer::class) val enabled: Boolean = true
+    @Serializable(with = IntAsBooleanSerializer::class)
+    val enabled: Boolean = true
 )

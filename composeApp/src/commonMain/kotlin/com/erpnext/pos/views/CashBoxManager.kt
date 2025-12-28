@@ -233,15 +233,13 @@ class CashBoxManager(
             )
         }
         val distinct = withBase.distinctBy { it.code.uppercase() }
-        return if (distinct.isEmpty()) {
+        return distinct.ifEmpty {
             listOf(
                 POSCurrencyOption(
                     code = normalizedBase,
                     name = normalizedBase
                 )
             )
-        } else {
-            distinct
         }
     }
 
@@ -256,7 +254,6 @@ class CashBoxManager(
                     name = mode.name,
                     modeOfPayment = mode.modeOfPayment,
                     type = modeTypes[mode.modeOfPayment]?.type,
-                    isDefault = mode.default
                 )
             }
         val activeModes = runCatching { api.getActiveModeOfPayment() }.getOrElse { emptyList() }
@@ -264,16 +261,12 @@ class CashBoxManager(
 
         if (profileModes.isEmpty() && activeModes.isEmpty()) return emptyList()
 
-        val baseModes = if (profileModes.isNotEmpty()) {
-            profileModes
-        } else {
+        val baseModes = profileModes.ifEmpty {
             activeModes.map { mode ->
                 POSPaymentModeOption(
                     name = mode.name,
                     modeOfPayment = mode.modeOfPayment,
                     type = modeTypes[mode.modeOfPayment]?.type,
-                    currency = mode.currency?.takeIf { it.isNotBlank() },
-                    isDefault = mode.isDefault == true
                 )
             }
         }
@@ -284,10 +277,9 @@ class CashBoxManager(
             val active = activeByName[option.modeOfPayment] ?: return@mapNotNull null
             option.copy(
                 type = option.type ?: modeTypes[option.modeOfPayment]?.type,
-                currency = active.currency?.takeIf { it.isNotBlank() }
             )
         }
-        return if (enriched.isEmpty()) baseModes else enriched
+        return enriched.ifEmpty { baseModes }
     }
 
     suspend fun updateManualExchangeRate(rate: Double) {
