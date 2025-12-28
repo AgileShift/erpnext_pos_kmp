@@ -564,8 +564,7 @@ private fun PaymentSection(
     onRemovePaymentLine: (Int) -> Unit
 ) {
     val modeOptions = remember(paymentModes) { paymentModes.map { it.modeOfPayment }.distinct() }
-    val defaultMode = paymentModes.firstOrNull { it.isDefault }?.modeOfPayment
-        ?: modeOptions.firstOrNull().orEmpty()
+    val defaultMode = paymentModes.first().modeOfPayment
     var selectedMode by remember(modeOptions, defaultMode) { mutableStateOf(defaultMode) }
     val selectedModeOption = paymentModes.firstOrNull { it.modeOfPayment == selectedMode }
     val requiresReference = remember(selectedModeOption) {
@@ -573,7 +572,7 @@ private fun PaymentSection(
     }
     val allowedCodes = remember(allowedCurrencies, baseCurrency) {
         val codes = allowedCurrencies.map { it.code }.filter { it.isNotBlank() }
-        if (codes.isEmpty()) listOf(baseCurrency) else codes
+        codes.ifEmpty { listOf(baseCurrency) }
     }
     var selectedCurrency by remember(allowedCodes, baseCurrency) {
         mutableStateOf(allowedCodes.firstOrNull() ?: baseCurrency)
@@ -581,26 +580,19 @@ private fun PaymentSection(
     var amountInput by remember { mutableStateOf("") }
     var rateInput by remember { mutableStateOf("1.0") }
     var referenceInput by remember { mutableStateOf("") }
-    val modeCurrency = paymentModes.firstOrNull { it.modeOfPayment == selectedMode }?.currency
-    val currencyOptions = remember(allowedCodes, baseCurrency, modeCurrency) {
+    val currencyOptions = remember(allowedCodes, baseCurrency) {
         val baseOptions = allowedCodes.ifEmpty { listOf(baseCurrency) }
-        val filtered = if (!modeCurrency.isNullOrBlank()) {
-            baseOptions.filter { it.equals(modeCurrency, ignoreCase = true) }
-        } else {
+        val ensuredBase = if (baseOptions.any { it.equals(baseCurrency, ignoreCase = true) }) {
             baseOptions
-        }
-        val ensuredBase = if (filtered.any { it.equals(baseCurrency, ignoreCase = true) }) {
-            filtered
         } else {
-            filtered + baseCurrency
+            baseOptions + baseCurrency
         }
         ensuredBase.distinct()
     }
 
-    LaunchedEffect(modeCurrency, currencyOptions, baseCurrency) {
-        val preferredCurrency = modeCurrency ?: baseCurrency
+    LaunchedEffect(currencyOptions, baseCurrency) {
         val resolved = currencyOptions.firstOrNull {
-            it.equals(preferredCurrency, ignoreCase = true)
+            it.equals(baseCurrency, ignoreCase = true)
         } ?: currencyOptions.firstOrNull() ?: baseCurrency
         selectedCurrency = resolved
         if (resolved.equals(baseCurrency, ignoreCase = true)) {
@@ -773,12 +765,9 @@ private fun PaymentSection(
     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
         val amountValue = amountInput.toDoubleOrNull()
         val rateValue = rateInput.toDoubleOrNull()
-        val currencyAllowed = modeCurrency == null ||
-            modeCurrency.equals(selectedCurrency, ignoreCase = true)
         val canAdd = amountValue != null &&
             amountValue > 0.0 &&
             (rateValue != null && rateValue > 0.0) &&
-            currencyAllowed &&
             selectedMode.isNotBlank() &&
             (!requiresReference || referenceInput.isNotBlank())
 
@@ -819,16 +808,6 @@ private fun PaymentSection(
         ) {
             Text("Eliminar")
         }
-    }
-
-    if (!modeCurrency.isNullOrBlank() &&
-        !modeCurrency.equals(selectedCurrency, ignoreCase = true)
-    ) {
-        Text(
-            text = "Currency must be $modeCurrency for $selectedMode.",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.error
-        )
     }
 
     if (!paymentErrorMessage.isNullOrBlank()) {
@@ -1004,8 +983,6 @@ private fun BillingScreenPreview() {
                     POSPaymentModeOption(
                         name = "Cash",
                         modeOfPayment = "Cash",
-                        currency = "USD",
-                        isDefault = true
                     )
                 ),
                 paymentTerms = listOf(

@@ -245,7 +245,7 @@ class APIService(
         val url = authStore.getCurrentSite() ?: return emptyList()
         return clientOAuth.getERPList(
             doctype = "Mode of Payment",
-            fields = listOf("name", "mode_of_payment", "currency", "is_default", "enabled"),
+            fields = listOf("name", "mode_of_payment", "enabled"),
             baseUrl = url,
             filters = filters {
                 "enabled" eq 1
