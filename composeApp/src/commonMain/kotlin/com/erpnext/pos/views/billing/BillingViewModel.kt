@@ -760,6 +760,8 @@ class BillingViewModel(
         outstandingAmount: Double
     ): PaymentEntryCreateDto {
         val baseAmount = line.enteredAmount * line.exchangeRate
+        val baseCurrency = context.currency
+        val isForeignCurrency = !line.currency.equals(baseCurrency, ignoreCase = true)
         return PaymentEntryCreateDto(
             company = context.company,
             postingDate = postingDate,
@@ -769,6 +771,8 @@ class BillingViewModel(
             modeOfPayment = line.modeOfPayment,
             paidAmount = baseAmount,
             receivedAmount = baseAmount,
+            sourceExchangeRate = if (isForeignCurrency) 1.0 else null,
+            targetExchangeRate = if (isForeignCurrency) line.exchangeRate else null,
             referenceNo = line.referenceNumber?.takeIf { it.isNotBlank() },
             references = listOf(
                 PaymentEntryReferenceCreateDto(
