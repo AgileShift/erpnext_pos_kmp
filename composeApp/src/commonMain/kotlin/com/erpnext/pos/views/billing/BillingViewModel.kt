@@ -124,7 +124,7 @@ class BillingViewModel(
                 }
             }
         }, exceptionHandler = {
-            _state.value = BillingState.Error(it.message ?: "Unknown error")
+            _state.value = BillingState.Error(it.message ?: "Error desconocido.")
         })
     }
 
@@ -184,7 +184,8 @@ class BillingViewModel(
         val existing = current.cartItems.firstOrNull { it.itemCode == item.itemCode }
         val exchangeRate = current.exchangeRate
         val maxQty = item.actualQty
-        if (existing != null && existing.quantity + 1 > maxQty) {
+        val desiredQty = (existing?.quantity ?: 0.0) + 1.0
+        if (desiredQty > maxQty) {
             _state.update {
                 current.copy(
                     cartErrorMessage = buildQtyErrorMessage(item.name, maxQty)
@@ -249,7 +250,7 @@ class BillingViewModel(
         if (requiresReference(modeOption) && line.referenceNumber.isNullOrBlank()) {
             _state.update {
                 current.copy(
-                    paymentErrorMessage = "Reference number is required for ${line.modeOfPayment} payments."
+                    paymentErrorMessage = "El número de referencia es obligatorio para pagos ${line.modeOfPayment}."
                 )
             }
             return
@@ -400,29 +401,29 @@ class BillingViewModel(
     fun onFinalizeSale() {
         val current = _state.value as? BillingState.Success ?: return
         val customer = current.selectedCustomer ?: run {
-            _state.update { BillingState.Error("Select a customer before finalizing the sale.") }
+            _state.update { BillingState.Error("Seleccione un cliente antes de finalizar la venta.") }
             return
         }
         if (current.cartItems.isEmpty()) {
-            _state.update { BillingState.Error("Add at least one item to the cart.") }
+            _state.update { BillingState.Error("Agregue al menos un artículo al carrito.") }
             return
         }
         if (!current.isCreditSale && current.paidAmountBase < current.total) {
-            _state.update { BillingState.Error("Paid amount must cover the total before finalizing the sale.") }
+            _state.update { BillingState.Error("El monto pagado debe cubrir el total antes de finalizar la venta.") }
             return
         }
         if (current.isCreditSale && current.selectedPaymentTerm == null) {
-            _state.update { BillingState.Error("Select a payment term to finalize a credit sale.") }
+            _state.update { BillingState.Error("Seleccione un término de pago para finalizar una venta a crédito.") }
             return
         }
         // Business rule: credit sales are registered as unpaid invoices and cannot include
         // immediate payment lines. Payments are posted later via Payment Entry.
         if (current.isCreditSale && current.paymentLines.isNotEmpty()) {
-            _state.update { BillingState.Error("Credit sales cannot include payment lines.") }
+            _state.update { BillingState.Error("Las ventas a crédito no pueden incluir líneas de pago.") }
             return
         }
 
-        val context = contextProvider.getContext() ?: error("POS context not initialized.")
+        val context = contextProvider.getContext() ?: error("El contexto POS no está inicializado.")
 
         _state.update { current.copy() }
 
@@ -477,7 +478,7 @@ class BillingViewModel(
             val postingDate = DateTimeProvider.todayDate()
             val dueDate = if (isCreditSale) {
                 val term = current.selectedPaymentTerm
-                    ?: error("Payment term is required for credit sales.")
+                    ?: error("El término de pago es obligatorio para ventas a crédito.")
                 val withMonths = DateTimeProvider.addMonths(postingDate, term.creditMonths ?: 0)
                 DateTimeProvider.addDays(withMonths, term.creditDays ?: 0)
             } else {
@@ -485,7 +486,7 @@ class BillingViewModel(
             }
             val paymentSchedule = if (isCreditSale) {
                 val term = current.selectedPaymentTerm
-                    ?: error("Payment term is required for credit sales.")
+                    ?: error("El término de pago es obligatorio para ventas a crédito.")
                 listOf(
                     SalesInvoicePaymentScheduleDto(
                         paymentTerm = term.name,
@@ -517,7 +518,7 @@ class BillingViewModel(
 
             if (!current.isCreditSale && paymentLines.isNotEmpty()) {
                 val invoiceId = created.name
-                    ?: error("Invoice ID was not returned after creation.")
+                    ?: error("No se devolvió el ID de la factura después de crearla.")
                 paymentLines.forEach { line ->
                     val paymentEntry = buildPaymentEntryDto(
                         line = line,
@@ -558,11 +559,11 @@ class BillingViewModel(
                     changeDueBase = 0.0,
                     paymentErrorMessage = null,
                     cartErrorMessage = null,
-                    successMessage = "Invoice ${created.name ?: ""} created successfully."
+                    successMessage = "Factura ${created.name ?: ""} creada correctamente."
                 )
             }
         }, exceptionHandler = { e ->
-            _state.update { BillingState.Error(e.message ?: "Unable to create invoice.") }
+            _state.update { BillingState.Error(e.message ?: "No se pudo crear la factura.") }
         })
     }
 
@@ -602,7 +603,7 @@ class BillingViewModel(
     }
 
     private fun buildQtyErrorMessage(itemName: String, maxQty: Double): String {
-        return "Only ${formatQty(maxQty)} available for $itemName."
+        return "Solo hay ${formatQty(maxQty)} disponibles para $itemName."
     }
 
     private fun formatQty(value: Double): String {
@@ -696,22 +697,22 @@ class BillingViewModel(
                     if (line.currency.equals(baseCurrency, ignoreCase = true)) {
                         null
                     } else {
-                        "Payment currency (${line.modeOfPayment}): ${line.currency}, Exchange rate: ${line.exchangeRate}"
+                        "Moneda de pago (${line.modeOfPayment}): ${line.currency}, tipo de cambio: ${line.exchangeRate}"
                     }
                 }
             )
             addAll(
                 paymentLines.mapNotNull { line ->
                     line.referenceNumber?.takeIf { it.isNotBlank() }?.let {
-                        "Reference (${line.modeOfPayment}): $it"
+                        "Referencia (${line.modeOfPayment}): $it"
                     }
                 }
             )
             if (current.discountCode.isNotBlank()) {
-                add("Discount code: ${current.discountCode}")
+                add("Código de descuento: ${current.discountCode}")
             }
             if (shippingAmount > 0.0) {
-                add("Shipping: $shippingAmount")
+                add("Envío: $shippingAmount")
             }
         }.joinToString(separator = "; ").takeIf { it.isNotBlank() }
     }
