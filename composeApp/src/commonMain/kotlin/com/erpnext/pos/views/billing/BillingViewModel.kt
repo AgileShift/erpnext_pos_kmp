@@ -13,6 +13,7 @@ import com.erpnext.pos.navigation.NavRoute
 import com.erpnext.pos.navigation.NavigationManager
 import com.erpnext.pos.remoteSource.dto.SalesInvoiceDto
 import com.erpnext.pos.remoteSource.dto.SalesInvoiceItemDto
+import com.erpnext.pos.remoteSource.dto.SalesInvoicePaymentDto
 import com.erpnext.pos.remoteSource.dto.SalesInvoicePaymentScheduleDto
 import com.erpnext.pos.remoteSource.mapper.toEntity
 import com.erpnext.pos.remoteSource.api.APIService
@@ -258,6 +259,8 @@ class BillingViewModel(
             return
         }
         _state.update {
+            // A sale is treated as credit when credit mode is enabled and payment terms are available.
+            // Payment terms are only enabled once ERPNext provides templates for the POS profile.
             current.copy(
                 isCreditSale = isCreditSale,
                 selectedPaymentTerm = if (isCreditSale) current.selectedPaymentTerm else null,
@@ -385,6 +388,10 @@ class BillingViewModel(
             _state.update { BillingState.Error("Select a payment term to finalize a credit sale.") }
             return
         }
+        if (current.isCreditSale && current.paymentLines.isNotEmpty()) {
+            _state.update { BillingState.Error("Credit sales cannot include payment lines.") }
+            return
+        }
 
         val context = contextProvider.getContext() ?: error("POS context not initialized.")
 
@@ -396,7 +403,8 @@ class BillingViewModel(
             val shippingAmount = current.shippingAmount.coerceAtLeast(0.0)
             val discountPercent = discountInfo.percent?.takeIf { it > 0.0 }
             val discountAmount = discountInfo.amount
-            val paymentLines = if (current.isCreditSale) emptyList() else current.paymentLines
+            val isCreditSale = current.isCreditSale
+            val paymentLines = if (isCreditSale) emptyList() else current.paymentLines
             val items = current.cartItems.map { cart ->
                 SalesInvoiceItemDto(
                     itemCode = cart.itemCode,
@@ -439,9 +447,23 @@ class BillingViewModel(
             }
 
             val total = (subtotal - discountAmount + shippingAmount).coerceAtLeast(0.0)
-            val paidAmount = 0.0
-            val outstandingAmount = total
-            val status = "Unpaid"
+            val payments = if (isCreditSale) {
+                emptyList()
+            } else {
+                paymentLines.map { line ->
+                    SalesInvoicePaymentDto(
+                        modeOfPayment = line.modeOfPayment,
+                        amount = line.baseAmount,
+                        paymentReference = line.referenceNumber
+                    )
+                }
+            }
+            // ERPNext sales cycle:
+            // - Credit sales must include payment_terms + payment_schedule with due_date derived from the term.
+            // - Paid amount stays at 0 and status remains "Unpaid" until a Payment Entry is created.
+            val paidAmount = if (isCreditSale) 0.0 else paymentLines.sumOf { it.baseAmount }
+            val outstandingAmount = (total - paidAmount).coerceAtLeast(0.0)
+            val status = if (isCreditSale || outstandingAmount > 0.0) "Unpaid" else "Paid"
             val paymentMetadata = buildList {
                 addAll(
                     paymentLines.mapNotNull { line ->
@@ -467,7 +489,7 @@ class BillingViewModel(
                 }
             }.joinToString(separator = "; ").takeIf { it.isNotBlank() }
             val postingDate = DateTimeProvider.todayDate()
-            val dueDate = if (current.isCreditSale) {
+            val dueDate = if (isCreditSale) {
                 val term = current.selectedPaymentTerm
                     ?: error("Payment term is required for credit sales.")
                 val withMonths = DateTimeProvider.addMonths(postingDate, term.creditMonths ?: 0)
@@ -475,7 +497,7 @@ class BillingViewModel(
             } else {
                 postingDate
             }
-            val paymentSchedule = if (current.isCreditSale) {
+            val paymentSchedule = if (isCreditSale) {
                 val term = current.selectedPaymentTerm
                     ?: error("Payment term is required for credit sales.")
                 listOf(
@@ -505,7 +527,7 @@ class BillingViewModel(
                 paidAmount = paidAmount,
                 items = items,
                 paymentSchedule = paymentSchedule,
-                paymentTerms = current.selectedPaymentTerm?.name,
+                paymentTerms = if (isCreditSale) current.selectedPaymentTerm?.name else null,
                 posProfile = context.profileName,
                 remarks = paymentMetadata
             )
