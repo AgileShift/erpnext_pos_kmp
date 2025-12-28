@@ -5,6 +5,7 @@ import com.erpnext.pos.data.AppDatabase
 import com.erpnext.pos.data.DatabaseBuilder
 import com.erpnext.pos.data.repositories.CheckoutRepository
 import com.erpnext.pos.data.repositories.CustomerRepository
+import com.erpnext.pos.data.repositories.DeliveryChargesRepository
 import com.erpnext.pos.data.repositories.InventoryRepository
 import com.erpnext.pos.data.repositories.PaymentTermsRepository
 import com.erpnext.pos.data.repositories.POSProfileRepository
@@ -21,6 +22,7 @@ import com.erpnext.pos.domain.usecases.FetchBillingProductsWithPriceUseCase
 import com.erpnext.pos.domain.usecases.FetchCategoriesUseCase
 import com.erpnext.pos.domain.usecases.FetchCustomerDetailUseCase
 import com.erpnext.pos.domain.usecases.FetchCustomersUseCase
+import com.erpnext.pos.domain.usecases.FetchDeliveryChargesUseCase
 import com.erpnext.pos.domain.usecases.FetchInventoryItemUseCase
 import com.erpnext.pos.domain.usecases.FetchPendingInvoiceUseCase
 import com.erpnext.pos.domain.usecases.FetchPaymentTermsUseCase
@@ -176,6 +178,7 @@ val appModule = module {
 
     //region Payment Terms
     single { PaymentTermsRepository(get(named("apiService"))) }
+    single { DeliveryChargesRepository(get(named("apiService"))) }
     //endregion
 
     //region Quotation/Sales Order/Delivery Note
@@ -189,6 +192,7 @@ val appModule = module {
     single { PaymentEntryRepository(get(named("apiService"))) }
     single {
         BillingViewModel(
+            get(),
             get(),
             get(),
             get(),
@@ -216,6 +220,7 @@ val appModule = module {
     single { FetchPendingInvoiceUseCase(get()) }
     single { FetchCustomersUseCase(get()) }
     single { FetchPaymentTermsUseCase(get()) }
+    single { FetchDeliveryChargesUseCase(get()) }
     single { FetchCustomerDetailUseCase(get()) }
     single { FetchInventoryItemUseCase(get()) }
     single { FetchCategoriesUseCase(get()) }

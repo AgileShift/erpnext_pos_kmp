@@ -6,6 +6,7 @@ import com.erpnext.pos.remoteSource.dto.BinDto
 import com.erpnext.pos.remoteSource.dto.CategoryDto
 import com.erpnext.pos.remoteSource.dto.CurrencyDto
 import com.erpnext.pos.remoteSource.dto.CustomerDto
+import com.erpnext.pos.remoteSource.dto.DeliveryChargeDto
 import com.erpnext.pos.remoteSource.dto.ExchangeRateResponse
 import com.erpnext.pos.remoteSource.dto.ItemDetailDto
 import com.erpnext.pos.remoteSource.dto.ItemDto
@@ -138,6 +139,15 @@ class APIService(
                 "discount_validity",
                 "discount_validity_based_on"
             ),
+            baseUrl = url
+        )
+    }
+
+    suspend fun fetchDeliveryCharges(): List<DeliveryChargeDto> {
+        val url = authStore.getCurrentSite()
+        return clientOAuth.getERPList(
+            ERPDocType.DeliveryCharges.path,
+            ERPDocType.DeliveryCharges.getFields(),
             baseUrl = url
         )
     }

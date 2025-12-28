@@ -945,16 +945,49 @@ private fun DiscountShippingInputs(
             modifier = Modifier.fillMaxWidth()
         )
         Text("Envío", style = MaterialTheme.typography.bodyMedium)
-        OutlinedTextField(
-            value = if (state.shippingAmount > 0.0) state.shippingAmount.toString() else "",
-            onValueChange = action.onShippingAmountChanged,
-            label = { Text("Monto de envío") },
-            keyboardOptions = KeyboardOptions(
-                keyboardType = KeyboardType.Number,
-                imeAction = ImeAction.Done
-            ),
-            modifier = Modifier.fillMaxWidth()
-        )
+        val deliveryChargeLabel = state.selectedDeliveryCharge?.label ?: "Selecciona cargo de envío"
+        var deliveryExpanded by remember { mutableStateOf(false) }
+        ExposedDropdownMenuBox(
+            expanded = deliveryExpanded,
+            onExpandedChange = { deliveryExpanded = it }
+        ) {
+            OutlinedTextField(
+                value = deliveryChargeLabel,
+                onValueChange = {},
+                readOnly = true,
+                label = { Text("Cargo de envío") },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .menuAnchor(MenuAnchorType.PrimaryNotEditable),
+                trailingIcon = {
+                    ExposedDropdownMenuDefaults.TrailingIcon(expanded = deliveryExpanded)
+                }
+            )
+            ExposedDropdownMenu(
+                expanded = deliveryExpanded,
+                onDismissRequest = { deliveryExpanded = false }
+            ) {
+                DropdownMenuItem(
+                    text = { Text("Sin envío") },
+                    onClick = {
+                        action.onDeliveryChargeSelected(null)
+                        deliveryExpanded = false
+                    }
+                )
+                state.deliveryCharges.forEach { charge ->
+                    val chargeLabel = "${
+                        charge.label
+                    } (${formatAmount(baseCurrency.toCurrencySymbol(), charge.defaultRate)})"
+                    DropdownMenuItem(
+                        text = { Text(chargeLabel) },
+                        onClick = {
+                            action.onDeliveryChargeSelected(charge)
+                            deliveryExpanded = false
+                        }
+                    )
+                }
+            }
+        }
         Text(
             "Se aplicará el descuento manual o código según corresponda.",
             style = MaterialTheme.typography.bodySmall,
@@ -1095,6 +1128,12 @@ private fun BillingScreenPreview() {
     val sampleCart = listOf(
         CartItem("P1", "Producto A", "C$", 2.0, 150.0)
     )
+    val deliveryCharges = listOf(
+        com.erpnext.pos.domain.models.DeliveryChargeBO(
+            label = "Zona urbana",
+            defaultRate = 10.0
+        )
+    )
 
     MaterialTheme {
         BillingScreen(
@@ -1108,6 +1147,8 @@ private fun BillingScreenPreview() {
                 currency = "USD",
                 discount = 0.0,
                 shippingAmount = 10.0,
+                deliveryCharges = deliveryCharges,
+                selectedDeliveryCharge = deliveryCharges.first(),
                 total = 355.0,
                 paymentLines = listOf(
                     PaymentLine(

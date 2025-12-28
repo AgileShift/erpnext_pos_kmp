@@ -36,7 +36,7 @@ fun rememberBillingActions(coordinator: BillingCoordinator): BillingAction {
             onDiscountCodeChanged = coordinator::onDiscountCodeChanged,
             onManualDiscountAmountChanged = coordinator::onManualDiscountAmountChanged,
             onManualDiscountPercentChanged = coordinator::onManualDiscountPercentChanged,
-            onShippingAmountChanged = coordinator::onShippingAmountChanged,
+            onDeliveryChargeSelected = coordinator::onDeliveryChargeSelected,
             onPaymentCurrencySelected = coordinator::onPaymentCurrencySelected,
             onClearSuccessMessage = coordinator::onClearSuccessMessage,
             onBack = coordinator::onBack

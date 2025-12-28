@@ -3,9 +3,11 @@ package com.erpnext.pos.views.billing
 import CartItem
 import com.erpnext.pos.base.BaseViewModel
 import com.erpnext.pos.domain.models.CustomerBO
+import com.erpnext.pos.domain.models.DeliveryChargeBO
 import com.erpnext.pos.domain.models.ItemBO
 import com.erpnext.pos.domain.usecases.FetchBillingProductsWithPriceUseCase
 import com.erpnext.pos.domain.usecases.FetchCustomersUseCase
+import com.erpnext.pos.domain.usecases.FetchDeliveryChargesUseCase
 import com.erpnext.pos.domain.usecases.FetchPaymentTermsUseCase
 import com.erpnext.pos.domain.usecases.CreatePaymentEntryInput
 import com.erpnext.pos.domain.usecases.CreatePaymentEntryUseCase
@@ -38,6 +40,7 @@ class BillingViewModel(
     val contextProvider: CashBoxManager,
     private val modeOfPaymentDao: ModeOfPaymentDao,
     private val paymentTermsUseCase: FetchPaymentTermsUseCase,
+    private val deliveryChargesUseCase: FetchDeliveryChargesUseCase,
     private val navManager: NavigationManager,
     private val createSalesInvoiceUseCase: CreateSalesInvoiceUseCase,
     private val createPaymentEntryUseCase: CreatePaymentEntryUseCase,
@@ -59,6 +62,9 @@ class BillingViewModel(
             val context = contextProvider.requireContext()
             val paymentTerms = runCatching {
                 paymentTermsUseCase.invoke(Unit)
+            }.getOrElse { emptyList() }
+            val deliveryCharges = runCatching {
+                deliveryChargesUseCase.invoke(Unit)
             }.getOrElse { emptyList() }
 
             customersUseCase.invoke(null).collectLatest { c ->
@@ -112,6 +118,7 @@ class BillingViewModel(
                             allowedCurrencies = context.allowedCurrencies,
                             exchangeRate = contextProvider.getContext()?.exchangeRate ?: 1.0,
                             paymentTerms = paymentTerms,
+                            deliveryCharges = deliveryCharges,
                             exchangeRateByCurrency = exchangeRateByCurrency
                         )
                     }
@@ -309,11 +316,16 @@ class BillingViewModel(
         }
     }
 
-    fun onShippingAmountChanged(value: String) {
+    fun onDeliveryChargeSelected(charge: DeliveryChargeBO?) {
         val current = _state.value as? BillingState.Success ?: return
-        val amount = value.toDoubleOrNull()?.coerceAtLeast(0.0) ?: 0.0
+        val amount = charge?.defaultRate?.coerceAtLeast(0.0) ?: 0.0
         _state.update {
-            recalculateTotals(current.copy(shippingAmount = amount))
+            recalculateTotals(
+                current.copy(
+                    selectedDeliveryCharge = charge,
+                    shippingAmount = amount
+                )
+            )
         }
     }
 
@@ -391,11 +403,45 @@ class BillingViewModel(
         _state.update { current.copy() }
 
         executeUseCase(action = {
+            val deliveryCharge = current.selectedDeliveryCharge
+            val shippingAmount = deliveryCharge?.defaultRate?.coerceAtLeast(0.0) ?: 0.0
+
             val totals = BillingCalculationHelper.calculateTotals(current)
             val discountInfo = resolveDiscountInfo(current, totals.subtotal)
+
             val discountPercent = discountInfo.percent?.takeIf { it > 0.0 }
             val isCreditSale = current.isCreditSale
             val paymentLines = if (isCreditSale) emptyList() else current.paymentLines
+
+            val items = current.cartItems.map { cart ->
+                SalesInvoiceItemDto(
+                    itemCode = cart.itemCode,
+                    itemName = cart.name,
+                    qty = cart.quantity,
+                    rate = cart.price,
+                    amount = cart.quantity * cart.price,
+                    discountPercentage = discountPercent,
+                    warehouse = context.warehouse,
+                    incomeAccount = context.incomeAccount
+                )
+            }.toMutableList()
+
+
+            if (discountPercent == null && discountInfo.amount > 0.0) {
+                items.add(
+                    SalesInvoiceItemDto(
+                        itemCode = DISCOUNT_ITEM_CODE,
+                        itemName = "Discount",
+                        qty = 1.0,
+                        rate = -discountInfo.amount,
+                        amount = -discountInfo.amount,
+                        warehouse = context.warehouse,
+                        incomeAccount = context.incomeAccount
+                    )
+                )
+            }
+
+            val total = (totals.subtotal - discountInfo.amount + shippingAmount).coerceAtLeast(0.0)
             val payments = if (isCreditSale) {
                 emptyList()
             } else {
@@ -413,6 +459,32 @@ class BillingViewModel(
             val paidAmount = if (isCreditSale) 0.0 else paymentLines.sumOf { it.baseAmount }
             val outstandingAmount = (totals.total - paidAmount).coerceAtLeast(0.0)
             val status = if (isCreditSale || outstandingAmount > 0.0) "Unpaid" else "Paid"
+
+            val paymentMetadata = buildList {
+                addAll(
+                    paymentLines.mapNotNull { line ->
+                        if (line.currency.equals(context.currency, ignoreCase = true)) {
+                            null
+                        } else {
+                            "Payment currency (${line.modeOfPayment}): ${line.currency}, Exchange rate: ${line.exchangeRate}"
+                        }
+                    }
+                )
+                addAll(
+                    paymentLines.mapNotNull { line ->
+                        line.referenceNumber?.takeIf { it.isNotBlank() }?.let {
+                            "Reference (${line.modeOfPayment}): $it"
+                        }
+                    }
+                )
+                if (current.discountCode.isNotBlank()) {
+                    add("Discount code: ${current.discountCode}")
+                }
+                deliveryCharge?.let { charge ->
+                    add("Delivery charge: ${charge.label} ($shippingAmount)")
+                }
+            }.joinToString(separator = "; ").takeIf { it.isNotBlank() }
+
             val postingDate = DateTimeProvider.todayDate()
             val dueDate = if (isCreditSale) {
                 val term = current.selectedPaymentTerm
@@ -441,7 +513,6 @@ class BillingViewModel(
                 customer = customer,
                 context = context,
                 totals = totals,
-                discountInfo = discountInfo,
                 discountPercent = discountPercent,
                 paidAmount = paidAmount,
                 outstandingAmount = outstandingAmount,
@@ -483,6 +554,7 @@ class BillingViewModel(
                     manualDiscountAmount = 0.0,
                     manualDiscountPercent = 0.0,
                     shippingAmount = 0.0,
+                    selectedDeliveryCharge = null,
                     total = 0.0,
                     isCreditSale = false,
                     selectedPaymentTerm = null,
@@ -540,7 +612,6 @@ class BillingViewModel(
 
     companion object {
         private const val DISCOUNT_ITEM_CODE = "Discount"
-        private const val SHIPPING_ITEM_CODE = "Shipping Charge"
     }
 
     private fun buildSalesInvoiceDto(
@@ -548,7 +619,6 @@ class BillingViewModel(
         customer: CustomerBO,
         context: POSContext,
         totals: BillingTotals,
-        discountInfo: DiscountInfo,
         discountPercent: Double?,
         paidAmount: Double,
         outstandingAmount: Double,
@@ -563,8 +633,6 @@ class BillingViewModel(
             current = current,
             context = context,
             discountPercent = discountPercent,
-            discountAmount = discountInfo.amount,
-            shippingAmount = totals.shipping
         )
         val paymentMetadata =
             buildPaymentMetadata(current, paymentLines, totals.shipping, context.currency)
@@ -595,8 +663,6 @@ class BillingViewModel(
         current: BillingState.Success,
         context: POSContext,
         discountPercent: Double?,
-        discountAmount: Double,
-        shippingAmount: Double
     ): MutableList<SalesInvoiceItemDto> {
         val items = current.cartItems.map { cart ->
             SalesInvoiceItemDto(
@@ -610,35 +676,6 @@ class BillingViewModel(
                 incomeAccount = context.incomeAccount
             )
         }.toMutableList()
-
-        if (discountPercent == null && discountAmount > 0.0) {
-            // ERPNext requires explicit discount rows when percentage discount is not used.
-            items.add(
-                SalesInvoiceItemDto(
-                    itemCode = DISCOUNT_ITEM_CODE,
-                    itemName = "Discount",
-                    qty = 1.0,
-                    rate = -discountAmount,
-                    amount = -discountAmount,
-                    warehouse = context.warehouse,
-                    incomeAccount = context.incomeAccount
-                )
-            )
-        }
-
-        if (shippingAmount > 0.0) {
-            items.add(
-                SalesInvoiceItemDto(
-                    itemCode = SHIPPING_ITEM_CODE,
-                    itemName = "Shipping Charge",
-                    qty = 1.0,
-                    rate = shippingAmount,
-                    amount = shippingAmount,
-                    warehouse = context.warehouse,
-                    incomeAccount = context.incomeAccount
-                )
-            )
-        }
 
         return items
     }

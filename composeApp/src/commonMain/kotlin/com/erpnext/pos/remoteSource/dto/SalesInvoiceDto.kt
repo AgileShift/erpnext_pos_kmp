@@ -52,6 +52,8 @@ data class SalesInvoiceDto(
     val customPaymentCurrency: String? = null,
     @SerialName("custom_exchange_rate")
     val customExchangeRate: Double? = null,
+    @SerialName("posa_delivery_charges")
+    val posaDeliveryCharges: String? = null,
     @SerialName("is_pos")
     @Serializable(IntAsBooleanSerializer::class)
     val isPos: Boolean = true,
