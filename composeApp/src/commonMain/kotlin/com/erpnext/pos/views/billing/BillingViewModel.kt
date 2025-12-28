@@ -9,7 +9,10 @@ import com.erpnext.pos.domain.usecases.FetchBillingProductsWithPriceUseCase
 import com.erpnext.pos.domain.usecases.FetchCustomersUseCase
 import com.erpnext.pos.domain.usecases.FetchDeliveryChargesUseCase
 import com.erpnext.pos.domain.usecases.FetchPaymentTermsUseCase
-import com.erpnext.pos.data.repositories.SalesInvoiceRepository
+import com.erpnext.pos.domain.usecases.CreatePaymentEntryInput
+import com.erpnext.pos.domain.usecases.CreatePaymentEntryUseCase
+import com.erpnext.pos.domain.usecases.CreateSalesInvoiceInput
+import com.erpnext.pos.domain.usecases.CreateSalesInvoiceUseCase
 import com.erpnext.pos.localSource.dao.ModeOfPaymentDao
 import com.erpnext.pos.navigation.NavRoute
 import com.erpnext.pos.navigation.NavigationManager
@@ -17,15 +20,15 @@ import com.erpnext.pos.remoteSource.dto.SalesInvoiceDto
 import com.erpnext.pos.remoteSource.dto.SalesInvoiceItemDto
 import com.erpnext.pos.remoteSource.dto.SalesInvoicePaymentDto
 import com.erpnext.pos.remoteSource.dto.SalesInvoicePaymentScheduleDto
-import com.erpnext.pos.remoteSource.mapper.toEntity
 import com.erpnext.pos.remoteSource.api.APIService
 import com.erpnext.pos.remoteSource.dto.v2.PaymentEntryCreateDto
 import com.erpnext.pos.remoteSource.dto.v2.PaymentEntryReferenceCreateDto
-import com.erpnext.pos.remoteSource.sdk.v2.ERPDocType
 import com.erpnext.pos.utils.toCurrencySymbol
 import com.erpnext.pos.utils.view.DateTimeProvider
 import com.erpnext.pos.domain.models.POSPaymentModeOption
 import com.erpnext.pos.views.CashBoxManager
+import com.erpnext.pos.views.POSContext
+import com.erpnext.pos.views.billing.BillingCalculationHelper.resolveDiscountInfo
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
@@ -35,11 +38,12 @@ class BillingViewModel(
     val customersUseCase: FetchCustomersUseCase,
     val itemsUseCase: FetchBillingProductsWithPriceUseCase,
     val contextProvider: CashBoxManager,
-    private val invoiceRepository: SalesInvoiceRepository,
     private val modeOfPaymentDao: ModeOfPaymentDao,
     private val paymentTermsUseCase: FetchPaymentTermsUseCase,
     private val deliveryChargesUseCase: FetchDeliveryChargesUseCase,
     private val navManager: NavigationManager,
+    private val createSalesInvoiceUseCase: CreateSalesInvoiceUseCase,
+    private val createPaymentEntryUseCase: CreatePaymentEntryUseCase,
     private val api: APIService,
 ) : BaseViewModel() {
 
@@ -48,18 +52,6 @@ class BillingViewModel(
 
     private var customers: List<CustomerBO> = emptyList()
     private var products: List<ItemBO> = emptyList()
-
-    private enum class DiscountSource {
-        None,
-        Manual,
-        Code
-    }
-
-    private data class DiscountInfo(
-        val amount: Double,
-        val percent: Double?,
-        val source: DiscountSource
-    )
 
     init {
         loadInitialData()
@@ -399,6 +391,8 @@ class BillingViewModel(
             _state.update { BillingState.Error("Select a payment term to finalize a credit sale.") }
             return
         }
+        // Business rule: credit sales are registered as unpaid invoices and cannot include
+        // immediate payment lines. Payments are posted later via Payment Entry.
         if (current.isCreditSale && current.paymentLines.isNotEmpty()) {
             _state.update { BillingState.Error("Credit sales cannot include payment lines.") }
             return
@@ -409,14 +403,16 @@ class BillingViewModel(
         _state.update { current.copy() }
 
         executeUseCase(action = {
-            val subtotal = current.cartItems.sumOf { it.price * it.quantity }
-            val discountInfo = resolveDiscountInfo(current, subtotal)
             val deliveryCharge = current.selectedDeliveryCharge
             val shippingAmount = deliveryCharge?.defaultRate?.coerceAtLeast(0.0) ?: 0.0
+
+            val totals = BillingCalculationHelper.calculateTotals(current)
+            val discountInfo = resolveDiscountInfo(current, totals.subtotal)
+
             val discountPercent = discountInfo.percent?.takeIf { it > 0.0 }
-            val discountAmount = discountInfo.amount
             val isCreditSale = current.isCreditSale
             val paymentLines = if (isCreditSale) emptyList() else current.paymentLines
+
             val items = current.cartItems.map { cart ->
                 SalesInvoiceItemDto(
                     itemCode = cart.itemCode,
@@ -430,21 +426,22 @@ class BillingViewModel(
                 )
             }.toMutableList()
 
-            if (discountPercent == null && discountAmount > 0.0) {
+
+            if (discountPercent == null && discountInfo.amount > 0.0) {
                 items.add(
                     SalesInvoiceItemDto(
                         itemCode = DISCOUNT_ITEM_CODE,
                         itemName = "Discount",
                         qty = 1.0,
-                        rate = -discountAmount,
-                        amount = -discountAmount,
+                        rate = -discountInfo.amount,
+                        amount = -discountInfo.amount,
                         warehouse = context.warehouse,
                         incomeAccount = context.incomeAccount
                     )
                 )
             }
 
-            val total = (subtotal - discountAmount + shippingAmount).coerceAtLeast(0.0)
+            val total = (totals.subtotal - discountInfo.amount + shippingAmount).coerceAtLeast(0.0)
             val payments = if (isCreditSale) {
                 emptyList()
             } else {
@@ -460,8 +457,9 @@ class BillingViewModel(
             // - Credit sales must include payment_terms + payment_schedule with due_date derived from the term.
             // - Paid amount stays at 0 and status remains "Unpaid" until a Payment Entry is created.
             val paidAmount = if (isCreditSale) 0.0 else paymentLines.sumOf { it.baseAmount }
-            val outstandingAmount = (total - paidAmount).coerceAtLeast(0.0)
+            val outstandingAmount = (totals.total - paidAmount).coerceAtLeast(0.0)
             val status = if (isCreditSale || outstandingAmount > 0.0) "Unpaid" else "Paid"
+
             val paymentMetadata = buildList {
                 addAll(
                     paymentLines.mapNotNull { line ->
@@ -486,6 +484,7 @@ class BillingViewModel(
                     add("Delivery charge: ${charge.label} ($shippingAmount)")
                 }
             }.joinToString(separator = "; ").takeIf { it.isNotBlank() }
+
             val postingDate = DateTimeProvider.todayDate()
             val dueDate = if (isCreditSale) {
                 val term = current.selectedPaymentTerm
@@ -509,60 +508,38 @@ class BillingViewModel(
             } else {
                 emptyList()
             }
-            val invoiceDto = SalesInvoiceDto(
-                customer = customer.name,
-                customerName = customer.customerName,
-                customerPhone = customer.mobileNo,
-                company = context.company,
-                postingDate = postingDate,
-                currency = context.currency,
-                dueDate = dueDate,
-                status = status,
-                grandTotal = total,
-                outstandingAmount = outstandingAmount,
-                totalTaxesAndCharges = 0.0,
-                netTotal = total,
+            val invoiceDto = buildSalesInvoiceDto(
+                current = current,
+                customer = customer,
+                context = context,
+                totals = totals,
+                discountPercent = discountPercent,
                 paidAmount = paidAmount,
-                items = items,
+                outstandingAmount = outstandingAmount,
+                status = status,
                 paymentSchedule = paymentSchedule,
-                paymentTerms = if (isCreditSale) current.selectedPaymentTerm?.name else null,
-                posaDeliveryCharges = deliveryCharge?.label,
-                posProfile = context.profileName,
-                remarks = paymentMetadata
+                payments = payments,
+                paymentLines = paymentLines,
+                postingDate = postingDate,
+                dueDate = dueDate
             )
 
-            val created = invoiceRepository.createRemoteInvoice(invoiceDto)
-            val entity = created.toEntity()
-            invoiceRepository.saveInvoiceLocally(
-                invoice = entity.invoice, items = entity.items, payments = entity.payments
-            )
+            val created = createSalesInvoiceUseCase(CreateSalesInvoiceInput(invoiceDto))
 
             if (!current.isCreditSale && paymentLines.isNotEmpty()) {
                 val invoiceId = created.name
                     ?: error("Invoice ID was not returned after creation.")
                 paymentLines.forEach { line ->
-                    val baseAmount = line.enteredAmount * line.exchangeRate
-                    val paymentEntry = PaymentEntryCreateDto(
-                        company = context.company,
+                    val paymentEntry = buildPaymentEntryDto(
+                        line = line,
+                        context = context,
+                        customer = customer,
                         postingDate = postingDate,
-                        paymentType = "Receive",
-                        partyType = "Customer",
-                        partyId = customer.name,
-                        modeOfPayment = line.modeOfPayment,
-                        paidAmount = baseAmount,
-                        receivedAmount = baseAmount,
-                        referenceNo = line.referenceNumber?.takeIf { it.isNotBlank() },
-                        references = listOf(
-                            PaymentEntryReferenceCreateDto(
-                                referenceDoctype = "Sales Invoice",
-                                referenceName = invoiceId,
-                                totalAmount = total,
-                                outstandingAmount = outstandingAmount,
-                                allocatedAmount = baseAmount
-                            )
-                        )
+                        invoiceId = invoiceId,
+                        invoiceTotal = totals.total,
+                        outstandingAmount = outstandingAmount
                     )
-                    api.createPaymentEntry(paymentEntry)
+                    createPaymentEntryUseCase(CreatePaymentEntryInput(paymentEntry))
                 }
             }
 
@@ -603,51 +580,168 @@ class BillingViewModel(
     }
 
     private fun recalculateTotals(current: BillingState.Success): BillingState.Success {
-        val subtotal = current.cartItems.sumOf { it.price * it.quantity }
-        val taxes = 0.0
-        val discountInfo = resolveDiscountInfo(current, subtotal)
-        val shippingAmount = current.shippingAmount.coerceAtLeast(0.0)
-        val total = (subtotal + taxes - discountInfo.amount + shippingAmount).coerceAtLeast(0.0)
+        /*
+         * Billing totals walkthrough (expected results)
+         * Scenario:
+         * - Customer: "Acme Retail".
+         * - Base currency: USD.
+         * - Items:
+         *   1) "Coffee Beans" @ 50.00 USD x1 = 50.00
+         *   2) "Paper Cups"  @ 30.00 USD x2 = 60.00
+         *   Subtotal = 110.00
+         * - Manual discount: 10% (no discount code) -> 110.00 * 10% = 11.00
+         * - Shipping: 5.00
+         * - Total = subtotal + taxes(0) - discount + shipping
+         *         = 110.00 - 11.00 + 5.00 = 104.00
+         *
+         * Multi-currency payments (base amount uses enteredAmount * exchangeRate):
+         * - Cash: 50.00 USD @ 1.0 = 50.00 base
+         * - Card: 40.00 EUR @ 1.10 = 44.00 base
+         *   PaidAmountBase = 50.00 + 44.00 = 94.00
+         *   BalanceDueBase = total - paid = 104.00 - 94.00 = 10.00
+         *   ChangeDueBase = max(paid - total, 0) = 0.00
+         */
+        val totals = BillingCalculationHelper.calculateTotals(current)
         return current.copy(
-            subtotal = subtotal,
-            taxes = taxes,
-            discount = discountInfo.amount,
-            total = total
+            subtotal = totals.subtotal,
+            taxes = totals.taxes,
+            discount = totals.discount,
+            total = totals.total
         ).recalculatePaymentTotals()
-    }
-
-    private fun resolveDiscountInfo(
-        current: BillingState.Success,
-        subtotal: Double
-    ): DiscountInfo {
-        val hasPercent = current.manualDiscountPercent > 0.0
-        val hasAmount = current.manualDiscountAmount > 0.0
-        val source = when {
-            current.discountCode.isNotBlank() -> DiscountSource.Code
-            hasPercent || hasAmount -> DiscountSource.Manual
-            else -> DiscountSource.None
-        }
-        val percent = current.manualDiscountPercent.takeIf { it > 0.0 }?.coerceAtMost(100.0)
-        val amount = when {
-            percent != null -> subtotal * (percent / 100.0)
-            hasAmount -> current.manualDiscountAmount
-            else -> 0.0
-        }.coerceIn(0.0, subtotal)
-
-        val effectiveAmount = when (source) {
-            DiscountSource.None -> 0.0
-            DiscountSource.Manual -> amount
-            DiscountSource.Code -> amount
-        }
-        return DiscountInfo(
-            amount = effectiveAmount,
-            percent = percent.takeIf { effectiveAmount > 0.0 },
-            source = source
-        )
     }
 
     companion object {
         private const val DISCOUNT_ITEM_CODE = "Discount"
+    }
+
+    private fun buildSalesInvoiceDto(
+        current: BillingState.Success,
+        customer: CustomerBO,
+        context: POSContext,
+        totals: BillingTotals,
+        discountPercent: Double?,
+        paidAmount: Double,
+        outstandingAmount: Double,
+        status: String,
+        paymentSchedule: List<SalesInvoicePaymentScheduleDto>,
+        payments: List<SalesInvoicePaymentDto>,
+        paymentLines: List<PaymentLine>,
+        postingDate: String,
+        dueDate: String
+    ): SalesInvoiceDto {
+        val items = buildInvoiceItems(
+            current = current,
+            context = context,
+            discountPercent = discountPercent,
+        )
+        val paymentMetadata =
+            buildPaymentMetadata(current, paymentLines, totals.shipping, context.currency)
+        return SalesInvoiceDto(
+            customer = customer.name,
+            customerName = customer.customerName,
+            customerPhone = customer.mobileNo,
+            company = context.company,
+            postingDate = postingDate,
+            currency = context.currency,
+            dueDate = dueDate,
+            status = status,
+            grandTotal = totals.total,
+            outstandingAmount = outstandingAmount,
+            totalTaxesAndCharges = totals.taxes,
+            netTotal = totals.total,
+            paidAmount = paidAmount,
+            items = items,
+            payments = payments,
+            paymentSchedule = paymentSchedule,
+            paymentTerms = if (current.isCreditSale) current.selectedPaymentTerm?.name else null,
+            posProfile = context.profileName,
+            remarks = paymentMetadata
+        )
+    }
+
+    private fun buildInvoiceItems(
+        current: BillingState.Success,
+        context: POSContext,
+        discountPercent: Double?,
+    ): MutableList<SalesInvoiceItemDto> {
+        val items = current.cartItems.map { cart ->
+            SalesInvoiceItemDto(
+                itemCode = cart.itemCode,
+                itemName = cart.name,
+                qty = cart.quantity,
+                rate = cart.price,
+                amount = cart.quantity * cart.price,
+                discountPercentage = discountPercent,
+                warehouse = context.warehouse,
+                incomeAccount = context.incomeAccount
+            )
+        }.toMutableList()
+
+        return items
+    }
+
+    private fun buildPaymentMetadata(
+        current: BillingState.Success,
+        paymentLines: List<PaymentLine>,
+        shippingAmount: Double,
+        baseCurrency: String
+    ): String? {
+        return buildList {
+            addAll(
+                paymentLines.mapNotNull { line ->
+                    if (line.currency.equals(baseCurrency, ignoreCase = true)) {
+                        null
+                    } else {
+                        "Payment currency (${line.modeOfPayment}): ${line.currency}, Exchange rate: ${line.exchangeRate}"
+                    }
+                }
+            )
+            addAll(
+                paymentLines.mapNotNull { line ->
+                    line.referenceNumber?.takeIf { it.isNotBlank() }?.let {
+                        "Reference (${line.modeOfPayment}): $it"
+                    }
+                }
+            )
+            if (current.discountCode.isNotBlank()) {
+                add("Discount code: ${current.discountCode}")
+            }
+            if (shippingAmount > 0.0) {
+                add("Shipping: $shippingAmount")
+            }
+        }.joinToString(separator = "; ").takeIf { it.isNotBlank() }
+    }
+
+    private fun buildPaymentEntryDto(
+        line: PaymentLine,
+        context: POSContext,
+        customer: CustomerBO,
+        postingDate: String,
+        invoiceId: String,
+        invoiceTotal: Double,
+        outstandingAmount: Double
+    ): PaymentEntryCreateDto {
+        val baseAmount = line.enteredAmount * line.exchangeRate
+        return PaymentEntryCreateDto(
+            company = context.company,
+            postingDate = postingDate,
+            paymentType = "Receive",
+            partyType = "Customer",
+            partyId = customer.name,
+            modeOfPayment = line.modeOfPayment,
+            paidAmount = baseAmount,
+            receivedAmount = baseAmount,
+            referenceNo = line.referenceNumber?.takeIf { it.isNotBlank() },
+            references = listOf(
+                PaymentEntryReferenceCreateDto(
+                    referenceDoctype = "Sales Invoice",
+                    referenceName = invoiceId,
+                    totalAmount = invoiceTotal,
+                    outstandingAmount = outstandingAmount,
+                    allocatedAmount = baseAmount
+                )
+            )
+        )
     }
 
     private fun requiresReference(mode: POSPaymentModeOption?): Boolean {

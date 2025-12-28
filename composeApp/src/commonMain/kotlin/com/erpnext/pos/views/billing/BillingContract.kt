@@ -61,16 +61,12 @@ sealed interface BillingState {
         val successMessage: String? = null
     ) : BillingState {
         fun recalculateCartTotals(): Success {
-            val newSubtotal = cartItems.sumOf { it.price * it.quantity }
-            val newTaxes = 0.0
-            val newDiscount = resolveDiscountAmount(newSubtotal, newTaxes)
-            val shipping = shippingAmount.coerceAtLeast(0.0)
-            val newTotal = (newSubtotal + newTaxes - newDiscount + shipping).coerceAtLeast(0.0)
+            val totals = BillingCalculationHelper.calculateTotals(this)
             return copy(
-                subtotal = newSubtotal,
-                taxes = newTaxes,
-                discount = newDiscount,
-                total = newTotal
+                subtotal = totals.subtotal,
+                taxes = totals.taxes,
+                discount = totals.discount,
+                total = totals.total
             ).recalculatePaymentTotals()
         }
 
@@ -87,22 +83,6 @@ sealed interface BillingState {
 
         fun withPaymentLines(lines: List<PaymentLine>): Success {
             return copy(paymentLines = lines, paymentErrorMessage = null).recalculatePaymentTotals()
-        }
-
-        private fun resolveDiscountAmount(subtotal: Double, taxes: Double): Double {
-            val maxDiscount = (subtotal + taxes).coerceAtLeast(0.0)
-            val percentDiscount = manualDiscountPercent.takeIf { it > 0.0 }?.coerceAtMost(100.0)
-            val rawDiscount = when {
-                percentDiscount != null -> subtotal * (percentDiscount / 100.0)
-                manualDiscountAmount > 0.0 -> manualDiscountAmount
-                else -> 0.0
-            }
-            val effectiveDiscount = rawDiscount.coerceIn(0.0, maxDiscount)
-            return if (discountCode.isNotBlank() || effectiveDiscount > 0.0) {
-                effectiveDiscount
-            } else {
-                0.0
-            }
         }
     }
 
