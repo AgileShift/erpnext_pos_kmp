@@ -58,6 +58,7 @@ sealed interface BillingState {
         val balanceDueBase: Double = 0.0,
         val changeDueBase: Double = 0.0,
         val paymentErrorMessage: String? = null,
+        val cartErrorMessage: String? = null,
         val successMessage: String? = null
     ) : BillingState {
         fun recalculateCartTotals(): Success {

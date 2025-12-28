@@ -170,6 +170,14 @@ fun BillingScreen(
                             },
                             onRemoveItem = action.onRemoveItem
                         )
+                        if (!state.cartErrorMessage.isNullOrBlank()) {
+                            Spacer(Modifier.height(6.dp))
+                            Text(
+                                text = state.cartErrorMessage,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.error
+                            )
+                        }
                     }
 
                     Spacer(Modifier.height(12.dp))
