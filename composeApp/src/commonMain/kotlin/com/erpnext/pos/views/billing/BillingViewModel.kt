@@ -693,7 +693,8 @@ class BillingViewModel(
             paymentSchedule = paymentSchedule,
             paymentTerms = if (current.isCreditSale) current.selectedPaymentTerm?.name else null,
             posProfile = context.profileName,
-            remarks = paymentMetadata
+            remarks = paymentMetadata,
+            updateStock = true
         )
     }
 
