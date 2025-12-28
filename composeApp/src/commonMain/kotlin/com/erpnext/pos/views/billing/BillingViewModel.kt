@@ -26,6 +26,7 @@ import com.erpnext.pos.utils.view.DateTimeProvider
 import com.erpnext.pos.domain.models.POSPaymentModeOption
 import com.erpnext.pos.views.CashBoxManager
 import com.erpnext.pos.views.POSContext
+import com.erpnext.pos.views.billing.BillingCalculationHelper.resolveDiscountInfo
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
@@ -391,9 +392,8 @@ class BillingViewModel(
 
         executeUseCase(action = {
             val totals = BillingCalculationHelper.calculateTotals(current)
-            val discountInfo = BillingCalculationHelper.resolveDiscountInfo(current, totals.subtotal)
+            val discountInfo = resolveDiscountInfo(current, totals.subtotal)
             val discountPercent = discountInfo.percent?.takeIf { it > 0.0 }
-            val discountAmount = discountInfo.amount
             val isCreditSale = current.isCreditSale
             val paymentLines = if (isCreditSale) emptyList() else current.paymentLines
             val payments = if (isCreditSale) {
@@ -508,6 +508,27 @@ class BillingViewModel(
     }
 
     private fun recalculateTotals(current: BillingState.Success): BillingState.Success {
+        /*
+         * Billing totals walkthrough (expected results)
+         * Scenario:
+         * - Customer: "Acme Retail".
+         * - Base currency: USD.
+         * - Items:
+         *   1) "Coffee Beans" @ 50.00 USD x1 = 50.00
+         *   2) "Paper Cups"  @ 30.00 USD x2 = 60.00
+         *   Subtotal = 110.00
+         * - Manual discount: 10% (no discount code) -> 110.00 * 10% = 11.00
+         * - Shipping: 5.00
+         * - Total = subtotal + taxes(0) - discount + shipping
+         *         = 110.00 - 11.00 + 5.00 = 104.00
+         *
+         * Multi-currency payments (base amount uses enteredAmount * exchangeRate):
+         * - Cash: 50.00 USD @ 1.0 = 50.00 base
+         * - Card: 40.00 EUR @ 1.10 = 44.00 base
+         *   PaidAmountBase = 50.00 + 44.00 = 94.00
+         *   BalanceDueBase = total - paid = 104.00 - 94.00 = 10.00
+         *   ChangeDueBase = max(paid - total, 0) = 0.00
+         */
         val totals = BillingCalculationHelper.calculateTotals(current)
         return current.copy(
             subtotal = totals.subtotal,
@@ -545,7 +566,8 @@ class BillingViewModel(
             discountAmount = discountInfo.amount,
             shippingAmount = totals.shipping
         )
-        val paymentMetadata = buildPaymentMetadata(current, paymentLines, totals.shipping, context.currency)
+        val paymentMetadata =
+            buildPaymentMetadata(current, paymentLines, totals.shipping, context.currency)
         return SalesInvoiceDto(
             customer = customer.name,
             customerName = customer.customerName,
