@@ -57,6 +57,8 @@ data class SalesInvoiceDto(
     @SerialName("is_pos")
     @Serializable(IntAsBooleanSerializer::class)
     val isPos: Boolean = true,
+    @SerialName("update_stock")
+    val updateStock: Boolean? = null,
     val doctype: String = "Sales Invoice",
     @SerialName("pos_profile")
     val posProfile: String? = null,
@@ -91,6 +93,14 @@ data class SalesInvoiceItemDto(
     val warehouse: String? = null,
     @SerialName("income_account")
     val incomeAccount: String? = null,
+    @SerialName("sales_order")
+    val salesOrder: String? = null,
+    @SerialName("so_detail")
+    val salesOrderItem: String? = null,
+    @SerialName("delivery_note")
+    val deliveryNote: String? = null,
+    @SerialName("dn_detail")
+    val deliveryNoteItem: String? = null,
     @SerialName("cost_center")
     val costCenter: String? = null
 )
