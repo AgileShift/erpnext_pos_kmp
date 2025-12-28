@@ -18,7 +18,6 @@ import com.erpnext.pos.navigation.NavRoute
 import com.erpnext.pos.navigation.NavigationManager
 import com.erpnext.pos.remoteSource.dto.SalesInvoiceDto
 import com.erpnext.pos.remoteSource.dto.SalesInvoiceItemDto
-import com.erpnext.pos.remoteSource.dto.SalesInvoicePaymentDto
 import com.erpnext.pos.remoteSource.dto.SalesInvoicePaymentScheduleDto
 import com.erpnext.pos.remoteSource.api.APIService
 import com.erpnext.pos.remoteSource.dto.v2.PaymentEntryCreateDto
@@ -88,17 +87,17 @@ class BillingViewModel(
                             POSPaymentModeOption(
                                 name = "Cash",
                                 modeOfPayment = "Cash",
-                                type = "Cash"
+                                type = "Cash",
                             ),
                             POSPaymentModeOption(
                                 name = "Card",
                                 modeOfPayment = "Card",
-                                type = "Card"
+                                type = "Card",
                             ),
                             POSPaymentModeOption(
                                 name = "Transfer",
                                 modeOfPayment = "Transfer",
-                                type = "Bank"
+                                type = "Bank",
                             )
                         )
                     }
@@ -438,6 +437,7 @@ class BillingViewModel(
             val discountPercent = discountInfo.percent?.takeIf { it > 0.0 }
             val isCreditSale = current.isCreditSale
             val paymentLines = if (isCreditSale) emptyList() else current.paymentLines
+            val baseCurrency = context.currency.ifBlank { current.currency ?: "USD" }
 
             val items = current.cartItems.map { cart ->
                 SalesInvoiceItemDto(
@@ -468,48 +468,12 @@ class BillingViewModel(
             }
 
             val total = (totals.subtotal - discountInfo.amount + shippingAmount).coerceAtLeast(0.0)
-            val payments = if (isCreditSale) {
-                emptyList()
-            } else {
-                paymentLines.map { line ->
-                    SalesInvoicePaymentDto(
-                        modeOfPayment = line.modeOfPayment,
-                        amount = line.baseAmount,
-                        paymentReference = line.referenceNumber
-                    )
-                }
-            }
             // ERPNext sales cycle:
             // - Credit sales must include payment_terms + payment_schedule with due_date derived from the term.
             // - Paid amount stays at 0 and status remains "Unpaid" until a Payment Entry is created.
             val paidAmount = if (isCreditSale) 0.0 else paymentLines.sumOf { it.baseAmount }
             val outstandingAmount = (totals.total - paidAmount).coerceAtLeast(0.0)
             val status = if (isCreditSale || outstandingAmount > 0.0) "Unpaid" else "Paid"
-
-            val paymentMetadata = buildList {
-                addAll(
-                    paymentLines.mapNotNull { line ->
-                        if (line.currency.equals(context.currency, ignoreCase = true)) {
-                            null
-                        } else {
-                            "Moneda de pago (${line.modeOfPayment}): ${line.currency}, tipo de cambio: ${line.exchangeRate}"
-                        }
-                    }
-                )
-                addAll(
-                    paymentLines.mapNotNull { line ->
-                        line.referenceNumber?.takeIf { it.isNotBlank() }?.let {
-                            "Referencia (${line.modeOfPayment}): $it"
-                        }
-                    }
-                )
-                if (current.discountCode.isNotBlank()) {
-                    add("Código de descuento: ${current.discountCode}")
-                }
-                deliveryCharge?.let { charge ->
-                    add("Cargo de entrega: ${charge.label} ($shippingAmount)")
-                }
-            }.joinToString(separator = "; ").takeIf { it.isNotBlank() }
 
             val postingDate = DateTimeProvider.todayDate()
             val dueDate = if (isCreditSale) {
@@ -544,8 +508,8 @@ class BillingViewModel(
                 outstandingAmount = outstandingAmount,
                 status = status,
                 paymentSchedule = paymentSchedule,
-                payments = payments,
                 paymentLines = paymentLines,
+                baseCurrency = baseCurrency,
                 postingDate = postingDate,
                 dueDate = dueDate
             )
@@ -563,7 +527,8 @@ class BillingViewModel(
                         postingDate = postingDate,
                         invoiceId = invoiceId,
                         invoiceTotal = totals.total,
-                        outstandingAmount = outstandingAmount
+                        outstandingAmount = outstandingAmount,
+                        paidFromAccount = created.debitTo
                     )
                     createPaymentEntryUseCase(CreatePaymentEntryInput(paymentEntry))
                 }
@@ -663,8 +628,8 @@ class BillingViewModel(
         outstandingAmount: Double,
         status: String,
         paymentSchedule: List<SalesInvoicePaymentScheduleDto>,
-        payments: List<SalesInvoicePaymentDto>,
         paymentLines: List<PaymentLine>,
+        baseCurrency: String,
         postingDate: String,
         dueDate: String
     ): SalesInvoiceDto {
@@ -674,14 +639,14 @@ class BillingViewModel(
             discountPercent = discountPercent,
         )
         val paymentMetadata =
-            buildPaymentMetadata(current, paymentLines, totals.shipping, context.currency)
+            buildPaymentMetadata(current, paymentLines, totals.shipping, baseCurrency)
         return SalesInvoiceDto(
             customer = customer.name,
             customerName = customer.customerName,
             customerPhone = customer.mobileNo,
             company = context.company,
             postingDate = postingDate,
-            currency = context.currency,
+            currency = baseCurrency,
             dueDate = dueDate,
             status = status,
             grandTotal = totals.total,
@@ -690,7 +655,7 @@ class BillingViewModel(
             netTotal = totals.total,
             paidAmount = paidAmount,
             items = items,
-            payments = payments,
+            payments = emptyList(),
             paymentSchedule = paymentSchedule,
             paymentTerms = if (current.isCreditSale) current.selectedPaymentTerm?.name else null,
             posProfile = context.profileName,
@@ -759,11 +724,13 @@ class BillingViewModel(
         postingDate: String,
         invoiceId: String,
         invoiceTotal: Double,
-        outstandingAmount: Double
+        outstandingAmount: Double,
+        paidFromAccount: String?
     ): PaymentEntryCreateDto {
         val baseAmount = line.enteredAmount * line.exchangeRate
         val baseCurrency = context.currency
         val isForeignCurrency = !line.currency.equals(baseCurrency, ignoreCase = true)
+        val paidFromResolved = paidFromAccount?.takeIf { it.isNotBlank() }
         return PaymentEntryCreateDto(
             company = context.company,
             postingDate = postingDate,
@@ -773,6 +740,7 @@ class BillingViewModel(
             modeOfPayment = line.modeOfPayment,
             paidAmount = baseAmount,
             receivedAmount = baseAmount,
+            paidFrom = paidFromResolved,
             sourceExchangeRate = if (isForeignCurrency) 1.0 else null,
             targetExchangeRate = if (isForeignCurrency) line.exchangeRate else null,
             referenceNo = line.referenceNumber?.takeIf { it.isNotBlank() },
