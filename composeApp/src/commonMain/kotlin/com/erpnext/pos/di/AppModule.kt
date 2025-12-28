@@ -6,6 +6,7 @@ import com.erpnext.pos.data.DatabaseBuilder
 import com.erpnext.pos.data.repositories.CheckoutRepository
 import com.erpnext.pos.data.repositories.CustomerRepository
 import com.erpnext.pos.data.repositories.InventoryRepository
+import com.erpnext.pos.data.repositories.PaymentTermsRepository
 import com.erpnext.pos.data.repositories.POSProfileRepository
 import com.erpnext.pos.data.repositories.SalesInvoiceRepository
 import com.erpnext.pos.data.repositories.UserRepository
@@ -19,6 +20,7 @@ import com.erpnext.pos.domain.usecases.FetchCustomerDetailUseCase
 import com.erpnext.pos.domain.usecases.FetchCustomersUseCase
 import com.erpnext.pos.domain.usecases.FetchInventoryItemUseCase
 import com.erpnext.pos.domain.usecases.FetchPendingInvoiceUseCase
+import com.erpnext.pos.domain.usecases.FetchPaymentTermsUseCase
 import com.erpnext.pos.domain.usecases.FetchPosProfileInfoUseCase
 import com.erpnext.pos.domain.usecases.FetchPosProfileUseCase
 import com.erpnext.pos.domain.usecases.FetchUserInfoUseCase
@@ -168,6 +170,10 @@ val appModule = module {
     single { SalesInvoiceRepository(get(), get(), get()) }
     //endregion
 
+    //region Payment Terms
+    single { PaymentTermsRepository(get(named("apiService"))) }
+    //endregion
+
     //region Quotation/Sales Order/Delivery Note
     single { QuotationViewModel(get()) }
     single { SalesOrderViewModel(get()) }
@@ -176,7 +182,7 @@ val appModule = module {
     //endregion
 
     //region Checkout
-    single { BillingViewModel(get(), get(), get(), get(), get(), get()) }
+    single { BillingViewModel(get(), get(), get(), get(), get(), get(), get()) }
     single { SalesInvoiceRemoteSource(get(named("apiService")), get()) }
     single { InvoiceLocalSource(get()) }
     single { CheckoutRepository(get(), get()) }
@@ -192,6 +198,7 @@ val appModule = module {
     single { CheckCustomerCreditUseCase(get()) }
     single { FetchPendingInvoiceUseCase(get()) }
     single { FetchCustomersUseCase(get()) }
+    single { FetchPaymentTermsUseCase(get()) }
     single { FetchCustomerDetailUseCase(get()) }
     single { FetchInventoryItemUseCase(get()) }
     single { FetchCategoriesUseCase(get()) }

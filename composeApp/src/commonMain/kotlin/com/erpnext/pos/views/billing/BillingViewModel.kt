@@ -6,6 +6,7 @@ import com.erpnext.pos.domain.models.CustomerBO
 import com.erpnext.pos.domain.models.ItemBO
 import com.erpnext.pos.domain.usecases.FetchBillingProductsWithPriceUseCase
 import com.erpnext.pos.domain.usecases.FetchCustomersUseCase
+import com.erpnext.pos.domain.usecases.FetchPaymentTermsUseCase
 import com.erpnext.pos.data.repositories.SalesInvoiceRepository
 import com.erpnext.pos.localSource.dao.ModeOfPaymentDao
 import com.erpnext.pos.navigation.NavRoute
@@ -13,6 +14,7 @@ import com.erpnext.pos.navigation.NavigationManager
 import com.erpnext.pos.remoteSource.dto.SalesInvoiceDto
 import com.erpnext.pos.remoteSource.dto.SalesInvoiceItemDto
 import com.erpnext.pos.remoteSource.dto.SalesInvoicePaymentDto
+import com.erpnext.pos.remoteSource.dto.SalesInvoicePaymentScheduleDto
 import com.erpnext.pos.remoteSource.mapper.toEntity
 import com.erpnext.pos.utils.toCurrencySymbol
 import com.erpnext.pos.utils.view.DateTimeProvider
@@ -30,6 +32,7 @@ class BillingViewModel(
     val contextProvider: CashBoxManager,
     private val invoiceRepository: SalesInvoiceRepository,
     private val modeOfPaymentDao: ModeOfPaymentDao,
+    private val paymentTermsUseCase: FetchPaymentTermsUseCase,
     private val navManager: NavigationManager
 ) : BaseViewModel() {
 
@@ -58,6 +61,9 @@ class BillingViewModel(
     fun loadInitialData() {
         executeUseCase(action = {
             val context = contextProvider.requireContext()
+            val paymentTerms = runCatching {
+                paymentTermsUseCase.invoke(Unit)
+            }.getOrElse { emptyList() }
 
             customersUseCase.invoke(null).collectLatest { c ->
                 customers = c
@@ -102,7 +108,8 @@ class BillingViewModel(
                             currency = currency,
                             paymentModes = paymentModes,
                             allowedCurrencies = context.allowedCurrencies,
-                            exchangeRate = contextProvider.getContext()?.exchangeRate ?: 1.0
+                            exchangeRate = contextProvider.getContext()?.exchangeRate ?: 1.0,
+                            paymentTerms = paymentTerms
                         )
                     }
                 }
@@ -244,6 +251,28 @@ class BillingViewModel(
         _state.update { current.withPaymentLines(updated) }
     }
 
+    fun onCreditSaleChanged(isCreditSale: Boolean) {
+        val current = _state.value as? BillingState.Success ?: return
+        if (isCreditSale && current.paymentTerms.isEmpty()) {
+            return
+        }
+        _state.update {
+            current.copy(
+                isCreditSale = isCreditSale,
+                selectedPaymentTerm = if (isCreditSale) current.selectedPaymentTerm else null
+            )
+        }
+    }
+
+    fun onPaymentTermSelected(term: com.erpnext.pos.domain.models.PaymentTermBO?) {
+        val current = _state.value as? BillingState.Success ?: return
+        _state.update {
+            current.copy(
+                selectedPaymentTerm = term
+            )
+        }
+    }
+
     fun onFinalizeSale() {
         val current = _state.value as? BillingState.Success ?: return
         val customer = current.selectedCustomer ?: run {
@@ -254,8 +283,12 @@ class BillingViewModel(
             _state.update { BillingState.Error("Add at least one item to the cart.") }
             return
         }
-        if (current.paidAmountBase < current.total) {
+        if (!current.isCreditSale && current.paidAmountBase < current.total) {
             _state.update { BillingState.Error("Paid amount must cover the total before finalizing the sale.") }
+            return
+        }
+        if (current.isCreditSale && current.selectedPaymentTerm == null) {
+            _state.update { BillingState.Error("Select a payment term to finalize a credit sale.") }
             return
         }
 
@@ -347,13 +380,36 @@ class BillingViewModel(
                 }
             }.joinToString(separator = "; ").takeIf { it.isNotBlank() }
             val primaryPaymentLine = current.paymentLines.firstOrNull()
+            val postingDate = DateTimeProvider.todayDate()
+            val dueDate = if (current.isCreditSale) {
+                val term = current.selectedPaymentTerm
+                    ?: error("Payment term is required for credit sales.")
+                val withMonths = DateTimeProvider.addMonths(postingDate, term.creditMonths ?: 0)
+                DateTimeProvider.addDays(withMonths, term.creditDays ?: 0)
+            } else {
+                postingDate
+            }
+            val paymentSchedule = if (current.isCreditSale) {
+                val term = current.selectedPaymentTerm
+                    ?: error("Payment term is required for credit sales.")
+                listOf(
+                    SalesInvoicePaymentScheduleDto(
+                        paymentTerm = term.name,
+                        invoicePortion = term.invoicePortion ?: 100.0,
+                        dueDate = dueDate,
+                        modeOfPayment = term.modeOfPayment
+                    )
+                )
+            } else {
+                emptyList()
+            }
             val invoiceDto = SalesInvoiceDto(
                 customer = customer.name,
                 customerName = customer.customerName,
                 customerPhone = customer.mobileNo,
                 company = context.company,
-                postingDate = DateTimeProvider.todayDate(),
-                dueDate = DateTimeProvider.todayDate(),
+                postingDate = postingDate,
+                dueDate = dueDate,
                 status = status,
                 grandTotal = total,
                 outstandingAmount = outstandingAmount,
@@ -362,6 +418,7 @@ class BillingViewModel(
                 paidAmount = paidAmount,
                 items = items,
                 payments = payments,
+                paymentSchedule = paymentSchedule,
                 posProfile = context.profileName,
                 currency = context.currency,
                 remarks = paymentMetadata,
@@ -375,21 +432,23 @@ class BillingViewModel(
                 invoice = entity.invoice, items = entity.items, payments = entity.payments
             )
 
-                _state.update {
-                    current.copy(
-                        selectedCustomer = null,
-                        cartItems = emptyList(),
-                        subtotal = 0.0,
-                        taxes = 0.0,
-                        discount = 0.0,
-                        discountCode = "",
-                        manualDiscountAmount = 0.0,
-                        manualDiscountPercent = 0.0,
-                        shippingAmount = 0.0,
-                        total = 0.0
-                    )
-                }
-            }, exceptionHandler = { e ->
+            _state.update {
+                current.copy(
+                    selectedCustomer = null,
+                    cartItems = emptyList(),
+                    subtotal = 0.0,
+                    taxes = 0.0,
+                    discount = 0.0,
+                    discountCode = "",
+                    manualDiscountAmount = 0.0,
+                    manualDiscountPercent = 0.0,
+                    shippingAmount = 0.0,
+                    total = 0.0,
+                    isCreditSale = false,
+                    selectedPaymentTerm = null
+                )
+            }
+        }, exceptionHandler = { e ->
             _state.update { BillingState.Error(e.message ?: "Unable to create invoice.") }
         })
     }

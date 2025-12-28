@@ -31,6 +31,8 @@ fun rememberBillingActions(coordinator: BillingCoordinator): BillingAction {
             onAddPaymentLine = coordinator::onAddPaymentLine,
             onRemovePaymentLine = coordinator::onRemovePaymentLine,
             onFinalizeSale = coordinator::onFinalizeSale,
+            onCreditSaleChanged = coordinator::onCreditSaleChanged,
+            onPaymentTermSelected = coordinator::onPaymentTermSelected,
             onBack = coordinator::onBack
         )
     }

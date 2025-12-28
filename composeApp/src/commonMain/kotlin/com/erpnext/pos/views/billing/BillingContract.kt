@@ -5,6 +5,7 @@ import com.erpnext.pos.domain.models.CustomerBO
 import com.erpnext.pos.domain.models.ItemBO
 import com.erpnext.pos.domain.models.POSCurrencyOption
 import com.erpnext.pos.domain.models.POSPaymentModeOption
+import com.erpnext.pos.domain.models.PaymentTermBO
 
 data class PaymentLine(
     val modeOfPayment: String,
@@ -43,6 +44,9 @@ sealed interface BillingState {
         val manualDiscountPercent: Double = 0.0,
         val shippingAmount: Double = 0.0,
         val total: Double = 0.0,
+        val isCreditSale: Boolean = false,
+        val paymentTerms: List<PaymentTermBO> = emptyList(),
+        val selectedPaymentTerm: PaymentTermBO? = null,
         val paymentLines: List<PaymentLine> = emptyList(),
         val paymentModes: List<POSPaymentModeOption> = emptyList(),
         val allowedCurrencies: List<POSCurrencyOption> = emptyList(),
@@ -111,5 +115,7 @@ data class BillingAction(
     val onAddPaymentLine: (PaymentLine) -> Unit = {},
     val onRemovePaymentLine: (index: Int) -> Unit = {},
     val onFinalizeSale: () -> Unit = {},
+    val onCreditSaleChanged: (Boolean) -> Unit = {},
+    val onPaymentTermSelected: (PaymentTermBO?) -> Unit = {},
     val onBack: () -> Unit = {},
 )
