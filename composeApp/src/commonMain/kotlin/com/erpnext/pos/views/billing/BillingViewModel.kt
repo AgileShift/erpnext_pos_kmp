@@ -345,9 +345,10 @@ class BillingViewModel(
 
             val total = (subtotal - discountAmount + shippingAmount).coerceAtLeast(0.0)
             val payments = current.paymentLines.map { line ->
+                val baseAmount = line.enteredAmount * line.exchangeRate
                 SalesInvoicePaymentDto(
                     modeOfPayment = line.modeOfPayment,
-                    amount = line.baseAmount,
+                    amount = baseAmount,
                     paymentReference = line.referenceNumber?.takeIf { it.isNotBlank() },
                     type = "Receive"
                 )
@@ -357,12 +358,16 @@ class BillingViewModel(
             val status = when {
                 paidAmount <= 0.0 -> "Unpaid"
                 outstandingAmount <= 0.0 -> "Paid"
-                else -> "Partly Paid"
+                else -> "Partial"
             }
             val paymentMetadata = buildList {
                 addAll(
-                    current.paymentLines.map { line ->
-                        "Payment currency: ${line.currency}, Exchange rate: ${line.exchangeRate}"
+                    current.paymentLines.mapNotNull { line ->
+                        if (line.currency.equals(context.currency, ignoreCase = true)) {
+                            null
+                        } else {
+                            "Payment currency (${line.modeOfPayment}): ${line.currency}, Exchange rate: ${line.exchangeRate}"
+                        }
                     }
                 )
                 addAll(
@@ -422,8 +427,12 @@ class BillingViewModel(
                 posProfile = context.profileName,
                 currency = context.currency,
                 remarks = paymentMetadata,
-                customPaymentCurrency = primaryPaymentLine?.currency,
-                customExchangeRate = primaryPaymentLine?.exchangeRate
+                customPaymentCurrency = primaryPaymentLine?.currency?.takeIf {
+                    !it.equals(context.currency, ignoreCase = true)
+                },
+                customExchangeRate = primaryPaymentLine?.exchangeRate?.takeIf {
+                    primaryPaymentLine?.currency?.equals(context.currency, ignoreCase = true) == false
+                }
             )
 
             val created = invoiceRepository.createRemoteInvoice(invoiceDto)
