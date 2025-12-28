@@ -5,6 +5,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
+import androidx.compose.foundation.clickable
 import com.erpnext.pos.domain.models.CustomerBO
 import com.erpnext.pos.domain.models.ItemBO
 import androidx.compose.foundation.text.KeyboardOptions
@@ -22,12 +23,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.style.TextAlign
 import coil3.compose.AsyncImage
 import coil3.compose.LocalPlatformContext
 import coil3.compose.SubcomposeAsyncImage
@@ -77,7 +79,25 @@ fun BillingScreen(
                 })
         },
         sheetPeekHeight = 140.dp,
-        sheetDragHandle = { BottomSheetDefaults.DragHandle(color = Color.Blue) },
+        sheetDragHandle = {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 12.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Surface(
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
+                    shape = MaterialTheme.shapes.extraLarge
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(width = 48.dp, height = 6.dp)
+                            .padding(horizontal = 12.dp)
+                    )
+                }
+            }
+        },
         sheetContent = {
             if (state is BillingState.Success) {
                 TotalsPaymentsSheet(
@@ -98,6 +118,12 @@ fun BillingScreen(
             }
 
             is BillingState.Success -> {
+                LaunchedEffect(state.successMessage) {
+                    state.successMessage?.let {
+                        snackbar.show(it, SnackbarType.Success, SnackbarPosition.Top)
+                        action.onClearSuccessMessage()
+                    }
+                }
                 Column(
                     modifier = Modifier
                         .padding(padding)
@@ -313,6 +339,11 @@ private fun ProductSelector(
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.primary
                                 )
+                                Text(
+                                    "Disponible: ${item.actualQty.formatQty()}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
                             }
                         }
                     },
@@ -342,7 +373,8 @@ private fun CollapsibleSection(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(vertical = 4.dp),
+                    .padding(vertical = 4.dp)
+                    .clickable { expanded = !expanded },
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -534,12 +566,18 @@ private fun TotalsPaymentsSheet(
                     HorizontalDivider()
                     SummaryRow("Total", currency, state.total, bold = true)
                 }
+                Spacer(Modifier.height(12.dp))
+                DiscountShippingInputs(
+                    state = state,
+                    action = action
+                )
             }
         }
         item {
             CollapsibleSection(title = "Pagos", defaultExpanded = true) {
                 PaymentSection(
                     baseCurrency = state.currency ?: "USD",
+                    exchangeRateByCurrency = state.exchangeRateByCurrency,
                     paymentLines = state.paymentLines,
                     paymentModes = state.paymentModes,
                     allowedCurrencies = state.allowedCurrencies,
@@ -548,8 +586,10 @@ private fun TotalsPaymentsSheet(
                     balanceDueBase = state.balanceDueBase,
                     changeDueBase = state.changeDueBase,
                     paymentErrorMessage = state.paymentErrorMessage,
+                    isCreditSale = state.isCreditSale,
                     onAddPaymentLine = action.onAddPaymentLine,
-                    onRemovePaymentLine = action.onRemovePaymentLine
+                    onRemovePaymentLine = action.onRemovePaymentLine,
+                    onPaymentCurrencySelected = action.onPaymentCurrencySelected
                 )
             }
         }
@@ -562,6 +602,7 @@ private fun TotalsPaymentsSheet(
 @Composable
 private fun PaymentSection(
     baseCurrency: String,
+    exchangeRateByCurrency: Map<String, Double>,
     paymentLines: List<PaymentLine>,
     paymentModes: List<POSPaymentModeOption>,
     allowedCurrencies: List<POSCurrencyOption>,
@@ -570,11 +611,13 @@ private fun PaymentSection(
     balanceDueBase: Double,
     changeDueBase: Double,
     paymentErrorMessage: String?,
+    isCreditSale: Boolean,
     onAddPaymentLine: (PaymentLine) -> Unit,
-    onRemovePaymentLine: (Int) -> Unit
+    onRemovePaymentLine: (Int) -> Unit,
+    onPaymentCurrencySelected: (String) -> Unit
 ) {
     val modeOptions = remember(paymentModes) { paymentModes.map { it.modeOfPayment }.distinct() }
-    val defaultMode = paymentModes.first().modeOfPayment
+    val defaultMode = paymentModes.firstOrNull()?.modeOfPayment.orEmpty()
     var selectedMode by remember(modeOptions, defaultMode) { mutableStateOf(defaultMode) }
     val selectedModeOption = paymentModes.firstOrNull { it.modeOfPayment == selectedMode }
     val requiresReference = remember(selectedModeOption) {
@@ -610,8 +653,28 @@ private fun PaymentSection(
         }
     }
 
+    LaunchedEffect(selectedCurrency, exchangeRateByCurrency) {
+        onPaymentCurrencySelected(selectedCurrency)
+        if (selectedCurrency.equals(baseCurrency, ignoreCase = true)) {
+            rateInput = "1.0"
+        } else {
+            exchangeRateByCurrency[selectedCurrency.uppercase()]?.let { rate ->
+                rateInput = rate.toString()
+            }
+        }
+    }
+
     LaunchedEffect(selectedMode) {
         referenceInput = ""
+    }
+
+    if (isCreditSale) {
+        Text(
+            "Pagos deshabilitados para ventas de crédito.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(vertical = 4.dp)
+        )
     }
 
     if (paymentLines.isEmpty()) {
@@ -743,7 +806,7 @@ private fun PaymentSection(
         value = amountInput,
         onValueChange = { amountInput = it },
         label = { Text("Monto") },
-        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Next),
         modifier = Modifier.fillMaxWidth()
     )
 
@@ -784,7 +847,8 @@ private fun PaymentSection(
                 amountValue > 0.0 &&
                 (rateValue != null && rateValue > 0.0) &&
                 selectedMode.isNotBlank() &&
-                (!requiresReference || referenceInput.isNotBlank())
+                (!requiresReference || referenceInput.isNotBlank()) &&
+                !isCreditSale
 
         Button(
             onClick = {
@@ -838,6 +902,52 @@ private fun PaymentSection(
     SummaryRow("Pagado (base)", baseCurrency, paidAmountBase, bold = true)
     SummaryRow("Balance pendiente", baseCurrency, balanceDueBase, bold = true)
     SummaryRow("Cambio", baseCurrency, changeDueBase, bold = true)
+}
+
+@Composable
+private fun DiscountShippingInputs(
+    state: BillingState.Success,
+    action: BillingAction
+) {
+    val baseCurrency = state.currency ?: "USD"
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text("Descuento manual", style = MaterialTheme.typography.bodyMedium)
+        OutlinedTextField(
+            value = if (state.manualDiscountPercent > 0.0) state.manualDiscountPercent.toString() else "",
+            onValueChange = action.onManualDiscountPercentChanged,
+            label = { Text("Porcentaje (%)") },
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Next),
+            modifier = Modifier.fillMaxWidth()
+        )
+        OutlinedTextField(
+            value = if (state.manualDiscountAmount > 0.0) state.manualDiscountAmount.toString() else "",
+            onValueChange = action.onManualDiscountAmountChanged,
+            label = { Text("Monto (${baseCurrency.toCurrencySymbol()})") },
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Next),
+            modifier = Modifier.fillMaxWidth()
+        )
+        Text("Código de descuento", style = MaterialTheme.typography.bodyMedium)
+        OutlinedTextField(
+            value = state.discountCode,
+            onValueChange = action.onDiscountCodeChanged,
+            label = { Text("Código") },
+            modifier = Modifier.fillMaxWidth()
+        )
+        Text("Envío", style = MaterialTheme.typography.bodyMedium)
+        OutlinedTextField(
+            value = if (state.shippingAmount > 0.0) state.shippingAmount.toString() else "",
+            onValueChange = action.onShippingAmountChanged,
+            label = { Text("Monto de envío") },
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Done),
+            modifier = Modifier.fillMaxWidth()
+        )
+        Text(
+            "Se aplicará el descuento manual o código según corresponda.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Start
+        )
+    }
 }
 
 @Composable
