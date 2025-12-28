@@ -43,6 +43,8 @@ import com.erpnext.pos.views.billing.PaymentLine
 import com.erpnext.pos.domain.models.POSCurrencyOption
 import com.erpnext.pos.domain.models.POSPaymentModeOption
 import com.erpnext.pos.utils.view.SnackbarController
+import com.erpnext.pos.utils.view.SnackbarPosition
+import com.erpnext.pos.utils.view.SnackbarType
 import org.jetbrains.compose.ui.tooling.preview.Preview
 import org.koin.compose.koinInject
 
@@ -73,7 +75,7 @@ fun BillingScreen(
                     IconButton(onClick = action.onBack) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Back"
+                            contentDescription = "Atras"
                         )
                     }
                 })
@@ -806,7 +808,10 @@ private fun PaymentSection(
         value = amountInput,
         onValueChange = { amountInput = it },
         label = { Text("Monto") },
-        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Next),
+        keyboardOptions = KeyboardOptions(
+            keyboardType = KeyboardType.Number,
+            imeAction = ImeAction.Next
+        ),
         modifier = Modifier.fillMaxWidth()
     )
 
@@ -916,14 +921,20 @@ private fun DiscountShippingInputs(
             value = if (state.manualDiscountPercent > 0.0) state.manualDiscountPercent.toString() else "",
             onValueChange = action.onManualDiscountPercentChanged,
             label = { Text("Porcentaje (%)") },
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Next),
+            keyboardOptions = KeyboardOptions(
+                keyboardType = KeyboardType.Number,
+                imeAction = ImeAction.Next
+            ),
             modifier = Modifier.fillMaxWidth()
         )
         OutlinedTextField(
             value = if (state.manualDiscountAmount > 0.0) state.manualDiscountAmount.toString() else "",
             onValueChange = action.onManualDiscountAmountChanged,
             label = { Text("Monto (${baseCurrency.toCurrencySymbol()})") },
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Next),
+            keyboardOptions = KeyboardOptions(
+                keyboardType = KeyboardType.Number,
+                imeAction = ImeAction.Next
+            ),
             modifier = Modifier.fillMaxWidth()
         )
         Text("Código de descuento", style = MaterialTheme.typography.bodyMedium)
@@ -938,7 +949,10 @@ private fun DiscountShippingInputs(
             value = if (state.shippingAmount > 0.0) state.shippingAmount.toString() else "",
             onValueChange = action.onShippingAmountChanged,
             label = { Text("Monto de envío") },
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Done),
+            keyboardOptions = KeyboardOptions(
+                keyboardType = KeyboardType.Number,
+                imeAction = ImeAction.Done
+            ),
             modifier = Modifier.fillMaxWidth()
         )
         Text(

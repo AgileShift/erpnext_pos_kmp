@@ -191,8 +191,7 @@ val appModule = module {
             get(),
             get(),
             get(),
-            get(named("apiService")),
-            get(named("apiServiceV2"))
+            get(named("apiService"))
         )
     }
     single { SalesInvoiceRemoteSource(get(named("apiService")), get()) }

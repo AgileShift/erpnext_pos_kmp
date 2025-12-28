@@ -38,7 +38,6 @@ class BillingViewModel(
     private val paymentTermsUseCase: FetchPaymentTermsUseCase,
     private val navManager: NavigationManager,
     private val api: APIService,
-    private val apiV2: APIServiceV2
 ) : BaseViewModel() {
 
     private val _state: MutableStateFlow<BillingState> = MutableStateFlow(BillingState.Loading)
@@ -496,6 +495,7 @@ class BillingViewModel(
                 customerPhone = customer.mobileNo,
                 company = context.company,
                 postingDate = postingDate,
+                currency = context.currency,
                 dueDate = dueDate,
                 status = status,
                 grandTotal = total,
@@ -504,11 +504,9 @@ class BillingViewModel(
                 netTotal = total,
                 paidAmount = paidAmount,
                 items = items,
-                payments = payments,
                 paymentSchedule = paymentSchedule,
                 paymentTerms = current.selectedPaymentTerm?.name,
                 posProfile = context.profileName,
-                currency = context.currency,
                 remarks = paymentMetadata
             )
 
@@ -543,7 +541,7 @@ class BillingViewModel(
                             )
                         )
                     )
-                    apiV2.createDoc(ERPDocType.PaymentEntry, paymentEntry)
+                    api.createPaymentEntry(paymentEntry)
                 }
             }
 
@@ -634,9 +632,9 @@ class BillingViewModel(
     private fun requiresReference(mode: POSPaymentModeOption?): Boolean {
         val type = mode?.type?.trim().orEmpty()
         return type.equals("Bank", ignoreCase = true) ||
-            type.equals("Card", ignoreCase = true) ||
-            mode?.modeOfPayment?.contains("bank", ignoreCase = true) == true ||
-            mode?.modeOfPayment?.contains("card", ignoreCase = true) == true
+                type.equals("Card", ignoreCase = true) ||
+                mode?.modeOfPayment?.contains("bank", ignoreCase = true) == true ||
+                mode?.modeOfPayment?.contains("card", ignoreCase = true) == true
     }
 }
 

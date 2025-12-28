@@ -24,6 +24,7 @@ import com.erpnext.pos.remoteSource.dto.SalesInvoiceDto
 import com.erpnext.pos.remoteSource.dto.TokenResponse
 import com.erpnext.pos.remoteSource.dto.UserDto
 import com.erpnext.pos.remoteSource.dto.WarehouseItemDto
+import com.erpnext.pos.remoteSource.dto.v2.PaymentEntryCreateDto
 import com.erpnext.pos.remoteSource.oauth.AuthInfoStore
 import com.erpnext.pos.remoteSource.oauth.OAuthConfig
 import com.erpnext.pos.remoteSource.oauth.Pkce
@@ -95,6 +96,14 @@ class APIService(
             }
         }
 
+    suspend fun createPaymentEntry(entry: PaymentEntryCreateDto) {
+        val url = authStore.getCurrentSite()
+        return clientOAuth.postERP(
+            ERPDocType.PaymentEntry.path,
+            payload = entry,
+            baseUrl = url
+        )
+    }
     suspend fun fetchInvoicesForTerritoryFromDate(
         territory: String,
         fromDate: String
