@@ -19,6 +19,7 @@ import com.erpnext.pos.remoteSource.dto.POSOpeningEntryDto
 import com.erpnext.pos.remoteSource.dto.POSOpeningEntryResponseDto
 import com.erpnext.pos.remoteSource.dto.POSProfileDto
 import com.erpnext.pos.remoteSource.dto.POSProfileSimpleDto
+import com.erpnext.pos.remoteSource.dto.PaymentTermDto
 import com.erpnext.pos.remoteSource.dto.SalesInvoiceDto
 import com.erpnext.pos.remoteSource.dto.TokenResponse
 import com.erpnext.pos.remoteSource.dto.UserDto
@@ -108,6 +109,27 @@ class APIService(
                 "territory" eq territory
                 "posting_date" gte fromDate
             }
+        )
+    }
+
+    suspend fun fetchPaymentTerms(): List<PaymentTermDto> {
+        val url = authStore.getCurrentSite()
+        return clientOAuth.getERPList(
+            ERPDocType.PaymentTerm.path,
+            listOf(
+                "payment_term_name",
+                "invoice_portion",
+                "mode_of_payment",
+                "due_date_based_on",
+                "credit_days",
+                "credit_months",
+                "discount_type",
+                "discount",
+                "description",
+                "discount_validity",
+                "discount_validity_based_on"
+            ),
+            baseUrl = url
         )
     }
 

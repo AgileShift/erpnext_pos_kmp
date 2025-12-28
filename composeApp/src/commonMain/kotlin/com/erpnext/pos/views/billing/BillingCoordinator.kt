@@ -19,6 +19,9 @@ class BillingCoordinator(val viewModel: BillingViewModel) {
     fun onAddPaymentLine(line: PaymentLine) = viewModel.onAddPaymentLine(line)
     fun onRemovePaymentLine(index: Int) = viewModel.onRemovePaymentLine(index)
     fun onFinalizeSale() = viewModel.onFinalizeSale()
+    fun onCreditSaleChanged(isCreditSale: Boolean) = viewModel.onCreditSaleChanged(isCreditSale)
+    fun onPaymentTermSelected(term: com.erpnext.pos.domain.models.PaymentTermBO?) =
+        viewModel.onPaymentTermSelected(term)
     fun onBack() = viewModel.onBack()
 }
 

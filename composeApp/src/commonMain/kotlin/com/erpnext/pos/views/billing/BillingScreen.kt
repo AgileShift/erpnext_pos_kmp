@@ -140,12 +140,28 @@ fun BillingScreen(
 
                     Spacer(Modifier.height(12.dp))
 
+                    CollapsibleSection(
+                        title = "Credit terms",
+                        defaultExpanded = true
+                    ) {
+                        CreditTermsSection(
+                            isCreditSale = state.isCreditSale,
+                            paymentTerms = state.paymentTerms,
+                            selectedPaymentTerm = state.selectedPaymentTerm,
+                            onCreditSaleChanged = action.onCreditSaleChanged,
+                            onPaymentTermSelected = action.onPaymentTermSelected
+                        )
+                    }
+
+                    Spacer(Modifier.height(12.dp))
+
                     Button(
                         onClick = action.onFinalizeSale,
                         modifier = Modifier.fillMaxWidth(),
                         enabled = state.selectedCustomer != null &&
                             state.cartItems.isNotEmpty() &&
-                            state.paidAmountBase >= state.total
+                            (state.isCreditSale || state.paidAmountBase >= state.total) &&
+                            (!state.isCreditSale || state.selectedPaymentTerm != null)
                     ) {
                         Text("Finalizar venta")
                     }
@@ -830,6 +846,97 @@ private fun PaymentSection(
     SummaryRow("Cambio", baseCurrency, changeDueBase, bold = true)
 }
 
+@Composable
+private fun CreditTermsSection(
+    isCreditSale: Boolean,
+    paymentTerms: List<com.erpnext.pos.domain.models.PaymentTermBO>,
+    selectedPaymentTerm: com.erpnext.pos.domain.models.PaymentTermBO?,
+    onCreditSaleChanged: (Boolean) -> Unit,
+    onPaymentTermSelected: (com.erpnext.pos.domain.models.PaymentTermBO?) -> Unit
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        val canEnableCredit = paymentTerms.isNotEmpty()
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text("Credit sale", style = MaterialTheme.typography.bodyMedium)
+            Switch(
+                checked = isCreditSale,
+                onCheckedChange = onCreditSaleChanged,
+                enabled = canEnableCredit
+            )
+        }
+
+        if (isCreditSale) {
+            Text("Payment term", style = MaterialTheme.typography.bodyMedium)
+            var templateExpanded by remember { mutableStateOf(false) }
+            val templateLabel = selectedPaymentTerm?.name ?: "Select payment term"
+            ExposedDropdownMenuBox(
+                expanded = templateExpanded,
+                onExpandedChange = { templateExpanded = it }
+            ) {
+                OutlinedTextField(
+                    value = templateLabel,
+                    onValueChange = {},
+                    readOnly = true,
+                    label = { Text("Select payment term") },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .menuAnchor(MenuAnchorType.PrimaryNotEditable),
+                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = templateExpanded) }
+                )
+                ExposedDropdownMenu(
+                    expanded = templateExpanded,
+                    onDismissRequest = { templateExpanded = false }
+                ) {
+                    paymentTerms.forEach { term ->
+                        DropdownMenuItem(
+                            text = { Text(term.name) },
+                            onClick = {
+                                onPaymentTermSelected(term)
+                                templateExpanded = false
+                            }
+                        )
+                    }
+                }
+            }
+            selectedPaymentTerm?.let { term ->
+                val creditDays = term.creditDays ?: 0
+                val creditMonths = term.creditMonths ?: 0
+                val termsLabel = buildString {
+                    if (creditMonths > 0) {
+                        append("$creditMonths month(s)")
+                    }
+                    if (creditDays > 0) {
+                        if (isNotEmpty()) append(" + ")
+                        append("$creditDays day(s)")
+                    }
+                }.ifBlank { "Same day" }
+                Text(
+                    text = "Terms: $termsLabel",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                term.description?.takeIf { it.isNotBlank() }?.let { description ->
+                    Text(
+                        text = description,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        } else if (!canEnableCredit) {
+            Text(
+                text = "No payment terms available. Credit sales are disabled.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
 private fun Double.formatQty(): String {
     return if (this % 1.0 == 0.0) {
         this.toInt().toString()
@@ -901,6 +1008,13 @@ private fun BillingScreenPreview() {
                         isDefault = true
                     )
                 ),
+                paymentTerms = listOf(
+                    com.erpnext.pos.domain.models.PaymentTermBO(
+                        name = "Layaway 30 days",
+                        creditDays = 30
+                    )
+                ),
+                selectedPaymentTerm = null,
                 allowedCurrencies = listOf(
                     POSCurrencyOption(
                         code = "USD",

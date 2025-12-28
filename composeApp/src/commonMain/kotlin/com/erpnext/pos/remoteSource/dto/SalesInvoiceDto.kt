@@ -43,6 +43,10 @@ data class SalesInvoiceDto(
     val items: List<SalesInvoiceItemDto> = emptyList(),
     @SerialName("payments")
     val payments: List<SalesInvoicePaymentDto> = emptyList(),
+    @SerialName("payment_schedule")
+    val paymentSchedule: List<SalesInvoicePaymentScheduleDto> = emptyList(),
+    @SerialName("payment_terms")
+    val paymentTerms: String? = null,
     val remarks: String? = null,
     @SerialName("custom_payment_currency")
     val customPaymentCurrency: String? = null,
@@ -56,6 +60,18 @@ data class SalesInvoiceDto(
     val posProfile: String? = null,
     @SerialName("party_account_currency")
     val currency: String? = null,
+)
+
+@Serializable
+data class SalesInvoicePaymentScheduleDto(
+    @SerialName("payment_term")
+    val paymentTerm: String,
+    @SerialName("invoice_portion")
+    val invoicePortion: Double,
+    @SerialName("due_date")
+    val dueDate: String,
+    @SerialName("mode_of_payment")
+    val modeOfPayment: String? = null
 )
 
 @Serializable
