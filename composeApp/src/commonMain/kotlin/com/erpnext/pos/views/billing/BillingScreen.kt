@@ -6,6 +6,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.shape.RoundedCornerShape
 import com.erpnext.pos.domain.models.CustomerBO
 import com.erpnext.pos.domain.models.ItemBO
 import androidx.compose.foundation.text.KeyboardOptions
@@ -31,6 +33,8 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextAlign
 import coil3.compose.AsyncImage
 import coil3.compose.LocalPlatformContext
@@ -68,6 +72,7 @@ fun BillingScreen(
     val snackbar = koinInject<SnackbarController>()
 
     BottomSheetScaffold(
+        sheetShadowElevation = 12.dp,
         topBar = {
             TopAppBar(
                 title = {
@@ -88,7 +93,7 @@ fun BillingScreen(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(vertical = 12.dp)
-                    .semantics { contentDescription = "Drag handle" },
+                    .semantics { contentDescription = "Mas informacion" },
                 contentAlignment = Alignment.Center
             ) {
                 Surface(
@@ -379,15 +384,15 @@ private fun CollapsibleSection(
 ) {
     var expanded by rememberSaveable { mutableStateOf(defaultExpanded) }
     Surface(
-        tonalElevation = 1.dp,
-        shape = MaterialTheme.shapes.medium
+        tonalElevation = 2.dp,
+        shape = MaterialTheme.shapes.medium,
+        onClick = { expanded = !expanded },
     ) {
         Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp)) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(vertical = 4.dp)
-                    .clickable { expanded = !expanded },
+                    .padding(vertical = 4.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
