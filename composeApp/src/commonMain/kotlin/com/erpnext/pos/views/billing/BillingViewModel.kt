@@ -88,17 +88,17 @@ class BillingViewModel(
                             POSPaymentModeOption(
                                 name = "Cash",
                                 modeOfPayment = "Cash",
-                                type = "Cash"
+                                type = "Cash",
                             ),
                             POSPaymentModeOption(
                                 name = "Card",
                                 modeOfPayment = "Card",
-                                type = "Card"
+                                type = "Card",
                             ),
                             POSPaymentModeOption(
                                 name = "Transfer",
                                 modeOfPayment = "Transfer",
-                                type = "Bank"
+                                type = "Bank",
                             )
                         )
                     }
@@ -562,7 +562,8 @@ class BillingViewModel(
                         postingDate = postingDate,
                         invoiceId = invoiceId,
                         invoiceTotal = totals.total,
-                        outstandingAmount = outstandingAmount
+                        outstandingAmount = outstandingAmount,
+                        paidFromAccount = created.debitTo
                     )
                     createPaymentEntryUseCase(CreatePaymentEntryInput(paymentEntry))
                 }
@@ -757,11 +758,13 @@ class BillingViewModel(
         postingDate: String,
         invoiceId: String,
         invoiceTotal: Double,
-        outstandingAmount: Double
+        outstandingAmount: Double,
+        paidFromAccount: String?
     ): PaymentEntryCreateDto {
         val baseAmount = line.enteredAmount * line.exchangeRate
         val baseCurrency = context.currency
         val isForeignCurrency = !line.currency.equals(baseCurrency, ignoreCase = true)
+        val paidFromResolved = paidFromAccount?.takeIf { it.isNotBlank() }
         return PaymentEntryCreateDto(
             company = context.company,
             postingDate = postingDate,
@@ -771,6 +774,7 @@ class BillingViewModel(
             modeOfPayment = line.modeOfPayment,
             paidAmount = baseAmount,
             receivedAmount = baseAmount,
+            paidFrom = paidFromResolved,
             sourceExchangeRate = if (isForeignCurrency) 1.0 else null,
             targetExchangeRate = if (isForeignCurrency) line.exchangeRate else null,
             referenceNo = line.referenceNumber?.takeIf { it.isNotBlank() },
