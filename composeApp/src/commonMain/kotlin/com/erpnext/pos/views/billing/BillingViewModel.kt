@@ -53,7 +53,7 @@ class BillingViewModel(
 
     private var customers: List<CustomerBO> = emptyList()
     private var products: List<ItemBO> = emptyList()
-    private var paymentModeDefinitions: Map<String, com.erpnext.pos.localSource.entities.ModeOfPaymentEntity> =
+    private var paymentModeAccounts: Map<String, com.erpnext.pos.localSource.entities.PaymentModesEntity> =
         emptyMap()
 
     init {
@@ -70,18 +70,20 @@ class BillingViewModel(
                 deliveryChargesUseCase.invoke(Unit)
             }.getOrElse { emptyList() }
 
-            val modeDefinitions = runCatching { modeOfPaymentDao.getAllModes() }
+            val profilePaymentModes = runCatching { modeOfPaymentDao.getAll(context.profileName) }
                 .getOrElse { emptyList() }
-            paymentModeDefinitions = buildPaymentModeDefinitionMap(modeDefinitions)
+            paymentModeAccounts = buildPaymentModeAccountMap(profilePaymentModes)
 
             customersUseCase.invoke(null).collectLatest { c ->
                 customers = c
                 itemsUseCase.invoke(null).collectLatest { i ->
                     products = i.filter { it.price > 0.0 && it.actualQty > 0.0 }
                     val currency = context.currency.ifBlank { "USD" }
-                    val modeTypes = modeDefinitions.associateBy { it.modeOfPayment }
+                    val modeTypes = runCatching { modeOfPaymentDao.getAllModes() }
+                        .getOrElse { emptyList() }
+                        .associateBy { it.modeOfPayment }
                     val paymentModes = context.paymentModes.ifEmpty {
-                        modeOfPaymentDao.getAll(context.profileName).map { mode ->
+                        profilePaymentModes.map { mode ->
                             POSPaymentModeOption(
                                 name = mode.name,
                                 modeOfPayment = mode.modeOfPayment,
@@ -723,9 +725,9 @@ class BillingViewModel(
         val baseAmount = line.enteredAmount * line.exchangeRate
         val baseCurrency = context.currency
         val paidFromResolved = paidFromAccount?.takeIf { it.isNotBlank() }
-        val modeDefinition = paymentModeDefinitions[line.modeOfPayment]
+        val modeDefinition = paymentModeAccounts[line.modeOfPayment]
         val paidToResolved = modeDefinition?.account?.takeIf { it.isNotBlank() }
-        val paidToCurrency = modeDefinition?.currency?.takeIf { it.isNotBlank() } ?: baseCurrency
+        val paidToCurrency = baseCurrency
         val partyCurrency = partyAccountCurrency?.takeIf { it.isNotBlank() } ?: line.currency
         val isForeignCurrency = !line.currency.equals(partyCurrency, ignoreCase = true)
 
@@ -922,7 +924,7 @@ class BillingViewModel(
         }
         if (!current.isCreditSale) {
             val invalidMode = current.paymentLines.firstOrNull { line ->
-                val account = paymentModeDefinitions[line.modeOfPayment]?.account
+                val account = paymentModeAccounts[line.modeOfPayment]?.account
                 account.isNullOrBlank()
             }
             if (invalidMode != null) {
@@ -932,10 +934,10 @@ class BillingViewModel(
         return null
     }
 
-    private fun buildPaymentModeDefinitionMap(
-        definitions: List<com.erpnext.pos.localSource.entities.ModeOfPaymentEntity>
-    ): Map<String, com.erpnext.pos.localSource.entities.ModeOfPaymentEntity> {
-        val map = mutableMapOf<String, com.erpnext.pos.localSource.entities.ModeOfPaymentEntity>()
+    private fun buildPaymentModeAccountMap(
+        definitions: List<com.erpnext.pos.localSource.entities.PaymentModesEntity>
+    ): Map<String, com.erpnext.pos.localSource.entities.PaymentModesEntity> {
+        val map = mutableMapOf<String, com.erpnext.pos.localSource.entities.PaymentModesEntity>()
         definitions.forEach { definition ->
             map[definition.modeOfPayment] = definition
             map[definition.name] = definition

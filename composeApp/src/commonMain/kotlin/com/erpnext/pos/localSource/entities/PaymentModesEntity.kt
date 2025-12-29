@@ -11,6 +11,8 @@ data class PaymentModesEntity(
     var default: Boolean,
     @ColumnInfo("mode_of_payment")
     var modeOfPayment: String,
+    @ColumnInfo("account")
+    var account: String? = null,
     @ColumnInfo(defaultValue = "")
     var profileId: String
 )

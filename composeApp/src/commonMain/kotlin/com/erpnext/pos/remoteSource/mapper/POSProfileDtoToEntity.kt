@@ -45,6 +45,7 @@ fun PaymentModesDto.toEntity(profileId: String): PaymentModesEntity {
         name = this.name,
         default = this.default,
         modeOfPayment = this.modeOfPayment,
+        account = this.account,
         profileId = profileId
     )
 }
