@@ -58,7 +58,8 @@ data class SalesInvoiceDto(
     @Serializable(IntAsBooleanSerializer::class)
     val isPos: Boolean = true,
     @SerialName("update_stock")
-    val updateStock: Boolean? = null,
+    @Serializable(with = IntAsBooleanSerializer::class)
+    val updateStock: Boolean = false,
     val doctype: String = "Sales Invoice",
     @SerialName("pos_profile")
     val posProfile: String? = null,
