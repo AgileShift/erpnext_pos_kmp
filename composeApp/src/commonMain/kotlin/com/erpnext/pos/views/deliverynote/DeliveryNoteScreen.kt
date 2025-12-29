@@ -30,12 +30,12 @@ fun DeliveryNoteScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Delivery Notes") },
+                title = { Text("Notas de entrega") },
                 navigationIcon = {
                     IconButton(onClick = action.onBack) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Back"
+                            contentDescription = "Atrás"
                         )
                     }
                 }
@@ -59,7 +59,7 @@ fun DeliveryNoteScreen(
                 )
 
                 DeliveryNoteState.Ready -> Text(
-                    text = "Delivery note view is ready to be wired.",
+                    text = "La vista de notas de entrega está lista para conectarse.",
                     style = MaterialTheme.typography.bodyLarge,
                     textAlign = TextAlign.Center
                 )
