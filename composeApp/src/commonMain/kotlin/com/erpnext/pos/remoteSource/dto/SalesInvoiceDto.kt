@@ -62,6 +62,8 @@ data class SalesInvoiceDto(
     val posProfile: String? = null,
     @SerialName("party_account_currency")
     val currency: String? = null,
+    @SerialName("debit_to")
+    val debitTo: String? = null,
 )
 
 @Serializable

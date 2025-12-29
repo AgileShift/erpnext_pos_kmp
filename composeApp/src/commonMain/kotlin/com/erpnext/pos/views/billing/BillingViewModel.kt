@@ -88,17 +88,17 @@ class BillingViewModel(
                             POSPaymentModeOption(
                                 name = "Cash",
                                 modeOfPayment = "Cash",
-                                type = "Cash"
+                                type = "Cash",
                             ),
                             POSPaymentModeOption(
                                 name = "Card",
                                 modeOfPayment = "Card",
-                                type = "Card"
+                                type = "Card",
                             ),
                             POSPaymentModeOption(
                                 name = "Transfer",
                                 modeOfPayment = "Transfer",
-                                type = "Bank"
+                                type = "Bank",
                             )
                         )
                     }
@@ -562,7 +562,10 @@ class BillingViewModel(
                         postingDate = postingDate,
                         invoiceId = invoiceId,
                         invoiceTotal = totals.total,
-                        outstandingAmount = outstandingAmount
+                        outstandingAmount = outstandingAmount,
+                        paidFromAccount = created.debitTo,
+                        partyAccountCurrency = created.currency,
+                        exchangeRateByCurrency = current.exchangeRateByCurrency
                     )
                     createPaymentEntryUseCase(CreatePaymentEntryInput(paymentEntry))
                 }
@@ -750,18 +753,30 @@ class BillingViewModel(
         }.joinToString(separator = "; ").takeIf { it.isNotBlank() }
     }
 
-    private fun buildPaymentEntryDto(
+    private suspend fun buildPaymentEntryDto(
         line: PaymentLine,
         context: POSContext,
         customer: CustomerBO,
         postingDate: String,
         invoiceId: String,
         invoiceTotal: Double,
-        outstandingAmount: Double
+        outstandingAmount: Double,
+        paidFromAccount: String?,
+        partyAccountCurrency: String?,
+        exchangeRateByCurrency: Map<String, Double>
     ): PaymentEntryCreateDto {
         val baseAmount = line.enteredAmount * line.exchangeRate
         val baseCurrency = context.currency
         val isForeignCurrency = !line.currency.equals(baseCurrency, ignoreCase = true)
+        val paidFromResolved = paidFromAccount?.takeIf { it.isNotBlank() }
+        val targetExchangeRate = resolveTargetExchangeRate(
+            baseCurrency = baseCurrency,
+            partyAccountCurrency = partyAccountCurrency,
+            paymentCurrency = line.currency,
+            paymentExchangeRate = line.exchangeRate,
+            exchangeRateByCurrency = exchangeRateByCurrency,
+            isForeignCurrency = isForeignCurrency
+        )
         return PaymentEntryCreateDto(
             company = context.company,
             postingDate = postingDate,
@@ -771,8 +786,9 @@ class BillingViewModel(
             modeOfPayment = line.modeOfPayment,
             paidAmount = baseAmount,
             receivedAmount = baseAmount,
+            paidFrom = paidFromResolved,
             sourceExchangeRate = if (isForeignCurrency) 1.0 else null,
-            targetExchangeRate = if (isForeignCurrency) line.exchangeRate else null,
+            targetExchangeRate = targetExchangeRate,
             referenceNo = line.referenceNumber?.takeIf { it.isNotBlank() },
             references = listOf(
                 PaymentEntryReferenceCreateDto(
@@ -784,6 +800,42 @@ class BillingViewModel(
                 )
             )
         )
+    }
+
+    private suspend fun resolveTargetExchangeRate(
+        baseCurrency: String,
+        partyAccountCurrency: String?,
+        paymentCurrency: String,
+        paymentExchangeRate: Double,
+        exchangeRateByCurrency: Map<String, Double>,
+        isForeignCurrency: Boolean
+    ): Double? {
+        if (partyAccountCurrency.isNullOrBlank() ||
+            partyAccountCurrency.equals(baseCurrency, ignoreCase = true)
+        ) {
+            return if (isForeignCurrency) paymentExchangeRate else null
+        }
+
+        if (partyAccountCurrency.equals(paymentCurrency, ignoreCase = true)) {
+            return paymentExchangeRate
+        }
+
+        val normalizedParty = partyAccountCurrency.trim().uppercase()
+        val cachedRate = exchangeRateByCurrency[normalizedParty]
+        if (cachedRate != null && cachedRate > 0.0) {
+            return cachedRate
+        }
+
+        val directRate = api.getExchangeRate(
+            fromCurrency = normalizedParty,
+            toCurrency = baseCurrency
+        )
+        val reverseRate = api.getExchangeRate(
+            fromCurrency = baseCurrency,
+            toCurrency = normalizedParty
+        )?.takeIf { it > 0.0 }?.let { 1 / it }
+
+        return directRate ?: reverseRate ?: if (isForeignCurrency) paymentExchangeRate else null
     }
 
     private fun requiresReference(mode: POSPaymentModeOption?): Boolean {
