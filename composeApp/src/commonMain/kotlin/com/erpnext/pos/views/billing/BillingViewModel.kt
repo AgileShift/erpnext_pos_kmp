@@ -53,6 +53,8 @@ class BillingViewModel(
 
     private var customers: List<CustomerBO> = emptyList()
     private var products: List<ItemBO> = emptyList()
+    private var paymentModeAccounts: Map<String, com.erpnext.pos.localSource.entities.PaymentModesEntity> =
+        emptyMap()
 
     init {
         loadInitialData()
@@ -68,6 +70,10 @@ class BillingViewModel(
                 deliveryChargesUseCase.invoke(Unit)
             }.getOrElse { emptyList() }
 
+            val profilePaymentModes = runCatching { modeOfPaymentDao.getAll(context.profileName) }
+                .getOrElse { emptyList() }
+            paymentModeAccounts = buildPaymentModeAccountMap(profilePaymentModes)
+
             customersUseCase.invoke(null).collectLatest { c ->
                 customers = c
                 itemsUseCase.invoke(null).collectLatest { i ->
@@ -77,7 +83,7 @@ class BillingViewModel(
                         .getOrElse { emptyList() }
                         .associateBy { it.modeOfPayment }
                     val paymentModes = context.paymentModes.ifEmpty {
-                        modeOfPaymentDao.getAll(context.profileName).map { mode ->
+                        profilePaymentModes.map { mode ->
                             POSPaymentModeOption(
                                 name = mode.name,
                                 modeOfPayment = mode.modeOfPayment,
@@ -402,7 +408,7 @@ class BillingViewModel(
         val customer = current.selectedCustomer
             ?: error("Customer must be selected before finalizing the sale.")
 
-        val context = contextProvider.getContext() ?: error("El contexto POS no está inicializado.")
+        val context = contextProvider.getContext() ?: error("El POS no está inicializado.")
 
         executeUseCase(action = {
             val deliveryCharge = current.selectedDeliveryCharge
@@ -611,9 +617,6 @@ class BillingViewModel(
         )
         val paymentMetadata =
             buildPaymentMetadata(current, paymentLines, totals.shipping, baseCurrency)
-        val payments = paymentLines.firstOrNull()?.let { line ->
-            listOf(SalesInvoicePaymentDto(line.modeOfPayment, 0.0))
-        } ?: emptyList()
         return SalesInvoiceDto(
             customer = customer.name,
             customerName = customer.customerName,
@@ -629,7 +632,7 @@ class BillingViewModel(
             netTotal = totals.total,
             paidAmount = paidAmount,
             items = items,
-            payments = payments,
+            payments = emptyList(),
             paymentSchedule = paymentSchedule,
             paymentTerms = if (current.isCreditSale) current.selectedPaymentTerm?.name else null,
             posProfile = context.profileName,
@@ -722,6 +725,9 @@ class BillingViewModel(
         val baseAmount = line.enteredAmount * line.exchangeRate
         val baseCurrency = context.currency
         val paidFromResolved = paidFromAccount?.takeIf { it.isNotBlank() }
+        val modeDefinition = paymentModeAccounts[line.modeOfPayment]
+        val paidToResolved = modeDefinition?.account?.takeIf { it.isNotBlank() }
+        val paidToCurrency = baseCurrency
         val partyCurrency = partyAccountCurrency?.takeIf { it.isNotBlank() } ?: line.currency
         val isForeignCurrency = !line.currency.equals(partyCurrency, ignoreCase = true)
 
@@ -772,6 +778,8 @@ class BillingViewModel(
             paidAmount = partyAmount,
             receivedAmount = line.enteredAmount,
             paidFrom = paidFromResolved,
+            paidTo = paidToResolved,
+            paidToAccountCurrency = paidToCurrency,
             sourceExchangeRate = if (isForeignCurrency) 1.0 else null,
             targetExchangeRate = targetExchangeRate,
             referenceNo = line.referenceNumber?.takeIf { it.isNotBlank() },
@@ -914,7 +922,27 @@ class BillingViewModel(
         if (current.isCreditSale && current.paymentLines.isNotEmpty()) {
             return "Las ventas a crédito no pueden incluir líneas de pago."
         }
+        if (!current.isCreditSale) {
+            val invalidMode = current.paymentLines.firstOrNull { line ->
+                val account = paymentModeAccounts[line.modeOfPayment]?.account
+                account.isNullOrBlank()
+            }
+            if (invalidMode != null) {
+                return "El modo de pago ${invalidMode.modeOfPayment} no tiene cuenta configurada."
+            }
+        }
         return null
+    }
+
+    private fun buildPaymentModeAccountMap(
+        definitions: List<com.erpnext.pos.localSource.entities.PaymentModesEntity>
+    ): Map<String, com.erpnext.pos.localSource.entities.PaymentModesEntity> {
+        val map = mutableMapOf<String, com.erpnext.pos.localSource.entities.PaymentModesEntity>()
+        definitions.forEach { definition ->
+            map[definition.modeOfPayment] = definition
+            map[definition.name] = definition
+        }
+        return map
     }
 }
 
