@@ -132,8 +132,16 @@ class BillingViewModel(
         })
     }
 
+    private fun requireSuccessState(): BillingState.Success? {
+        return when (val current = _state.value) {
+            is BillingState.Success -> current
+            is BillingState.Error -> current.previous?.also { _state.value = it }
+            else -> null
+        }
+    }
+
     fun onCustomerSearchQueryChange(query: String) {
-        val current = _state.value as? BillingState.Success ?: return
+        val current = requireSuccessState() ?: return
         val filtered = if (query.isBlank()) {
             customers
         } else {
@@ -156,7 +164,7 @@ class BillingViewModel(
     }
 
     fun onCustomerSelected(customer: CustomerBO) {
-        val current = _state.value as? BillingState.Success ?: return
+        val current = requireSuccessState() ?: return
         _state.update {
             current.copy(
                 selectedCustomer = customer, customerSearchQuery = customer.customerName
@@ -165,7 +173,7 @@ class BillingViewModel(
     }
 
     fun onProductSearchQueryChange(query: String) {
-        val current = _state.value as? BillingState.Success ?: return
+        val current = requireSuccessState() ?: return
         val filtered = if (query.isBlank()) {
             products
         } else {
@@ -184,7 +192,7 @@ class BillingViewModel(
     }
 
     fun onProductAdded(item: ItemBO) {
-        val current = _state.value as? BillingState.Success ?: return
+        val current = requireSuccessState() ?: return
         val existing = current.cartItems.firstOrNull { it.itemCode == item.itemCode }
         val exchangeRate = current.exchangeRate
         val maxQty = item.actualQty
@@ -218,7 +226,7 @@ class BillingViewModel(
     }
 
     fun onQuantityChanged(itemCode: String, newQuantity: Double) {
-        val current = _state.value as? BillingState.Success ?: return
+        val current = requireSuccessState() ?: return
         val product = products.firstOrNull { it.itemCode == itemCode }
         val maxQty = product?.actualQty
         if (maxQty != null && newQuantity > maxQty) {
@@ -239,7 +247,7 @@ class BillingViewModel(
     }
 
     fun onRemoveItem(itemCode: String) {
-        val current = _state.value as? BillingState.Success ?: return
+        val current = requireSuccessState() ?: return
         val updated = current.cartItems.filterNot { it.itemCode == itemCode }
         _state.update {
             recalculateTotals(current.copy(cartItems = updated, cartErrorMessage = null))
@@ -247,7 +255,7 @@ class BillingViewModel(
     }
 
     fun onAddPaymentLine(line: PaymentLine) {
-        val current = _state.value as? BillingState.Success ?: return
+        val current = requireSuccessState() ?: return
         val modeOption = current.paymentModes.firstOrNull {
             it.modeOfPayment == line.modeOfPayment
         }
@@ -265,7 +273,7 @@ class BillingViewModel(
     }
 
     fun onUpdatePaymentLine(index: Int, line: PaymentLine) {
-        val current = _state.value as? BillingState.Success ?: return
+        val current = requireSuccessState() ?: return
         if (index !in current.paymentLines.indices) return
         val updated = current.paymentLines.mapIndexed { idx, existing ->
             if (idx == index) line.toBaseAmount() else existing
@@ -274,14 +282,14 @@ class BillingViewModel(
     }
 
     fun onRemovePaymentLine(index: Int) {
-        val current = _state.value as? BillingState.Success ?: return
+        val current = requireSuccessState() ?: return
         if (index !in current.paymentLines.indices) return
         val updated = current.paymentLines.filterIndexed { idx, _ -> idx != index }
         _state.update { current.withPaymentLines(updated) }
     }
 
     fun onCreditSaleChanged(isCreditSale: Boolean) {
-        val current = _state.value as? BillingState.Success ?: return
+        val current = requireSuccessState() ?: return
         if (isCreditSale && current.paymentTerms.isEmpty()) {
             return
         }
@@ -298,7 +306,7 @@ class BillingViewModel(
     }
 
     fun onPaymentTermSelected(term: com.erpnext.pos.domain.models.PaymentTermBO?) {
-        val current = _state.value as? BillingState.Success ?: return
+        val current = requireSuccessState() ?: return
         _state.update {
             current.copy(
                 selectedPaymentTerm = term
@@ -307,7 +315,7 @@ class BillingViewModel(
     }
 
     fun onDiscountCodeChanged(code: String) {
-        val current = _state.value as? BillingState.Success ?: return
+        val current = requireSuccessState() ?: return
         _state.update {
             recalculateTotals(
                 current.copy(
@@ -320,7 +328,7 @@ class BillingViewModel(
     }
 
     fun onManualDiscountAmountChanged(value: String) {
-        val current = _state.value as? BillingState.Success ?: return
+        val current = requireSuccessState() ?: return
         val amount = value.toDoubleOrNull()?.coerceAtLeast(0.0) ?: 0.0
         _state.update {
             recalculateTotals(
@@ -333,7 +341,7 @@ class BillingViewModel(
     }
 
     fun onManualDiscountPercentChanged(value: String) {
-        val current = _state.value as? BillingState.Success ?: return
+        val current = requireSuccessState() ?: return
         val percent = value.toDoubleOrNull()?.coerceAtLeast(0.0) ?: 0.0
         _state.update {
             recalculateTotals(
@@ -346,7 +354,7 @@ class BillingViewModel(
     }
 
     fun onDeliveryChargeSelected(charge: DeliveryChargeBO?) {
-        val current = _state.value as? BillingState.Success ?: return
+        val current = requireSuccessState() ?: return
         val amount = charge?.defaultRate?.coerceAtLeast(0.0) ?: 0.0
         _state.update {
             recalculateTotals(
@@ -359,7 +367,7 @@ class BillingViewModel(
     }
 
     fun onPaymentCurrencySelected(currency: String) {
-        val current = _state.value as? BillingState.Success ?: return
+        val current = requireSuccessState() ?: return
         val baseCurrency = current.currency?.takeIf { it.isNotBlank() } ?: return
         val normalized = currency.trim().uppercase()
         if (normalized.equals(baseCurrency, ignoreCase = true)) {
@@ -397,13 +405,13 @@ class BillingViewModel(
     }
 
     fun onClearSuccessMessage() {
-        val current = _state.value as? BillingState.Success ?: return
+        val current = requireSuccessState() ?: return
         if (current.successMessage == null) return
         _state.update { current.copy(successMessage = null) }
     }
 
     fun onFinalizeSale() {
-        val current = _state.value as? BillingState.Success ?: return
+        val current = requireSuccessState() ?: return
         val customer = current.selectedCustomer ?: run {
             _state.update {
                 BillingState.Error(
@@ -549,7 +557,10 @@ class BillingViewModel(
             if (!current.isCreditSale && paymentLines.isNotEmpty()) {
                 val invoiceId = created.name
                     ?: error("No se devolvió el ID de la factura después de crearla.")
+                var remainingOutstanding = totals.total
                 paymentLines.forEach { line ->
+                    val allocation = minOf(line.baseAmount, remainingOutstanding)
+                    if (allocation <= 0.0) return@forEach
                     val paymentEntry = buildPaymentEntryDto(
                         line = line,
                         context = context,
@@ -557,10 +568,12 @@ class BillingViewModel(
                         postingDate = postingDate,
                         invoiceId = invoiceId,
                         invoiceTotal = totals.total,
-                        outstandingAmount = outstandingAmount,
+                        outstandingAmount = remainingOutstanding,
+                        allocatedAmount = allocation,
                         paidFromAccount = created.debitTo
                     )
                     createPaymentEntryUseCase(CreatePaymentEntryInput(paymentEntry))
+                    remainingOutstanding -= allocation
                 }
             }
 
@@ -762,9 +775,9 @@ class BillingViewModel(
         invoiceId: String,
         invoiceTotal: Double,
         outstandingAmount: Double,
+        allocatedAmount: Double,
         paidFromAccount: String?
     ): PaymentEntryCreateDto {
-        val baseAmount = line.enteredAmount * line.exchangeRate
         val baseCurrency = context.currency
         val isForeignCurrency = !line.currency.equals(baseCurrency, ignoreCase = true)
         val paidFromResolved = paidFromAccount?.takeIf { it.isNotBlank() }
@@ -775,8 +788,8 @@ class BillingViewModel(
             partyType = "Customer",
             partyId = customer.name,
             modeOfPayment = line.modeOfPayment,
-            paidAmount = baseAmount,
-            receivedAmount = baseAmount,
+            paidAmount = allocatedAmount,
+            receivedAmount = allocatedAmount,
             paidFrom = paidFromResolved,
             sourceExchangeRate = if (isForeignCurrency) 1.0 else null,
             targetExchangeRate = if (isForeignCurrency) line.exchangeRate else null,
@@ -787,7 +800,7 @@ class BillingViewModel(
                     referenceName = invoiceId,
                     totalAmount = invoiceTotal,
                     outstandingAmount = outstandingAmount,
-                    allocatedAmount = baseAmount
+                    allocatedAmount = allocatedAmount
                 )
             )
         )
