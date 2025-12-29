@@ -84,24 +84,6 @@ class BillingViewModel(
                                 type = modeTypes[mode.modeOfPayment]?.type,
                             )
                         }
-                    }.ifEmpty {
-                        listOf(
-                            POSPaymentModeOption(
-                                name = "Cash",
-                                modeOfPayment = "Cash",
-                                type = "Cash",
-                            ),
-                            POSPaymentModeOption(
-                                name = "Card",
-                                modeOfPayment = "Card",
-                                type = "Card",
-                            ),
-                            POSPaymentModeOption(
-                                name = "Transfer",
-                                modeOfPayment = "Transfer",
-                                type = "Bank",
-                            )
-                        )
                     }
                     val exchangeRateByCurrency = buildMap {
                         val baseCurrency = currency.uppercase()
