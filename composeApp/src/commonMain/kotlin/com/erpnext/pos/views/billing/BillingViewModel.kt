@@ -615,9 +615,6 @@ class BillingViewModel(
         )
         val paymentMetadata =
             buildPaymentMetadata(current, paymentLines, totals.shipping, baseCurrency)
-        val payments = paymentLines.firstOrNull()?.let { line ->
-            listOf(SalesInvoicePaymentDto(line.modeOfPayment, 0.0))
-        } ?: emptyList()
         return SalesInvoiceDto(
             customer = customer.name,
             customerName = customer.customerName,
@@ -633,7 +630,7 @@ class BillingViewModel(
             netTotal = totals.total,
             paidAmount = paidAmount,
             items = items,
-            payments = payments,
+            payments = emptyList(),
             paymentSchedule = paymentSchedule,
             paymentTerms = if (current.isCreditSale) current.selectedPaymentTerm?.name else null,
             posProfile = context.profileName,
