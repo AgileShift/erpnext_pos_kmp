@@ -153,12 +153,24 @@ fun BillingScreen(
                 }
                 val previous = state.previous
                 if (previous != null) {
-                    BillingContent(
-                        state = previous,
-                        action = action,
-                        padding = padding,
-                        snackbar = snackbar
-                    )
+                    Column(
+                        modifier = Modifier
+                            .padding(padding)
+                            .fillMaxSize()
+                    ) {
+                        Text(
+                            text = state.message,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                        )
+                        BillingContent(
+                            state = previous,
+                            action = action,
+                            padding = PaddingValues(0.dp),
+                            snackbar = snackbar
+                        )
+                    }
                 } else {
                     Box(
                         modifier = Modifier
@@ -272,9 +284,7 @@ private fun BillingContent(
             onClick = action.onFinalizeSale,
             modifier = Modifier.fillMaxWidth(),
             enabled = state.selectedCustomer != null &&
-                    state.cartItems.isNotEmpty() &&
-                    (state.isCreditSale || state.paidAmountBase >= state.total) &&
-                    (!state.isCreditSale || state.selectedPaymentTerm != null)
+                    state.cartItems.isNotEmpty()
         ) {
             Text("Finalizar venta")
         }
