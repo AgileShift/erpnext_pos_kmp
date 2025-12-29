@@ -284,7 +284,9 @@ private fun BillingContent(
             onClick = action.onFinalizeSale,
             modifier = Modifier.fillMaxWidth(),
             enabled = state.selectedCustomer != null &&
-                    state.cartItems.isNotEmpty()
+                    state.cartItems.isNotEmpty() &&
+                    (state.isCreditSale || state.paidAmountBase >= state.total) &&
+                    (!state.isCreditSale || state.selectedPaymentTerm != null)
         ) {
             Text("Finalizar venta")
         }

@@ -406,7 +406,7 @@ class BillingViewModel(
         val customer = current.selectedCustomer
             ?: error("Customer must be selected before finalizing the sale.")
 
-        val context = contextProvider.getContext() ?: error("El contexto POS no está inicializado.")
+        val context = contextProvider.getContext() ?: error("El POS no está inicializado.")
 
         executeUseCase(action = {
             val deliveryCharge = current.selectedDeliveryCharge
