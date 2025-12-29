@@ -21,6 +21,7 @@ import com.erpnext.pos.remoteSource.dto.POSOpeningEntryResponseDto
 import com.erpnext.pos.remoteSource.dto.POSProfileDto
 import com.erpnext.pos.remoteSource.dto.POSProfileSimpleDto
 import com.erpnext.pos.remoteSource.dto.PaymentTermDto
+import com.erpnext.pos.remoteSource.dto.SalesInvoiceCreatedDto
 import com.erpnext.pos.remoteSource.dto.SalesInvoiceDto
 import com.erpnext.pos.remoteSource.dto.TokenResponse
 import com.erpnext.pos.remoteSource.dto.UserDto
@@ -105,6 +106,7 @@ class APIService(
             baseUrl = url
         )
     }
+
     suspend fun fetchInvoicesForTerritoryFromDate(
         territory: String,
         fromDate: String
@@ -586,11 +588,13 @@ class APIService(
     //region Invoice - Checkout
     suspend fun createSalesInvoice(data: SalesInvoiceDto): SalesInvoiceDto {
         val url = authStore.getCurrentSite()
-        return clientOAuth.postERP(
+        val result: SalesInvoiceDto = clientOAuth.postERP(
             doctype = ERPDocType.SalesInvoice.path,
             payload = data,
             baseUrl = url,
         )
+
+        return result
     }
 
     suspend fun getSalesInvoiceByName(name: String): SalesInvoiceDto {

@@ -17,6 +17,9 @@ enum class DocStatus(status: String) {
 }
 
 @Serializable
+data class SalesInvoiceCreatedDto(@SerialName("name") val name: String)
+
+@Serializable
 data class SalesInvoiceDto(
     val name: String? = null,
     val customer: String,
@@ -57,13 +60,18 @@ data class SalesInvoiceDto(
     @SerialName("is_pos")
     @Serializable(IntAsBooleanSerializer::class)
     val isPos: Boolean = true,
+    @SerialName("update_stock")
+    @Serializable(with = IntAsBooleanSerializer::class)
+    val updateStock: Boolean = false,
     val doctype: String = "Sales Invoice",
     @SerialName("pos_profile")
     val posProfile: String? = null,
-    @SerialName("party_account_currency")
+    @SerialName("currency")
     val currency: String? = null,
     @SerialName("debit_to")
     val debitTo: String? = null,
+    @SerialName("docstatus")
+    val docStatus: Int
 )
 
 @Serializable
@@ -93,6 +101,14 @@ data class SalesInvoiceItemDto(
     val warehouse: String? = null,
     @SerialName("income_account")
     val incomeAccount: String? = null,
+    @SerialName("sales_order")
+    val salesOrder: String? = null,
+    @SerialName("so_detail")
+    val salesOrderItem: String? = null,
+    @SerialName("delivery_note")
+    val deliveryNote: String? = null,
+    @SerialName("dn_detail")
+    val deliveryNoteItem: String? = null,
     @SerialName("cost_center")
     val costCenter: String? = null
 )
