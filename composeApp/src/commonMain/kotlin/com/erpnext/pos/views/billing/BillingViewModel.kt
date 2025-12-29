@@ -554,7 +554,6 @@ class BillingViewModel(
                         partyAccountCurrency = created.currency,
                         exchangeRateByCurrency = current.exchangeRateByCurrency,
                         outstandingAmount = remainingOutstanding,
-                        allocatedAmount = allocation,
                     )
                     createPaymentEntryUseCase(CreatePaymentEntryInput(paymentEntry))
                     remainingOutstanding -= allocation
@@ -762,11 +761,12 @@ class BillingViewModel(
         paidFromAccount: String?,
         partyAccountCurrency: String?,
         exchangeRateByCurrency: Map<String, Double>,
-        allocatedAmount: Double,
     ): PaymentEntryCreateDto {
+        val baseAmount = line.enteredAmount * line.exchangeRate
         val baseCurrency = context.currency
         val isForeignCurrency = !line.currency.equals(baseCurrency, ignoreCase = true)
         val paidFromResolved = paidFromAccount?.takeIf { it.isNotBlank() }
+        val partyCurrency = partyAccountCurrency?.takeIf { it.isNotBlank() } ?: baseCurrency
 
         val targetExchangeRate = resolveTargetExchangeRate(
             baseCurrency = baseCurrency,
@@ -776,6 +776,15 @@ class BillingViewModel(
             exchangeRateByCurrency = exchangeRateByCurrency,
             isForeignCurrency = isForeignCurrency
         )
+
+        val partyAmount = resolvePartyAmount(
+            baseCurrency = baseCurrency,
+            partyCurrency = partyCurrency,
+            paymentCurrency = line.currency,
+            paymentAmount = line.enteredAmount,
+            baseAmount = baseAmount,
+            targetExchangeRate = targetExchangeRate
+        )
         return PaymentEntryCreateDto(
             company = context.company,
             postingDate = postingDate,
@@ -783,8 +792,8 @@ class BillingViewModel(
             partyType = "Customer",
             partyId = customer.name,
             modeOfPayment = line.modeOfPayment,
-            paidAmount = allocatedAmount,
-            receivedAmount = allocatedAmount,
+            paidAmount = partyAmount,
+            receivedAmount = line.enteredAmount,
             paidFrom = paidFromResolved,
             sourceExchangeRate = if (isForeignCurrency) 1.0 else null,
             targetExchangeRate = targetExchangeRate,
@@ -795,7 +804,7 @@ class BillingViewModel(
                     referenceName = invoiceId,
                     totalAmount = invoiceTotal,
                     outstandingAmount = outstandingAmount,
-                    allocatedAmount = allocatedAmount
+                    allocatedAmount = partyAmount
                 )
             )
         )
@@ -835,6 +844,28 @@ class BillingViewModel(
         )?.takeIf { it > 0.0 }?.let { 1 / it }
 
         return directRate ?: reverseRate ?: if (isForeignCurrency) paymentExchangeRate else null
+    }
+
+    private fun resolvePartyAmount(
+        baseCurrency: String,
+        partyCurrency: String,
+        paymentCurrency: String,
+        paymentAmount: Double,
+        baseAmount: Double,
+        targetExchangeRate: Double?
+    ): Double {
+        if (paymentCurrency.equals(partyCurrency, ignoreCase = true)) {
+            return paymentAmount
+        }
+        if (partyCurrency.equals(baseCurrency, ignoreCase = true)) {
+            return baseAmount
+        }
+        val rate = targetExchangeRate ?: return baseAmount
+        return if (paymentCurrency.equals(baseCurrency, ignoreCase = true)) {
+            paymentAmount / rate
+        } else {
+            baseAmount / rate
+        }
     }
 
     private fun requiresReference(mode: POSPaymentModeOption?): Boolean {
