@@ -832,7 +832,7 @@ private fun PaymentSection(
 
     Spacer(Modifier.height(12.dp))
 
-    Text("Payment currency", style = MaterialTheme.typography.bodyMedium)
+    Text("Moneda de pago", style = MaterialTheme.typography.bodyMedium)
     var currencyExpanded by remember { mutableStateOf(false) }
     ExposedDropdownMenuBox(
         expanded = currencyExpanded,
@@ -868,7 +868,7 @@ private fun PaymentSection(
 
     Spacer(Modifier.height(12.dp))
     Text(
-        text = "Invoice base currency: $baseCurrency",
+        text = "Moneda base de factura: $baseCurrency",
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant
     )
