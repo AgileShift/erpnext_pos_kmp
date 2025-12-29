@@ -87,7 +87,10 @@ sealed interface BillingState {
         }
     }
 
-    data class Error(val message: String) : BillingState
+    data class Error(
+        val message: String,
+        val previous: Success? = null
+    ) : BillingState
     object Empty : BillingState
 }
 

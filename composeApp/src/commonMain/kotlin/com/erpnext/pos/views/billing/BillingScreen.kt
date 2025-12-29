@@ -106,9 +106,14 @@ fun BillingScreen(
             }
         },
         sheetContent = {
-            if (state is BillingState.Success) {
+            val sheetState = when (state) {
+                is BillingState.Success -> state
+                is BillingState.Error -> state.previous
+                else -> null
+            }
+            if (sheetState != null) {
                 TotalsPaymentsSheet(
-                    state = state,
+                    state = sheetState,
                     action = action
                 )
             } else {
@@ -125,93 +130,12 @@ fun BillingScreen(
             }
 
             is BillingState.Success -> {
-                LaunchedEffect(state.successMessage) {
-                    state.successMessage?.let {
-                        snackbar.show(it, SnackbarType.Success, SnackbarPosition.Top)
-                        action.onClearSuccessMessage()
-                    }
-                }
-                Column(
-                    modifier = Modifier
-                        .padding(padding)
-                        .fillMaxSize()
-                        .padding(horizontal = 16.dp, vertical = 8.dp)
-                ) {
-                    CollapsibleSection(
-                        title = "Cliente",
-                        defaultExpanded = true
-                    ) {
-                        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                            CustomerSelector(
-                                customers = state.customers,
-                                query = state.customerSearchQuery,
-                                onQueryChange = action.onCustomerSearchQueryChange,
-                                onCustomerSelected = action.onCustomerSelected
-                            )
-                        }
-                    }
-
-                    Spacer(Modifier.height(8.dp))
-
-                    CollapsibleSection(
-                        title = "Carrito",
-                        defaultExpanded = false
-                    ) {
-                        ProductSelector(
-                            query = state.productSearchQuery,
-                            onQueryChange = action.onProductSearchQueryChange,
-                            results = state.productSearchResults,
-                            onProductAdded = action.onProductAdded
-                        )
-
-                        CartList(
-                            cartItems = state.cartItems,
-                            currency = state.currency ?: "USD",
-                            onQuantityChanged = { itemCode, newQuantity ->
-                                action.onQuantityChanged(itemCode, newQuantity)
-                            },
-                            onRemoveItem = action.onRemoveItem
-                        )
-                        if (!state.cartErrorMessage.isNullOrBlank()) {
-                            Spacer(Modifier.height(6.dp))
-                            Text(
-                                text = state.cartErrorMessage,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.error
-                            )
-                        }
-                    }
-
-                    Spacer(Modifier.height(12.dp))
-
-                    if (state.paymentTerms.isNotEmpty()) {
-                        CollapsibleSection(
-                            title = "Terminos de credito",
-                            defaultExpanded = false
-                        ) {
-                            CreditTermsSection(
-                                isCreditSale = state.isCreditSale,
-                                paymentTerms = state.paymentTerms,
-                                selectedPaymentTerm = state.selectedPaymentTerm,
-                                onCreditSaleChanged = action.onCreditSaleChanged,
-                                onPaymentTermSelected = action.onPaymentTermSelected
-                            )
-                        }
-                    }
-
-                    Spacer(Modifier.height(12.dp))
-
-                    Button(
-                        onClick = action.onFinalizeSale,
-                        modifier = Modifier.fillMaxWidth(),
-                        enabled = state.selectedCustomer != null &&
-                                state.cartItems.isNotEmpty() &&
-                                (state.isCreditSale || state.paidAmountBase >= state.total) &&
-                                (!state.isCreditSale || state.selectedPaymentTerm != null)
-                    ) {
-                        Text("Finalizar venta")
-                    }
-                }
+                BillingContent(
+                    state = state,
+                    action = action,
+                    padding = padding,
+                    snackbar = snackbar
+                )
             }
 
             is BillingState.Empty -> {
@@ -223,8 +147,135 @@ fun BillingScreen(
             }
 
             is BillingState.Error -> {
-                snackbar.show(state.message, SnackbarType.Error, SnackbarPosition.Top)
+                LaunchedEffect(state.message) {
+                    snackbar.show(state.message, SnackbarType.Error, SnackbarPosition.Top)
+                }
+                val previous = state.previous
+                if (previous != null) {
+                    BillingContent(
+                        state = previous,
+                        action = action,
+                        padding = padding,
+                        snackbar = snackbar
+                    )
+                } else {
+                    Box(
+                        modifier = Modifier
+                            .padding(padding)
+                            .fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(
+                                text = state.message,
+                                color = MaterialTheme.colorScheme.error,
+                                style = MaterialTheme.typography.bodyMedium,
+                                textAlign = TextAlign.Center
+                            )
+                            Spacer(Modifier.height(12.dp))
+                            Button(onClick = action.onBack) {
+                                Text("Volver")
+                            }
+                        }
+                    }
+                }
             }
+        }
+    }
+}
+
+@Composable
+private fun BillingContent(
+    state: BillingState.Success,
+    action: BillingAction,
+    padding: PaddingValues,
+    snackbar: SnackbarController
+) {
+    LaunchedEffect(state.successMessage) {
+        state.successMessage?.let {
+            snackbar.show(it, SnackbarType.Success, SnackbarPosition.Top)
+            action.onClearSuccessMessage()
+        }
+    }
+    Column(
+        modifier = Modifier
+            .padding(padding)
+            .fillMaxSize()
+            .padding(horizontal = 16.dp, vertical = 8.dp)
+    ) {
+        CollapsibleSection(
+            title = "Cliente",
+            defaultExpanded = true
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                CustomerSelector(
+                    customers = state.customers,
+                    query = state.customerSearchQuery,
+                    onQueryChange = action.onCustomerSearchQueryChange,
+                    onCustomerSelected = action.onCustomerSelected
+                )
+            }
+        }
+
+        Spacer(Modifier.height(8.dp))
+
+        CollapsibleSection(
+            title = "Carrito",
+            defaultExpanded = false
+        ) {
+            ProductSelector(
+                query = state.productSearchQuery,
+                onQueryChange = action.onProductSearchQueryChange,
+                results = state.productSearchResults,
+                onProductAdded = action.onProductAdded
+            )
+
+            CartList(
+                cartItems = state.cartItems,
+                currency = state.currency ?: "USD",
+                onQuantityChanged = { itemCode, newQuantity ->
+                    action.onQuantityChanged(itemCode, newQuantity)
+                },
+                onRemoveItem = action.onRemoveItem
+            )
+            if (!state.cartErrorMessage.isNullOrBlank()) {
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    text = state.cartErrorMessage,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error
+                )
+            }
+        }
+
+        Spacer(Modifier.height(12.dp))
+
+        if (state.paymentTerms.isNotEmpty()) {
+            CollapsibleSection(
+                title = "Terminos de credito",
+                defaultExpanded = false
+            ) {
+                CreditTermsSection(
+                    isCreditSale = state.isCreditSale,
+                    paymentTerms = state.paymentTerms,
+                    selectedPaymentTerm = state.selectedPaymentTerm,
+                    onCreditSaleChanged = action.onCreditSaleChanged,
+                    onPaymentTermSelected = action.onPaymentTermSelected
+                )
+            }
+        }
+
+        Spacer(Modifier.height(12.dp))
+
+        Button(
+            onClick = action.onFinalizeSale,
+            modifier = Modifier.fillMaxWidth(),
+            enabled = state.selectedCustomer != null &&
+                    state.cartItems.isNotEmpty() &&
+                    (state.isCreditSale || state.paidAmountBase >= state.total) &&
+                    (!state.isCreditSale || state.selectedPaymentTerm != null)
+        ) {
+            Text("Finalizar venta")
         }
     }
 }
