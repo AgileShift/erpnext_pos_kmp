@@ -30,12 +30,12 @@ fun SalesOrderScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Sales Orders") },
+                title = { Text("Órdenes de venta") },
                 navigationIcon = {
                     IconButton(onClick = action.onBack) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Back"
+                            contentDescription = "Atrás"
                         )
                     }
                 }
@@ -59,7 +59,7 @@ fun SalesOrderScreen(
                 )
 
                 SalesOrderState.Ready -> Text(
-                    text = "Sales order view is ready to be wired.",
+                    text = "La vista de órdenes de venta está lista para conectarse.",
                     style = MaterialTheme.typography.bodyLarge,
                     textAlign = TextAlign.Center
                 )

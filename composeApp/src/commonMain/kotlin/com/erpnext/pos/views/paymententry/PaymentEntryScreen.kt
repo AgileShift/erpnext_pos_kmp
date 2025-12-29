@@ -45,10 +45,10 @@ fun PaymentEntryScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Payment Entry") },
+                title = { Text("Entrada de pago") },
                 navigationIcon = {
                     IconButton(onClick = action.onBack) {
-                        Icon(Icons.Filled.ArrowBack, contentDescription = "Back")
+                        Icon(Icons.Filled.ArrowBack, contentDescription = "Atrás")
                     }
                 }
             )
@@ -65,7 +65,7 @@ fun PaymentEntryScreen(
                 value = state.invoiceId,
                 onValueChange = action.onInvoiceIdChanged,
                 modifier = Modifier.fillMaxWidth(),
-                label = { Text("Invoice ID") },
+                label = { Text("ID de factura") },
                 singleLine = true
             )
 
@@ -73,7 +73,7 @@ fun PaymentEntryScreen(
                 value = state.modeOfPayment,
                 onValueChange = action.onModeOfPaymentChanged,
                 modifier = Modifier.fillMaxWidth(),
-                label = { Text("Mode of payment") },
+                label = { Text("Modo de pago") },
                 singleLine = true
             )
 
@@ -81,7 +81,7 @@ fun PaymentEntryScreen(
                 value = state.amount,
                 onValueChange = action.onAmountChanged,
                 modifier = Modifier.fillMaxWidth(),
-                label = { Text("Amount") },
+                label = { Text("Monto") },
                 singleLine = true
             )
 
@@ -96,11 +96,11 @@ fun PaymentEntryScreen(
                         strokeWidth = 2.dp
                     )
                 }
-                Text("Register payment")
+                Text("Registrar pago")
             }
 
             Text(
-                text = "Payments are saved locally and synced during the next sync cycle.",
+                text = "Los pagos se guardan localmente y se sincronizan en el próximo ciclo.",
                 style = MaterialTheme.typography.bodySmall
             )
         }

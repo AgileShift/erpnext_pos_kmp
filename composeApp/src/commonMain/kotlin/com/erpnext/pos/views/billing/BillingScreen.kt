@@ -5,6 +5,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -80,7 +81,7 @@ fun BillingScreen(
                     IconButton(onClick = action.onBack) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Atras"
+                            contentDescription = "Atrás"
                         )
                     }
                 })
@@ -397,7 +398,7 @@ private fun ProductSelector(
                             Column {
                                 Text(item.name)
                                 Text(
-                                    text = "Codigo: ${item.itemCode}",
+                                    text = "Código: ${item.itemCode}",
                                     style = MaterialTheme.typography.bodySmall
                                 )
                                 Text(
@@ -432,8 +433,10 @@ private fun CollapsibleSection(
 ) {
     var expanded by rememberSaveable { mutableStateOf(defaultExpanded) }
     Surface(
-        tonalElevation = 2.dp,
+        tonalElevation = 0.dp,
+        shadowElevation = 0.dp,
         shape = MaterialTheme.shapes.medium,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
         onClick = { expanded = !expanded },
     ) {
         Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp)) {
@@ -451,7 +454,7 @@ private fun CollapsibleSection(
                 ) {
                     Icon(
                         imageVector = if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
-                        contentDescription = if (expanded) "Collapse section" else "Expand section"
+                        contentDescription = if (expanded) "Colapsar sección" else "Expandir sección"
                     )
                 }
             }
@@ -481,7 +484,7 @@ private fun CartList(
 
     Column(modifier = Modifier.fillMaxWidth()) {
         Text(
-            "Items (${cartItems.size})",
+            "Artículos (${cartItems.size})",
             style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
@@ -764,7 +767,7 @@ private fun PaymentSection(
                         Column(modifier = Modifier.weight(1f)) {
                             Text(line.modeOfPayment, fontWeight = FontWeight.SemiBold)
                             Text(
-                                "Amount: ${
+                                "Monto: ${
                                     formatAmount(
                                         line.currency.toCurrencySymbol(),
                                         line.enteredAmount
@@ -779,9 +782,9 @@ private fun PaymentSection(
                                     )
                                 }"
                             )
-                            Text("Rate: ${line.exchangeRate}")
+                            Text("Tasa: ${line.exchangeRate}")
                             if (!line.referenceNumber.isNullOrBlank()) {
-                                Text("Reference: ${line.referenceNumber}")
+                                Text("Referencia: ${line.referenceNumber}")
                             }
                         }
                         IconButton(onClick = { onRemovePaymentLine(index) }) {
@@ -903,10 +906,10 @@ private fun PaymentSection(
         OutlinedTextField(
             value = referenceInput,
             onValueChange = { referenceInput = it },
-            label = { Text("Reference number") },
+            label = { Text("Número de referencia") },
             supportingText = {
                 if (referenceInput.isBlank()) {
-                    Text("Required for ${selectedMode} payments.")
+                    Text("Requerido para pagos con ${selectedMode}.")
                 }
             },
             isError = referenceInput.isBlank(),

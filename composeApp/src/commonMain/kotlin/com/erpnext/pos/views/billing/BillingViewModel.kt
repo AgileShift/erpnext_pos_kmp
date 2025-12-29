@@ -394,57 +394,15 @@ class BillingViewModel(
 
     fun onFinalizeSale() {
         val current = requireSuccessState() ?: return
-        val customer = current.selectedCustomer ?: run {
-            _state.update {
-                BillingState.Error(
-                    "Selecciona un cliente antes de finalizar la venta.",
-                    current
-                )
-            }
+        val validationError = validateFinalizeSale(current)
+        if (validationError != null) {
+            _state.update { BillingState.Error(validationError, current) }
             return
         }
-        if (current.cartItems.isEmpty()) {
-            _state.update {
-                BillingState.Error(
-                    "Agrega al menos un artículo al carrito.",
-                    current
-                )
-            }
-            return
-        }
-        if (!current.isCreditSale && current.paidAmountBase < current.total) {
-            _state.update {
-                BillingState.Error(
-                    "El monto pagado debe cubrir el total antes de finalizar la venta.",
-                    current
-                )
-            }
-            return
-        }
-        if (current.isCreditSale && current.selectedPaymentTerm == null) {
-            _state.update {
-                BillingState.Error(
-                    "Selecciona un término de pago para finalizar una venta a crédito.",
-                    current
-                )
-            }
-            return
-        }
-        // Business rule: credit sales are registered as unpaid invoices and cannot include
-        // immediate payment lines. Payments are posted later via Payment Entry.
-        if (current.isCreditSale && current.paymentLines.isNotEmpty()) {
-            _state.update {
-                BillingState.Error(
-                    "Las ventas a crédito no pueden incluir líneas de pago.",
-                    current
-                )
-            }
-            return
-        }
+        val customer = current.selectedCustomer
+            ?: error("Customer must be selected before finalizing the sale.")
 
         val context = contextProvider.getContext() ?: error("El contexto POS no está inicializado.")
-
-        _state.update { current.copy() }
 
         executeUseCase(action = {
             val deliveryCharge = current.selectedDeliveryCharge
@@ -458,42 +416,13 @@ class BillingViewModel(
             val paymentLines = if (isCreditSale) emptyList() else current.paymentLines
             val baseCurrency = context.currency.ifBlank { current.currency ?: "USD" }
 
-            val items = current.cartItems.map { cart ->
-                SalesInvoiceItemDto(
-                    itemCode = cart.itemCode,
-                    itemName = cart.name,
-                    qty = cart.quantity,
-                    rate = cart.price,
-                    amount = cart.quantity * cart.price,
-                    discountPercentage = discountPercent,
-                    warehouse = context.warehouse,
-                    incomeAccount = context.incomeAccount
-                )
-            }.toMutableList()
-
-
-            if (discountPercent == null && discountInfo.amount > 0.0) {
-                items.add(
-                    SalesInvoiceItemDto(
-                        itemCode = DISCOUNT_ITEM_CODE,
-                        itemName = "Discount",
-                        qty = 1.0,
-                        rate = -discountInfo.amount,
-                        amount = -discountInfo.amount,
-                        warehouse = context.warehouse,
-                        incomeAccount = context.incomeAccount
-                    )
-                )
-            }
-
             val total = (totals.subtotal - discountInfo.amount + shippingAmount).coerceAtLeast(0.0)
             // ERPNext sales cycle:
             // - Credit sales must include payment_terms + payment_schedule with due_date derived from the term.
             // - Paid amount stays at 0 and status remains "Unpaid" until a Payment Entry is created.
             val paidAmount = if (isCreditSale) 0.0 else paymentLines.sumOf { it.baseAmount }
             val outstandingAmount = (totals.total - paidAmount).coerceAtLeast(0.0)
-            val status =
-                if (isCreditSale || outstandingAmount > 0.0) "Unpaid" else if (outstandingAmount == 0.0 || outstandingAmount < totals.total) "Unpaid" else "Paid"
+            val status = if (isCreditSale || outstandingAmount > 0.0) "Unpaid" else "Paid"
 
             val postingDate = DateTimeProvider.todayDate()
             val dueDate = if (isCreditSale) {
@@ -524,6 +453,7 @@ class BillingViewModel(
                 context = context,
                 totals = totals,
                 discountPercent = discountPercent,
+                discountAmount = discountInfo.amount,
                 paidAmount = paidAmount,
                 outstandingAmount = outstandingAmount,
                 status = status,
@@ -551,11 +481,20 @@ class BillingViewModel(
                         invoiceId = invoiceId,
                         invoiceTotal = totals.total,
                         paidFromAccount = created.debitTo,
-                        partyAccountCurrency = created.currency,
+                        partyAccountCurrency = created.partyAccountCurrency ?: created.currency,
                         exchangeRateByCurrency = current.exchangeRateByCurrency,
                         outstandingAmount = remainingOutstanding,
                     )
-                    createPaymentEntryUseCase(CreatePaymentEntryInput(paymentEntry))
+                    val paymentResult = runCatching {
+                        createPaymentEntryUseCase(CreatePaymentEntryInput(paymentEntry))
+                    }
+                    if (paymentResult.isFailure) {
+                        val reason = paymentResult.exceptionOrNull()
+                            ?.toUserMessage("No se pudo registrar el pago.")
+                        throw IllegalStateException(
+                            "La factura ${created.name ?: ""} se creó, pero falló el pago. $reason"
+                        )
+                    }
                     remainingOutstanding -= allocation
                 }
             }
@@ -654,6 +593,7 @@ class BillingViewModel(
         context: POSContext,
         totals: BillingTotals,
         discountPercent: Double?,
+        discountAmount: Double,
         paidAmount: Double,
         outstandingAmount: Double,
         status: String,
@@ -667,9 +607,13 @@ class BillingViewModel(
             current = current,
             context = context,
             discountPercent = discountPercent,
+            discountAmount = discountAmount
         )
         val paymentMetadata =
             buildPaymentMetadata(current, paymentLines, totals.shipping, baseCurrency)
+        val payments = paymentLines.firstOrNull()?.let { line ->
+            listOf(SalesInvoicePaymentDto(line.modeOfPayment, 0.0))
+        } ?: emptyList()
         return SalesInvoiceDto(
             customer = customer.name,
             customerName = customer.customerName,
@@ -685,9 +629,7 @@ class BillingViewModel(
             netTotal = totals.total,
             paidAmount = paidAmount,
             items = items,
-            payments = listOf(
-                SalesInvoicePaymentDto(paymentLines[0].modeOfPayment, 0.0)
-            ),
+            payments = payments,
             paymentSchedule = paymentSchedule,
             paymentTerms = if (current.isCreditSale) current.selectedPaymentTerm?.name else null,
             posProfile = context.profileName,
@@ -701,6 +643,7 @@ class BillingViewModel(
         current: BillingState.Success,
         context: POSContext,
         discountPercent: Double?,
+        discountAmount: Double
     ): MutableList<SalesInvoiceItemDto> {
         val items = current.cartItems.map { cart ->
             SalesInvoiceItemDto(
@@ -714,6 +657,20 @@ class BillingViewModel(
                 incomeAccount = context.incomeAccount
             )
         }.toMutableList()
+
+        if (discountPercent == null && discountAmount > 0.0) {
+            items.add(
+                SalesInvoiceItemDto(
+                    itemCode = DISCOUNT_ITEM_CODE,
+                    itemName = "Discount",
+                    qty = 1.0,
+                    rate = -discountAmount,
+                    amount = -discountAmount,
+                    warehouse = context.warehouse,
+                    incomeAccount = context.incomeAccount
+                )
+            )
+        }
 
         return items
     }
@@ -764,9 +721,9 @@ class BillingViewModel(
     ): PaymentEntryCreateDto {
         val baseAmount = line.enteredAmount * line.exchangeRate
         val baseCurrency = context.currency
-        val isForeignCurrency = !line.currency.equals(baseCurrency, ignoreCase = true)
         val paidFromResolved = paidFromAccount?.takeIf { it.isNotBlank() }
-        val partyCurrency = partyAccountCurrency?.takeIf { it.isNotBlank() } ?: baseCurrency
+        val partyCurrency = partyAccountCurrency?.takeIf { it.isNotBlank() } ?: line.currency
+        val isForeignCurrency = !line.currency.equals(partyCurrency, ignoreCase = true)
 
         val targetExchangeRate = resolveTargetExchangeRate(
             baseCurrency = baseCurrency,
@@ -777,6 +734,14 @@ class BillingViewModel(
             isForeignCurrency = isForeignCurrency
         )
 
+        val partyExchangeRateToBase = resolvePartyExchangeRateToBase(
+            baseCurrency = baseCurrency,
+            partyCurrency = partyCurrency,
+            paymentCurrency = line.currency,
+            paymentExchangeRate = line.exchangeRate,
+            exchangeRateByCurrency = exchangeRateByCurrency
+        )
+
         val partyAmount = resolvePartyAmount(
             baseCurrency = baseCurrency,
             partyCurrency = partyCurrency,
@@ -784,6 +749,18 @@ class BillingViewModel(
             paymentAmount = line.enteredAmount,
             baseAmount = baseAmount,
             targetExchangeRate = targetExchangeRate
+        )
+        val referenceTotal = resolveReferenceAmount(
+            baseAmount = invoiceTotal,
+            partyCurrency = partyCurrency,
+            baseCurrency = baseCurrency,
+            partyExchangeRateToBase = partyExchangeRateToBase
+        )
+        val referenceOutstanding = resolveReferenceAmount(
+            baseAmount = outstandingAmount,
+            partyCurrency = partyCurrency,
+            baseCurrency = baseCurrency,
+            partyExchangeRateToBase = partyExchangeRateToBase
         )
         return PaymentEntryCreateDto(
             company = context.company,
@@ -802,8 +779,8 @@ class BillingViewModel(
                 PaymentEntryReferenceCreateDto(
                     referenceDoctype = "Sales Invoice",
                     referenceName = invoiceId,
-                    totalAmount = invoiceTotal,
-                    outstandingAmount = outstandingAmount,
+                    totalAmount = referenceTotal,
+                    outstandingAmount = referenceOutstanding,
                     allocatedAmount = partyAmount
                 )
             )
@@ -825,7 +802,7 @@ class BillingViewModel(
         }
 
         if (partyAccountCurrency.equals(paymentCurrency, ignoreCase = true)) {
-            return paymentExchangeRate
+            return 1.0
         }
 
         val normalizedParty = partyAccountCurrency.trim().uppercase()
@@ -868,12 +845,76 @@ class BillingViewModel(
         }
     }
 
+    private suspend fun resolvePartyExchangeRateToBase(
+        baseCurrency: String,
+        partyCurrency: String,
+        paymentCurrency: String,
+        paymentExchangeRate: Double,
+        exchangeRateByCurrency: Map<String, Double>
+    ): Double {
+        if (partyCurrency.equals(baseCurrency, ignoreCase = true)) {
+            return 1.0
+        }
+        if (partyCurrency.equals(paymentCurrency, ignoreCase = true)) {
+            return paymentExchangeRate
+        }
+        val normalized = partyCurrency.trim().uppercase()
+        val cachedRate = exchangeRateByCurrency[normalized]
+        if (cachedRate != null && cachedRate > 0.0) {
+            return cachedRate
+        }
+        val directRate = api.getExchangeRate(
+            fromCurrency = normalized,
+            toCurrency = baseCurrency
+        )
+        val reverseRate = api.getExchangeRate(
+            fromCurrency = baseCurrency,
+            toCurrency = normalized
+        )?.takeIf { it > 0.0 }?.let { 1 / it }
+        return directRate ?: reverseRate ?: 1.0
+    }
+
+    private fun resolveReferenceAmount(
+        baseAmount: Double,
+        partyCurrency: String,
+        baseCurrency: String,
+        partyExchangeRateToBase: Double
+    ): Double {
+        if (partyCurrency.equals(baseCurrency, ignoreCase = true)) {
+            return baseAmount
+        }
+        return if (partyExchangeRateToBase > 0.0) {
+            baseAmount / partyExchangeRateToBase
+        } else {
+            baseAmount
+        }
+    }
+
     private fun requiresReference(mode: POSPaymentModeOption?): Boolean {
         val type = mode?.type?.trim().orEmpty()
         return type.equals("Bank", ignoreCase = true) ||
                 type.equals("Card", ignoreCase = true) ||
                 mode?.modeOfPayment?.contains("bank", ignoreCase = true) == true ||
                 mode?.modeOfPayment?.contains("card", ignoreCase = true) == true
+    }
+
+    private fun validateFinalizeSale(current: BillingState.Success): String? {
+        if (current.selectedCustomer == null) {
+            return "Selecciona un cliente antes de finalizar la venta."
+        }
+        if (current.cartItems.isEmpty()) {
+            return "Agrega al menos un artículo al carrito."
+        }
+        if (!current.isCreditSale && current.paidAmountBase < current.total) {
+            return "El monto pagado debe cubrir el total antes de finalizar la venta."
+        }
+        if (current.isCreditSale && current.selectedPaymentTerm == null) {
+            return "Selecciona un término de pago para finalizar una venta a crédito."
+        }
+        if (current.isCreditSale && current.paymentLines.isNotEmpty()) {
+            return "Las ventas a crédito no pueden incluir líneas de pago."
+        }
+        return null
     }
 }
 
