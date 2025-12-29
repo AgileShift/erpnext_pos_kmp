@@ -22,6 +22,7 @@ import com.erpnext.pos.remoteSource.dto.SalesInvoicePaymentScheduleDto
 import com.erpnext.pos.remoteSource.api.APIService
 import com.erpnext.pos.remoteSource.dto.v2.PaymentEntryCreateDto
 import com.erpnext.pos.remoteSource.dto.v2.PaymentEntryReferenceCreateDto
+import com.erpnext.pos.remoteSource.sdk.toUserMessage
 import com.erpnext.pos.utils.toCurrencySymbol
 import com.erpnext.pos.utils.view.DateTimeProvider
 import com.erpnext.pos.domain.models.POSPaymentModeOption
@@ -125,7 +126,9 @@ class BillingViewModel(
                 }
             }
         }, exceptionHandler = {
-            _state.value = BillingState.Error(it.message ?: "Error desconocido.")
+            _state.value = BillingState.Error(
+                it.toUserMessage("No se pudo cargar la información de facturación.")
+            )
         })
     }
 
@@ -402,25 +405,50 @@ class BillingViewModel(
     fun onFinalizeSale() {
         val current = _state.value as? BillingState.Success ?: return
         val customer = current.selectedCustomer ?: run {
-            _state.update { BillingState.Error("Seleccione un cliente antes de finalizar la venta.") }
+            _state.update {
+                BillingState.Error(
+                    "Selecciona un cliente antes de finalizar la venta.",
+                    current
+                )
+            }
             return
         }
         if (current.cartItems.isEmpty()) {
-            _state.update { BillingState.Error("Agregue al menos un artículo al carrito.") }
+            _state.update {
+                BillingState.Error(
+                    "Agrega al menos un artículo al carrito.",
+                    current
+                )
+            }
             return
         }
         if (!current.isCreditSale && current.paidAmountBase < current.total) {
-            _state.update { BillingState.Error("El monto pagado debe cubrir el total antes de finalizar la venta.") }
+            _state.update {
+                BillingState.Error(
+                    "El monto pagado debe cubrir el total antes de finalizar la venta.",
+                    current
+                )
+            }
             return
         }
         if (current.isCreditSale && current.selectedPaymentTerm == null) {
-            _state.update { BillingState.Error("Seleccione un término de pago para finalizar una venta a crédito.") }
+            _state.update {
+                BillingState.Error(
+                    "Selecciona un término de pago para finalizar una venta a crédito.",
+                    current
+                )
+            }
             return
         }
         // Business rule: credit sales are registered as unpaid invoices and cannot include
         // immediate payment lines. Payments are posted later via Payment Entry.
         if (current.isCreditSale && current.paymentLines.isNotEmpty()) {
-            _state.update { BillingState.Error("Las ventas a crédito no pueden incluir líneas de pago.") }
+            _state.update {
+                BillingState.Error(
+                    "Las ventas a crédito no pueden incluir líneas de pago.",
+                    current
+                )
+            }
             return
         }
 
@@ -565,7 +593,11 @@ class BillingViewModel(
                 )
             }
         }, exceptionHandler = { e ->
-            _state.update { BillingState.Error(e.message ?: "No se pudo crear la factura.") }
+            val errorMessage = e.toUserMessage("No se pudo crear la factura.")
+            _state.update { currentState ->
+                val previous = currentState as? BillingState.Success
+                BillingState.Error(errorMessage, previous)
+            }
         })
     }
 
