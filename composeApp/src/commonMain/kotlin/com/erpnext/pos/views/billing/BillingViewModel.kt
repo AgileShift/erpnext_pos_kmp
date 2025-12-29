@@ -25,6 +25,7 @@ import com.erpnext.pos.remoteSource.dto.v2.PaymentEntryReferenceCreateDto
 import com.erpnext.pos.utils.toCurrencySymbol
 import com.erpnext.pos.utils.view.DateTimeProvider
 import com.erpnext.pos.domain.models.POSPaymentModeOption
+import com.erpnext.pos.remoteSource.dto.SalesInvoicePaymentDto
 import com.erpnext.pos.views.CashBoxManager
 import com.erpnext.pos.views.POSContext
 import com.erpnext.pos.views.billing.BillingCalculationHelper.resolveDiscountInfo
@@ -473,7 +474,8 @@ class BillingViewModel(
             // - Paid amount stays at 0 and status remains "Unpaid" until a Payment Entry is created.
             val paidAmount = if (isCreditSale) 0.0 else paymentLines.sumOf { it.baseAmount }
             val outstandingAmount = (totals.total - paidAmount).coerceAtLeast(0.0)
-            val status = if (isCreditSale || outstandingAmount > 0.0) "Unpaid" else "Paid"
+            val status =
+                if (isCreditSale || outstandingAmount > 0.0) "Unpaid" else if (outstandingAmount == 0.0 || outstandingAmount < totals.total) "Unpaid" else "Paid"
 
             val postingDate = DateTimeProvider.todayDate()
             val dueDate = if (isCreditSale) {
@@ -655,12 +657,15 @@ class BillingViewModel(
             netTotal = totals.total,
             paidAmount = paidAmount,
             items = items,
-            payments = emptyList(),
+            payments = listOf(
+                SalesInvoicePaymentDto(paymentLines[0].modeOfPayment, 0.0)
+            ),
             paymentSchedule = paymentSchedule,
             paymentTerms = if (current.isCreditSale) current.selectedPaymentTerm?.name else null,
             posProfile = context.profileName,
             remarks = paymentMetadata,
-            updateStock = true
+            updateStock = true,
+            docStatus = 1
         )
     }
 

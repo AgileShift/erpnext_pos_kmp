@@ -170,27 +170,32 @@ suspend inline fun <reified T, reified R> HttpClient.postERP(
     baseUrl: String?,
     additionalHeaders: Map<String, String> = emptyMap()
 ): R {
-    require(baseUrl != null && baseUrl.isNotBlank()) { "baseUrl no puede ser nulo o vacío" }
+    try {
+        require(baseUrl != null && baseUrl.isNotBlank()) { "baseUrl no puede ser nulo o vacío" }
 
-    val endpoint = baseUrl.trimEnd('/') + "/api/resource/${encodeURIComponent(doctype)}"
-    val bodyText = this.post {
-        url { takeFrom(endpoint) }
-        contentType(ContentType.Application.Json)
-        setBody(json.encodeToString(payload))
-        if (additionalHeaders.isNotEmpty()) headers {
-            additionalHeaders.forEach { (k, v) ->
-                append(
-                    k,
-                    v
-                )
+        val endpoint = baseUrl.trimEnd('/') + "/api/resource/${encodeURIComponent(doctype)}"
+        val bodyText = this.post {
+            url { takeFrom(endpoint) }
+            contentType(ContentType.Application.Json)
+            setBody(json.encodeToString(payload))
+            if (additionalHeaders.isNotEmpty()) headers {
+                additionalHeaders.forEach { (k, v) ->
+                    append(
+                        k,
+                        v
+                    )
+                }
             }
-        }
-    }.bodyAsText()
+        }.bodyAsText()
 
-    val parsed = json.parseToJsonElement(bodyText).jsonObject
-    val dataElement = parsed["data"]
-        ?: throw FrappeException("La respuesta no contiene 'data'. Respuesta: $bodyText")
-    return json.decodeFromJsonElement(dataElement)
+        val parsed = json.parseToJsonElement(bodyText).jsonObject
+        val dataElement = parsed["data"]
+            ?: throw FrappeException("La respuesta no contiene 'data'. Respuesta: $bodyText")
+        return json.decodeFromJsonElement(dataElement)
+    } catch (e: Exception) {
+        e.printStackTrace()
+        return ("" as R)
+    }
 }
 
 suspend inline fun <reified T, reified R> HttpClient.putERP(
