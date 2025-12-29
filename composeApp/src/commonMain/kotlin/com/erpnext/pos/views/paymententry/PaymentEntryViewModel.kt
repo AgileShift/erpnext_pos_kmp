@@ -37,7 +37,7 @@ class PaymentEntryViewModel(
         val current = _state.value
         val amount = current.amount.toDoubleOrNull()
         if (amount == null) {
-            _state.update { it.copy(errorMessage = "Enter a valid amount.") }
+            _state.update { it.copy(errorMessage = "Ingresa un monto válido.") }
             return
         }
 
@@ -55,7 +55,7 @@ class PaymentEntryViewModel(
                 _state.update {
                     it.copy(
                         isSubmitting = false,
-                        successMessage = "Payment registered successfully."
+                        successMessage = "Pago registrado correctamente."
                     )
                 }
             },
@@ -63,7 +63,7 @@ class PaymentEntryViewModel(
                 _state.update {
                     it.copy(
                         isSubmitting = false,
-                        errorMessage = throwable.message ?: "Unable to register payment."
+                        errorMessage = throwable.message ?: "No se pudo registrar el pago."
                     )
                 }
             }

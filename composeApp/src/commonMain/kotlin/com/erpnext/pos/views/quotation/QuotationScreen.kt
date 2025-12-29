@@ -30,12 +30,12 @@ fun QuotationScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Quotations") },
+                title = { Text("Cotizaciones") },
                 navigationIcon = {
                     IconButton(onClick = action.onBack) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Back"
+                            contentDescription = "Atrás"
                         )
                     }
                 }
@@ -59,7 +59,7 @@ fun QuotationScreen(
                 )
 
                 QuotationState.Ready -> Text(
-                    text = "Quotation view is ready to be wired.",
+                    text = "La vista de cotizaciones está lista para conectarse.",
                     style = MaterialTheme.typography.bodyLarge,
                     textAlign = TextAlign.Center
                 )
