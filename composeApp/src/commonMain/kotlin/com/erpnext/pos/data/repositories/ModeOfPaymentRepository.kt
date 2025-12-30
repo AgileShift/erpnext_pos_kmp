@@ -1,11 +1,65 @@
 package com.erpnext.pos.data.repositories
 
-interface IModeOfPaymentRepository {
+import com.erpnext.pos.base.Resource
+import com.erpnext.pos.base.networkBoundResource
+import com.erpnext.pos.localSource.datasources.ModeOfPaymentLocalSource
+import com.erpnext.pos.localSource.entities.ModeOfPaymentEntity
+import com.erpnext.pos.remoteSource.datasources.ModeOfPaymentRemoteSource
+import com.erpnext.pos.sync.SyncTTL
+import com.erpnext.pos.views.CashBoxManager
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flowOf
+import kotlin.time.Clock
+import kotlin.time.ExperimentalTime
 
+interface IModeOfPaymentRepository {
+    suspend fun sync(ttlHours: Int = SyncTTL.DEFAULT_TTL_HOURS): Flow<Resource<List<ModeOfPaymentEntity>>>
 }
 
+@OptIn(ExperimentalTime::class)
 class ModeOfPaymentRepository(
-    private val remoteSource: Any,
-    private val localSource: Any
-): IModeOfPaymentRepository {
+    private val remoteSource: ModeOfPaymentRemoteSource,
+    private val localSource: ModeOfPaymentLocalSource,
+    private val context: CashBoxManager
+) : IModeOfPaymentRepository {
+
+    override suspend fun sync(
+        ttlHours: Int
+    ): Flow<Resource<List<ModeOfPaymentEntity>>> {
+        val company = context.requireContext().company
+        return networkBoundResource(
+            query = { flowOf(localSource.getAllModes(company)) },
+            fetch = {
+                val now = Clock.System.now().toEpochMilliseconds()
+                val activeModes = remoteSource.getActiveModes()
+                val results = mutableListOf<ModeOfPaymentEntity>()
+                activeModes.forEach { mode ->
+                    val detail = remoteSource.getModeDetail(mode.name) ?: return@forEach
+                    val account = detail.accounts.firstOrNull { it.company == company }
+                        ?.defaultAccount
+                    val accountDetail = account?.let { remoteSource.getAccountDetail(it) }
+                    results.add(
+                        ModeOfPaymentEntity(
+                            name = detail.name,
+                            modeOfPayment = detail.modeOfPayment,
+                            company = company,
+                            type = accountDetail?.accountType ?: detail.type ?: "Cash",
+                            isDefault = false,
+                            enabled = detail.enabled,
+                            currency = accountDetail?.accountCurrency,
+                            account = account,
+                            lastSyncedAt = now
+                        )
+                    )
+                }
+                results
+            },
+            saveFetchResult = { localSource.insertAllModes(it) },
+            shouldFetch = { cached ->
+                cached.isEmpty() ||
+                    SyncTTL.isExpired(localSource.getLastSyncedAt(company), ttlHours)
+            },
+            onFetchFailed = { }
+        )
+    }
 }

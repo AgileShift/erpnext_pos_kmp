@@ -7,6 +7,7 @@ import com.erpnext.pos.data.repositories.CheckoutRepository
 import com.erpnext.pos.data.repositories.CustomerRepository
 import com.erpnext.pos.data.repositories.DeliveryChargesRepository
 import com.erpnext.pos.data.repositories.InventoryRepository
+import com.erpnext.pos.data.repositories.ModeOfPaymentRepository
 import com.erpnext.pos.data.repositories.PaymentTermsRepository
 import com.erpnext.pos.data.repositories.POSProfileRepository
 import com.erpnext.pos.data.repositories.PaymentEntryRepository
@@ -31,9 +32,11 @@ import com.erpnext.pos.domain.usecases.FetchPosProfileUseCase
 import com.erpnext.pos.domain.usecases.FetchUserInfoUseCase
 import com.erpnext.pos.domain.usecases.LogoutUseCase
 import com.erpnext.pos.domain.usecases.RegisterInvoicePaymentUseCase
+import com.erpnext.pos.domain.usecases.SaveInvoicePaymentsUseCase
 import com.erpnext.pos.localSource.datasources.CustomerLocalSource
 import com.erpnext.pos.localSource.datasources.InventoryLocalSource
 import com.erpnext.pos.localSource.datasources.InvoiceLocalSource
+import com.erpnext.pos.localSource.datasources.ModeOfPaymentLocalSource
 import com.erpnext.pos.localSource.datasources.POSProfileLocalSource
 import com.erpnext.pos.localSource.preferences.ExchangeRatePreferences
 import com.erpnext.pos.navigation.NavigationManager
@@ -41,6 +44,7 @@ import com.erpnext.pos.remoteSource.api.APIService
 import com.erpnext.pos.remoteSource.api.defaultEngine
 import com.erpnext.pos.remoteSource.datasources.CustomerRemoteSource
 import com.erpnext.pos.remoteSource.datasources.InventoryRemoteSource
+import com.erpnext.pos.remoteSource.datasources.ModeOfPaymentRemoteSource
 import com.erpnext.pos.remoteSource.datasources.POSProfileRemoteSource
 import com.erpnext.pos.remoteSource.datasources.SalesInvoiceRemoteSource
 import com.erpnext.pos.remoteSource.datasources.UserRemoteSource
@@ -131,7 +135,7 @@ val appModule = module {
             get()
         )
     }
-    single<SyncManager> { SyncManager(get(), get(), get(), get()) }
+    single<SyncManager> { SyncManager(get(), get(), get(),  get(),get()) }
     //endregion
 
     //region Login DI
@@ -147,6 +151,12 @@ val appModule = module {
     single { InventoryLocalSource(get(), get()) }
     single { InventoryRepository(get(), get(), get()) }
     single { InventoryViewModel(get(), get(), get()) }
+    //endregion
+
+    //region Mode of Payment
+    single { ModeOfPaymentRemoteSource(get(named("apiService"))) }
+    single { ModeOfPaymentLocalSource(get()) }
+    single { ModeOfPaymentRepository(get(), get(), get()) }
     //endregion
 
     //region POS Profile
@@ -201,6 +211,7 @@ val appModule = module {
             get(),
             get(),
             get(),
+            get(),
             get(named("apiService"))
         )
     }
@@ -218,6 +229,7 @@ val appModule = module {
     single { FetchBillingProductsWithPriceUseCase(get()) }
     single { CheckCustomerCreditUseCase(get()) }
     single { FetchPendingInvoiceUseCase(get()) }
+    single { SaveInvoicePaymentsUseCase(get()) }
     single { FetchCustomersUseCase(get()) }
     single { FetchPaymentTermsUseCase(get()) }
     single { FetchDeliveryChargesUseCase(get()) }

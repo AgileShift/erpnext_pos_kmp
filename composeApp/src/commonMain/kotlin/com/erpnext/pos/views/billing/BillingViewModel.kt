@@ -5,6 +5,7 @@ import com.erpnext.pos.base.BaseViewModel
 import com.erpnext.pos.domain.models.CustomerBO
 import com.erpnext.pos.domain.models.DeliveryChargeBO
 import com.erpnext.pos.domain.models.ItemBO
+import com.erpnext.pos.domain.models.PaymentTermBO
 import com.erpnext.pos.domain.usecases.FetchBillingProductsWithPriceUseCase
 import com.erpnext.pos.domain.usecases.FetchCustomersUseCase
 import com.erpnext.pos.domain.usecases.FetchDeliveryChargesUseCase
@@ -13,8 +14,11 @@ import com.erpnext.pos.domain.usecases.CreatePaymentEntryInput
 import com.erpnext.pos.domain.usecases.CreatePaymentEntryUseCase
 import com.erpnext.pos.domain.usecases.CreateSalesInvoiceInput
 import com.erpnext.pos.domain.usecases.CreateSalesInvoiceUseCase
+import com.erpnext.pos.domain.usecases.SaveInvoicePaymentsInput
+import com.erpnext.pos.domain.usecases.SaveInvoicePaymentsUseCase
 import com.erpnext.pos.localSource.dao.ModeOfPaymentDao
 import com.erpnext.pos.localSource.entities.ModeOfPaymentEntity
+import com.erpnext.pos.localSource.entities.POSInvoicePaymentEntity
 import com.erpnext.pos.navigation.NavRoute
 import com.erpnext.pos.navigation.NavigationManager
 import com.erpnext.pos.remoteSource.dto.SalesInvoiceDto
@@ -46,6 +50,7 @@ class BillingViewModel(
     private val navManager: NavigationManager,
     private val createSalesInvoiceUseCase: CreateSalesInvoiceUseCase,
     private val createPaymentEntryUseCase: CreatePaymentEntryUseCase,
+    private val saveInvoicePaymentsUseCase: SaveInvoicePaymentsUseCase,
     private val api: APIService,
 ) : BaseViewModel() {
 
@@ -75,12 +80,13 @@ class BillingViewModel(
                 itemsUseCase.invoke(null).collectLatest { i ->
                     products = i.filter { it.price > 0.0 && it.actualQty > 0.0 }
                     val currency = context.currency.ifBlank { "USD" }
-                    val modeDefinitions = runCatching { modeOfPaymentDao.getAllModes() }
-                        .getOrElse { emptyList() }
+                    val modeDefinitions =
+                        runCatching { modeOfPaymentDao.getAllModes(context.company) }
+                            .getOrElse { emptyList() }
                     val modeTypes = modeDefinitions.associateBy { it.modeOfPayment }
                     paymentModeDetails = buildPaymentModeDetailMap(modeDefinitions)
                     val paymentModes = context.paymentModes.ifEmpty {
-                        modeOfPaymentDao.getAll(/*context.profileName*/).map { mode ->
+                        modeOfPaymentDao.getAll(context.company).map { mode ->
                             POSPaymentModeOption(
                                 name = mode.name,
                                 modeOfPayment = mode.modeOfPayment,
@@ -290,7 +296,7 @@ class BillingViewModel(
         }
     }
 
-    fun onPaymentTermSelected(term: com.erpnext.pos.domain.models.PaymentTermBO?) {
+    fun onPaymentTermSelected(term: PaymentTermBO?) {
         val current = requireSuccessState() ?: return
         _state.update {
             current.copy(
@@ -418,37 +424,25 @@ class BillingViewModel(
             val isCreditSale = current.isCreditSale
             val paymentLines = if (isCreditSale) emptyList() else current.paymentLines
             val baseCurrency = context.currency.ifBlank { current.currency ?: "USD" }
-            val total = (totals.subtotal - discountInfo.amount + shippingAmount).coerceAtLeast(0.0)
             // ERPNext sales cycle:
             // - Credit sales must include payment_terms + payment_schedule with due_date derived from the term.
             // - Paid amount stays at 0 and status remains "Unpaid" until a Payment Entry is created.
-            val paidAmount = if (isCreditSale) 0.0 else paymentLines.sumOf { it.baseAmount }
-            val outstandingAmount = (totals.total - paidAmount).coerceAtLeast(0.0)
-            val status = if (isCreditSale || outstandingAmount > 0.0) "Unpaid" else "Paid"
-
             val postingDate = DateTimeProvider.todayDate()
-            val dueDate = if (isCreditSale) {
-                val term = current.selectedPaymentTerm
-                    ?: error("El término de pago es obligatorio para ventas a crédito.")
-                val withMonths = DateTimeProvider.addMonths(postingDate, term.creditMonths ?: 0)
-                DateTimeProvider.addDays(withMonths, term.creditDays ?: 0)
-            } else {
-                postingDate
-            }
-            val paymentSchedule = if (isCreditSale) {
-                val term = current.selectedPaymentTerm
-                    ?: error("El término de pago es obligatorio para ventas a crédito.")
-                listOf(
-                    SalesInvoicePaymentScheduleDto(
-                        paymentTerm = term.name,
-                        invoicePortion = term.invoicePortion ?: 100.0,
-                        dueDate = dueDate,
-                        modeOfPayment = term.modeOfPayment
-                    )
-                )
-            } else {
-                emptyList()
-            }
+            val dueDate = resolveDueDate(
+                isCreditSale = isCreditSale,
+                postingDate = postingDate,
+                term = current.selectedPaymentTerm
+            )
+            val paymentSchedule = buildPaymentSchedule(
+                isCreditSale = isCreditSale,
+                term = current.selectedPaymentTerm,
+                dueDate = dueDate
+            )
+            val paymentStatus = resolvePaymentStatus(
+                isCreditSale = isCreditSale,
+                total = totals.total,
+                paymentLines = paymentLines
+            )
             val invoiceDto = buildSalesInvoiceDto(
                 current = current,
                 customer = customer,
@@ -456,9 +450,9 @@ class BillingViewModel(
                 totals = totals,
                 discountPercent = discountPercent,
                 discountAmount = discountInfo.amount,
-                paidAmount = paidAmount,
-                outstandingAmount = outstandingAmount,
-                status = status,
+                paidAmount = paymentStatus.paidAmount,
+                outstandingAmount = paymentStatus.outstandingAmount,
+                status = paymentStatus.status,
                 paymentSchedule = paymentSchedule,
                 paymentLines = paymentLines,
                 baseCurrency = baseCurrency,
@@ -499,6 +493,17 @@ class BillingViewModel(
                     }
                     remainingOutstanding -= allocation
                 }
+                val localPayments = buildLocalPayments(
+                    invoiceId = invoiceId,
+                    postingDate = postingDate,
+                    paymentLines = paymentLines
+                )
+                saveInvoicePaymentsUseCase(
+                    SaveInvoicePaymentsInput(
+                        invoiceName = invoiceId,
+                        payments = localPayments
+                    )
+                )
             }
 
             _state.update {
@@ -613,9 +618,11 @@ class BillingViewModel(
         )
         val paymentMetadata =
             buildPaymentMetadata(current, paymentLines, totals.shipping, baseCurrency)
-        val payments = listOf(
-            SalesInvoicePaymentDto(paymentLines[0].modeOfPayment, 0.0)
-        )
+        val paymentMode = paymentLines.firstOrNull()?.modeOfPayment
+            ?: current.selectedPaymentTerm?.modeOfPayment
+            ?: current.paymentModes.firstOrNull()?.modeOfPayment
+            ?: error("No hay modo de pago disponible para crear la factura.")
+        val payments = listOf(SalesInvoicePaymentDto(paymentMode, 0.0))
         return SalesInvoiceDto(
             customer = customer.name,
             customerName = customer.customerName,
@@ -707,6 +714,22 @@ class BillingViewModel(
                 add("Envío: $shippingAmount")
             }
         }.joinToString(separator = "; ").takeIf { it.isNotBlank() }
+    }
+
+    private fun buildLocalPayments(
+        invoiceId: String,
+        postingDate: String,
+        paymentLines: List<PaymentLine>
+    ): List<POSInvoicePaymentEntity> {
+        return paymentLines.map { line ->
+            POSInvoicePaymentEntity(
+                parentInvoice = invoiceId,
+                modeOfPayment = line.modeOfPayment,
+                amount = line.baseAmount,
+                paymentReference = line.referenceNumber?.takeIf { it.isNotBlank() },
+                paymentDate = postingDate
+            )
+        }
     }
 
     private suspend fun buildPaymentEntryDto(
@@ -908,6 +931,52 @@ class BillingViewModel(
         } else {
             baseAmount
         }
+    }
+
+    private data class PaymentStatus(
+        val paidAmount: Double,
+        val outstandingAmount: Double,
+        val status: String
+    )
+
+    private fun resolvePaymentStatus(
+        isCreditSale: Boolean,
+        total: Double,
+        paymentLines: List<PaymentLine>
+    ): PaymentStatus {
+        val paidAmount = if (isCreditSale) 0.0 else paymentLines.sumOf { it.baseAmount }
+        val outstandingAmount = (total - paidAmount).coerceAtLeast(0.0)
+        val status = if (isCreditSale || outstandingAmount > 0.0) "Unpaid" else "Paid"
+        return PaymentStatus(paidAmount, outstandingAmount, status)
+    }
+
+    private fun resolveDueDate(
+        isCreditSale: Boolean,
+        postingDate: String,
+        term: PaymentTermBO?
+    ): String {
+        if (!isCreditSale) return postingDate
+        val resolvedTerm = term ?: error("El término de pago es obligatorio para ventas a crédito.")
+        val withMonths = DateTimeProvider.addMonths(postingDate, resolvedTerm.creditMonths ?: 0)
+        return DateTimeProvider.addDays(withMonths, resolvedTerm.creditDays ?: 0)
+    }
+
+    private fun buildPaymentSchedule(
+        isCreditSale: Boolean,
+        term: PaymentTermBO?,
+        dueDate: String
+    ): List<SalesInvoicePaymentScheduleDto> {
+        if (!isCreditSale) return emptyList()
+
+        val resolvedTerm = term ?: error("El término de pago es obligatorio para ventas a crédito.")
+        return listOf(
+            SalesInvoicePaymentScheduleDto(
+                paymentTerm = resolvedTerm.name,
+                invoicePortion = resolvedTerm.invoicePortion ?: 100.0,
+                dueDate = dueDate,
+                modeOfPayment = resolvedTerm.modeOfPayment
+            )
+        )
     }
 
     private fun requiresReference(mode: POSPaymentModeOption?): Boolean {

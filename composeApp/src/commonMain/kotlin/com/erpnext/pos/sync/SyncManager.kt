@@ -3,6 +3,7 @@ package com.erpnext.pos.sync
 import com.erpnext.pos.base.Resource
 import com.erpnext.pos.data.repositories.CustomerRepository
 import com.erpnext.pos.data.repositories.InventoryRepository
+import com.erpnext.pos.data.repositories.ModeOfPaymentRepository
 import com.erpnext.pos.data.repositories.SalesInvoiceRepository
 import com.erpnext.pos.utils.NetworkMonitor
 import kotlinx.coroutines.CoroutineScope
@@ -21,7 +22,7 @@ import kotlinx.coroutines.launch
 
 interface ISyncManager {
     val state: StateFlow<SyncState>
-    fun fullSync()
+    fun fullSync(ttlHours: Int = SyncTTL.DEFAULT_TTL_HOURS)
 }
 
 class SyncManager(
@@ -37,7 +38,7 @@ class SyncManager(
     private val _state = MutableStateFlow<SyncState>(SyncState.IDLE)
     override val state: StateFlow<SyncState> = _state.asStateFlow()
 
-    override fun fullSync() {
+    override fun fullSync(ttlHours: Int) {
         if (_state.value is SyncState.SYNCING) return
 
         scope.launch {
@@ -51,8 +52,8 @@ class SyncManager(
                 coroutineScope {
                     val jobs = listOf(
                         async {
-                            SyncState.SYNCING("Metodos de pago...")
-                            modeOfPaymentRepo.sync()
+                            _state.value = SyncState.SYNCING("Metodos de pago...")
+                            modeOfPaymentRepo.sync(ttlHours)
                                 .filter { it !is Resource.Loading }
                                 .first()
                         },

@@ -11,11 +11,9 @@ import com.erpnext.pos.localSource.dao.POSOpeningEntryDao
 import com.erpnext.pos.localSource.dao.POSProfileDao
 import com.erpnext.pos.localSource.dao.UserDao
 import com.erpnext.pos.localSource.entities.CashboxEntity
-import com.erpnext.pos.localSource.entities.ModeOfPaymentEntity
 import com.erpnext.pos.localSource.preferences.ExchangeRatePreferences
 import com.erpnext.pos.remoteSource.api.APIService
 import com.erpnext.pos.remoteSource.dto.BalanceDetailsDto
-import com.erpnext.pos.remoteSource.dto.ModeOfPaymentDto
 import com.erpnext.pos.remoteSource.dto.POSClosingEntryDto
 import com.erpnext.pos.remoteSource.dto.POSOpeningEntryDto
 import com.erpnext.pos.remoteSource.mapper.toDto
@@ -249,17 +247,10 @@ class CashBoxManager(
         profileName: String,
         company: String
     ): List<POSPaymentModeOption> {
-        val activeModes = runCatching { api.getActiveModeOfPayment() }.getOrElse { emptyList() }
-        val activeByName = activeModes.associateBy { it.modeOfPayment }
-
-        if (activeModes.isNotEmpty()) {
-            syncModeOfPaymentDetails(activeModes, company)
-        }
-
-        val storedModes = runCatching { modeOfPaymentDao.getAllModes() }
+        val storedModes = runCatching { modeOfPaymentDao.getAllModes(company) }
             .getOrElse { emptyList() }
         val modeTypes = storedModes.associateBy { it.modeOfPayment }
-        val profileModes = runCatching { modeOfPaymentDao.getAll(/*profileName*/) }
+        return runCatching { modeOfPaymentDao.getAll(company) }
             .getOrElse { emptyList() }
             .map { mode ->
                 POSPaymentModeOption(
@@ -268,57 +259,6 @@ class CashBoxManager(
                     type = modeTypes[mode.modeOfPayment]?.type,
                 )
             }
-
-        if (profileModes.isEmpty() && activeModes.isEmpty()) return emptyList()
-
-        val baseModes = profileModes.ifEmpty {
-            activeModes.map { mode ->
-                POSPaymentModeOption(
-                    name = mode.name,
-                    modeOfPayment = mode.modeOfPayment,
-                    type = modeTypes[mode.modeOfPayment]?.type,
-                )
-            }
-        }
-
-        if (activeByName.isEmpty()) return baseModes
-
-        val enriched = baseModes.mapNotNull { option ->
-            val active = activeByName[option.modeOfPayment] ?: return@mapNotNull null
-            option.copy(
-                type = option.type ?: modeTypes[option.modeOfPayment]?.type,
-            )
-        }
-        return enriched.ifEmpty { baseModes }
-    }
-
-    private suspend fun syncModeOfPaymentDetails(
-        activeModes: List<ModeOfPaymentDto>,
-        company: String
-    ) {
-        val updatedModes = mutableListOf<ModeOfPaymentEntity>()
-        activeModes.forEach { mode ->
-            val detail = runCatching { api.getModeOfPaymentDetail(mode.name) }.getOrNull()
-                ?: return@forEach
-            val account = detail.accounts.firstOrNull { it.company == company }?.defaultAccount
-            val accountDetail = account?.let {
-                runCatching { api.getAccountDetail(it) }.getOrNull()
-            }
-            updatedModes.add(
-                ModeOfPaymentEntity(
-                    name = detail.name,
-                    modeOfPayment = detail.modeOfPayment,
-                    type = accountDetail?.accountType ?: detail.type ?: "Cash",
-                    isDefault = false,
-                    enabled = detail.enabled,
-                    currency = accountDetail?.accountCurrency,
-                    account = account
-                )
-            )
-        }
-        if (updatedModes.isNotEmpty()) {
-            modeOfPaymentDao.insertAllModes(updatedModes)
-        }
     }
 
     suspend fun updateManualExchangeRate(rate: Double) {
