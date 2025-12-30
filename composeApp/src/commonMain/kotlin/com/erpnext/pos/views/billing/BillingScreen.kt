@@ -153,24 +153,12 @@ fun BillingScreen(
                 }
                 val previous = state.previous
                 if (previous != null) {
-                    Column(
-                        modifier = Modifier
-                            .padding(padding)
-                            .fillMaxSize()
-                    ) {
-                        Text(
-                            text = state.message,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.error,
-                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-                        )
-                        BillingContent(
-                            state = previous,
-                            action = action,
-                            padding = PaddingValues(0.dp),
-                            snackbar = snackbar
-                        )
-                    }
+                    BillingContent(
+                        state = previous,
+                        action = action,
+                        padding = padding,
+                        snackbar = snackbar
+                    )
                 } else {
                     Box(
                         modifier = Modifier

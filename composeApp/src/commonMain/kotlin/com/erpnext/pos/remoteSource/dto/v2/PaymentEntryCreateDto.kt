@@ -25,8 +25,6 @@ data class PaymentEntryCreateDto(
     val paidFrom: String? = null,
     @SerialName("paid_to")
     val paidTo: String? = null,
-    @SerialName("paid_to_account_currency")
-    val paidToAccountCurrency: String? = null,
     @SerialName("source_exchange_rate")
     val sourceExchangeRate: Double? = null,
     @SerialName("target_exchange_rate")
