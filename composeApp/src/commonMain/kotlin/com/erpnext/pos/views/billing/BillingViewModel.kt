@@ -745,6 +745,13 @@ class BillingViewModel(
         exchangeRateByCurrency: Map<String, Double>,
     ): PaymentEntryCreateDto {
         val baseAmount = line.enteredAmount * line.exchangeRate
+        val allocationBase = minOf(baseAmount, outstandingAmount)
+        val safeRate = if (line.exchangeRate > 0.0) line.exchangeRate else 1.0
+        val allocationPaymentAmount = if (baseAmount <= outstandingAmount) {
+            line.enteredAmount
+        } else {
+            allocationBase / safeRate
+        }
         val baseCurrency = context.currency
         val paidFromResolved = paidFromAccount?.takeIf { it.isNotBlank() }
         val modeDefinition = paymentModeDetails[line.modeOfPayment]
@@ -786,8 +793,8 @@ class BillingViewModel(
             baseCurrency = baseCurrency,
             partyCurrency = partyCurrency,
             paymentCurrency = line.currency,
-            paymentAmount = line.enteredAmount,
-            baseAmount = baseAmount,
+            paymentAmount = allocationPaymentAmount,
+            baseAmount = allocationBase,
             targetExchangeRate = targetExchangeRate
         )
         val referenceTotal = resolveReferenceAmount(
@@ -802,6 +809,7 @@ class BillingViewModel(
             baseCurrency = baseCurrency,
             partyExchangeRateToBase = partyExchangeRateToBase
         )
+        val allocatedAmount = minOf(partyAmount, referenceOutstanding)
         return PaymentEntryCreateDto(
             company = context.company,
             postingDate = postingDate,
@@ -810,8 +818,8 @@ class BillingViewModel(
             docStatus = 1,
             partyId = customer.name,
             modeOfPayment = line.modeOfPayment,
-            paidAmount = partyAmount,
-            receivedAmount = line.enteredAmount,
+            paidAmount = allocatedAmount,
+            receivedAmount = allocationPaymentAmount,
             paidFrom = paidFromResolved,
             paidTo = paidToResolved,
             paidToAccountCurrency = paidToAccountCurrency ?: baseCurrency,
@@ -824,7 +832,7 @@ class BillingViewModel(
                     referenceName = invoiceId,
                     totalAmount = referenceTotal,
                     outstandingAmount = referenceOutstanding,
-                    allocatedAmount = partyAmount
+                    allocatedAmount = allocatedAmount
                 )
             )
         )
