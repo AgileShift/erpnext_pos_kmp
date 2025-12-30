@@ -29,6 +29,7 @@ class SyncManager(
     private val customerRepo: CustomerRepository,
     private val inventoryRepo: InventoryRepository,
     private val networkMonitor: NetworkMonitor,
+    private val modeOfPaymentRepo: ModeOfPaymentRepository,
 ) : ISyncManager {
 
     private val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
@@ -49,6 +50,12 @@ class SyncManager(
             try {
                 coroutineScope {
                     val jobs = listOf(
+                        async {
+                            SyncState.SYNCING("Metodos de pago...")
+                            modeOfPaymentRepo.sync()
+                                .filter { it !is Resource.Loading }
+                                .first()
+                        },
                         async {
                             _state.value = SyncState.SYNCING("Clientes...")
 

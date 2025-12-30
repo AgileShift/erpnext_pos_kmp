@@ -115,6 +115,7 @@ class PaymentEntryRepository(
                     modeOfPayment = snapshot.paymentEntry.modeOfPayment.takeIf { it.isNotBlank() },
                     paidAmount = snapshot.paymentEntry.paidAmount,
                     receivedAmount = snapshot.paymentEntry.receivedAmount,
+                    docStatus = snapshot.paymentEntry.docStatus ?: 1,
                     references = snapshot.references.map { reference ->
                         PaymentEntryReferenceCreateDto(
                             referenceDoctype = reference.referenceDoctype,

@@ -14,6 +14,7 @@ import com.erpnext.pos.domain.usecases.CreatePaymentEntryUseCase
 import com.erpnext.pos.domain.usecases.CreateSalesInvoiceInput
 import com.erpnext.pos.domain.usecases.CreateSalesInvoiceUseCase
 import com.erpnext.pos.localSource.dao.ModeOfPaymentDao
+import com.erpnext.pos.localSource.entities.ModeOfPaymentEntity
 import com.erpnext.pos.navigation.NavRoute
 import com.erpnext.pos.navigation.NavigationManager
 import com.erpnext.pos.remoteSource.dto.SalesInvoiceDto
@@ -53,6 +54,7 @@ class BillingViewModel(
 
     private var customers: List<CustomerBO> = emptyList()
     private var products: List<ItemBO> = emptyList()
+    private var paymentModeDetails: Map<String, ModeOfPaymentEntity> = emptyMap()
 
     init {
         loadInitialData()
@@ -73,11 +75,12 @@ class BillingViewModel(
                 itemsUseCase.invoke(null).collectLatest { i ->
                     products = i.filter { it.price > 0.0 && it.actualQty > 0.0 }
                     val currency = context.currency.ifBlank { "USD" }
-                    val modeTypes = runCatching { modeOfPaymentDao.getAllModes() }
+                    val modeDefinitions = runCatching { modeOfPaymentDao.getAllModes() }
                         .getOrElse { emptyList() }
-                        .associateBy { it.modeOfPayment }
+                    val modeTypes = modeDefinitions.associateBy { it.modeOfPayment }
+                    paymentModeDetails = buildPaymentModeDetailMap(modeDefinitions)
                     val paymentModes = context.paymentModes.ifEmpty {
-                        modeOfPaymentDao.getAll(context.profileName).map { mode ->
+                        modeOfPaymentDao.getAll(/*context.profileName*/).map { mode ->
                             POSPaymentModeOption(
                                 name = mode.name,
                                 modeOfPayment = mode.modeOfPayment,
@@ -415,7 +418,6 @@ class BillingViewModel(
             val isCreditSale = current.isCreditSale
             val paymentLines = if (isCreditSale) emptyList() else current.paymentLines
             val baseCurrency = context.currency.ifBlank { current.currency ?: "USD" }
-
             val total = (totals.subtotal - discountInfo.amount + shippingAmount).coerceAtLeast(0.0)
             // ERPNext sales cycle:
             // - Credit sales must include payment_terms + payment_schedule with due_date derived from the term.
@@ -492,7 +494,7 @@ class BillingViewModel(
                         val reason = paymentResult.exceptionOrNull()
                             ?.toUserMessage("No se pudo registrar el pago.")
                         throw IllegalStateException(
-                            "La factura ${created.name ?: ""} se creó, pero falló el pago. $reason"
+                            "La factura ${created.name} se creó, pero falló el pago. $reason"
                         )
                     }
                     remainingOutstanding -= allocation
@@ -611,9 +613,9 @@ class BillingViewModel(
         )
         val paymentMetadata =
             buildPaymentMetadata(current, paymentLines, totals.shipping, baseCurrency)
-        val payments = paymentLines.firstOrNull()?.let { line ->
-            listOf(SalesInvoicePaymentDto(line.modeOfPayment, 0.0))
-        } ?: emptyList()
+        val payments = listOf(
+            SalesInvoicePaymentDto(paymentLines[0].modeOfPayment, 0.0)
+        )
         return SalesInvoiceDto(
             customer = customer.name,
             customerName = customer.customerName,
@@ -722,8 +724,19 @@ class BillingViewModel(
         val baseAmount = line.enteredAmount * line.exchangeRate
         val baseCurrency = context.currency
         val paidFromResolved = paidFromAccount?.takeIf { it.isNotBlank() }
+        val modeDefinition = paymentModeDetails[line.modeOfPayment]
+        val paidToResolved = modeDefinition?.account?.takeIf { it.isNotBlank() }
+        val paidToAccountCurrency = modeDefinition?.currency?.takeIf { it.isNotBlank() }
+        if (paidToResolved == null) {
+            throw IllegalStateException(
+                "El modo de pago ${line.modeOfPayment} no tiene cuenta configurada. " +
+                        "Sincroniza los métodos de pago."
+            )
+        }
         val partyCurrency = partyAccountCurrency?.takeIf { it.isNotBlank() } ?: line.currency
         val isForeignCurrency = !line.currency.equals(partyCurrency, ignoreCase = true)
+        val needsTargetExchangeRate = !partyCurrency.equals(baseCurrency, ignoreCase = true) ||
+                !line.currency.equals(baseCurrency, ignoreCase = true)
 
         val targetExchangeRate = resolveTargetExchangeRate(
             baseCurrency = baseCurrency,
@@ -732,7 +745,11 @@ class BillingViewModel(
             paymentExchangeRate = line.exchangeRate,
             exchangeRateByCurrency = exchangeRateByCurrency,
             isForeignCurrency = isForeignCurrency
-        )
+        )?.takeIf { it > 0.0 } ?: if (needsTargetExchangeRate) {
+            if (line.exchangeRate > 0.0) line.exchangeRate else 1.0
+        } else {
+            null
+        }
 
         val partyExchangeRateToBase = resolvePartyExchangeRateToBase(
             baseCurrency = baseCurrency,
@@ -767,11 +784,14 @@ class BillingViewModel(
             postingDate = postingDate,
             paymentType = "Receive",
             partyType = "Customer",
+            docStatus = 1,
             partyId = customer.name,
             modeOfPayment = line.modeOfPayment,
             paidAmount = partyAmount,
             receivedAmount = line.enteredAmount,
             paidFrom = paidFromResolved,
+            paidTo = paidToResolved,
+            paidToAccountCurrency = paidToAccountCurrency ?: baseCurrency,
             sourceExchangeRate = if (isForeignCurrency) 1.0 else null,
             targetExchangeRate = targetExchangeRate,
             referenceNo = line.referenceNumber?.takeIf { it.isNotBlank() },
@@ -896,6 +916,17 @@ class BillingViewModel(
                 type.equals("Card", ignoreCase = true) ||
                 mode?.modeOfPayment?.contains("bank", ignoreCase = true) == true ||
                 mode?.modeOfPayment?.contains("card", ignoreCase = true) == true
+    }
+
+    private fun buildPaymentModeDetailMap(
+        definitions: List<ModeOfPaymentEntity>
+    ): Map<String, ModeOfPaymentEntity> {
+        val map = mutableMapOf<String, ModeOfPaymentEntity>()
+        definitions.forEach { definition ->
+            map[definition.modeOfPayment] = definition
+            map[definition.name] = definition
+        }
+        return map
     }
 
     private fun validateFinalizeSale(current: BillingState.Success): String? {

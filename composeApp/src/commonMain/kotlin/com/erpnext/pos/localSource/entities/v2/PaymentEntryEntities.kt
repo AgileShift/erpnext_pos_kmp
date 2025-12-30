@@ -22,6 +22,8 @@ data class PaymentEntryEntity(
     var partyId: String,
     var paidAmount: Double,
     var receivedAmount: Double,
+    @ColumnInfo("docstatus")
+    var docStatus: Int? = 1,
     var unallocatedAmount: Double? = null,
     var syncStatus: SyncStatus? = null,
     @ColumnInfo(name = "remote_modified")

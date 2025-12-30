@@ -5,6 +5,8 @@ data class DocTypeFields(val doctype: ERPDocType, val fields: List<String>)
 enum class ERPDocType(val path: String) {
     Item("Item"),
     PaymentEntry("Payment Entry"),
+    ModeOfPayment("Mode of Payment"),
+    Account("Account"),
     Category("Item Group"),
     ItemPrice("Item Price"),
     User("User"),
@@ -23,6 +25,10 @@ enum class ERPDocType(val path: String) {
 }
 
 val fields: List<DocTypeFields> = listOf(
+    DocTypeFields(
+        ERPDocType.ModeOfPayment,
+        listOf("name", "mode_of_payment", "enabled")
+    ),
     DocTypeFields(
         ERPDocType.Item,
         listOf(

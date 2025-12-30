@@ -1,8 +1,8 @@
 {
   "formatVersion": 1,
   "database": {
-    "version": 5,
-    "identityHash": "2b41e9068c28fe71613cd94ccd919806",
+    "version": 7,
+    "identityHash": "1462f40416181728a0c25a6ed640ab31",
     "entities": [
       {
         "tableName": "tabUser",
@@ -4768,7 +4768,7 @@
       },
       {
         "tableName": "payment_entries",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`paymentEntryId` TEXT NOT NULL, `postingDate` TEXT NOT NULL, `company` TEXT NOT NULL, `territory` TEXT, `paymentType` TEXT NOT NULL, `modeOfPayment` TEXT NOT NULL, `partyType` TEXT NOT NULL, `partyId` TEXT NOT NULL, `paidAmount` REAL NOT NULL, `receivedAmount` REAL NOT NULL, `docStatus` INTEGER NOT NULL, `unallocatedAmount` REAL, `syncStatus` TEXT, `remote_modified` TEXT, `remote_name` TEXT, `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `created_at` INTEGER NOT NULL, `updated_at` INTEGER, `is_deleted` INTEGER NOT NULL, `companyId` TEXT NOT NULL, `instanceId` TEXT NOT NULL, `lastSyncedAt` INTEGER)",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`paymentEntryId` TEXT NOT NULL, `postingDate` TEXT NOT NULL, `company` TEXT NOT NULL, `territory` TEXT, `paymentType` TEXT NOT NULL, `modeOfPayment` TEXT NOT NULL, `partyType` TEXT NOT NULL, `partyId` TEXT NOT NULL, `paidAmount` REAL NOT NULL, `receivedAmount` REAL NOT NULL, `docstatus` INTEGER, `unallocatedAmount` REAL, `syncStatus` TEXT, `remote_modified` TEXT, `remote_name` TEXT, `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `created_at` INTEGER NOT NULL, `updated_at` INTEGER, `is_deleted` INTEGER NOT NULL, `companyId` TEXT NOT NULL, `instanceId` TEXT NOT NULL, `lastSyncedAt` INTEGER)",
         "fields": [
           {
             "fieldPath": "paymentEntryId",
@@ -4831,9 +4831,8 @@
           },
           {
             "fieldPath": "docStatus",
-            "columnName": "docStatus",
-            "affinity": "INTEGER",
-            "notNull": true
+            "columnName": "docstatus",
+            "affinity": "INTEGER"
           },
           {
             "fieldPath": "unallocatedAmount",
@@ -5217,7 +5216,7 @@
     ],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
-      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '2b41e9068c28fe71613cd94ccd919806')"
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '1462f40416181728a0c25a6ed640ab31')"
     ]
   }
 }
