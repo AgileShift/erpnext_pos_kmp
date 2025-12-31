@@ -872,42 +872,6 @@ private fun PaymentSection(
             }
 
             Spacer(Modifier.height(12.dp))
-
-            Text("Moneda de pago", style = MaterialTheme.typography.bodyMedium)
-            var currencyExpanded by remember { mutableStateOf(false) }
-            ExposedDropdownMenuBox(
-                expanded = currencyExpanded,
-                onExpandedChange = { currencyExpanded = it }
-            ) {
-                OutlinedTextField(
-                    value = selectedCurrency,
-                    onValueChange = {},
-                    readOnly = true,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .menuAnchor(MenuAnchorType.PrimaryNotEditable),
-                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = currencyExpanded) }
-                )
-                ExposedDropdownMenu(
-                    expanded = currencyExpanded,
-                    onDismissRequest = { currencyExpanded = false }
-                ) {
-                    currencyOptions.forEach { currency ->
-                        DropdownMenuItem(
-                            text = { Text(currency) },
-                            onClick = {
-                                selectedCurrency = currency
-                                if (currency == baseCurrency) {
-                                    rateInput = "1.0"
-                                }
-                                currencyExpanded = false
-                            }
-                        )
-                    }
-                }
-            }
-
-            Spacer(Modifier.height(12.dp))
             Text(
                 text = "Moneda base de factura: $baseCurrency",
                 style = MaterialTheme.typography.bodySmall,
@@ -924,17 +888,6 @@ private fun PaymentSection(
                     keyboardType = KeyboardType.Number,
                     imeAction = ImeAction.Next
                 ),
-                modifier = Modifier.fillMaxWidth()
-            )
-
-            Spacer(Modifier.height(12.dp))
-
-            OutlinedTextField(
-                value = rateInput,
-                onValueChange = { rateInput = it },
-                label = { Text("Tasa de cambio") },
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                enabled = selectedCurrency != baseCurrency,
                 modifier = Modifier.fillMaxWidth()
             )
 

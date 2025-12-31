@@ -57,6 +57,8 @@ kotlin {
         val desktopMain by getting
 
         commonMain.dependencies {
+            implementation(libs.bignum)
+
             implementation(libs.pullrefresh)
 
             implementation(libs.androidx.paging.compose)

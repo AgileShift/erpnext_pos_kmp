@@ -24,6 +24,8 @@ data class PaymentLine(
 sealed interface BillingState {
     object Loading : BillingState
     data class Success(
+        val paymentModeCurrencyByMode: Map<String, String> = emptyMap(),
+
         // Customer-related state
         val customers: List<CustomerBO> = emptyList(),
         val selectedCustomer: CustomerBO? = null,
@@ -91,6 +93,7 @@ sealed interface BillingState {
         val message: String,
         val previous: Success? = null
     ) : BillingState
+
     object Empty : BillingState
 }
 

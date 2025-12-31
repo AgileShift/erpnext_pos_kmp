@@ -40,7 +40,7 @@ fun SalesInvoiceWithItemsAndPayments.toDto(): SalesInvoiceDto {
         customerPhone = invoice.customerPhone,
         netTotal = invoice.netTotal,
         paidAmount = invoice.paidAmount,
-        posProfile = invoice.posProfile,
+        posProfile = invoice.profileId,
         docStatus = invoice.docstatus
     )
 }
@@ -55,8 +55,6 @@ fun SalesInvoiceItemEntity.toDto(parent: SalesInvoiceEntity): SalesInvoiceItemDt
         amount = amount,
         discountPercentage = discountPercentage.takeIf { it != 0.0 },
         warehouse = warehouse ?: parent.warehouse,
-        incomeAccount = parent.incomeAccount,
-        costCenter = parent.costCenter
     )
 }
 

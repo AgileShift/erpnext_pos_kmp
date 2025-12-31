@@ -73,7 +73,13 @@ data class SalesInvoiceDto(
     @SerialName("debit_to")
     val debitTo: String? = null,
     @SerialName("docstatus")
-    val docStatus: Int
+    val docStatus: Int,
+
+    // Response
+    @SerialName("base_grand_total")
+    val baseGrandTotal: Double? = null,
+    @SerialName("base_paid_amount")
+    val basePaidAmount: Double? = null,
 )
 
 @Serializable
