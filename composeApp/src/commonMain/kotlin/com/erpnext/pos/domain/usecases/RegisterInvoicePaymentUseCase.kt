@@ -1,5 +1,6 @@
 package com.erpnext.pos.domain.usecases
 
+import com.erpnext.pos.data.repositories.SalesInvoiceRepository
 import com.erpnext.pos.domain.repositories.ISaleInvoiceRepository
 import com.erpnext.pos.localSource.entities.POSInvoicePaymentEntity
 import kotlin.time.Clock
@@ -13,7 +14,7 @@ data class RegisterInvoicePaymentInput(
 
 @OptIn(ExperimentalTime::class)
 class RegisterInvoicePaymentUseCase(
-    private val repository: ISaleInvoiceRepository
+    private val repository: SalesInvoiceRepository
 ) : UseCase<RegisterInvoicePaymentInput, Unit>() {
 
     override suspend fun useCaseFunction(input: RegisterInvoicePaymentInput) {
