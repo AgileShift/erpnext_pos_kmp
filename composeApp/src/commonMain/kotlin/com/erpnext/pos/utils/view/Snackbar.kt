@@ -20,10 +20,13 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
@@ -67,6 +70,14 @@ fun SnackbarHost(
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    LaunchedEffect(snackbar?.message, snackbar?.type, snackbar?.position) {
+        if (snackbar == null) return@LaunchedEffect
+        if (snackbar.type != SnackbarType.Loading) {
+            delay(2500)
+            onDismiss()
+        }
+    }
+
     val alignment = when (snackbar?.position) {
         SnackbarPosition.Top -> Alignment.TopCenter
         else -> Alignment.BottomCenter
@@ -99,6 +110,13 @@ fun ModernSnackbar(snackbar: UiSnackbar, onDismiss: () -> Unit) {
         SnackbarType.Info -> MaterialTheme.colorScheme.surfaceVariant
     }
 
+    val contentColor = when (snackbar.type) {
+        SnackbarType.Success -> MaterialTheme.colorScheme.onPrimary
+        SnackbarType.Error -> MaterialTheme.colorScheme.onError
+        SnackbarType.Loading -> MaterialTheme.colorScheme.onSecondary
+        SnackbarType.Info -> MaterialTheme.colorScheme.onSurfaceVariant
+    }
+
     Surface(
         shape = RoundedCornerShape(24.dp),
         tonalElevation = 8.dp,
@@ -114,8 +132,8 @@ fun ModernSnackbar(snackbar: UiSnackbar, onDismiss: () -> Unit) {
             if (snackbar.type == SnackbarType.Loading) {
                 CircularProgressIndicator(
                     strokeWidth = 2.dp,
+                    color = contentColor,
                     modifier = Modifier.size(18.dp),
-                    color = MaterialTheme.colorScheme.onPrimary
                 )
                 Spacer(Modifier.width(12.dp))
             }
@@ -123,7 +141,7 @@ fun ModernSnackbar(snackbar: UiSnackbar, onDismiss: () -> Unit) {
             Text(
                 text = snackbar.message,
                 style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onPrimary
+                color = contentColor
             )
         }
     }

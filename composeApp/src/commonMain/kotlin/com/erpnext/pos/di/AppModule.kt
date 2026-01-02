@@ -16,6 +16,7 @@ import com.erpnext.pos.data.repositories.UserRepository
 import com.erpnext.pos.di.v2.appModulev2
 import com.erpnext.pos.domain.repositories.IPOSRepository
 import com.erpnext.pos.domain.repositories.IUserRepository
+import com.erpnext.pos.domain.usecases.AdjustLocalInventoryUseCase
 import com.erpnext.pos.domain.usecases.CheckCustomerCreditUseCase
 import com.erpnext.pos.domain.usecases.CreatePaymentEntryUseCase
 import com.erpnext.pos.domain.usecases.CreateSalesInvoiceUseCase
@@ -135,7 +136,7 @@ val appModule = module {
             get()
         )
     }
-    single<SyncManager> { SyncManager(get(), get(), get(),  get(),get()) }
+    single<SyncManager> { SyncManager(get(), get(), get(), get(), get()) }
     //endregion
 
     //region Login DI
@@ -199,9 +200,11 @@ val appModule = module {
     //endregion
 
     //region Checkout
+    single { AdjustLocalInventoryUseCase(get()) }
     single { PaymentEntryRepository(get(named("apiService"))) }
     single {
         BillingViewModel(
+            get(),
             get(),
             get(),
             get(),

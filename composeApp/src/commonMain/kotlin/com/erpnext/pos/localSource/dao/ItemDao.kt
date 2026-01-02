@@ -10,6 +10,18 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface ItemDao {
+    @Query(
+        """
+        UPDATE tabItem
+        SET actualQty = CASE 
+            WHEN (actualQty - :qty) < 0 THEN 0 
+            ELSE (actualQty - :qty) 
+        END
+        WHERE itemCode = :itemCode
+    """
+    )
+    suspend fun decrementActualQty(itemCode: String, qty: Double)
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun addItems(items: List<ItemEntity>)
 

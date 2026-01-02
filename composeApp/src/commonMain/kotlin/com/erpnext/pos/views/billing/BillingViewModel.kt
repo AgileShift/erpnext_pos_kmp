@@ -31,6 +31,9 @@ import com.erpnext.pos.remoteSource.sdk.toUserMessage
 import com.erpnext.pos.utils.toCurrencySymbol
 import com.erpnext.pos.utils.view.DateTimeProvider
 import com.erpnext.pos.domain.models.POSPaymentModeOption
+import com.erpnext.pos.domain.usecases.AdjustLocalInventoryInput
+import com.erpnext.pos.domain.usecases.AdjustLocalInventoryUseCase
+import com.erpnext.pos.domain.usecases.StockDelta
 import com.erpnext.pos.remoteSource.dto.SalesInvoicePaymentDto
 import com.erpnext.pos.utils.oauth.CurrencySpec
 import com.erpnext.pos.utils.oauth.bd
@@ -51,9 +54,10 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.update
 
 class BillingViewModel(
-    val customersUseCase: FetchCustomersUseCase,
-    val itemsUseCase: FetchBillingProductsWithPriceUseCase,
-    val contextProvider: CashBoxManager,
+    private val customersUseCase: FetchCustomersUseCase,
+    private val itemsUseCase: FetchBillingProductsWithPriceUseCase,
+    private val adjustLocalInventoryUseCase: AdjustLocalInventoryUseCase,
+    private val contextProvider: CashBoxManager,
     private val modeOfPaymentDao: ModeOfPaymentDao,
     private val paymentTermsUseCase: FetchPaymentTermsUseCase,
     private val deliveryChargesUseCase: FetchDeliveryChargesUseCase,
@@ -476,7 +480,8 @@ class BillingViewModel(
             current.copy(
                 isCreditSale = isCreditSale,
                 selectedPaymentTerm = if (isCreditSale) current.selectedPaymentTerm else null,
-                paymentLines = if (isCreditSale) emptyList() else current.paymentLines,
+                //paymentLines = if (isCreditSale) emptyList() else current.paymentLines,
+                paymentLines = current.paymentLines,
                 paymentErrorMessage = null
             ).recalculatePaymentTotals()
         }
@@ -566,7 +571,7 @@ class BillingViewModel(
             val discountPercent = discountInfo.percent?.takeIf { it > 0.0 }
 
             val isCreditSale = current.isCreditSale
-            val paymentLines = if (isCreditSale) emptyList() else current.paymentLines
+            val paymentLines = current.paymentLines
             val baseCurrency = context.currency.ifBlank { current.currency ?: "USD" }
 
             val postingDate = DateTimeProvider.todayDate()
@@ -652,6 +657,43 @@ class BillingViewModel(
                 )
             }
 
+            runCatching {
+                adjustLocalInventoryUseCase(
+                    AdjustLocalInventoryInput(
+                        warehouse = context.warehouse ?: "",
+                        deltas = current.cartItems.map {
+                            StockDelta(
+                                itemCode = it.itemCode,
+                                qty = it.quantity
+                            )
+                        }
+                    )
+                )
+            }.onFailure {
+                _state.update { st ->
+                    val s = st as? BillingState.Success ?: return@update st
+                    s.copy(
+                        successMessage = "Factura ${created.name ?: ""} creada, pero fallo la actualizacion de inventario local. Reintenta sincronizacion/recarga."
+                    )
+                }
+            }
+
+            val soldByCode = current.cartItems
+                .groupBy { it.itemCode }
+                .mapValues { (_, list) -> list.sumOf { it.quantity } }
+
+            products = products.map { p ->
+                val sold = soldByCode[p.itemCode] ?: 0.0
+                if (sold <= 0.0) p
+                else p.copy(actualQty = (p.actualQty - sold).coerceAtLeast(0.0))
+            }.filter { it.price > 0.0 && it.actualQty > 0.0 }
+
+            val q = current.productSearchQuery
+            val refreshedResults = if (q.isBlank()) products else products.filter {
+                it.name.contains(q, ignoreCase = true) || it.itemCode.contains(q, ignoreCase = true)
+            }
+
+
             _state.update {
                 current.copy(
                     selectedCustomer = null,
@@ -670,7 +712,7 @@ class BillingViewModel(
                     customerSearchQuery = "",
                     productSearchQuery = "",
                     customers = customers,
-                    productSearchResults = products,
+                    productSearchResults = refreshedResults,
                     paymentLines = emptyList(),
                     paidAmountBase = 0.0,
                     balanceDueBase = 0.0,
@@ -1133,15 +1175,27 @@ class BillingViewModel(
     private fun validateFinalizeSale(current: BillingState.Success): String? {
         if (current.selectedCustomer == null) return "Selecciona un cliente antes de finalizar la venta."
         if (current.cartItems.isEmpty()) return "Agrega al menos un artículo al carrito."
-        if (!current.isCreditSale && current.paidAmountBase < current.total) {
+        /*if (!current.isCreditSale && current.paidAmountBase < current.total) {
             return "El monto pagado debe cubrir el total antes de finalizar la venta."
-        }
-        if (current.isCreditSale && current.selectedPaymentTerm == null) {
+        }*/
+        if (current.isCreditSale && current.selectedPaymentTerm == null)
             return "Selecciona un término de pago para finalizar una venta a crédito."
-        }
-        if (current.isCreditSale && current.paymentLines.isNotEmpty()) {
+
+        // No crédito: debe pagar todo
+        if (!current.isCreditSale && current.paidAmountBase + 0.0001 < current.total)
+            return "El monto pagado debe cubrir el total antes de finalizar la venta."
+
+        // Crédito: puede pagar parcial, pero no exceder total
+        if (current.isCreditSale && current.paidAmountBase > current.total + 0.0001)
+            return "El pago no puede exceder el total en una venta a crédito."
+
+        /*if (current.isCreditSale && current.paymentLines.isNotEmpty()) {
             return "Las ventas a crédito no pueden incluir líneas de pago."
-        }
+        }*/
+
+        if (current.paymentLines.isEmpty())
+            return "Agrega al menos un pago o marca la venta como crédito."
+
         return null
     }
 }

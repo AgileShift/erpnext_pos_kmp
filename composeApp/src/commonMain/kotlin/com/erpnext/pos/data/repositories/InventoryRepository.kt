@@ -10,6 +10,7 @@ import com.erpnext.pos.data.mappers.toBO
 import com.erpnext.pos.domain.models.CategoryBO
 import com.erpnext.pos.domain.models.ItemBO
 import com.erpnext.pos.domain.repositories.IInventoryRepository
+import com.erpnext.pos.domain.usecases.StockDelta
 import com.erpnext.pos.localSource.datasources.InventoryLocalSource
 import com.erpnext.pos.localSource.entities.ItemEntity
 import com.erpnext.pos.remoteSource.datasources.InventoryRemoteSource
@@ -25,6 +26,10 @@ class InventoryRepository(
     private val localSource: InventoryLocalSource,
     private val context: CashBoxManager
 ) : IInventoryRepository {
+
+    suspend fun decrementStock(warehouse: String, deltas: List<StockDelta>) {
+        localSource.decrementStock(warehouse, deltas)
+    }
 
     fun <Key : Any, Value : Any, R : Any> PagingSource<Key, Value>.mapEntityToBO(
         transform: (Value) -> R = { (it as ItemEntity).toBO() as R }

@@ -1,11 +1,13 @@
 package com.erpnext.pos.localSource.datasources
 
 import androidx.paging.PagingSource
+import com.erpnext.pos.domain.usecases.StockDelta
 import com.erpnext.pos.localSource.dao.CategoryDao
 import com.erpnext.pos.localSource.dao.ItemDao
 import com.erpnext.pos.localSource.entities.CategoryEntity
 import com.erpnext.pos.localSource.entities.ItemEntity
 import kotlinx.coroutines.flow.Flow
+import kotlin.math.sqrt
 
 interface IInventoryLocalSource {
     suspend fun insertAll(inventory: List<ItemEntity>)
@@ -19,11 +21,34 @@ interface IInventoryLocalSource {
     suspend fun getOldestItem(): ItemEntity?
     suspend fun count(): Int
     suspend fun deleteAll()
+    suspend fun decrementStock(warehouse: String, deltas: List<StockDelta>)
 }
 
-class InventoryLocalSource(private val dao: ItemDao, private val categoryDao: CategoryDao) :
+class InventoryLocalSource(
+    private val dao: ItemDao,
+    private val categoryDao: CategoryDao
+) :
     IInventoryLocalSource {
     override suspend fun insertAll(inventory: List<ItemEntity>) = dao.addItems(inventory)
+
+    override suspend fun decrementStock(warehouse: String, deltas: List<StockDelta>) {
+        deltas
+            .filter { it.qty > 0.0 }
+            .groupBy { it.itemCode }
+            .mapValues { (_, list) -> list.sumOf { it.qty } }
+            .forEach { (itemCode, qty) ->
+                /*binDao.decrementActualQty(
+                    warehouse,
+                    itemCode,
+                    qty
+                )*/
+
+                dao.decrementActualQty(
+                    itemCode,
+                    qty
+                )
+            }
+    }
 
     override fun getAllPaged(): PagingSource<Int, ItemEntity> = dao.getAllItemsPaged()
     override suspend fun getAll(): List<ItemEntity> = dao.getAllItems()

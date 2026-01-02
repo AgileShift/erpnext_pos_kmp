@@ -11,6 +11,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.material.ripple.rememberRipple
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
 import com.erpnext.pos.domain.models.CustomerBO
 import com.erpnext.pos.domain.models.ItemBO
 import androidx.compose.foundation.text.KeyboardOptions
@@ -21,6 +22,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Remove
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.ripple.rememberRipple
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -51,6 +53,7 @@ import com.erpnext.pos.views.billing.PaymentLine
 import com.erpnext.pos.domain.models.POSCurrencyOption
 import com.erpnext.pos.domain.models.POSPaymentModeOption
 import com.erpnext.pos.utils.view.SnackbarController
+import com.erpnext.pos.utils.view.SnackbarHost
 import com.erpnext.pos.utils.view.SnackbarPosition
 import com.erpnext.pos.utils.view.SnackbarType
 import org.jetbrains.compose.ui.tooling.preview.Preview
@@ -68,33 +71,26 @@ data class CartItem(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun BillingScreen(
-    state: BillingState,
-    action: BillingAction
+    state: BillingState, action: BillingAction
 ) {
     val snackbar = koinInject<SnackbarController>()
+    val uiSnackbar = snackbar.snackbar.collectAsState().value
 
-    BottomSheetScaffold(
-        sheetShadowElevation = 12.dp,
-        topBar = {
-            TopAppBar(
-                title = {
-                    Text("Nueva Factura")
-                },
-                navigationIcon = {
-                    IconButton(onClick = action.onBack) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Atrás"
-                        )
-                    }
-                })
-        },
-        sheetPeekHeight = 140.dp,
-        sheetDragHandle = {
+    Box(Modifier.fillMaxSize()) {
+        BottomSheetScaffold(sheetShadowElevation = 12.dp, topBar = {
+            TopAppBar(title = {
+                Text("Nueva Factura")
+            }, navigationIcon = {
+                IconButton(onClick = action.onBack) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = "Atrás"
+                    )
+                }
+            })
+        }, sheetPeekHeight = 140.dp, sheetDragHandle = {
             Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 12.dp),
+                modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
                 contentAlignment = Alignment.Center
             ) {
                 Surface(
@@ -102,14 +98,12 @@ fun BillingScreen(
                     shape = MaterialTheme.shapes.extraLarge
                 ) {
                     Box(
-                        modifier = Modifier
-                            .size(width = 48.dp, height = 6.dp)
+                        modifier = Modifier.size(width = 48.dp, height = 6.dp)
                             .padding(horizontal = 12.dp)
                     )
                 }
             }
-        },
-        sheetContent = {
+        }, sheetContent = {
             val sheetState = when (state) {
                 is BillingState.Success -> state
                 is BillingState.Error -> state.previous
@@ -117,74 +111,74 @@ fun BillingScreen(
             }
             if (sheetState != null) {
                 TotalsPaymentsSheet(
-                    state = sheetState,
-                    action = action
+                    state = sheetState, action = action
                 )
             } else {
                 Spacer(Modifier.height(1.dp))
             }
-        }
-    ) { padding ->
+        }) { padding ->
 
-        when (state) {
-            is BillingState.Loading -> {
-                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator()
+            when (state) {
+                is BillingState.Loading -> {
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator()
+                    }
                 }
-            }
 
-            is BillingState.Success -> {
-                BillingContent(
-                    state = state,
-                    action = action,
-                    padding = padding,
-                    snackbar = snackbar
-                )
-            }
-
-            is BillingState.Empty -> {
-                snackbar.show(
-                    "No hay productos en el carrito",
-                    SnackbarType.Info,
-                    SnackbarPosition.Top
-                )
-            }
-
-            is BillingState.Error -> {
-                LaunchedEffect(state.message) {
-                    snackbar.show(state.message, SnackbarType.Error, SnackbarPosition.Top)
-                }
-                val previous = state.previous
-                if (previous != null) {
+                is BillingState.Success -> {
                     BillingContent(
-                        state = previous,
-                        action = action,
-                        padding = padding,
-                        snackbar = snackbar
+                        state = state, action = action, padding = padding, snackbar = snackbar
                     )
-                } else {
-                    Box(
-                        modifier = Modifier
-                            .padding(padding)
-                            .fillMaxSize(),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text(
-                                text = state.message,
-                                color = MaterialTheme.colorScheme.error,
-                                style = MaterialTheme.typography.bodyMedium,
-                                textAlign = TextAlign.Center
-                            )
-                            Spacer(Modifier.height(12.dp))
-                            Button(onClick = action.onBack) {
-                                Text("Volver")
+                }
+
+                is BillingState.Empty -> {
+                    LaunchedEffect(Unit) {
+                        snackbar.show(
+                            "No hay productos en el carrito",
+                            SnackbarType.Info,
+                            SnackbarPosition.Top
+                        )
+                    }
+                }
+
+                is BillingState.Error -> {
+                    LaunchedEffect(state.message) {
+                        snackbar.show(state.message, SnackbarType.Error, SnackbarPosition.Top)
+                    }
+                    val previous = state.previous
+                    if (previous != null) {
+                        BillingContent(
+                            state = previous,
+                            action = action,
+                            padding = padding,
+                            snackbar = snackbar
+                        )
+                    } else {
+                        Box(
+                            modifier = Modifier.padding(padding).fillMaxSize(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text(
+                                    text = state.message,
+                                    color = MaterialTheme.colorScheme.error,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    textAlign = TextAlign.Center
+                                )
+                                Spacer(Modifier.height(12.dp))
+                                Button(onClick = action.onBack) {
+                                    Text("Volver")
+                                }
                             }
                         }
                     }
                 }
             }
         }
+
+        SnackbarHost(
+            snackbar = uiSnackbar, onDismiss = snackbar::dismiss, modifier = Modifier.fillMaxSize()
+        )
     }
 }
 
@@ -202,14 +196,11 @@ private fun BillingContent(
         }
     }
     Column(
-        modifier = Modifier
-            .padding(padding)
-            .fillMaxSize()
+        modifier = Modifier.padding(padding).fillMaxSize()
             .padding(horizontal = 16.dp, vertical = 8.dp)
     ) {
         CollapsibleSection(
-            title = "Cliente",
-            defaultExpanded = true
+            title = "Cliente", defaultExpanded = true
         ) {
             Column(
                 modifier = Modifier.padding(end = 12.dp, start = 12.dp, bottom = 8.dp),
@@ -227,8 +218,7 @@ private fun BillingContent(
         Spacer(Modifier.height(8.dp))
 
         CollapsibleSection(
-            title = "Carrito",
-            defaultExpanded = false
+            title = "Carrito", defaultExpanded = false
         ) {
             ProductSelector(
                 query = state.productSearchQuery,
@@ -259,8 +249,7 @@ private fun BillingContent(
 
         if (state.paymentTerms.isNotEmpty()) {
             CollapsibleSection(
-                title = "Terminos de credito",
-                defaultExpanded = false
+                title = "Terminos de credito", defaultExpanded = false
             ) {
                 CreditTermsSection(
                     isCreditSale = state.isCreditSale,
@@ -277,10 +266,7 @@ private fun BillingContent(
         Button(
             onClick = action.onFinalizeSale,
             modifier = Modifier.fillMaxWidth(),
-            enabled = state.selectedCustomer != null &&
-                    state.cartItems.isNotEmpty() &&
-                    (state.isCreditSale || state.paidAmountBase >= state.total) &&
-                    (!state.isCreditSale || state.selectedPaymentTerm != null)
+            enabled = state.selectedCustomer != null && state.cartItems.isNotEmpty() && (state.isCreditSale || state.paidAmountBase >= state.total) && (!state.isCreditSale || state.selectedPaymentTerm != null)
         ) {
             Text("Finalizar venta")
         }
@@ -300,29 +286,25 @@ private fun CustomerSelector(
 
     //Text("Cliente", style = MaterialTheme.typography.titleMedium)
     ExposedDropdownMenuBox(
-        expanded = expanded && hasCustomers,
-        onExpandedChange = { expanded = it }
-    ) {
-        OutlinedTextField(
+        expanded = expanded && hasCustomers, onExpandedChange = { expanded = it }) {
+        AppTextField(
             value = query,
             onValueChange = {
                 onQueryChange(it)
                 expanded = true
             },
-            modifier = Modifier
-                .fillMaxWidth()
-                .menuAnchor(MenuAnchorType.PrimaryEditable)
-                .onFocusChanged { focusState ->
-                    expanded = focusState.isFocused
-                },
-            label = { Text("Buscar o Seleccionar Cliente") },
+            modifier = Modifier//.fillMaxWidth()
+                .menuAnchor(MenuAnchorType.PrimaryEditable),
+            /*.onFocusChanged { focusState ->
+                expanded = focusState.isFocused
+            }*/
+            label = "Buscar o Seleccionar",
+            placeholder = "Nombre, codigo, telefono...",
+            leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-            singleLine = true
         )
         ExposedDropdownMenu(
-            expanded = expanded && hasCustomers,
-            onDismissRequest = { expanded = false }
-        ) {
+            expanded = expanded && hasCustomers, onDismissRequest = { expanded = false }) {
             customers.forEach { customer ->
                 DropdownMenuItem(
                     text = { Text("${customer.name} - ${customer.customerName}") },
@@ -349,95 +331,82 @@ private fun ProductSelector(
     Column(modifier = Modifier.padding(horizontal = 12.dp)) {
         Text("Producto", style = MaterialTheme.typography.titleMedium)
         ExposedDropdownMenuBox(
-            expanded = expanded && hasResults,
-            onExpandedChange = { expanded = it }
-        ) {
-            OutlinedTextField(
+            expanded = expanded && hasResults, onExpandedChange = { expanded = it }) {
+            AppTextField(
                 value = query,
                 onValueChange = {
                     onQueryChange(it)
                     expanded = true
                 },
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .menuAnchor(MenuAnchorType.PrimaryEditable)
-                    .onFocusChanged { focusState ->
-                        expanded = focusState.isFocused
-                    },
-                label = { Text("Buscar por nombre o código") },
-                singleLine = true,
-                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) }
-            )
+                    //.fillMaxWidth()
+                    .menuAnchor(MenuAnchorType.PrimaryEditable)/*.onFocusChanged { focusState ->
+                    expanded = focusState.isFocused
+                }*/,
+                label = "Buscar por nombre o código",
+                placeholder = "Nombre, codigo...",
+                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) })
 
             ExposedDropdownMenu(
-                expanded = expanded && hasResults,
-                onDismissRequest = { expanded = false }
-            ) {
+                expanded = expanded && hasResults, onDismissRequest = { expanded = false }) {
                 results.forEach { item ->
-                    DropdownMenuItem(
-                        text = {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                SubcomposeAsyncImage(
-                                    model = remember(item.image) {
-                                        ImageRequest.Builder(context)
-                                            .data(item.image?.ifBlank { "https://placehold.co/64x64" })
-                                            .crossfade(true)
-                                            .build()
-                                    },
-                                    contentDescription = item.name,
-                                    modifier = Modifier
-                                        .size(40.dp)
-                                        .clip(MaterialTheme.shapes.small),
-                                    contentScale = ContentScale.Crop,
-                                    loading = {
-                                        CircularProgressIndicator(
-                                            modifier = Modifier.size(
-                                                16.dp
-                                            )
+                    DropdownMenuItem(text = {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            SubcomposeAsyncImage(
+                                model = remember(item.image) {
+                                    ImageRequest.Builder(context)
+                                        .data(item.image?.ifBlank { "https://placehold.co/64x64" })
+                                        .crossfade(true).build()
+                                },
+                                contentDescription = item.name,
+                                modifier = Modifier.size(40.dp).clip(MaterialTheme.shapes.small),
+                                contentScale = ContentScale.Crop,
+                                loading = {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(
+                                            16.dp
                                         )
-                                    },
-                                    error = {
-                                        AsyncImage(
-                                            model = "https://placehold.co/64x64",
-                                            contentDescription = "placeholder",
-                                            modifier = Modifier.size(40.dp)
-                                        )
-                                    }
+                                    )
+                                },
+                                error = {
+                                    AsyncImage(
+                                        model = "https://placehold.co/64x64",
+                                        contentDescription = "placeholder",
+                                        modifier = Modifier.size(40.dp)
+                                    )
+                                })
+                            Column {
+                                Text(item.name)
+                                Text(
+                                    text = "Código: ${item.itemCode}",
+                                    style = MaterialTheme.typography.bodySmall
                                 )
-                                Column {
-                                    Text(item.name)
-                                    Text(
-                                        text = "Código: ${item.itemCode}",
-                                        style = MaterialTheme.typography.bodySmall
-                                    )
-                                    Text(
-                                        "Precio: ${
-                                            formatAmount(
-                                                item.currency ?: "USD",
-                                                item.price
-                                            )
-                                        }",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.primary
-                                    )
-                                    Text(
-                                        "Disponible: ${item.actualQty.formatQty()}",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
+                                Text(
+                                    "Precio: ${
+                                        formatAmount(
+                                            item.currency ?: "USD", item.price
+                                        )
+                                    }",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                                Text(
+                                    "Disponible: ${item.actualQty.formatQty()}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
                             }
-                        },
-                        onClick = {
-                            onProductAdded(item)
-                            onQueryChange("")
-                            expanded = false
                         }
-                    )
+                    }, onClick = {
+                        onProductAdded(item)
+                        onQueryChange("")
+                        expanded = false
+                    })
                 }
             }
         }
@@ -446,9 +415,7 @@ private fun ProductSelector(
 
 @Composable
 private fun CollapsibleSection(
-    title: String,
-    defaultExpanded: Boolean,
-    content: @Composable () -> Unit
+    title: String, defaultExpanded: Boolean, content: @Composable () -> Unit
 ) {
     var expanded by rememberSaveable { mutableStateOf(defaultExpanded) }
     val interactionSource = remember { MutableInteractionSource() }
@@ -460,20 +427,15 @@ private fun CollapsibleSection(
     ) {
         Column(modifier = Modifier.fillMaxWidth()) {
             Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable(
-                        interactionSource = interactionSource,
-                        indication = ripple(bounded = true)
-                    ) { expanded = !expanded }
-                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                modifier = Modifier.fillMaxWidth().clickable(
+                    interactionSource = interactionSource, indication = ripple(bounded = true)
+                ) { expanded = !expanded }.padding(horizontal = 12.dp, vertical = 8.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(title, style = MaterialTheme.typography.titleSmall)
                 IconButton(
-                    onClick = { expanded = !expanded },
-                    modifier = Modifier.size(28.dp)
+                    onClick = { expanded = !expanded }, modifier = Modifier.size(28.dp)
                 ) {
                     Icon(
                         imageVector = if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
@@ -534,10 +496,7 @@ private fun CartList(
 
 @Composable
 private fun CartItemRow(
-    item: CartItem,
-    onQuantityChanged: (Double) -> Unit,
-    onRemoveItem: () -> Unit,
-    currency: String
+    item: CartItem, onQuantityChanged: (Double) -> Unit, onRemoveItem: () -> Unit, currency: String
 ) {
     val subtotal = item.price * item.quantity
     val displayQty = item.quantity.formatQty()
@@ -549,9 +508,7 @@ private fun CartItemRow(
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
     ) {
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 8.dp, vertical = 6.dp),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column(modifier = Modifier.weight(1f)) {
@@ -564,8 +521,7 @@ private fun CartItemRow(
                 Text(
                     text = "Qty $displayQty • ${
                         formatAmount(
-                            currency.toCurrencySymbol(),
-                            item.price
+                            currency.toCurrencySymbol(), item.price
                         )
                     }",
                     style = MaterialTheme.typography.bodySmall,
@@ -596,13 +552,11 @@ private fun CartItemRow(
                     modifier = Modifier.size(26.dp)
                 ) {
                     Icon(
-                        Icons.Default.Add,
-                        contentDescription = "Increase quantity"
+                        Icons.Default.Add, contentDescription = "Increase quantity"
                     )
                 }
                 IconButton(
-                    onClick = onRemoveItem,
-                    modifier = Modifier.size(26.dp)
+                    onClick = onRemoveItem, modifier = Modifier.size(26.dp)
                 ) {
                     Icon(
                         Icons.Default.Delete,
@@ -636,27 +590,22 @@ private fun SummaryRow(label: String, symbol: String, amount: Double, bold: Bool
 
 @Composable
 private fun TotalsPaymentsSheet(
-    state: BillingState.Success,
-    action: BillingAction
+    state: BillingState.Success, action: BillingAction
 ) {
     LazyColumn(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 12.dp),
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         item {
             Text(
-                "Totales + Pagos",
-                style = MaterialTheme.typography.titleMedium
+                "Totales + Pagos", style = MaterialTheme.typography.titleMedium
             )
         }
         item {
             val currency = state.currency ?: "USD"
             CollapsibleSection(title = "Totales + Descuentos + Envío", defaultExpanded = true) {
                 Column(
-                    modifier = Modifier
-                        .padding(horizontal = 12.dp),
+                    modifier = Modifier.padding(horizontal = 12.dp),
                     verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     SummaryRow("Subtotal", currency, state.subtotal)
@@ -668,14 +617,14 @@ private fun TotalsPaymentsSheet(
                 }
                 Spacer(Modifier.height(12.dp))
                 DiscountShippingInputs(
-                    state = state,
-                    action = action
+                    state = state, action = action
                 )
             }
         }
         item {
             CollapsibleSection(title = "Pagos", defaultExpanded = true) {
                 PaymentSection(
+                    state = state,
                     baseCurrency = state.currency ?: "USD",
                     exchangeRateByCurrency = state.exchangeRateByCurrency,
                     paymentLines = state.paymentLines,
@@ -701,6 +650,7 @@ private fun TotalsPaymentsSheet(
 
 @Composable
 private fun PaymentSection(
+    state: BillingState,
     baseCurrency: String,
     exchangeRateByCurrency: Map<String, Double>,
     paymentLines: List<PaymentLine>,
@@ -731,6 +681,7 @@ private fun PaymentSection(
         mutableStateOf(allowedCodes.firstOrNull() ?: baseCurrency)
     }
     var amountInput by remember { mutableStateOf("") }
+    var amountValue by remember { mutableStateOf(0.0) }
     var rateInput by remember { mutableStateOf("1.0") }
     var referenceInput by remember { mutableStateOf("") }
     val currencyOptions = remember(allowedCodes, baseCurrency) {
@@ -769,14 +720,14 @@ private fun PaymentSection(
     }
     Column(modifier = Modifier.padding(end = 12.dp, start = 12.dp, bottom = 8.dp)) {
 
-        if (isCreditSale) {
+        /*if (isCreditSale) {
             Text(
                 "Pagos deshabilitados para ventas de crédito.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(vertical = 4.dp)
             )
-        }
+        }*/
 
         if (paymentLines.isEmpty()) {
             Text(
@@ -806,16 +757,14 @@ private fun PaymentSection(
                                 Text(
                                     "Monto: ${
                                         formatAmount(
-                                            line.currency.toCurrencySymbol(),
-                                            line.enteredAmount
+                                            line.currency.toCurrencySymbol(), line.enteredAmount
                                         )
                                     }"
                                 )
                                 Text(
                                     "Base: ${
                                         formatAmount(
-                                            baseCurrency.toCurrencySymbol(),
-                                            line.baseAmount
+                                            baseCurrency.toCurrencySymbol(), line.baseAmount
                                         )
                                     }"
                                 )
@@ -839,150 +788,151 @@ private fun PaymentSection(
 
         Spacer(Modifier.height(12.dp))
 
-        if (!isCreditSale) {
-            Text("Modo de pago", style = MaterialTheme.typography.bodyMedium)
-            var modeExpanded by remember { mutableStateOf(false) }
-            ExposedDropdownMenuBox(
-                expanded = modeExpanded,
-                onExpandedChange = { modeExpanded = it }
-            ) {
-                OutlinedTextField(
-                    value = selectedMode,
-                    onValueChange = {},
-                    readOnly = true,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .menuAnchor(MenuAnchorType.PrimaryNotEditable),
-                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = modeExpanded) }
-                )
-                ExposedDropdownMenu(
-                    expanded = modeExpanded,
-                    onDismissRequest = { modeExpanded = false }
-                ) {
-                    modeOptions.forEach { mode ->
-                        DropdownMenuItem(
-                            text = { Text(mode) },
-                            onClick = {
-                                selectedMode = mode
-                                modeExpanded = false
-                            }
-                        )
-                    }
-                }
-            }
-
-            Spacer(Modifier.height(12.dp))
+        if (isCreditSale) {
             Text(
-                text = "Moneda base de factura: $baseCurrency",
+                "Pago parcial (opcional). El restante quedará como saldo a crédito.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
+            Spacer(Modifier.height(8.dp))
+        }
 
-            Spacer(Modifier.height(12.dp))
-
+        Text("Modo de pago", style = MaterialTheme.typography.bodyMedium)
+        var modeExpanded by remember { mutableStateOf(false) }
+        ExposedDropdownMenuBox(
+            expanded = modeExpanded, onExpandedChange = { modeExpanded = it }) {
             OutlinedTextField(
-                value = amountInput,
-                onValueChange = { amountInput = it },
-                label = { Text("Monto") },
-                keyboardOptions = KeyboardOptions(
-                    keyboardType = KeyboardType.Number,
-                    imeAction = ImeAction.Next
-                ),
+                value = selectedMode,
+                onValueChange = {},
+                readOnly = true,
+                modifier = Modifier.fillMaxWidth().menuAnchor(MenuAnchorType.PrimaryNotEditable),
+                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = modeExpanded) })
+            ExposedDropdownMenu(
+                expanded = modeExpanded, onDismissRequest = { modeExpanded = false }) {
+                modeOptions.forEach { mode ->
+                    DropdownMenuItem(text = { Text(mode) }, onClick = {
+                        selectedMode = mode
+                        modeExpanded = false
+                    })
+                }
+            }
+        }
+
+        Spacer(Modifier.height(12.dp))
+        Text(
+            text = "Moneda base de factura: $baseCurrency",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+
+        Spacer(Modifier.height(12.dp))
+
+        val currency =
+            (state as BillingState.Success).paymentModeCurrencyByMode[selectedMode] ?: baseCurrency
+        //val paymentCurrency = paymentModes[selectedMode]
+        MoneyTextField(
+            currencyCode = currency,
+            rawValue = amountInput,
+            onRawValueChange = { amountInput = it },
+            label = "Monto",
+            enabled = !isCreditSale,
+            onAmountChanged = { amountValue = it },
+            supportingText = {
+                if (selectedCurrency != baseCurrency) {
+                    val rate = rateInput.toDoubleOrNull() ?: 0.0
+                    val base = amountValue * rate
+                    Text("Base: ${formatAmount(baseCurrency.toCurrencySymbol(), base)}")
+                }
+            })/*OutlinedTextField(
+            value = amountInput,
+            onValueChange = { amountInput = it },
+            label = { Text("Monto") },
+            keyboardOptions = KeyboardOptions(
+                keyboardType = KeyboardType.Number, imeAction = ImeAction.Next
+            ),
+            modifier = Modifier.fillMaxWidth()
+        )*/
+
+        Spacer(Modifier.height(12.dp))
+
+        if (requiresReference) {
+            OutlinedTextField(
+                value = referenceInput,
+                onValueChange = { referenceInput = it },
+                label = { Text("Número de referencia") },
+                supportingText = {
+                    if (referenceInput.isBlank()) {
+                        Text("Requerido para pagos con ${selectedMode}.")
+                    }
+                },
+                isError = referenceInput.isBlank(),
                 modifier = Modifier.fillMaxWidth()
             )
 
             Spacer(Modifier.height(12.dp))
-
-            if (requiresReference) {
-                OutlinedTextField(
-                    value = referenceInput,
-                    onValueChange = { referenceInput = it },
-                    label = { Text("Número de referencia") },
-                    supportingText = {
-                        if (referenceInput.isBlank()) {
-                            Text("Requerido para pagos con ${selectedMode}.")
-                        }
-                    },
-                    isError = referenceInput.isBlank(),
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                Spacer(Modifier.height(12.dp))
-            }
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                val amountValue = amountInput.toDoubleOrNull()
-                val rateValue = rateInput.toDoubleOrNull()
-                val canAdd = amountValue != null &&
-                        amountValue > 0.0 &&
-                        (rateValue != null && rateValue > 0.0) &&
-                        selectedMode.isNotBlank() &&
-                        (!requiresReference || referenceInput.isNotBlank()) &&
-                        !isCreditSale
-
-                Button(
-                    onClick = {
-                        val amount = amountValue ?: return@Button
-                        val rate = if (selectedCurrency == baseCurrency) 1.0 else rateValue ?: 1.0
-                        onAddPaymentLine(
-                            PaymentLine(
-                                modeOfPayment = selectedMode,
-                                enteredAmount = amount,
-                                currency = selectedCurrency,
-                                exchangeRate = rate,
-                                baseAmount = amount * rate,
-                                referenceNumber = referenceInput.takeIf { it.isNotBlank() }
-                            )
-                        )
-                        amountInput = ""
-                        referenceInput = ""
-                        if (selectedCurrency == baseCurrency) {
-                            rateInput = "1.0"
-                        }
-                    },
-                    modifier = Modifier.weight(1f),
-                    enabled = canAdd
-                ) {
-                    Text("Agregar pago")
-                }
-
-                OutlinedButton(
-                    onClick = {
-                        if (paymentLines.isNotEmpty()) {
-                            onRemovePaymentLine(paymentLines.lastIndex)
-                        }
-                    },
-                    modifier = Modifier.weight(1f),
-                    enabled = paymentLines.isNotEmpty()
-                ) {
-                    Text("Eliminar")
-                }
-            }
-
-            if (!paymentErrorMessage.isNullOrBlank()) {
-                Text(
-                    text = paymentErrorMessage,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.error
-                )
-            }
-
-            Spacer(Modifier.height(12.dp))
-
-            SummaryRow("Pagado (base)", baseCurrency, paidAmountBase, bold = true)
-            SummaryRow("Balance pendiente", baseCurrency, balanceDueBase, bold = true)
-            SummaryRow("Cambio", baseCurrency, changeDueBase, bold = true)
         }
+
+        Row(
+            modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            //val amountValue = amountInput.toDoubleOrNull()
+            val rateValue = rateInput.toDoubleOrNull()
+            val canAdd =
+                amountValue > 0.0 && (rateValue != null && rateValue > 0.0) && selectedMode.isNotBlank() && (!requiresReference || referenceInput.isNotBlank()) && (paidAmountBase < totalAmount) // <- Para evitar sobre pago
+
+            Button(
+                onClick = {
+                    val rate = if (selectedCurrency == baseCurrency) 1.0 else (rateValue ?: 1.0)
+                    onAddPaymentLine(
+                        PaymentLine(
+                            modeOfPayment = selectedMode,
+                            enteredAmount = amountValue,
+                            currency = selectedCurrency,
+                            exchangeRate = rate,
+                            baseAmount = amountValue * rate,
+                            referenceNumber = referenceInput.takeIf { it.isNotBlank() })
+                    )
+                    amountInput = ""
+                    amountValue = 0.0
+                    referenceInput = ""
+                    if (selectedCurrency == baseCurrency) {
+                        rateInput = "1.0"
+                    }
+                }, modifier = Modifier.weight(1f), enabled = canAdd
+            ) {
+                Text("Agregar pago")
+            }
+
+            OutlinedButton(
+                onClick = {
+                    if (paymentLines.isNotEmpty()) {
+                        onRemovePaymentLine(paymentLines.lastIndex)
+                    }
+                }, modifier = Modifier.weight(1f), enabled = paymentLines.isNotEmpty()
+            ) {
+                Text("Eliminar")
+            }
+        }
+
+        if (!paymentErrorMessage.isNullOrBlank()) {
+            Text(
+                text = paymentErrorMessage,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error
+            )
+        }
+
+        Spacer(Modifier.height(12.dp))
+
+        SummaryRow("Pagado (base)", baseCurrency, paidAmountBase, bold = true)
+        SummaryRow("Balance pendiente", baseCurrency, balanceDueBase, bold = true)
+        SummaryRow("Cambio", baseCurrency, changeDueBase, bold = true)
     }
 }
 
 @Composable
 private fun DiscountShippingInputs(
-    state: BillingState.Success,
-    action: BillingAction
+    state: BillingState.Success, action: BillingAction
 ) {
     val baseCurrency = state.currency ?: "USD"
     Column(
@@ -995,8 +945,7 @@ private fun DiscountShippingInputs(
             onValueChange = action.onManualDiscountPercentChanged,
             label = { Text("Porcentaje (%)") },
             keyboardOptions = KeyboardOptions(
-                keyboardType = KeyboardType.Number,
-                imeAction = ImeAction.Next
+                keyboardType = KeyboardType.Number, imeAction = ImeAction.Next
             ),
             modifier = Modifier.fillMaxWidth()
         )
@@ -1005,8 +954,7 @@ private fun DiscountShippingInputs(
             onValueChange = action.onManualDiscountAmountChanged,
             label = { Text("Monto (${baseCurrency.toCurrencySymbol()})") },
             keyboardOptions = KeyboardOptions(
-                keyboardType = KeyboardType.Number,
-                imeAction = ImeAction.Next
+                keyboardType = KeyboardType.Number, imeAction = ImeAction.Next
             ),
             modifier = Modifier.fillMaxWidth()
         )
@@ -1021,43 +969,30 @@ private fun DiscountShippingInputs(
         val deliveryChargeLabel = state.selectedDeliveryCharge?.label ?: "Selecciona cargo de envío"
         var deliveryExpanded by remember { mutableStateOf(false) }
         ExposedDropdownMenuBox(
-            expanded = deliveryExpanded,
-            onExpandedChange = { deliveryExpanded = it }
-        ) {
+            expanded = deliveryExpanded, onExpandedChange = { deliveryExpanded = it }) {
             OutlinedTextField(
                 value = deliveryChargeLabel,
                 onValueChange = {},
                 readOnly = true,
                 label = { Text("Cargo de envío") },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .menuAnchor(MenuAnchorType.PrimaryNotEditable),
+                modifier = Modifier.fillMaxWidth().menuAnchor(MenuAnchorType.PrimaryNotEditable),
                 trailingIcon = {
                     ExposedDropdownMenuDefaults.TrailingIcon(expanded = deliveryExpanded)
-                }
-            )
+                })
             ExposedDropdownMenu(
-                expanded = deliveryExpanded,
-                onDismissRequest = { deliveryExpanded = false }
-            ) {
-                DropdownMenuItem(
-                    text = { Text("Sin envío") },
-                    onClick = {
-                        action.onDeliveryChargeSelected(null)
-                        deliveryExpanded = false
-                    }
-                )
+                expanded = deliveryExpanded, onDismissRequest = { deliveryExpanded = false }) {
+                DropdownMenuItem(text = { Text("Sin envío") }, onClick = {
+                    action.onDeliveryChargeSelected(null)
+                    deliveryExpanded = false
+                })
                 state.deliveryCharges.forEach { charge ->
                     val chargeLabel = "${
                         charge.label
                     } (${formatAmount(baseCurrency.toCurrencySymbol(), charge.defaultRate)})"
-                    DropdownMenuItem(
-                        text = { Text(chargeLabel) },
-                        onClick = {
-                            action.onDeliveryChargeSelected(charge)
-                            deliveryExpanded = false
-                        }
-                    )
+                    DropdownMenuItem(text = { Text(chargeLabel) }, onClick = {
+                        action.onDeliveryChargeSelected(charge)
+                        deliveryExpanded = false
+                    })
                 }
             }
         }
@@ -1101,31 +1036,23 @@ private fun CreditTermsSection(
             var templateExpanded by remember { mutableStateOf(false) }
             val templateLabel = selectedPaymentTerm?.name ?: "Selecciona la condicion de pago"
             ExposedDropdownMenuBox(
-                expanded = templateExpanded,
-                onExpandedChange = { templateExpanded = it }
-            ) {
-                OutlinedTextField(
+                expanded = templateExpanded, onExpandedChange = { templateExpanded = it }) {
+                AppTextField(
                     value = templateLabel,
                     onValueChange = {},
-                    readOnly = true,
-                    label = { Text("Selecciona la condicion de pago") },
-                    modifier = Modifier
-                        .fillMaxWidth()
+                    label = "Selecciona la condicion de pago",
+                    placeholder = "Condicion de pago",
+                    modifier = Modifier//.fillMaxWidth()
                         .menuAnchor(MenuAnchorType.PrimaryNotEditable),
-                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = templateExpanded) }
-                )
+                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = templateExpanded) },
+                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) })
                 ExposedDropdownMenu(
-                    expanded = templateExpanded,
-                    onDismissRequest = { templateExpanded = false }
-                ) {
+                    expanded = templateExpanded, onDismissRequest = { templateExpanded = false }) {
                     paymentTerms.forEach { term ->
-                        DropdownMenuItem(
-                            text = { Text(term.name) },
-                            onClick = {
-                                onPaymentTermSelected(term)
-                                templateExpanded = false
-                            }
-                        )
+                        DropdownMenuItem(text = { Text(term.name) }, onClick = {
+                            onPaymentTermSelected(term)
+                            templateExpanded = false
+                        })
                     }
                 }
             }
@@ -1174,10 +1101,205 @@ private fun Double.formatQty(): String {
 
 private fun requiresReference(option: POSPaymentModeOption?): Boolean {
     val type = option?.type?.trim().orEmpty()
-    return type.equals("Bank", ignoreCase = true) ||
-            type.equals("Card", ignoreCase = true) ||
-            option?.modeOfPayment?.contains("bank", ignoreCase = true) == true ||
-            option?.modeOfPayment?.contains("card", ignoreCase = true) == true
+    return type.equals("Bank", ignoreCase = true) || type.equals(
+        "Card", ignoreCase = true
+    ) || option?.modeOfPayment?.contains(
+        "bank", ignoreCase = true
+    ) == true || option?.modeOfPayment?.contains("card", ignoreCase = true) == true
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun AppTextField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    label: String,
+    modifier: Modifier = Modifier,
+    placeholder: String? = null,
+    singleLine: Boolean = true,
+    enabled: Boolean = true,
+    isError: Boolean = false,
+    supportingText: (@Composable () -> Unit)? = null,
+    keyboardOptions: KeyboardOptions = KeyboardOptions.Default,
+    keyboardActions: KeyboardActions = KeyboardActions.Default,
+    leadingIcon: (@Composable () -> Unit)? = null,
+    trailingIcon: (@Composable () -> Unit)? = null,
+) {
+    TextField(
+        value = value,
+        onValueChange = onValueChange,
+        modifier = modifier.fillMaxWidth().heightIn(min = 56.dp),
+        label = { Text(label) },
+        placeholder = placeholder?.let { { Text(it) } },
+        singleLine = singleLine,
+        enabled = enabled,
+        isError = isError,
+        supportingText = supportingText,
+        keyboardOptions = keyboardOptions,
+        keyboardActions = keyboardActions,
+        leadingIcon = leadingIcon,
+        trailingIcon = trailingIcon,
+        shape = RoundedCornerShape(14.dp),
+        colors = TextFieldDefaults.colors(
+            focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+            unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.22f),
+            disabledContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.12f),
+            focusedIndicatorColor = Color.Transparent,
+            unfocusedIndicatorColor = Color.Transparent,
+            disabledIndicatorColor = Color.Transparent
+        )
+    )
+}
+
+data class MoneyUiSpec(
+    val code: String,
+    val decimals: Int = 2,
+    val groupSep: Char = ',',
+    val decimalSep: Char = '.',
+)
+
+private fun moneyUiSpec(currencyCode: String, fallbackDecimals: Int = 2): MoneyUiSpec {
+    val code = currencyCode.trim().uppercase()
+    return when (code) {
+        "NIO", "USD" -> MoneyUiSpec(code = code, decimals = 2, groupSep = ',', decimalSep = '.')
+        "EUR" -> MoneyUiSpec(code = code, decimals = 2, groupSep = '.', decimalSep = ',')
+        else -> MoneyUiSpec(
+            code = code, decimals = fallbackDecimals, groupSep = ',', decimalSep = '.'
+        )
+    }
+}
+
+private fun sanitizeMoneyInput(input: String, maxDecimals: Int): String {
+    val s = input.trim().replace(" ", "")
+    val filtered = s.filter { it.isDigit() || it == '.' || it == ',' }
+    if (filtered.isBlank()) return ""
+
+    val lastDot = filtered.lastIndexOf('.')
+    val lastComma = filtered.lastIndexOf(',')
+    val decIdx = maxOf(lastDot, lastComma)
+
+    fun normalizeInt(digits: String): String = digits.trimStart('0').ifBlank { "0" }
+
+    return if (decIdx >= 0) {
+        val intDigits = filtered.substring(0, decIdx).filter { it.isDigit() }
+        val decDigits = filtered.substring(decIdx + 1).filter { it.isDigit() }.take(maxDecimals)
+        normalizeInt(intDigits) + "." + decDigits
+    } else {
+        val intDigits = filtered.filter { it.isDigit() }
+        normalizeInt(intDigits)
+    }
+}
+
+private fun formatWithGrouping(intPart: String, groupSep: Char): String =
+    intPart.ifBlank { "0" }.reversed().chunked(3).joinToString(groupSep.toString()).reversed()
+
+private fun formatMoneyDisplay(raw: String, spec: MoneyUiSpec, focused: Boolean): String {
+    if (raw.isBlank()) return ""
+    val parts = raw.split('.', limit = 2)
+    val intPart = parts.getOrNull(0).orEmpty()
+    val decPart = parts.getOrNull(1).orEmpty()
+
+    return if (focused) {
+        // En edición: NO estorbar, NO agrupar, NO forzar .00
+        if (raw.contains('.')) intPart + spec.decimalSep + decPart else intPart
+    } else {
+        val grouped = formatWithGrouping(intPart, spec.groupSep)
+        val padded = decPart.padEnd(spec.decimals, '0').take(spec.decimals)
+        grouped + spec.decimalSep + padded
+    }
+}
+
+private fun parseMoneyToDouble(raw: String): Double =
+    raw.trim().let { if (it.endsWith(".")) it.dropLast(1) else it }.toDoubleOrNull() ?: 0.0
+
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun MoneyTextField(
+    currencyCode: String,
+    rawValue: String,
+    onRawValueChange: (String) -> Unit,
+    modifier: Modifier = Modifier,
+    label: String = "Monto",
+    enabled: Boolean = true,
+    isError: Boolean = false,
+    supportingText: (@Composable () -> Unit)? = null,
+    imeAction: ImeAction = ImeAction.Next,
+    onAmountChanged: (Double) -> Unit = {}
+) {
+    val spec = remember(currencyCode) { moneyUiSpec(currencyCode) }
+    val symbol = remember(currencyCode) { currencyCode.toCurrencySymbol() }
+
+    var focused by remember { mutableStateOf(false) }
+
+    // Raw normalizado SIEMPRE usando '.' como decimal interno
+    val sanitizedRaw = remember(rawValue, spec.decimals) {
+        sanitizeMoneyInput(rawValue, maxDecimals = spec.decimals)
+    }
+
+    val display = remember(sanitizedRaw, spec, focused) {
+        formatMoneyDisplay(sanitizedRaw, spec, focused)
+    }
+
+    LaunchedEffect(sanitizedRaw) {
+        onAmountChanged(parseMoneyToDouble(sanitizedRaw))
+    }
+
+    TextField(
+        value = display,
+        onValueChange = { typed ->
+            // Convertimos lo tecleado a raw normalizado (sin miles, '.' como decimal)
+            val newRaw = sanitizeMoneyInput(typed, maxDecimals = spec.decimals)
+            onRawValueChange(newRaw)
+        },
+        modifier = modifier
+            .fillMaxWidth()
+            .heightIn(min = 56.dp)
+            .onFocusChanged { state ->
+                val wasFocused = focused
+                focused = state.isFocused
+
+                // Al perder foco: fuerza que exista decimal (ej: "100" -> "100.00")
+                if (wasFocused && !focused) {
+                    val normalized = sanitizeMoneyInput(rawValue, maxDecimals = spec.decimals)
+                    if (normalized.isNotBlank() && !normalized.contains('.')) {
+                        onRawValueChange("$normalized.${"0".repeat(spec.decimals)}")
+                    } else if (normalized.contains('.')) {
+                        val parts = normalized.split('.', limit = 2)
+                        val intPart = parts[0]
+                        val decPart = parts.getOrNull(1).orEmpty().padEnd(spec.decimals, '0')
+                            .take(spec.decimals)
+                        onRawValueChange("$intPart.$decPart")
+                    }
+                }
+            },
+        label = { Text(label) },
+        prefix = {
+            Text(
+                text = if (symbol.isBlank()) currencyCode else symbol,
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(Modifier.width(8.dp))
+        },
+        singleLine = true,
+        enabled = enabled,
+        isError = isError,
+        supportingText = supportingText,
+        keyboardOptions = KeyboardOptions(
+            keyboardType = KeyboardType.Decimal,
+            imeAction = imeAction
+        ),
+        shape = RoundedCornerShape(14.dp),
+        colors = TextFieldDefaults.colors(
+            focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+            unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.22f),
+            disabledContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.12f),
+            focusedIndicatorColor = Color.Transparent,
+            unfocusedIndicatorColor = Color.Transparent,
+            disabledIndicatorColor = Color.Transparent
+        )
+    )
 }
 
 @Preview
@@ -1206,8 +1328,7 @@ private fun BillingScreenPreview() {
     )
     val deliveryCharges = listOf(
         com.erpnext.pos.domain.models.DeliveryChargeBO(
-            label = "Zona urbana",
-            defaultRate = 10.0
+            label = "Zona urbana", defaultRate = 10.0
         )
     )
 
@@ -1243,16 +1364,13 @@ private fun BillingScreenPreview() {
                 ),
                 paymentTerms = listOf(
                     com.erpnext.pos.domain.models.PaymentTermBO(
-                        name = "Layaway 30 days",
-                        creditDays = 30
+                        name = "Layaway 30 days", creditDays = 30
                     )
                 ),
                 selectedPaymentTerm = null,
                 allowedCurrencies = listOf(
                     POSCurrencyOption(
-                        code = "USD",
-                        name = "US Dollar",
-                        symbol = "$"
+                        code = "USD", name = "US Dollar", symbol = "$"
                     )
                 ),
                 paidAmountBase = 100.0,
