@@ -18,9 +18,13 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ConfirmationNumber
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.DeliveryDining
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
+import androidx.compose.material.icons.filled.Money
+import androidx.compose.material.icons.filled.Percent
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.ripple.rememberRipple
@@ -39,6 +43,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.input.OffsetMapping
+import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.input.TransformedText
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import coil3.compose.AsyncImage
 import coil3.compose.LocalPlatformContext
@@ -801,11 +811,13 @@ private fun PaymentSection(
         var modeExpanded by remember { mutableStateOf(false) }
         ExposedDropdownMenuBox(
             expanded = modeExpanded, onExpandedChange = { modeExpanded = it }) {
-            OutlinedTextField(
+            AppTextField(
                 value = selectedMode,
                 onValueChange = {},
-                readOnly = true,
                 modifier = Modifier.fillMaxWidth().menuAnchor(MenuAnchorType.PrimaryNotEditable),
+                label = "Selecciona metodo de pago",
+                placeholder = "Selecciona metodo de pago",
+                leadingIcon = { Icon(Icons.Default.Money, contentDescription = null) },
                 trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = modeExpanded) })
             ExposedDropdownMenu(
                 expanded = modeExpanded, onDismissRequest = { modeExpanded = false }) {
@@ -856,10 +868,12 @@ private fun PaymentSection(
         Spacer(Modifier.height(12.dp))
 
         if (requiresReference) {
-            OutlinedTextField(
+            AppTextField(
                 value = referenceInput,
                 onValueChange = { referenceInput = it },
-                label = { Text("Número de referencia") },
+                label = "Número de referencia",
+                placeholder = "#11231",
+                leadingIcon = { Icon(Icons.Default.ConfirmationNumber, contentDescription = null) },
                 supportingText = {
                     if (referenceInput.isBlank()) {
                         Text("Requerido para pagos con ${selectedMode}.")
@@ -940,29 +954,33 @@ private fun DiscountShippingInputs(
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         Text("Descuento manual", style = MaterialTheme.typography.bodyMedium)
-        OutlinedTextField(
+        AppTextField(
             value = if (state.manualDiscountPercent > 0.0) state.manualDiscountPercent.toString() else "",
             onValueChange = action.onManualDiscountPercentChanged,
-            label = { Text("Porcentaje (%)") },
+            label = "Porcentaje (%)",
+            trailingIcon = { Icon(Icons.Default.Percent, contentDescription = null) },
             keyboardOptions = KeyboardOptions(
                 keyboardType = KeyboardType.Number, imeAction = ImeAction.Next
             ),
             modifier = Modifier.fillMaxWidth()
         )
-        OutlinedTextField(
+        AppTextField(
             value = if (state.manualDiscountAmount > 0.0) state.manualDiscountAmount.toString() else "",
             onValueChange = action.onManualDiscountAmountChanged,
-            label = { Text("Monto (${baseCurrency.toCurrencySymbol()})") },
+            label = "Monto (${baseCurrency.toCurrencySymbol()})",
+            trailingIcon = { Icon(Icons.Default.Money, contentDescription = null) },
             keyboardOptions = KeyboardOptions(
                 keyboardType = KeyboardType.Number, imeAction = ImeAction.Next
             ),
             modifier = Modifier.fillMaxWidth()
         )
         Text("Código de descuento", style = MaterialTheme.typography.bodyMedium)
-        OutlinedTextField(
+        AppTextField(
             value = state.discountCode,
             onValueChange = action.onDiscountCodeChanged,
-            label = { Text("Código") },
+            label = "Código",
+            placeholder = "Codigo de descuento activo",
+            trailingIcon = { Icon(Icons.Default.Money, contentDescription = null) },
             modifier = Modifier.fillMaxWidth()
         )
         Text("Envío", style = MaterialTheme.typography.bodyMedium)
@@ -970,11 +988,10 @@ private fun DiscountShippingInputs(
         var deliveryExpanded by remember { mutableStateOf(false) }
         ExposedDropdownMenuBox(
             expanded = deliveryExpanded, onExpandedChange = { deliveryExpanded = it }) {
-            OutlinedTextField(
+            AppTextField(
                 value = deliveryChargeLabel,
                 onValueChange = {},
-                readOnly = true,
-                label = { Text("Cargo de envío") },
+                label = "Cargo de envío",
                 modifier = Modifier.fillMaxWidth().menuAnchor(MenuAnchorType.PrimaryNotEditable),
                 trailingIcon = {
                     ExposedDropdownMenuDefaults.TrailingIcon(expanded = deliveryExpanded)
@@ -1212,6 +1229,134 @@ private fun formatMoneyDisplay(raw: String, spec: MoneyUiSpec, focused: Boolean)
 private fun parseMoneyToDouble(raw: String): Double =
     raw.trim().let { if (it.endsWith(".")) it.dropLast(1) else it }.toDoubleOrNull() ?: 0.0
 
+private fun normalizeRawMoneyInput(input: String, maxDecimals: Int): String {
+    val s = input.trim().replace(" ", "")
+    if (s.isBlank()) return ""
+
+    // Permitimos dígitos y separadores . ,
+    val filtered = s.filter { it.isDigit() || it == '.' || it == ',' }
+    if (filtered.isBlank()) return ""
+
+    // Usamos el ÚLTIMO separador como decimal, el resto se considera miles
+    val lastDot = filtered.lastIndexOf('.')
+    val lastComma = filtered.lastIndexOf(',')
+    val decIdx = maxOf(lastDot, lastComma)
+
+    fun cleanIntDigits(d: String): String {
+        val digits = d.filter { it.isDigit() }
+        // Evita "00012" -> "12"
+        val trimmed = digits.trimStart('0')
+        return if (trimmed.isBlank()) "0" else trimmed
+    }
+
+    return if (decIdx >= 0) {
+        val intDigits = cleanIntDigits(filtered.substring(0, decIdx))
+        val decDigits = filtered.substring(decIdx + 1).filter { it.isDigit() }.take(maxDecimals)
+        "$intDigits.$decDigits" // raw siempre con '.'
+    } else {
+        cleanIntDigits(filtered)
+    }
+}
+
+private class MoneyVisualTransformation(
+    private val spec: MoneyUiSpec,
+) : VisualTransformation {
+    override fun filter(text: AnnotatedString): TransformedText {
+        val raw = text.text
+        val normalized = normalizeRawMoneyInput(raw, spec.decimals)
+
+        // Mantén el raw original (lo que el usuario edita) tal cual; el display se basa en normalized.
+        // Para el mapping, usamos el mismo "raw" (porque offsets se miden sobre text.text).
+        // OJO: lo ideal es que tu TextField.value SIEMPRE sea normalized.
+        // (abajo te lo dejo así, para que el mapping sea exacto)
+        val value = normalized
+
+        val dotIndex = value.indexOf('.')
+        val hasDot = dotIndex >= 0
+        val intPart = if (hasDot) value.substring(0, dotIndex) else value
+        val decRaw = if (hasDot) value.substring(dotIndex + 1) else ""
+
+        // --- build grouped int + mapping int offsets ---
+        val n = intPart.length
+        val mapIntOffsets = IntArray(n + 1)
+        val groupedInt = StringBuilder()
+
+        var rawIntOffset = 0
+        for (ch in intPart) {
+            mapIntOffsets[rawIntOffset] = groupedInt.length
+            groupedInt.append(ch)
+            rawIntOffset++
+
+            val remaining = n - rawIntOffset
+            if (remaining > 0 && remaining % 3 == 0) {
+                groupedInt.append(spec.groupSep)
+            }
+        }
+        mapIntOffsets[n] = groupedInt.length
+
+        val decShown = decRaw.take(spec.decimals).padEnd(spec.decimals, '0')
+        val transformed = buildString {
+            append(groupedInt)
+            append(spec.decimalSep)
+            append(decShown)
+        }
+
+        val intTransLen = groupedInt.length
+        val decSepPos = intTransLen
+        val decStart = decSepPos + 1
+
+        val offsetMapping = object : OffsetMapping {
+            override fun originalToTransformed(offset: Int): Int {
+                val o = offset.coerceIn(0, value.length)
+
+                // offsets dentro del entero
+                val intLen = intPart.length
+                if (!hasDot) {
+                    return if (o <= intLen) mapIntOffsets[o] else intTransLen
+                }
+
+                // has dot
+                return when {
+                    o <= intLen -> mapIntOffsets[o]
+                    o == intLen + 1 -> decStart // cursor “después del punto”
+                    else -> {
+                        val decOffset = (o - (intLen + 1)).coerceAtMost(spec.decimals)
+                        decStart + decOffset
+                    }
+                }
+            }
+
+            override fun transformedToOriginal(offset: Int): Int {
+                val t = offset.coerceIn(0, transformed.length)
+
+                // dentro del entero (incluye comas)
+                if (t <= intTransLen) {
+                    // busca el mayor rawIntOffset cuyo mapped <= t
+                    var i = 0
+                    while (i < mapIntOffsets.size && mapIntOffsets[i] <= t) i++
+                    return (i - 1).coerceAtLeast(0)
+                }
+
+                // en la parte decimal (siempre existe visualmente)
+                if (!hasDot) {
+                    // si no hay punto en raw, no permitimos que el cursor se meta en los decimales “falsos”
+                    return intPart.length
+                }
+
+                // hay punto en raw: permitimos editar decimales
+                if (t == decSepPos) return intPart.length
+                if (t == decStart) return intPart.length + 1
+
+                val decOffset = (t - decStart).coerceIn(0, spec.decimals)
+                val rawDecLen = decRaw.length.coerceAtMost(spec.decimals)
+                val clamped = decOffset.coerceAtMost(rawDecLen)
+                return (intPart.length + 1 + clamped)
+            }
+        }
+
+        return TransformedText(AnnotatedString(transformed), offsetMapping)
+    }
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -1228,55 +1373,42 @@ fun MoneyTextField(
     onAmountChanged: (Double) -> Unit = {}
 ) {
     val spec = remember(currencyCode) { moneyUiSpec(currencyCode) }
-    val symbol = remember(currencyCode) { currencyCode.toCurrencySymbol() }
+    val symbol = remember(currencyCode) {
+        val s = currencyCode.toCurrencySymbol()
+        s.ifBlank { currencyCode }
+    }
+    val transformation = remember(spec) { MoneyVisualTransformation(spec) }
 
-    var focused by remember { mutableStateOf(false) }
-
-    // Raw normalizado SIEMPRE usando '.' como decimal interno
-    val sanitizedRaw = remember(rawValue, spec.decimals) {
-        sanitizeMoneyInput(rawValue, maxDecimals = spec.decimals)
+    var tfv by remember(rawValue, spec.decimals) {
+        val sanitized = sanitizeMoneyInput(rawValue, spec.decimals)
+        mutableStateOf(TextFieldValue(sanitized, selection = TextRange(sanitized.length)))
     }
 
-    val display = remember(sanitizedRaw, spec, focused) {
-        formatMoneyDisplay(sanitizedRaw, spec, focused)
+    val display = remember(tfv.text, spec) {
+        formatMoneyDisplay(tfv.text, spec, true)
     }
 
-    LaunchedEffect(sanitizedRaw) {
-        onAmountChanged(parseMoneyToDouble(sanitizedRaw))
+    LaunchedEffect(tfv.text) {
+        onAmountChanged(parseMoneyToDouble(tfv.text))
     }
 
     TextField(
-        value = display,
+        value = tfv,
         onValueChange = { typed ->
-            // Convertimos lo tecleado a raw normalizado (sin miles, '.' como decimal)
-            val newRaw = sanitizeMoneyInput(typed, maxDecimals = spec.decimals)
-            onRawValueChange(newRaw)
+            val sanitized = sanitizeMoneyInput(typed.text, spec.decimals)
+            tfv = TextFieldValue(
+                text = sanitized,
+                selection = TextRange(sanitized.length)
+            )
+            onRawValueChange(sanitized)
         },
         modifier = modifier
             .fillMaxWidth()
-            .heightIn(min = 56.dp)
-            .onFocusChanged { state ->
-                val wasFocused = focused
-                focused = state.isFocused
-
-                // Al perder foco: fuerza que exista decimal (ej: "100" -> "100.00")
-                if (wasFocused && !focused) {
-                    val normalized = sanitizeMoneyInput(rawValue, maxDecimals = spec.decimals)
-                    if (normalized.isNotBlank() && !normalized.contains('.')) {
-                        onRawValueChange("$normalized.${"0".repeat(spec.decimals)}")
-                    } else if (normalized.contains('.')) {
-                        val parts = normalized.split('.', limit = 2)
-                        val intPart = parts[0]
-                        val decPart = parts.getOrNull(1).orEmpty().padEnd(spec.decimals, '0')
-                            .take(spec.decimals)
-                        onRawValueChange("$intPart.$decPart")
-                    }
-                }
-            },
+            .heightIn(min = 56.dp),
         label = { Text(label) },
         prefix = {
             Text(
-                text = if (symbol.isBlank()) currencyCode else symbol,
+                text = symbol.ifBlank { symbol },
                 style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -1290,6 +1422,7 @@ fun MoneyTextField(
             keyboardType = KeyboardType.Decimal,
             imeAction = imeAction
         ),
+        visualTransformation = transformation,
         shape = RoundedCornerShape(14.dp),
         colors = TextFieldDefaults.colors(
             focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
