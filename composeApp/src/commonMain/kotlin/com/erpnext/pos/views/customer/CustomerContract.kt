@@ -1,6 +1,7 @@
 package com.erpnext.pos.views.customer
 
 import com.erpnext.pos.domain.models.CustomerBO
+import com.erpnext.pos.domain.models.SalesInvoiceBO
 
 sealed class CustomerState {
     object Loading : CustomerState()
@@ -9,6 +10,19 @@ sealed class CustomerState {
 
     data class Error(val message: String) : CustomerState()
 }
+
+sealed class CustomerInvoicesState {
+    data object Idle : CustomerInvoicesState()
+    data object Loading : CustomerInvoicesState()
+    data class Success(val invoices: List<SalesInvoiceBO>) : CustomerInvoicesState()
+    data class Error(val message: String) : CustomerInvoicesState()
+}
+
+data class CustomerPaymentState(
+    val isSubmitting: Boolean = false,
+    val errorMessage: String? = null,
+    val successMessage: String? = null
+)
 
 data class CustomerAction(
     val onSearchQueryChanged: (String) -> Unit = {},
@@ -22,5 +36,9 @@ data class CustomerAction(
     val onCreateSalesOrder: (CustomerBO) -> Unit = {},
     val onCreateDeliveryNote: (CustomerBO) -> Unit = {},
     val onCreateInvoice: (CustomerBO) -> Unit = {},
-    val onRegisterPayment: (CustomerBO) -> Unit = {}
+    val onRegisterPayment: (CustomerBO) -> Unit = {},
+    val loadOutstandingInvoices: (CustomerBO) -> Unit = {},
+    val clearOutstandingInvoices: () -> Unit = {},
+    val registerPayment: (customerId: String, invoiceId: String, modeOfPayment: String, amount: Double) -> Unit =
+        { _, _, _, _ -> }
 )

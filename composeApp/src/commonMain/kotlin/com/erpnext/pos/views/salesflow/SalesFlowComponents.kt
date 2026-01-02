@@ -40,14 +40,14 @@ fun SalesFlowContextSummary(context: SalesFlowContext?) {
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
     ) {
         Column(
-            modifier = Modifier.fillMaxWidth().padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+            modifier = Modifier.fillMaxWidth().padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             if (customerLabel != null) {
-                InfoRow(label = "Customer", value = customerLabel)
+                InfoRow(label = "Customer", value = customerLabel, isCompact = true)
             }
             if (sourceInfo != null) {
-                InfoRow(label = "Source", value = sourceInfo)
+                InfoRow(label = "Source", value = sourceInfo, isCompact = true)
             }
         }
     }
@@ -103,16 +103,19 @@ fun SalesFlowActionButtons(
 }
 
 @Composable
-private fun InfoRow(label: String, value: String) {
+private fun InfoRow(label: String, value: String, isCompact: Boolean = false) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(text = label, style = MaterialTheme.typography.bodyMedium)
+        Text(
+            text = label,
+            style = if (isCompact) MaterialTheme.typography.bodySmall else MaterialTheme.typography.bodyMedium
+        )
         Text(
             text = value,
-            style = MaterialTheme.typography.bodyMedium,
+            style = if (isCompact) MaterialTheme.typography.bodySmall else MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.primary
         )
     }

@@ -18,11 +18,13 @@ fun CustomerRoute(
     coordinator: CustomerCoordinator = rememberCustomerCoordinator()
 ) {
     val uiState by coordinator.screenStateFlow.collectAsState(CustomerState.Loading)
+    val invoicesState by coordinator.invoicesState.collectAsState()
+    val paymentState by coordinator.paymentState.collectAsState()
     val navManager: NavigationManager = koinInject()
     val salesFlowStore: SalesFlowContextStore = koinInject()
     val actions = rememberCustomerActions(coordinator, navManager, salesFlowStore)
 
-    CustomerListScreen(uiState, actions)
+    CustomerListScreen(uiState, invoicesState, paymentState, actions)
 }
 
 @Composable
@@ -39,7 +41,7 @@ fun rememberCustomerActions(
             checkCredit = coordinator::checkCredit,
             onRefresh = coordinator::onRefresh,
             onSearchQueryChanged = coordinator::onSearchQueryChanged,
-            onViewPendingInvoices = { navManager.navigateTo(NavRoute.Credits) },
+            onViewPendingInvoices = { coordinator.loadOutstandingInvoices(it.name) },
             onCreateQuotation = { customer ->
                 salesFlowStore.set(
                     SalesFlowContext(
@@ -80,7 +82,10 @@ fun rememberCustomerActions(
                 )
                 navManager.navigateTo(NavRoute.Billing)
             },
-            onRegisterPayment = { navManager.navigateTo(NavRoute.PaymentEntry()) }
+            onRegisterPayment = { coordinator.loadOutstandingInvoices(it.name) },
+            loadOutstandingInvoices = { coordinator.loadOutstandingInvoices(it.name) },
+            clearOutstandingInvoices = coordinator::clearOutstandingInvoices,
+            registerPayment = coordinator::registerPayment
         )
     }
 }

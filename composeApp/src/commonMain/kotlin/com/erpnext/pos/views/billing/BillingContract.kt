@@ -8,6 +8,7 @@ import com.erpnext.pos.domain.models.POSCurrencyOption
 import com.erpnext.pos.domain.models.POSPaymentModeOption
 import com.erpnext.pos.domain.models.PaymentTermBO
 import com.erpnext.pos.views.salesflow.SalesFlowContext
+import com.erpnext.pos.views.salesflow.SalesFlowSource
 
 data class PaymentLine(
     val modeOfPayment: String,
@@ -118,4 +119,6 @@ data class BillingAction(
     val onPaymentCurrencySelected: (String) -> Unit = {},
     val onClearSuccessMessage: () -> Unit = {},
     val onBack: () -> Unit = {},
+    val onLinkSource: (SalesFlowSource, String) -> Unit = { _, _ -> },
+    val onClearSource: () -> Unit = {}
 )

@@ -39,7 +39,9 @@ fun rememberBillingActions(coordinator: BillingCoordinator): BillingAction {
             onDeliveryChargeSelected = coordinator::onDeliveryChargeSelected,
             onPaymentCurrencySelected = coordinator::onPaymentCurrencySelected,
             onClearSuccessMessage = coordinator::onClearSuccessMessage,
-            onBack = coordinator::onBack
+            onBack = coordinator::onBack,
+            onLinkSource = coordinator::onLinkSource,
+            onClearSource = coordinator::onClearSource
         )
     }
 }

@@ -10,6 +10,8 @@ import com.erpnext.pos.domain.usecases.FetchUserInfoUseCase
 import com.erpnext.pos.domain.usecases.LogoutUseCase
 import com.erpnext.pos.navigation.NavRoute
 import com.erpnext.pos.navigation.NavigationManager
+import com.erpnext.pos.localSource.preferences.SyncPreferences
+import com.erpnext.pos.localSource.preferences.SyncSettings
 import com.erpnext.pos.sync.SyncManager
 import com.erpnext.pos.sync.SyncState
 import com.erpnext.pos.views.CashBoxManager
@@ -28,26 +30,45 @@ class HomeViewModel(
     private val fetchPosProfileInfoUseCase: FetchPosProfileInfoUseCase,
     private val contextManager: CashBoxManager,
     private val syncManager: SyncManager,
+    private val syncPreferences: SyncPreferences,
     private val navManager: NavigationManager
 ) : BaseViewModel() {
     private val _stateFlow: MutableStateFlow<HomeState> = MutableStateFlow(HomeState.Loading)
     val stateFlow = _stateFlow.asStateFlow()
 
     val syncState: StateFlow<SyncState> = syncManager.state
+    private val _syncSettings = MutableStateFlow(
+        SyncSettings(autoSync = true, syncOnStartup = true, wifiOnly = false, lastSyncAt = null)
+    )
+    val syncSettings: StateFlow<SyncSettings> = _syncSettings.asStateFlow()
 
     private var userInfo: UserBO = UserBO()
     private var posProfiles: List<POSProfileSimpleBO> = emptyList()
 
     init {
         viewModelScope.launch {
+            syncPreferences.settings.collectLatest { settings ->
+                _syncSettings.value = settings
+            }
+        }
+        viewModelScope.launch {
             isCashboxOpen().collectLatest {
-                if (it) startInitialSync()
+                if (it && _syncSettings.value.syncOnStartup) {
+                    startInitialSync()
+                }
             }
         }
         loadInitialData()
     }
 
     fun startInitialSync() {
+        if (!_syncSettings.value.autoSync) return
+        executeUseCase(
+            action = { syncManager.fullSync() },
+            exceptionHandler = { it.printStackTrace() })
+    }
+
+    fun syncNow() {
         executeUseCase(
             action = { syncManager.fullSync() },
             exceptionHandler = { it.printStackTrace() })
@@ -99,6 +120,24 @@ class HomeViewModel(
     fun closeCashbox() {
         viewModelScope.launch {
             contextManager.closeCashBox()
+        }
+    }
+
+    fun setAutoSync(enabled: Boolean) {
+        viewModelScope.launch {
+            syncPreferences.setAutoSync(enabled)
+        }
+    }
+
+    fun setSyncOnStartup(enabled: Boolean) {
+        viewModelScope.launch {
+            syncPreferences.setSyncOnStartup(enabled)
+        }
+    }
+
+    fun setWifiOnly(enabled: Boolean) {
+        viewModelScope.launch {
+            syncPreferences.setWifiOnly(enabled)
         }
     }
 }

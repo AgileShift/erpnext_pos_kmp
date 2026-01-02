@@ -23,6 +23,10 @@ fun rememberHomeActions(coordinator: HomeCoordinator): HomeAction {
         HomeAction(
             sync = coordinator::sync,
             syncState = coordinator.syncState,
+            syncSettings = coordinator.syncSettings,
+            onAutoSyncChanged = coordinator::onAutoSyncChanged,
+            onSyncOnStartupChanged = coordinator::onSyncOnStartupChanged,
+            onWifiOnlyChanged = coordinator::onWifiOnlyChanged,
             initialState = coordinator::initialState,
             loadInitialData = coordinator::loadInitialData,
             onLogout = coordinator::logout,

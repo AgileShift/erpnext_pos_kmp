@@ -299,6 +299,19 @@ class BillingViewModel(
         }
     }
 
+    fun linkSourceDocument(sourceType: SalesFlowSource, sourceId: String) {
+        val current = requireSuccessState() ?: return
+        val updated = (current.salesFlowContext ?: SalesFlowContext())
+            .withSource(sourceType, sourceId)
+        _state.update { current.copy(salesFlowContext = updated) }
+    }
+
+    fun clearSourceDocument() {
+        val current = requireSuccessState() ?: return
+        val updated = current.salesFlowContext?.copy(sourceType = null, sourceId = null)
+        _state.update { current.copy(salesFlowContext = updated) }
+    }
+
     fun onProductSearchQueryChange(query: String) {
         val current = requireSuccessState() ?: return
         val filtered = if (query.isBlank()) {

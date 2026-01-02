@@ -67,6 +67,7 @@ import com.erpnext.pos.utils.view.SnackbarHost
 import com.erpnext.pos.utils.view.SnackbarPosition
 import com.erpnext.pos.utils.view.SnackbarType
 import com.erpnext.pos.views.salesflow.SalesFlowContextSummary
+import com.erpnext.pos.views.salesflow.SalesFlowSource
 import org.jetbrains.compose.ui.tooling.preview.Preview
 import org.koin.compose.koinInject
 
@@ -200,6 +201,8 @@ private fun BillingContent(
     padding: PaddingValues,
     snackbar: SnackbarController
 ) {
+    var showSourceSheet by remember { mutableStateOf(false) }
+
     LaunchedEffect(state.successMessage) {
         state.successMessage?.let {
             snackbar.show(it, SnackbarType.Success, SnackbarPosition.Top)
@@ -210,21 +213,6 @@ private fun BillingContent(
         modifier = Modifier.padding(padding).fillMaxSize()
             .padding(horizontal = 16.dp, vertical = 8.dp)
     ) {
-        state.salesFlowContext?.let { context ->
-            CollapsibleSection(
-                title = "Sales flow",
-                defaultExpanded = true
-            ) {
-                Column(
-                    modifier = Modifier.padding(end = 12.dp, start = 12.dp, bottom = 8.dp)
-                ) {
-                    SalesFlowContextSummary(context)
-                }
-            }
-
-            Spacer(Modifier.height(8.dp))
-        }
-
         CollapsibleSection(
             title = "Cliente", defaultExpanded = true
         ) {
@@ -232,6 +220,14 @@ private fun BillingContent(
                 modifier = Modifier.padding(end = 12.dp, start = 12.dp, bottom = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
+                state.salesFlowContext?.let { context ->
+                    SalesFlowContextSummary(context)
+                }
+                SourceDocumentRow(
+                    hasSource = state.salesFlowContext?.sourceType != null,
+                    onLink = { showSourceSheet = true },
+                    onClear = action.onClearSource
+                )
                 CustomerSelector(
                     customers = state.customers,
                     query = state.customerSearchQuery,
@@ -295,6 +291,129 @@ private fun BillingContent(
             enabled = state.selectedCustomer != null && state.cartItems.isNotEmpty() && (state.isCreditSale || state.paidAmountBase >= state.total) && (!state.isCreditSale || state.selectedPaymentTerm != null)
         ) {
             Text("Finalizar venta")
+        }
+    }
+
+    if (showSourceSheet) {
+        SourceDocumentSheet(
+            onDismiss = { showSourceSheet = false },
+            onApply = { source, reference ->
+                action.onLinkSource(source, reference)
+                showSourceSheet = false
+            }
+        )
+    }
+}
+
+@Composable
+private fun SourceDocumentRow(
+    hasSource: Boolean,
+    onLink: () -> Unit,
+    onClear: () -> Unit
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = if (hasSource) "Source document linked" else "Link a source document",
+            style = MaterialTheme.typography.bodySmall
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (hasSource) {
+                TextButton(onClick = onClear) { Text("Clear") }
+            }
+            TextButton(onClick = onLink) { Text("Link") }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun SourceDocumentSheet(
+    onDismiss: () -> Unit,
+    onApply: (SalesFlowSource, String) -> Unit
+) {
+    var sourceType by remember { mutableStateOf(SalesFlowSource.SalesOrder) }
+    var reference by remember { mutableStateOf("") }
+    var expanded by remember { mutableStateOf(false) }
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        dragHandle = { BottomSheetDefaults.DragHandle() }
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 24.dp, vertical = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Text(
+                text = "Link source document",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold
+            )
+            ExposedDropdownMenuBox(
+                expanded = expanded,
+                onExpandedChange = { expanded = it }
+            ) {
+                OutlinedTextField(
+                    value = when (sourceType) {
+                        SalesFlowSource.Quotation -> "Quotation"
+                        SalesFlowSource.SalesOrder -> "Sales Order"
+                        SalesFlowSource.DeliveryNote -> "Delivery Note"
+                        SalesFlowSource.Customer -> "Customer"
+                    },
+                    onValueChange = {},
+                    readOnly = true,
+                    label = { Text("Source type") },
+                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+                    modifier = Modifier.menuAnchor(MenuAnchorType.PrimaryEditable).fillMaxWidth()
+                )
+                ExposedDropdownMenu(
+                    expanded = expanded,
+                    onDismissRequest = { expanded = false }
+                ) {
+                    listOf(
+                        SalesFlowSource.Quotation,
+                        SalesFlowSource.SalesOrder,
+                        SalesFlowSource.DeliveryNote
+                    ).forEach { option ->
+                        DropdownMenuItem(
+                            text = {
+                                Text(
+                                    when (option) {
+                                        SalesFlowSource.Quotation -> "Quotation"
+                                        SalesFlowSource.SalesOrder -> "Sales Order"
+                                        SalesFlowSource.DeliveryNote -> "Delivery Note"
+                                        SalesFlowSource.Customer -> "Customer"
+                                    }
+                                )
+                            },
+                            onClick = {
+                                sourceType = option
+                                expanded = false
+                            }
+                        )
+                    }
+                }
+            }
+
+            OutlinedTextField(
+                value = reference,
+                onValueChange = { reference = it },
+                label = { Text("Document ID") },
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            Button(
+                onClick = { onApply(sourceType, reference) },
+                modifier = Modifier.fillMaxWidth(),
+                enabled = reference.isNotBlank()
+            ) {
+                Text("Apply")
+            }
         }
     }
 }

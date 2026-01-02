@@ -78,6 +78,19 @@ interface SalesInvoiceDao {
     fun getAllFiltered(search: String): PagingSource<Int, SalesInvoiceWithItemsAndPayments>
 
     @Transaction
+    @Query(
+        """
+        SELECT * FROM tabSalesInvoice
+        WHERE customer = :customerName
+          AND outstanding_amount > 0
+        ORDER BY posting_date DESC
+        """
+    )
+    suspend fun getOutstandingInvoicesForCustomer(
+        customerName: String
+    ): List<SalesInvoiceWithItemsAndPayments>
+
+    @Transaction
     @Query("SELECT * FROM tabSalesInvoice WHERE posting_date BETWEEN :startDate AND :endDate ORDER BY posting_date DESC")
     fun getInvoicesByDateRange(
         startDate: String,

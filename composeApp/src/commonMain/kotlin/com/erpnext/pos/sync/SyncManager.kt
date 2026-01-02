@@ -5,6 +5,7 @@ import com.erpnext.pos.data.repositories.CustomerRepository
 import com.erpnext.pos.data.repositories.InventoryRepository
 import com.erpnext.pos.data.repositories.ModeOfPaymentRepository
 import com.erpnext.pos.data.repositories.SalesInvoiceRepository
+import com.erpnext.pos.localSource.preferences.SyncPreferences
 import com.erpnext.pos.utils.NetworkMonitor
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -31,6 +32,7 @@ class SyncManager(
     private val inventoryRepo: InventoryRepository,
     private val networkMonitor: NetworkMonitor,
     private val modeOfPaymentRepo: ModeOfPaymentRepository,
+    private val syncPreferences: SyncPreferences
 ) : ISyncManager {
 
     private val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
@@ -89,6 +91,7 @@ class SyncManager(
                     jobs.awaitAll()
                 }
                 _state.value = SyncState.SUCCESS
+                syncPreferences.setLastSyncAt(System.currentTimeMillis())
             } catch (e: Exception) {
                 e.printStackTrace()
                 _state.value = SyncState.ERROR("Error durante la sincronización: ${e.message}")
