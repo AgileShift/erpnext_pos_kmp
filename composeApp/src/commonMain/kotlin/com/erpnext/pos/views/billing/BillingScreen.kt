@@ -220,20 +220,20 @@ private fun BillingContent(
                 modifier = Modifier.padding(end = 12.dp, start = 12.dp, bottom = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                state.salesFlowContext?.let { context ->
-                    SalesFlowContextSummary(context)
-                }
-                SourceDocumentRow(
-                    hasSource = state.salesFlowContext?.sourceType != null,
-                    onLink = { showSourceSheet = true },
-                    onClear = action.onClearSource
-                )
                 CustomerSelector(
                     customers = state.customers,
                     query = state.customerSearchQuery,
                     onQueryChange = action.onCustomerSearchQueryChange,
                     onCustomerSelected = action.onCustomerSelected
                 )
+                SourceDocumentRow(
+                    hasSource = state.salesFlowContext?.sourceType != null,
+                    onLink = { showSourceSheet = true },
+                    onClear = action.onClearSource
+                )
+                state.salesFlowContext?.let { context ->
+                    SalesFlowContextSummary(context)
+                }
             }
         }
 
@@ -1072,7 +1072,7 @@ private fun PaymentSection(
             rawValue = amountInput,
             onRawValueChange = { amountInput = it },
             label = "Monto",
-            enabled = !isCreditSale,
+            enabled = true,
             onAmountChanged = { amountValue = it },
             supportingText = {
                 if (selectedCurrency != baseCurrency) {
@@ -1174,64 +1174,102 @@ private fun DiscountShippingInputs(
     state: BillingState.Success, action: BillingAction
 ) {
     val baseCurrency = state.currency ?: "USD"
-    var usePercent by rememberSaveable(state.manualDiscountPercent, state.manualDiscountAmount) {
-        mutableStateOf(state.manualDiscountPercent > 0.0 || state.manualDiscountAmount == 0.0)
+    enum class DiscountInputType { Code, Percent, Amount }
+
+    val initialType = remember(
+        state.discountCode,
+        state.manualDiscountPercent,
+        state.manualDiscountAmount
+    ) {
+        when {
+            state.discountCode.isNotBlank() -> DiscountInputType.Code
+            state.manualDiscountPercent > 0.0 -> DiscountInputType.Percent
+            state.manualDiscountAmount > 0.0 -> DiscountInputType.Amount
+            else -> DiscountInputType.Percent
+        }
+    }
+
+    var discountType by rememberSaveable(initialType) { mutableStateOf(initialType) }
+
+    fun selectDiscountType(type: DiscountInputType) {
+        discountType = type
+        when (type) {
+            DiscountInputType.Code -> {
+                action.onManualDiscountAmountChanged("")
+                action.onManualDiscountPercentChanged("")
+            }
+
+            DiscountInputType.Percent -> {
+                action.onDiscountCodeChanged("")
+                action.onManualDiscountAmountChanged("")
+            }
+
+            DiscountInputType.Amount -> {
+                action.onDiscountCodeChanged("")
+                action.onManualDiscountPercentChanged("")
+            }
+        }
     }
     Column(
         modifier = Modifier.padding(end = 12.dp, start = 12.dp, bottom = 8.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        Text("Descuento manual", style = MaterialTheme.typography.bodyMedium)
+        Text("Discount", style = MaterialTheme.typography.bodyMedium)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             FilterChip(
-                selected = usePercent,
-                onClick = {
-                    usePercent = true
-                    action.onManualDiscountAmountChanged("")
-                },
+                selected = discountType == DiscountInputType.Code,
+                onClick = { selectDiscountType(DiscountInputType.Code) },
+                label = { Text("Code") }
+            )
+            FilterChip(
+                selected = discountType == DiscountInputType.Percent,
+                onClick = { selectDiscountType(DiscountInputType.Percent) },
                 label = { Text("Percent") }
             )
             FilterChip(
-                selected = !usePercent,
-                onClick = {
-                    usePercent = false
-                    action.onManualDiscountPercentChanged("")
-                },
+                selected = discountType == DiscountInputType.Amount,
+                onClick = { selectDiscountType(DiscountInputType.Amount) },
                 label = { Text("Amount") }
             )
         }
-        if (usePercent) {
-            AppTextField(
-                value = if (state.manualDiscountPercent > 0.0) state.manualDiscountPercent.toString() else "",
-                onValueChange = action.onManualDiscountPercentChanged,
-                label = "Porcentaje (%)",
-                trailingIcon = { Icon(Icons.Default.Percent, contentDescription = null) },
-                keyboardOptions = KeyboardOptions(
-                    keyboardType = KeyboardType.Number, imeAction = ImeAction.Next
-                ),
-                modifier = Modifier.fillMaxWidth()
-            )
-        } else {
-            AppTextField(
-                value = if (state.manualDiscountAmount > 0.0) state.manualDiscountAmount.toString() else "",
-                onValueChange = action.onManualDiscountAmountChanged,
-                label = "Monto (${baseCurrency.toCurrencySymbol()})",
-                trailingIcon = { Icon(Icons.Default.Money, contentDescription = null) },
-                keyboardOptions = KeyboardOptions(
-                    keyboardType = KeyboardType.Number, imeAction = ImeAction.Next
-                ),
-                modifier = Modifier.fillMaxWidth()
-            )
+        when (discountType) {
+            DiscountInputType.Code -> {
+                AppTextField(
+                    value = state.discountCode,
+                    onValueChange = action.onDiscountCodeChanged,
+                    label = "Discount code",
+                    placeholder = "Enter discount code",
+                    trailingIcon = { Icon(Icons.Default.Money, contentDescription = null) },
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+
+            DiscountInputType.Percent -> {
+                AppTextField(
+                    value = if (state.manualDiscountPercent > 0.0) state.manualDiscountPercent.toString() else "",
+                    onValueChange = action.onManualDiscountPercentChanged,
+                    label = "Percent (%)",
+                    trailingIcon = { Icon(Icons.Default.Percent, contentDescription = null) },
+                    keyboardOptions = KeyboardOptions(
+                        keyboardType = KeyboardType.Number, imeAction = ImeAction.Next
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+
+            DiscountInputType.Amount -> {
+                AppTextField(
+                    value = if (state.manualDiscountAmount > 0.0) state.manualDiscountAmount.toString() else "",
+                    onValueChange = action.onManualDiscountAmountChanged,
+                    label = "Amount (${baseCurrency.toCurrencySymbol()})",
+                    trailingIcon = { Icon(Icons.Default.Money, contentDescription = null) },
+                    keyboardOptions = KeyboardOptions(
+                        keyboardType = KeyboardType.Number, imeAction = ImeAction.Next
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
         }
-        Text("Código de descuento", style = MaterialTheme.typography.bodyMedium)
-        AppTextField(
-            value = state.discountCode,
-            onValueChange = action.onDiscountCodeChanged,
-            label = "Código",
-            placeholder = "Codigo de descuento activo",
-            trailingIcon = { Icon(Icons.Default.Money, contentDescription = null) },
-            modifier = Modifier.fillMaxWidth()
-        )
         Text("Envío", style = MaterialTheme.typography.bodyMedium)
         val deliveryChargeLabel = state.selectedDeliveryCharge?.label ?: "Selecciona cargo de envío"
         var deliveryExpanded by remember { mutableStateOf(false) }
