@@ -14,6 +14,7 @@ import com.erpnext.pos.data.repositories.v2.QuotationRepository
 import com.erpnext.pos.data.repositories.v2.SalesInvoiceRemoteRepository
 import com.erpnext.pos.data.repositories.v2.SalesInvoiceRepository
 import com.erpnext.pos.data.repositories.v2.SalesOrderRepository
+import com.erpnext.pos.data.repositories.v2.SourceDocumentRepository
 import com.erpnext.pos.data.repositories.v2.SyncRepository
 import com.erpnext.pos.domain.sync.SyncUnit
 import com.erpnext.pos.domain.usecases.v2.CreateCustomerOfflineUseCase
@@ -21,6 +22,7 @@ import com.erpnext.pos.domain.usecases.v2.CreateDeliveryNoteOfflineUseCase
 import com.erpnext.pos.domain.usecases.v2.CreatePaymentEntryOfflineUseCase
 import com.erpnext.pos.domain.usecases.v2.CreateQuotationOfflineUseCase
 import com.erpnext.pos.domain.usecases.v2.CreateSalesOrderOfflineUseCase
+import com.erpnext.pos.domain.usecases.v2.LoadSourceDocumentsUseCase
 import com.erpnext.pos.domain.usecases.v2.sync.BinSyncUnit
 import com.erpnext.pos.domain.usecases.v2.sync.CustomerSyncUnit
 import com.erpnext.pos.domain.usecases.v2.sync.DeliveryNoteSyncUnit
@@ -61,6 +63,7 @@ val appModulev2 = module {
     single { QuotationRepository(get(), get(), get(), get()) }
     single { SalesOrderRepository(get(), get(), get(), get()) }
     single { DeliveryNoteRepository(get(), get(), get()) }
+    single { SourceDocumentRepository(get(named("apiServiceV2"))) }
     single { DeliveryChargesRepository(get(named("apiServiceV2"))) }
     single { PaymentEntryRepository(get(), get(), get()) }
     single { SyncRepository(get(), get()) }
@@ -73,6 +76,7 @@ val appModulev2 = module {
     single { CreateDeliveryNoteOfflineUseCase(get(), get(), get(), get(), get()) }
     single { CreatePaymentEntryOfflineUseCase(get(), get(), get()) }
     single { CreateCustomerOfflineUseCase(get(), get()) }
+    single { LoadSourceDocumentsUseCase(get()) }
 
     factory { ItemGroupSyncUnit(get(), get()) }
     factory { ItemSyncUnit(get(), get()) }

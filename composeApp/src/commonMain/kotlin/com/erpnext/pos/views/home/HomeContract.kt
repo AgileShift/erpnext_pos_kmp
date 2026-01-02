@@ -3,7 +3,6 @@ package com.erpnext.pos.views.home
 import com.erpnext.pos.domain.models.POSProfileBO
 import com.erpnext.pos.domain.models.POSProfileSimpleBO
 import com.erpnext.pos.domain.models.UserBO
-import com.erpnext.pos.localSource.preferences.SyncSettings
 import com.erpnext.pos.remoteSource.dto.POSOpeningEntryDto
 import com.erpnext.pos.sync.SyncState
 import com.erpnext.pos.views.PaymentModeWithAmount
@@ -24,11 +23,6 @@ sealed class HomeState {
 data class HomeAction(
     val sync: () -> Unit = {},
     val syncState: StateFlow<SyncState> = MutableStateFlow(SyncState.IDLE),
-    val syncSettings: StateFlow<SyncSettings> =
-        MutableStateFlow(SyncSettings(autoSync = true, syncOnStartup = true, wifiOnly = false, lastSyncAt = null)),
-    val onAutoSyncChanged: (Boolean) -> Unit = {},
-    val onSyncOnStartupChanged: (Boolean) -> Unit = {},
-    val onWifiOnlyChanged: (Boolean) -> Unit = {},
     val loadInitialData: () -> Unit = {},
     val initialState: () -> Unit = {},
     val openCashbox: (pos: POSProfileSimpleBO, amounts: List<PaymentModeWithAmount>) -> Unit = { _, _ -> },

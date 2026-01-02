@@ -14,6 +14,11 @@ class SettingsCoordinator(
     fun onToggle(s: String, b: Boolean) {}
 
     fun onSelect(s: String) {}
+
+    fun onSyncNow() = viewModel.onSyncNow()
+    fun onAutoSyncChanged(enabled: Boolean) = viewModel.setAutoSync(enabled)
+    fun onSyncOnStartupChanged(enabled: Boolean) = viewModel.setSyncOnStartup(enabled)
+    fun onWifiOnlyChanged(enabled: Boolean) = viewModel.setWifiOnly(enabled)
 }
 
 @Composable

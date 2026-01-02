@@ -50,11 +50,14 @@ fun DesktopNavigationRail(
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 primaryItems.forEach { navRoute ->
                     val isEnabled = when (navRoute) {
-                        NavRoute.Home -> true
+                        NavRoute.Home,
+                        NavRoute.Settings -> true
+
                         NavRoute.Inventory,
                         NavRoute.Billing,
                         NavRoute.Customer,
                         NavRoute.Credits -> isCashBoxOpen
+
                         else -> true
                     }
                     NavigationRailEntry(

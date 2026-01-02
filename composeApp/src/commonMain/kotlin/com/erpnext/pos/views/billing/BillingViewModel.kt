@@ -34,6 +34,8 @@ import com.erpnext.pos.domain.models.POSPaymentModeOption
 import com.erpnext.pos.domain.usecases.AdjustLocalInventoryInput
 import com.erpnext.pos.domain.usecases.AdjustLocalInventoryUseCase
 import com.erpnext.pos.domain.usecases.StockDelta
+import com.erpnext.pos.domain.usecases.v2.LoadSourceDocumentsInput
+import com.erpnext.pos.domain.usecases.v2.LoadSourceDocumentsUseCase
 import com.erpnext.pos.remoteSource.dto.SalesInvoicePaymentDto
 import com.erpnext.pos.utils.oauth.CurrencySpec
 import com.erpnext.pos.utils.oauth.bd
@@ -68,6 +70,7 @@ class BillingViewModel(
     private val deliveryChargesUseCase: FetchDeliveryChargesUseCase,
     private val navManager: NavigationManager,
     private val salesFlowStore: SalesFlowContextStore,
+    private val loadSourceDocumentsUseCase: LoadSourceDocumentsUseCase,
     private val createSalesInvoiceUseCase: CreateSalesInvoiceUseCase,
     private val createPaymentEntryUseCase: CreatePaymentEntryUseCase,
     private val saveInvoicePaymentsUseCase: SaveInvoicePaymentsUseCase,
@@ -294,7 +297,9 @@ class BillingViewModel(
             current.copy(
                 selectedCustomer = customer,
                 customerSearchQuery = customer.customerName,
-                salesFlowContext = updatedFlowContext
+                salesFlowContext = updatedFlowContext,
+                sourceDocuments = emptyList(),
+                sourceDocumentsError = null
             )
         }
     }
@@ -310,6 +315,46 @@ class BillingViewModel(
         val current = requireSuccessState() ?: return
         val updated = current.salesFlowContext?.copy(sourceType = null, sourceId = null)
         _state.update { current.copy(salesFlowContext = updated) }
+    }
+
+    fun loadSourceDocuments(sourceType: SalesFlowSource) {
+        val current = requireSuccessState() ?: return
+        val customerId = current.selectedCustomer?.name
+        if (customerId.isNullOrBlank()) {
+            _state.update {
+                current.copy(
+                    sourceDocuments = emptyList(),
+                    isLoadingSourceDocuments = false,
+                    sourceDocumentsError = "Select a customer first."
+                )
+            }
+            return
+        }
+
+        _state.update { current.copy(isLoadingSourceDocuments = true, sourceDocumentsError = null) }
+        executeUseCase(
+            action = {
+                val docs = loadSourceDocumentsUseCase(
+                    LoadSourceDocumentsInput(customerId = customerId, sourceType = sourceType)
+                )
+                _state.update {
+                    current.copy(
+                        sourceDocuments = docs,
+                        isLoadingSourceDocuments = false,
+                        sourceDocumentsError = null
+                    )
+                }
+            },
+            exceptionHandler = { throwable ->
+                _state.update {
+                    current.copy(
+                        sourceDocuments = emptyList(),
+                        isLoadingSourceDocuments = false,
+                        sourceDocumentsError = throwable.message ?: "Unable to load documents."
+                    )
+                }
+            }
+        )
     }
 
     fun onProductSearchQueryChange(query: String) {

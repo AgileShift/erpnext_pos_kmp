@@ -34,6 +34,8 @@ class BillingCoordinator(val viewModel: BillingViewModel) {
     fun onLinkSource(sourceType: SalesFlowSource, sourceId: String) =
         viewModel.linkSourceDocument(sourceType, sourceId)
     fun onClearSource() = viewModel.clearSourceDocument()
+    fun onLoadSourceDocuments(sourceType: SalesFlowSource) =
+        viewModel.loadSourceDocuments(sourceType)
 }
 
 @Composable

@@ -14,7 +14,6 @@ class HomeCoordinator(
 ) {
     val screenStateFlow = viewModel.stateFlow
     val syncState = viewModel.syncState
-    val syncSettings = viewModel.syncSettings
 
     fun loadInitialData() {
         return viewModel.loadInitialData()
@@ -50,18 +49,6 @@ class HomeCoordinator(
 
     fun isCashboxOpen(): StateFlow<Boolean> {
         return viewModel.isCashboxOpen()
-    }
-
-    fun onAutoSyncChanged(enabled: Boolean) {
-        viewModel.setAutoSync(enabled)
-    }
-
-    fun onSyncOnStartupChanged(enabled: Boolean) {
-        viewModel.setSyncOnStartup(enabled)
-    }
-
-    fun onWifiOnlyChanged(enabled: Boolean) {
-        viewModel.setWifiOnly(enabled)
     }
 }
 

@@ -13,6 +13,7 @@ import com.erpnext.pos.data.repositories.POSProfileRepository
 import com.erpnext.pos.data.repositories.PaymentEntryRepository
 import com.erpnext.pos.data.repositories.SalesInvoiceRepository
 import com.erpnext.pos.data.repositories.UserRepository
+import com.erpnext.pos.data.repositories.v2.SourceDocumentRepository
 import com.erpnext.pos.di.v2.appModulev2
 import com.erpnext.pos.domain.repositories.IPOSRepository
 import com.erpnext.pos.domain.repositories.IUserRepository
@@ -35,6 +36,7 @@ import com.erpnext.pos.domain.usecases.FetchUserInfoUseCase
 import com.erpnext.pos.domain.usecases.LogoutUseCase
 import com.erpnext.pos.domain.usecases.RegisterInvoicePaymentUseCase
 import com.erpnext.pos.domain.usecases.SaveInvoicePaymentsUseCase
+import com.erpnext.pos.domain.usecases.v2.LoadSourceDocumentsUseCase
 import com.erpnext.pos.localSource.datasources.CustomerLocalSource
 import com.erpnext.pos.localSource.datasources.InventoryLocalSource
 import com.erpnext.pos.localSource.datasources.InvoiceLocalSource
@@ -45,6 +47,7 @@ import com.erpnext.pos.localSource.preferences.SyncPreferences
 import com.erpnext.pos.navigation.NavigationManager
 import com.erpnext.pos.remoteSource.api.APIService
 import com.erpnext.pos.remoteSource.api.defaultEngine
+import com.erpnext.pos.remoteSource.api.v2.APIServiceV2
 import com.erpnext.pos.remoteSource.datasources.CustomerRemoteSource
 import com.erpnext.pos.remoteSource.datasources.InventoryRemoteSource
 import com.erpnext.pos.remoteSource.datasources.ModeOfPaymentRemoteSource
@@ -225,6 +228,9 @@ val appModule = module {
     //endregion
 
     //region Checkout
+    single(named("apiServiceV2")) { APIServiceV2(get(), get(), get()) }
+    single { SourceDocumentRepository(get(named("apiServiceV2"))) }
+    single { LoadSourceDocumentsUseCase(get()) }
     single { AdjustLocalInventoryUseCase(get()) }
     single { PaymentEntryRepository(get(named("apiService"))) }
     single {
@@ -238,6 +244,7 @@ val appModule = module {
             deliveryChargesUseCase = get(),
             navManager = get(),
             salesFlowStore = get(),
+            loadSourceDocumentsUseCase = get(),
             createSalesInvoiceUseCase = get(),
             createPaymentEntryUseCase = get(),
             saveInvoicePaymentsUseCase = get(),
@@ -250,7 +257,7 @@ val appModule = module {
     //endregion
 
     //region Settings
-    single { SettingsViewModel() }
+    single { SettingsViewModel(get(), get()) }
     //endregion
 
     //region UseCases DI
@@ -279,7 +286,7 @@ fun initKoin(
 ) {
     startKoin {
         config?.invoke(this)
-        modules(appModule + modules)
+        modules(appModule + appModulev2 + modules)
         koin.get<AppDatabase> { parametersOf(builder) }
     }
 }

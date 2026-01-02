@@ -41,7 +41,8 @@ fun rememberBillingActions(coordinator: BillingCoordinator): BillingAction {
             onClearSuccessMessage = coordinator::onClearSuccessMessage,
             onBack = coordinator::onBack,
             onLinkSource = coordinator::onLinkSource,
-            onClearSource = coordinator::onClearSource
+            onClearSource = coordinator::onClearSource,
+            onLoadSourceDocuments = coordinator::onLoadSourceDocuments
         )
     }
 }
