@@ -28,7 +28,7 @@ sealed class NavRoute(
     object Quotation : NavRoute("quotation", "Cotizaciones", Icons.Filled.Description)
     object SalesOrder : NavRoute("sales-order", "Orden de venta", Icons.Filled.ShoppingCart)
     object DeliveryNote : NavRoute("delivery-note", "Nota de entrega", Icons.Filled.LocalShipping)
-    object Settings : NavRoute("settings", "Configuración", Icons.Filled.Settings)
+    object Settings : NavRoute("settings", "", Icons.Filled.Settings)
     data class PaymentEntry(val invoiceId: String? = null) : NavRoute(
         path = if (invoiceId.isNullOrBlank()) {
             "payment-entry"
@@ -38,5 +38,6 @@ sealed class NavRoute(
         title = "Payment Entry",
         icon = Icons.Filled.Payments
     )
+
     object NavigateUp : NavRoute("navigate-up", "Navigate Up", Icons.Filled.Home)
 }

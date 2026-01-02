@@ -8,6 +8,8 @@ class CustomerCoordinator(
     val viewModel: CustomerViewModel
 ) {
     val screenStateFlow = viewModel.stateFlow
+    val invoicesState = viewModel.invoicesState
+    val paymentState = viewModel.paymentState
 
     fun fetchAll() = viewModel.fetchAllCustomers()
 
@@ -21,6 +23,17 @@ class CustomerCoordinator(
         viewModel.checkCredit(customerId, amount, onResult)
 
     fun onRefresh() = viewModel.onRefresh()
+
+    fun loadOutstandingInvoices(customerId: String) = viewModel.loadOutstandingInvoices(customerId)
+
+    fun clearOutstandingInvoices() = viewModel.clearOutstandingInvoices()
+
+    fun registerPayment(
+        customerId: String,
+        invoiceId: String,
+        modeOfPayment: String,
+        amount: Double
+    ) = viewModel.registerPayment(customerId, invoiceId, modeOfPayment, amount)
 }
 
 @Composable

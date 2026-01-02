@@ -2,6 +2,7 @@ package com.erpnext.pos.views.billing
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
+import com.erpnext.pos.views.salesflow.SalesFlowSource
 import org.koin.compose.viewmodel.koinViewModel
 
 class BillingCoordinator(val viewModel: BillingViewModel) {
@@ -30,6 +31,11 @@ class BillingCoordinator(val viewModel: BillingViewModel) {
     fun onPaymentCurrencySelected(currency: String) = viewModel.onPaymentCurrencySelected(currency)
     fun onClearSuccessMessage() = viewModel.onClearSuccessMessage()
     fun onBack() = viewModel.onBack()
+    fun onLinkSource(sourceType: SalesFlowSource, sourceId: String) =
+        viewModel.linkSourceDocument(sourceType, sourceId)
+    fun onClearSource() = viewModel.clearSourceDocument()
+    fun onLoadSourceDocuments(sourceType: SalesFlowSource) =
+        viewModel.loadSourceDocuments(sourceType)
 }
 
 @Composable

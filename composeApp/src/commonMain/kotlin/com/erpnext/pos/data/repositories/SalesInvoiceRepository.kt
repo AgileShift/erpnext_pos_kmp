@@ -128,4 +128,8 @@ class SalesInvoiceRepository(
     }
 
     override suspend fun countPending(): Int = localSource.countAllPendingSync()
+
+    suspend fun getOutstandingInvoicesForCustomer(customerName: String): List<SalesInvoiceBO> {
+        return localSource.getOutstandingInvoicesForCustomer(customerName).toBO()
+    }
 }

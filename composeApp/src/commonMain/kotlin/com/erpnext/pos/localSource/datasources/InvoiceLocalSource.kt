@@ -30,6 +30,9 @@ interface IInvoiceLocalSource {
         invoice: SalesInvoiceEntity,
         payments: List<POSInvoicePaymentEntity>
     )
+    suspend fun getOutstandingInvoicesForCustomer(
+        customerName: String
+    ): List<SalesInvoiceWithItemsAndPayments>
 }
 
 class InvoiceLocalSource(
@@ -85,5 +88,11 @@ class InvoiceLocalSource(
         payments: List<POSInvoicePaymentEntity>
     ) {
         salesInvoiceDao.applyPayments(invoice, payments)
+    }
+
+    override suspend fun getOutstandingInvoicesForCustomer(
+        customerName: String
+    ): List<SalesInvoiceWithItemsAndPayments> {
+        return salesInvoiceDao.getOutstandingInvoicesForCustomer(customerName)
     }
 }

@@ -66,6 +66,8 @@ import com.erpnext.pos.utils.view.SnackbarController
 import com.erpnext.pos.utils.view.SnackbarHost
 import com.erpnext.pos.utils.view.SnackbarPosition
 import com.erpnext.pos.utils.view.SnackbarType
+import com.erpnext.pos.views.salesflow.SalesFlowContextSummary
+import com.erpnext.pos.views.salesflow.SalesFlowSource
 import org.jetbrains.compose.ui.tooling.preview.Preview
 import org.koin.compose.koinInject
 
@@ -199,6 +201,8 @@ private fun BillingContent(
     padding: PaddingValues,
     snackbar: SnackbarController
 ) {
+    var showSourceSheet by remember { mutableStateOf(false) }
+
     LaunchedEffect(state.successMessage) {
         state.successMessage?.let {
             snackbar.show(it, SnackbarType.Success, SnackbarPosition.Top)
@@ -216,6 +220,14 @@ private fun BillingContent(
                 modifier = Modifier.padding(end = 12.dp, start = 12.dp, bottom = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
+                state.salesFlowContext?.let { context ->
+                    SalesFlowContextSummary(context)
+                }
+                SourceDocumentRow(
+                    hasSource = state.salesFlowContext?.sourceType != null,
+                    onLink = { showSourceSheet = true },
+                    onClear = action.onClearSource
+                )
                 CustomerSelector(
                     customers = state.customers,
                     query = state.customerSearchQuery,
@@ -279,6 +291,219 @@ private fun BillingContent(
             enabled = state.selectedCustomer != null && state.cartItems.isNotEmpty() && (state.isCreditSale || state.paidAmountBase >= state.total) && (!state.isCreditSale || state.selectedPaymentTerm != null)
         ) {
             Text("Finalizar venta")
+        }
+    }
+
+    if (showSourceSheet) {
+        SourceDocumentSheet(
+            state = state,
+            onDismiss = { showSourceSheet = false },
+            onLoad = action.onLoadSourceDocuments,
+            onApply = { source, reference ->
+                action.onLinkSource(source, reference)
+                showSourceSheet = false
+            }
+        )
+    }
+}
+
+@Composable
+private fun SourceDocumentRow(
+    hasSource: Boolean,
+    onLink: () -> Unit,
+    onClear: () -> Unit
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = if (hasSource) "Source document linked" else "Link a source document",
+            style = MaterialTheme.typography.bodySmall
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (hasSource) {
+                TextButton(onClick = onClear) { Text("Clear") }
+            }
+            TextButton(onClick = onLink) { Text("Link") }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun SourceDocumentSheet(
+    state: BillingState.Success,
+    onDismiss: () -> Unit,
+    onLoad: (SalesFlowSource) -> Unit,
+    onApply: (SalesFlowSource, String) -> Unit
+) {
+    var sourceType by remember { mutableStateOf(SalesFlowSource.SalesOrder) }
+    var reference by remember { mutableStateOf("") }
+    var expanded by remember { mutableStateOf(false) }
+    var searchQuery by remember { mutableStateOf("") }
+
+    LaunchedEffect(sourceType) {
+        reference = ""
+    }
+
+    LaunchedEffect(sourceType, state.selectedCustomer?.name) {
+        if (state.selectedCustomer != null) {
+            onLoad(sourceType)
+        }
+    }
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        dragHandle = { BottomSheetDefaults.DragHandle() }
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 24.dp, vertical = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Text(
+                text = "Link source document",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold
+            )
+            ExposedDropdownMenuBox(
+                expanded = expanded,
+                onExpandedChange = { expanded = it }
+            ) {
+                OutlinedTextField(
+                    value = when (sourceType) {
+                        SalesFlowSource.Quotation -> "Quotation"
+                        SalesFlowSource.SalesOrder -> "Sales Order"
+                        SalesFlowSource.DeliveryNote -> "Delivery Note"
+                        SalesFlowSource.Customer -> "Customer"
+                    },
+                    onValueChange = {},
+                    readOnly = true,
+                    label = { Text("Source type") },
+                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+                    modifier = Modifier.menuAnchor(MenuAnchorType.PrimaryEditable).fillMaxWidth()
+                )
+                ExposedDropdownMenu(
+                    expanded = expanded,
+                    onDismissRequest = { expanded = false }
+                ) {
+                    listOf(
+                        SalesFlowSource.Quotation,
+                        SalesFlowSource.SalesOrder,
+                        SalesFlowSource.DeliveryNote
+                    ).forEach { option ->
+                        DropdownMenuItem(
+                            text = {
+                                Text(
+                                    when (option) {
+                                        SalesFlowSource.Quotation -> "Quotation"
+                                        SalesFlowSource.SalesOrder -> "Sales Order"
+                                        SalesFlowSource.DeliveryNote -> "Delivery Note"
+                                        SalesFlowSource.Customer -> "Customer"
+                                    }
+                                )
+                            },
+                            onClick = {
+                                sourceType = option
+                                expanded = false
+                            }
+                        )
+                    }
+                }
+            }
+
+            if (state.selectedCustomer == null) {
+                Text(
+                    text = "Select a customer to load documents.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            } else {
+                OutlinedTextField(
+                    value = searchQuery,
+                    onValueChange = { searchQuery = it },
+                    label = { Text("Filter by ID or status") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                when {
+                    state.isLoadingSourceDocuments -> {
+                        CircularProgressIndicator()
+                    }
+
+                    !state.sourceDocumentsError.isNullOrBlank() -> {
+                        Text(
+                            text = state.sourceDocumentsError.orEmpty(),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error
+                        )
+                    }
+
+                    state.sourceDocuments.isEmpty() -> {
+                        Text(
+                            text = "No documents found.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+
+                    else -> {
+                        val filtered = state.sourceDocuments.filter { doc ->
+                            val query = searchQuery.trim()
+                            if (query.isBlank()) true else {
+                                doc.id.contains(query, ignoreCase = true) ||
+                                    (doc.status?.contains(query, ignoreCase = true) == true)
+                            }
+                        }
+                        filtered.forEach { doc ->
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = if (doc.id == reference) {
+                                        MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f)
+                                    } else {
+                                        MaterialTheme.colorScheme.surface
+                                    }
+                                )
+                            ) {
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable { reference = doc.id }
+                                        .padding(12.dp),
+                                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    Text(
+                                        text = doc.id,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                    Text(
+                                        text = "Date: ${doc.date ?: "N/A"}",
+                                        style = MaterialTheme.typography.bodySmall
+                                    )
+                                    Text(
+                                        text = "Status: ${doc.status ?: "Unknown"}",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            Button(
+                onClick = { onApply(sourceType, reference) },
+                modifier = Modifier.fillMaxWidth(),
+                enabled = reference.isNotBlank()
+            ) {
+                Text("Apply")
+            }
         }
     }
 }
@@ -949,31 +1174,55 @@ private fun DiscountShippingInputs(
     state: BillingState.Success, action: BillingAction
 ) {
     val baseCurrency = state.currency ?: "USD"
+    var usePercent by rememberSaveable(state.manualDiscountPercent, state.manualDiscountAmount) {
+        mutableStateOf(state.manualDiscountPercent > 0.0 || state.manualDiscountAmount == 0.0)
+    }
     Column(
         modifier = Modifier.padding(end = 12.dp, start = 12.dp, bottom = 8.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         Text("Descuento manual", style = MaterialTheme.typography.bodyMedium)
-        AppTextField(
-            value = if (state.manualDiscountPercent > 0.0) state.manualDiscountPercent.toString() else "",
-            onValueChange = action.onManualDiscountPercentChanged,
-            label = "Porcentaje (%)",
-            trailingIcon = { Icon(Icons.Default.Percent, contentDescription = null) },
-            keyboardOptions = KeyboardOptions(
-                keyboardType = KeyboardType.Number, imeAction = ImeAction.Next
-            ),
-            modifier = Modifier.fillMaxWidth()
-        )
-        AppTextField(
-            value = if (state.manualDiscountAmount > 0.0) state.manualDiscountAmount.toString() else "",
-            onValueChange = action.onManualDiscountAmountChanged,
-            label = "Monto (${baseCurrency.toCurrencySymbol()})",
-            trailingIcon = { Icon(Icons.Default.Money, contentDescription = null) },
-            keyboardOptions = KeyboardOptions(
-                keyboardType = KeyboardType.Number, imeAction = ImeAction.Next
-            ),
-            modifier = Modifier.fillMaxWidth()
-        )
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FilterChip(
+                selected = usePercent,
+                onClick = {
+                    usePercent = true
+                    action.onManualDiscountAmountChanged("")
+                },
+                label = { Text("Percent") }
+            )
+            FilterChip(
+                selected = !usePercent,
+                onClick = {
+                    usePercent = false
+                    action.onManualDiscountPercentChanged("")
+                },
+                label = { Text("Amount") }
+            )
+        }
+        if (usePercent) {
+            AppTextField(
+                value = if (state.manualDiscountPercent > 0.0) state.manualDiscountPercent.toString() else "",
+                onValueChange = action.onManualDiscountPercentChanged,
+                label = "Porcentaje (%)",
+                trailingIcon = { Icon(Icons.Default.Percent, contentDescription = null) },
+                keyboardOptions = KeyboardOptions(
+                    keyboardType = KeyboardType.Number, imeAction = ImeAction.Next
+                ),
+                modifier = Modifier.fillMaxWidth()
+            )
+        } else {
+            AppTextField(
+                value = if (state.manualDiscountAmount > 0.0) state.manualDiscountAmount.toString() else "",
+                onValueChange = action.onManualDiscountAmountChanged,
+                label = "Monto (${baseCurrency.toCurrencySymbol()})",
+                trailingIcon = { Icon(Icons.Default.Money, contentDescription = null) },
+                keyboardOptions = KeyboardOptions(
+                    keyboardType = KeyboardType.Number, imeAction = ImeAction.Next
+                ),
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
         Text("Código de descuento", style = MaterialTheme.typography.bodyMedium)
         AppTextField(
             value = state.discountCode,

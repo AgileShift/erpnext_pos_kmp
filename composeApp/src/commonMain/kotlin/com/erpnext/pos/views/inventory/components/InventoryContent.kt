@@ -11,6 +11,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.paging.LoadState
 import androidx.paging.compose.LazyPagingItems
+import com.erpnext.pos.base.getPlatformName
 import com.erpnext.pos.domain.models.ItemBO
 import com.erpnext.pos.views.inventory.InventoryAction
 import com.erpnext.pos.views.inventory.InventoryState
@@ -26,6 +27,7 @@ fun InventoryContent(
     onQueryChanged: (String) -> Unit,
     onCategorySelected: (String) -> Unit
 ) {
+    val isDesktop = getPlatformName() == "Desktop"
     Column(Modifier.fillMaxSize()) {
         InventoryFilters(
             searchQuery = searchQuery,
@@ -63,7 +65,8 @@ fun InventoryContent(
                 InventoryList(
                     items = itemsLazy,
                     listState = listState,
-                    actions = actions
+                    actions = actions,
+                    isDesktop = isDesktop
                 )
             }
         }

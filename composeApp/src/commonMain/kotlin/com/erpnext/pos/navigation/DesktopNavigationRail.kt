@@ -28,13 +28,14 @@ fun DesktopNavigationRail(
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoutePath = navBackStackEntry?.destination?.route
 
-    val items = listOf(
+    val primaryItems = listOf(
         NavRoute.Home,
         NavRoute.Inventory,
         NavRoute.Billing,
         NavRoute.Customer,
         NavRoute.Credits
     )
+    val secondaryItems = listOf(NavRoute.Settings)
 
     NavigationRail(
         modifier = Modifier
@@ -44,58 +45,87 @@ fun DesktopNavigationRail(
     ) {
         Column(
             modifier = Modifier.fillMaxHeight(),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+            verticalArrangement = Arrangement.SpaceBetween
         ) {
-            items.forEach { navRoute ->
-                val isEnabled = when (navRoute) {
-                    NavRoute.Home -> true
-                    NavRoute.Inventory,
-                    NavRoute.Billing,
-                    NavRoute.Customer,
-                    NavRoute.Credits -> isCashBoxOpen
-                    else -> true
-                }
-                val isSelected = currentRoutePath == navRoute.path
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                primaryItems.forEach { navRoute ->
+                    val isEnabled = when (navRoute) {
+                        NavRoute.Home,
+                        NavRoute.Settings -> true
 
-                NavigationRailItem(
-                    selected = isSelected,
-                    onClick = {
-                        if (isEnabled && currentRoutePath != navRoute.path) {
-                            navController.navigate(navRoute.path) {
-                                popUpTo(navController.graph.findStartDestination().id) {
-                                    saveState = true
-                                }
-                                launchSingleTop = true
-                                restoreState = true
-                            }
-                        }
-                    },
-                    icon = {
-                        androidx.compose.material3.Icon(
-                            imageVector = navRoute.icon,
-                            contentDescription = navRoute.title,
-                            tint = if (isSelected && isEnabled) {
-                                MaterialTheme.colorScheme.primary
-                            } else {
-                                MaterialTheme.colorScheme.onSurfaceVariant
-                                    .copy(alpha = if (isEnabled) 1f else 0.4f)
-                            }
-                        )
-                    },
-                    label = {
-                        Text(
-                            text = navRoute.title,
-                            color = if (isSelected && isEnabled) {
-                                MaterialTheme.colorScheme.primary
-                            } else {
-                                MaterialTheme.colorScheme.onSurfaceVariant
-                                    .copy(alpha = if (isEnabled) 1f else 0.4f)
-                            }
-                        )
-                    },
-                    modifier = Modifier.alpha(if (isEnabled) 1f else 0.4f)
-                )
+                        NavRoute.Inventory,
+                        NavRoute.Billing,
+                        NavRoute.Customer,
+                        NavRoute.Credits -> isCashBoxOpen
+
+                        else -> true
+                    }
+                    NavigationRailEntry(
+                        navController = navController,
+                        navRoute = navRoute,
+                        isEnabled = isEnabled,
+                        isSelected = currentRoutePath == navRoute.path
+                    )
+                }
+            }
+
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                secondaryItems.forEach { navRoute ->
+                    NavigationRailEntry(
+                        navController = navController,
+                        navRoute = navRoute,
+                        isEnabled = true,
+                        isSelected = currentRoutePath == navRoute.path
+                    )
+                }
             }
         }
     }
+}
+
+@Composable
+private fun NavigationRailEntry(
+    navController: NavController,
+    navRoute: NavRoute,
+    isEnabled: Boolean,
+    isSelected: Boolean
+) {
+    NavigationRailItem(
+        selected = isSelected,
+        onClick = {
+            if (isEnabled && navController.currentDestination?.route != navRoute.path) {
+                navController.navigate(navRoute.path) {
+                    popUpTo(navController.graph.findStartDestination().id) {
+                        saveState = true
+                    }
+                    launchSingleTop = true
+                    restoreState = true
+                }
+            }
+        },
+        icon = {
+            androidx.compose.material3.Icon(
+                imageVector = navRoute.icon,
+                contentDescription = navRoute.title,
+                tint = if (isSelected && isEnabled) {
+                    MaterialTheme.colorScheme.primary
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                        .copy(alpha = if (isEnabled) 1f else 0.4f)
+                }
+            )
+        },
+        label = {
+            Text(
+                text = navRoute.title,
+                color = if (isSelected && isEnabled) {
+                    MaterialTheme.colorScheme.primary
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                        .copy(alpha = if (isEnabled) 1f else 0.4f)
+                }
+            )
+        },
+        modifier = Modifier.alpha(if (isEnabled) 1f else 0.4f)
+    )
 }

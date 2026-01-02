@@ -20,7 +20,7 @@ class HomeCoordinator(
     }
 
     fun sync() {
-        viewModel.startInitialSync()
+        viewModel.syncNow()
     }
 
     fun initialState() {

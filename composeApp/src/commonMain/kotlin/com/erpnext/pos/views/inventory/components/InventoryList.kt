@@ -3,8 +3,10 @@ package com.erpnext.pos.views.inventory.components
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.ExperimentalAnimationApi
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Error
@@ -32,6 +34,7 @@ fun InventoryList(
     items: LazyPagingItems<ItemBO>,
     listState: LazyListState,
     actions: InventoryAction,
+    isDesktop: Boolean,
     modifier: Modifier = Modifier
 ) {
     AnimatedContent(
@@ -65,48 +68,77 @@ fun InventoryList(
             }
 
             else -> {
-                LazyColumn(
-                    modifier = modifier.fillMaxSize(),
-                    state = listState,
-                    contentPadding = PaddingValues(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    items(
-                        count = items.itemCount,
-                        key = { index ->
+                if (isDesktop) {
+                    LazyVerticalGrid(
+                        modifier = modifier.fillMaxSize(),
+                        columns = GridCells.Adaptive(minSize = 260.dp),
+                        contentPadding = PaddingValues(16.dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        items(
+                            count = items.itemCount,
+                            key = { index ->
+                                val item = items[index]
+                                item?.itemCode ?: item?.name ?: "item-$index"
+                            }
+                        ) { index ->
                             val item = items[index]
-                            // 🔸 Usa claves estables y consistentes
-                            item?.itemCode ?: item?.name ?: "item-$index"
-                        }
-                    ) { index ->
-                        val item = items[index]
-                        if (item != null) {
-                            ProductCard(actions, item)
-                        } else {
-                            // 🔹 Shimmer parcial discreto
-                            ShimmerProductPlaceholder(
-                                Modifier
-                                    .fillMaxWidth()
-                                    .height(110.dp)
-                            )
+                            if (item != null) {
+                                ProductCard(actions, item)
+                            } else {
+                                ShimmerProductPlaceholder(
+                                    Modifier
+                                        .fillMaxWidth()
+                                        .height(160.dp)
+                                )
+                            }
                         }
                     }
-
-                    when (items.loadState.append) {
-                        is LoadState.Loading -> {
-                            item { LoadingMoreItem() }
-                        }
-
-                        is LoadState.Error -> {
-                            item {
-                                ErrorItem(
-                                    "Error al cargar más items",
-                                    onRetry = { items.retry() }
+                } else {
+                    androidx.compose.foundation.lazy.LazyColumn(
+                        modifier = modifier.fillMaxSize(),
+                        state = listState,
+                        contentPadding = PaddingValues(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        items(
+                            count = items.itemCount,
+                            key = { index ->
+                                val item = items[index]
+                                // 🔸 Usa claves estables y consistentes
+                                item?.itemCode ?: item?.name ?: "item-$index"
+                            }
+                        ) { index ->
+                            val item = items[index]
+                            if (item != null) {
+                                ProductCard(actions, item)
+                            } else {
+                                // 🔹 Shimmer parcial discreto
+                                ShimmerProductPlaceholder(
+                                    Modifier
+                                        .fillMaxWidth()
+                                        .height(110.dp)
                                 )
                             }
                         }
 
-                        else -> {}
+                        when (items.loadState.append) {
+                            is LoadState.Loading -> {
+                                item { LoadingMoreItem() }
+                            }
+
+                            is LoadState.Error -> {
+                                item {
+                                    ErrorItem(
+                                        "Error al cargar más items",
+                                        onRetry = { items.retry() }
+                                    )
+                                }
+                            }
+
+                            else -> {}
+                        }
                     }
                 }
             }

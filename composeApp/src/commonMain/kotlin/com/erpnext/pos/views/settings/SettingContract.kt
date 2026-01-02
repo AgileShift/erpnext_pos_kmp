@@ -1,5 +1,8 @@
 package com.erpnext.pos.views.settings
 
+import com.erpnext.pos.localSource.preferences.SyncSettings
+import com.erpnext.pos.sync.SyncState
+
 data class POSSettingBO(
     val company: String,
     val posProfile: String,
@@ -13,12 +16,20 @@ data class POSSettingBO(
 
 sealed class POSSettingState {
     object Loading : POSSettingState()
-    data class Success(val settings: POSSettingBO) : POSSettingState()
+    data class Success(
+        val settings: POSSettingBO,
+        val syncSettings: SyncSettings,
+        val syncState: SyncState
+    ) : POSSettingState()
     data class Error(val message: String) : POSSettingState()
 }
 
 data class POSSettingAction(
     val loadSettings: () -> Unit = {},
     val onToggle: (String, Boolean) -> Unit = { _, _ -> },
-    val onSelect: (String) -> Unit = {}
+    val onSelect: (String) -> Unit = {},
+    val onSyncNow: () -> Unit = {},
+    val onAutoSyncChanged: (Boolean) -> Unit = {},
+    val onSyncOnStartupChanged: (Boolean) -> Unit = {},
+    val onWifiOnlyChanged: (Boolean) -> Unit = {}
 )

@@ -13,6 +13,7 @@ import com.erpnext.pos.data.repositories.POSProfileRepository
 import com.erpnext.pos.data.repositories.PaymentEntryRepository
 import com.erpnext.pos.data.repositories.SalesInvoiceRepository
 import com.erpnext.pos.data.repositories.UserRepository
+import com.erpnext.pos.data.repositories.v2.SourceDocumentRepository
 import com.erpnext.pos.di.v2.appModulev2
 import com.erpnext.pos.domain.repositories.IPOSRepository
 import com.erpnext.pos.domain.repositories.IUserRepository
@@ -27,6 +28,7 @@ import com.erpnext.pos.domain.usecases.FetchCustomersUseCase
 import com.erpnext.pos.domain.usecases.FetchDeliveryChargesUseCase
 import com.erpnext.pos.domain.usecases.FetchInventoryItemUseCase
 import com.erpnext.pos.domain.usecases.FetchPendingInvoiceUseCase
+import com.erpnext.pos.domain.usecases.FetchOutstandingInvoicesForCustomerUseCase
 import com.erpnext.pos.domain.usecases.FetchPaymentTermsUseCase
 import com.erpnext.pos.domain.usecases.FetchPosProfileInfoUseCase
 import com.erpnext.pos.domain.usecases.FetchPosProfileUseCase
@@ -34,15 +36,18 @@ import com.erpnext.pos.domain.usecases.FetchUserInfoUseCase
 import com.erpnext.pos.domain.usecases.LogoutUseCase
 import com.erpnext.pos.domain.usecases.RegisterInvoicePaymentUseCase
 import com.erpnext.pos.domain.usecases.SaveInvoicePaymentsUseCase
+import com.erpnext.pos.domain.usecases.v2.LoadSourceDocumentsUseCase
 import com.erpnext.pos.localSource.datasources.CustomerLocalSource
 import com.erpnext.pos.localSource.datasources.InventoryLocalSource
 import com.erpnext.pos.localSource.datasources.InvoiceLocalSource
 import com.erpnext.pos.localSource.datasources.ModeOfPaymentLocalSource
 import com.erpnext.pos.localSource.datasources.POSProfileLocalSource
 import com.erpnext.pos.localSource.preferences.ExchangeRatePreferences
+import com.erpnext.pos.localSource.preferences.SyncPreferences
 import com.erpnext.pos.navigation.NavigationManager
 import com.erpnext.pos.remoteSource.api.APIService
 import com.erpnext.pos.remoteSource.api.defaultEngine
+import com.erpnext.pos.remoteSource.api.v2.APIServiceV2
 import com.erpnext.pos.remoteSource.datasources.CustomerRemoteSource
 import com.erpnext.pos.remoteSource.datasources.InventoryRemoteSource
 import com.erpnext.pos.remoteSource.datasources.ModeOfPaymentRemoteSource
@@ -65,6 +70,7 @@ import com.erpnext.pos.views.salesorder.SalesOrderViewModel
 import com.erpnext.pos.views.settings.SettingsViewModel
 import com.erpnext.pos.views.splash.SplashViewModel
 import com.erpnext.pos.views.paymententry.PaymentEntryViewModel
+import com.erpnext.pos.views.salesflow.SalesFlowContextStore
 import io.ktor.client.HttpClient
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.plugins.logging.LogLevel
@@ -115,6 +121,7 @@ val appModule = module {
     }
 
     single { SnackbarController() }
+    single { SalesFlowContextStore() }
 
     single<CoroutineScope> { CoroutineScope(SupervisorJob() + Dispatchers.IO) }
     single { NavigationManager(get()) }
@@ -124,6 +131,7 @@ val appModule = module {
         }
     }
     single { ExchangeRatePreferences(get()) }
+    single { SyncPreferences(get()) }
     single<CashBoxManager> {
         CashBoxManager(
             get(named("apiService")),
@@ -136,7 +144,7 @@ val appModule = module {
             get()
         )
     }
-    single<SyncManager> { SyncManager(get(), get(), get(), get(), get()) }
+    single<SyncManager> { SyncManager(get(), get(), get(), get(), get(), get()) }
     //endregion
 
     //region Login DI
@@ -171,12 +179,32 @@ val appModule = module {
     single { CustomerRemoteSource(get(named("apiService"))) }
     single { CustomerLocalSource(get(), get()) }
     single { CustomerRepository(get(), get(), get()) }
-    single { CustomerViewModel(get(), get(), get(), get()) }
+    single {
+        CustomerViewModel(
+            cashboxManager = get(),
+            fetchCustomersUseCase = get(),
+            checkCustomerCreditUseCase = get(),
+            fetchCustomerDetailUseCase = get(),
+            fetchOutstandingInvoicesUseCase = get(),
+            registerInvoicePaymentUseCase = get()
+        )
+    }
     //endregion
 
     //region Home
     single { UserRemoteSource(get(named("apiService")), get()) }
-    single { HomeViewModel(get(), get(), get(), get(), get(), get(), get()) }
+    single {
+        HomeViewModel(
+            fetchUserInfoUseCase = get(),
+            fetchPosProfileUseCase = get(),
+            logoutUseCase = get(),
+            fetchPosProfileInfoUseCase = get(),
+            contextManager = get(),
+            syncManager = get(),
+            syncPreferences = get(),
+            navManager = get()
+        )
+    }
     single<IUserRepository> { UserRepository(get()) }
     //endregion
 
@@ -200,22 +228,27 @@ val appModule = module {
     //endregion
 
     //region Checkout
+    single(named("apiServiceV2")) { APIServiceV2(get(), get(), get()) }
+    single { SourceDocumentRepository(get(named("apiServiceV2"))) }
+    single { LoadSourceDocumentsUseCase(get()) }
     single { AdjustLocalInventoryUseCase(get()) }
     single { PaymentEntryRepository(get(named("apiService"))) }
     single {
         BillingViewModel(
-            get(),
-            get(),
-            get(),
-            get(),
-            get(),
-            get(),
-            get(),
-            get(),
-            get(),
-            get(),
-            get(),
-            get(named("apiService"))
+            customersUseCase = get(),
+            itemsUseCase = get(),
+            adjustLocalInventoryUseCase = get(),
+            contextProvider = get(),
+            modeOfPaymentDao = get(),
+            paymentTermsUseCase = get(),
+            deliveryChargesUseCase = get(),
+            navManager = get(),
+            salesFlowStore = get(),
+            loadSourceDocumentsUseCase = get(),
+            createSalesInvoiceUseCase = get(),
+            createPaymentEntryUseCase = get(),
+            saveInvoicePaymentsUseCase = get(),
+            api = get(named("apiService"))
         )
     }
     single { SalesInvoiceRemoteSource(get(named("apiService")), get()) }
@@ -224,7 +257,7 @@ val appModule = module {
     //endregion
 
     //region Settings
-    single { SettingsViewModel() }
+    single { SettingsViewModel(get(), get()) }
     //endregion
 
     //region UseCases DI
@@ -232,6 +265,7 @@ val appModule = module {
     single { FetchBillingProductsWithPriceUseCase(get()) }
     single { CheckCustomerCreditUseCase(get()) }
     single { FetchPendingInvoiceUseCase(get()) }
+    single { FetchOutstandingInvoicesForCustomerUseCase(get()) }
     single { SaveInvoicePaymentsUseCase(get()) }
     single { FetchCustomersUseCase(get()) }
     single { FetchPaymentTermsUseCase(get()) }
@@ -252,7 +286,7 @@ fun initKoin(
 ) {
     startKoin {
         config?.invoke(this)
-        modules(appModule + modules)
+        modules(appModule + appModulev2 + modules)
         koin.get<AppDatabase> { parametersOf(builder) }
     }
 }

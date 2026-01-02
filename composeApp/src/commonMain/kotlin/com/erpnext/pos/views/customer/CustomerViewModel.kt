@@ -10,6 +10,9 @@ import com.erpnext.pos.domain.usecases.CustomerCreditInput
 import com.erpnext.pos.domain.usecases.CustomerQueryInput
 import com.erpnext.pos.domain.usecases.FetchCustomerDetailUseCase
 import com.erpnext.pos.domain.usecases.FetchCustomersUseCase
+import com.erpnext.pos.domain.usecases.FetchOutstandingInvoicesForCustomerUseCase
+import com.erpnext.pos.domain.usecases.RegisterInvoicePaymentInput
+import com.erpnext.pos.domain.usecases.RegisterInvoicePaymentUseCase
 import com.erpnext.pos.views.CashBoxManager
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -24,12 +27,20 @@ class CustomerViewModel(
     private val cashboxManager: CashBoxManager,
     private val fetchCustomersUseCase: FetchCustomersUseCase,
     private val checkCustomerCreditUseCase: CheckCustomerCreditUseCase,
-    private val fetchCustomerDetailUseCase: FetchCustomerDetailUseCase
+    private val fetchCustomerDetailUseCase: FetchCustomerDetailUseCase,
+    private val fetchOutstandingInvoicesUseCase: FetchOutstandingInvoicesForCustomerUseCase,
+    private val registerInvoicePaymentUseCase: RegisterInvoicePaymentUseCase
 ) : BaseViewModel() {
 
     private val _stateFlow: MutableStateFlow<CustomerState> =
         MutableStateFlow(CustomerState.Loading)
     val stateFlow = _stateFlow
+
+    private val _invoicesState = MutableStateFlow<CustomerInvoicesState>(CustomerInvoicesState.Idle)
+    val invoicesState = _invoicesState
+
+    private val _paymentState = MutableStateFlow(CustomerPaymentState())
+    val paymentState = _paymentState
 
     private var searchFilter by mutableStateOf<String?>(null)
     private var selectedState by mutableStateOf<String?>(null)
@@ -107,5 +118,73 @@ class CustomerViewModel(
 
     fun onRefresh() {
         fetchAllCustomers(searchFilter, selectedState)
+    }
+
+    fun loadOutstandingInvoices(customerId: String) {
+        _invoicesState.value = CustomerInvoicesState.Loading
+        executeUseCase(
+            action = {
+                val invoices = fetchOutstandingInvoicesUseCase.invoke(customerId)
+                _invoicesState.value = CustomerInvoicesState.Success(invoices)
+            },
+            exceptionHandler = {
+                _invoicesState.value = CustomerInvoicesState.Error(
+                    it.message ?: "Unable to load outstanding invoices."
+                )
+            }
+        )
+    }
+
+    fun clearOutstandingInvoices() {
+        _invoicesState.value = CustomerInvoicesState.Idle
+        _paymentState.value = CustomerPaymentState()
+    }
+
+    fun registerPayment(
+        customerId: String,
+        invoiceId: String,
+        modeOfPayment: String,
+        amount: Double
+    ) {
+        if (modeOfPayment.isBlank()) {
+            _paymentState.value = CustomerPaymentState(
+                errorMessage = "Select a mode of payment."
+            )
+            return
+        }
+        if (invoiceId.isBlank()) {
+            _paymentState.value = CustomerPaymentState(
+                errorMessage = "Select an invoice."
+            )
+            return
+        }
+        if (amount <= 0) {
+            _paymentState.value = CustomerPaymentState(
+                errorMessage = "Enter a valid amount."
+            )
+            return
+        }
+
+        _paymentState.value = CustomerPaymentState(isSubmitting = true)
+        executeUseCase(
+            action = {
+                registerInvoicePaymentUseCase(
+                    RegisterInvoicePaymentInput(
+                        invoiceId = invoiceId,
+                        modeOfPayment = modeOfPayment,
+                        amount = amount
+                    )
+                )
+                _paymentState.value = CustomerPaymentState(
+                    successMessage = "Payment registered successfully."
+                )
+                loadOutstandingInvoices(customerId)
+            },
+            exceptionHandler = {
+                _paymentState.value = CustomerPaymentState(
+                    errorMessage = it.message ?: "Unable to register payment."
+                )
+            }
+        )
     }
 }
