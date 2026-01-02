@@ -63,6 +63,8 @@ data class SalesOrderDetailDto(
     val salesOrderId: String,
     @SerialName("items")
     val items: List<SalesOrderDetailItemDto> = emptyList(),
+    @SerialName("taxes")
+    val taxes: List<SalesOrderDetailTaxDto> = emptyList(),
     @SerialName("payment_schedule")
     val paymentSchedule: List<PaymentScheduleRowDto> = emptyList()
 )
@@ -88,11 +90,25 @@ data class SalesOrderDetailItemDto(
 )
 
 @Serializable
+data class SalesOrderDetailTaxDto(
+    @SerialName("charge_type")
+    val chargeType: String,
+    @SerialName("account_head")
+    val accountHead: String,
+    @SerialName("rate")
+    val rate: Double,
+    @SerialName("tax_amount")
+    val taxAmount: Double
+)
+
+@Serializable
 data class DeliveryNoteDetailDto(
     @SerialName("name")
     val deliveryNoteId: String,
     @SerialName("items")
-    val items: List<DeliveryNoteDetailItemDto> = emptyList()
+    val items: List<DeliveryNoteDetailItemDto> = emptyList(),
+    @SerialName("taxes")
+    val taxes: List<DeliveryNoteDetailTaxDto> = emptyList()
 )
 
 @Serializable
@@ -117,4 +133,16 @@ data class DeliveryNoteDetailItemDto(
     val salesOrderId: String? = null,
     @SerialName("sales_invoice")
     val salesInvoiceId: String? = null
+)
+
+@Serializable
+data class DeliveryNoteDetailTaxDto(
+    @SerialName("charge_type")
+    val chargeType: String,
+    @SerialName("account_head")
+    val accountHead: String,
+    @SerialName("rate")
+    val rate: Double,
+    @SerialName("tax_amount")
+    val taxAmount: Double
 )

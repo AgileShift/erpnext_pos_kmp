@@ -306,15 +306,100 @@ class BillingViewModel(
 
     fun linkSourceDocument(sourceType: SalesFlowSource, sourceId: String) {
         val current = requireSuccessState() ?: return
-        val updated = (current.salesFlowContext ?: SalesFlowContext())
-            .withSource(sourceType, sourceId)
-        _state.update { current.copy(salesFlowContext = updated) }
+        val selectedDoc = current.sourceDocuments.firstOrNull {
+            it.sourceType == sourceType && it.id == sourceId
+        }
+
+        if (selectedDoc == null) {
+            val updated = (current.salesFlowContext ?: SalesFlowContext())
+                .withSource(sourceType, sourceId)
+            _state.update { current.copy(salesFlowContext = updated) }
+            return
+        }
+
+        executeUseCase(action = {
+            val context = contextProvider.requireContext()
+            val baseCurrency = current.currency?.trim().orEmpty()
+                .ifBlank { context.currency.trim().ifBlank { "USD" } }
+            val sourceCurrency = selectedDoc.totals?.currency
+            val rate = resolveSourceExchangeRate(
+                sourceCurrency = sourceCurrency,
+                baseCurrency = baseCurrency,
+                exchangeRateByCurrency = current.exchangeRateByCurrency,
+                fallbackRate = context.exchangeRate
+            )
+
+            val convertedDoc = convertSourceDocument(
+                source = selectedDoc,
+                baseCurrency = baseCurrency,
+                rate = rate
+            )
+
+            val updatedCustomer = convertedDoc.customerId?.let { id ->
+                customers.firstOrNull { it.name == id }
+            } ?: current.selectedCustomer
+
+            val updatedContext = (current.salesFlowContext ?: SalesFlowContext())
+                .withCustomer(
+                    customerId = updatedCustomer?.name ?: convertedDoc.customerId,
+                    customerName = updatedCustomer?.customerName ?: convertedDoc.customerName
+                )
+                .withSource(sourceType, sourceId)
+
+            val cartItems = convertedDoc.items.map { item ->
+                CartItem(
+                    itemCode = item.itemCode,
+                    name = item.itemName ?: item.itemCode,
+                    currency = baseCurrency.toCurrencySymbol(),
+                    quantity = item.qty,
+                    price = item.rate
+                )
+            }
+
+            val next = current.copy(
+                selectedCustomer = updatedCustomer,
+                customerSearchQuery = updatedCustomer?.customerName ?: current.customerSearchQuery,
+                salesFlowContext = updatedContext,
+                cartItems = cartItems,
+                discountCode = "",
+                manualDiscountAmount = 0.0,
+                manualDiscountPercent = 0.0,
+                shippingAmount = 0.0,
+                selectedDeliveryCharge = null,
+                isCreditSale = false,
+                selectedPaymentTerm = null,
+                paymentLines = emptyList(),
+                paidAmountBase = 0.0,
+                balanceDueBase = 0.0,
+                changeDueBase = 0.0,
+                paymentErrorMessage = null,
+                cartErrorMessage = null,
+                sourceDocument = convertedDoc,
+                isSourceDocumentApplied = true,
+                exchangeRateByCurrency = current.exchangeRateByCurrency
+                    .plus(baseCurrency.uppercase() to 1.0)
+                    .let { cache ->
+                        val sourceKey = sourceCurrency?.trim()?.uppercase().orEmpty()
+                        if (sourceKey.isBlank() || sourceKey == baseCurrency.uppercase()) cache
+                        else cache.plus(sourceKey to rate)
+                    }
+            )
+
+            _state.update { recalculateTotals(next) }
+        }, exceptionHandler = { e ->
+            _state.update {
+                current.copy(
+                    cartErrorMessage = e.toUserMessage("Unable to apply source document.")
+                )
+            }
+        })
     }
 
     fun clearSourceDocument() {
         val current = requireSuccessState() ?: return
         val updated = current.salesFlowContext?.copy(sourceType = null, sourceId = null)
-        _state.update { current.copy(salesFlowContext = updated) }
+        val reset = resetFromSource(current).copy(salesFlowContext = updated)
+        _state.update { reset }
     }
 
     fun loadSourceDocuments(sourceType: SalesFlowSource) {
@@ -715,7 +800,7 @@ class BillingViewModel(
 
             val created = createSalesInvoiceUseCase(CreateSalesInvoiceInput(invoiceDto))
 
-            if (!current.isCreditSale && paymentLines.isNotEmpty()) {
+            if (paymentLines.isNotEmpty()) {
                 val invoiceId = created.name ?: error("No se devolvió el ID de la factura.")
 
                 val currencySpecs = buildCurrencySpecs(context)
@@ -830,7 +915,9 @@ class BillingViewModel(
                     changeDueBase = 0.0,
                     paymentErrorMessage = null,
                     cartErrorMessage = null,
-                    successMessage = "Factura ${created.name ?: ""} creada correctamente."
+                    successMessage = "Factura ${created.name ?: ""} creada correctamente.",
+                    sourceDocument = null,
+                    isSourceDocumentApplied = false
                 )
             }
         }, exceptionHandler = { e ->
@@ -854,6 +941,80 @@ class BillingViewModel(
             discount = totals.discount,
             total = totals.total
         ).recalculatePaymentTotals()
+    }
+
+    private suspend fun resolveSourceExchangeRate(
+        sourceCurrency: String?,
+        baseCurrency: String,
+        exchangeRateByCurrency: Map<String, Double>,
+        fallbackRate: Double
+    ): Double {
+        val from = sourceCurrency?.trim()?.uppercase().takeIf { !it.isNullOrBlank() }
+        val to = baseCurrency.trim().uppercase()
+        if (from == null || from == to) return 1.0
+
+        exchangeRateByCurrency[from]?.takeIf { it > 0.0 }?.let { return it }
+
+        if (from == "USD" && to != "USD" && fallbackRate > 0.0) {
+            return fallbackRate
+        }
+
+        return resolveExchangeRateBetween(
+            fromCurrency = from,
+            toCurrency = to,
+            exchangeRateByCurrency = exchangeRateByCurrency
+        ) ?: error("Unable to resolve exchange rate $from -> $to")
+    }
+
+    private fun convertSourceDocument(
+        source: com.erpnext.pos.domain.models.SourceDocumentOption,
+        baseCurrency: String,
+        rate: Double
+    ): com.erpnext.pos.domain.models.SourceDocumentOption {
+        if (rate == 1.0) return source
+        val convertedTotals = source.totals?.let { totals ->
+            totals.copy(
+                netTotal = totals.netTotal?.let { it * rate },
+                grandTotal = totals.grandTotal?.let { it * rate },
+                taxTotal = totals.taxTotal?.let { it * rate },
+                currency = baseCurrency
+            )
+        }
+        val convertedItems = source.items.map { item ->
+            item.copy(
+                rate = item.rate * rate,
+                amount = item.amount * rate
+            )
+        }
+        return source.copy(
+            items = convertedItems,
+            totals = convertedTotals
+        )
+    }
+
+    private fun resetFromSource(current: BillingState.Success): BillingState.Success {
+        return current.copy(
+            cartItems = emptyList(),
+            subtotal = 0.0,
+            taxes = 0.0,
+            discount = 0.0,
+            discountCode = "",
+            manualDiscountAmount = 0.0,
+            manualDiscountPercent = 0.0,
+            shippingAmount = 0.0,
+            selectedDeliveryCharge = null,
+            total = 0.0,
+            isCreditSale = false,
+            selectedPaymentTerm = null,
+            paymentLines = emptyList(),
+            paidAmountBase = 0.0,
+            balanceDueBase = 0.0,
+            changeDueBase = 0.0,
+            paymentErrorMessage = null,
+            cartErrorMessage = null,
+            sourceDocument = null,
+            isSourceDocumentApplied = false
+        )
     }
 
     private fun buildQtyErrorMessage(itemName: String, maxQty: Double): String {
@@ -1241,13 +1402,9 @@ class BillingViewModel(
         total: Double,
         paymentLines: List<PaymentLine>
     ): PaymentStatus {
-        val hasPayments = paymentLines.isNotEmpty()
-        val paidAmount =
-            if (isCreditSale || hasPayments) 0.0 else paymentLines.sumOf { it.baseAmount }
-        val outstandingAmount =
-            if (isCreditSale || hasPayments) total else (total - paidAmount).coerceAtLeast(0.0)
-        val status =
-            if (isCreditSale || hasPayments || outstandingAmount > 0.0) "Unpaid" else "Paid"
+        val paidAmount = paymentLines.sumOf { it.baseAmount }
+        val outstandingAmount = (total - paidAmount).coerceAtLeast(0.0)
+        val status = if (outstandingAmount > 0.0) "Unpaid" else "Paid"
         return PaymentStatus(paidAmount, outstandingAmount, status)
     }
 
@@ -1319,8 +1476,8 @@ class BillingViewModel(
             return "Las ventas a crédito no pueden incluir líneas de pago."
         }*/
 
-        if (current.paymentLines.isEmpty())
-            return "Agrega al menos un pago o marca la venta como crédito."
+        if (!current.isCreditSale && current.paymentLines.isEmpty())
+            return "Add at least one payment or mark the sale as credit."
 
         return null
     }

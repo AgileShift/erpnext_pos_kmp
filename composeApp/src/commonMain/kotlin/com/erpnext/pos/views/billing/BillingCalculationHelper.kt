@@ -23,7 +23,7 @@ data class DiscountInfo(
 object BillingCalculationHelper {
     fun calculateTotals(state: BillingState.Success): BillingTotals {
         val subtotal = state.cartItems.sumOf { it.price * it.quantity }
-        val taxes = 0.0
+        val taxes = state.sourceDocument?.totals?.taxTotal ?: 0.0
         val discountInfo = resolveDiscountInfo(state, subtotal)
         val shippingAmount = state.shippingAmount.coerceAtLeast(0.0)
         val total = (subtotal + taxes - discountInfo.amount + shippingAmount).coerceAtLeast(0.0)
