@@ -455,7 +455,7 @@ private fun SourceDocumentSheet(
                             val query = searchQuery.trim()
                             if (query.isBlank()) true else {
                                 doc.id.contains(query, ignoreCase = true) ||
-                                    (doc.status?.contains(query, ignoreCase = true) == true)
+                                        (doc.status?.contains(query, ignoreCase = true) == true)
                             }
                         }
                         filtered.forEach { doc ->
@@ -1169,12 +1169,13 @@ private fun PaymentSection(
     }
 }
 
+enum class DiscountInputType { Code, Percent, Amount }
+
 @Composable
 private fun DiscountShippingInputs(
     state: BillingState.Success, action: BillingAction
 ) {
     val baseCurrency = state.currency ?: "USD"
-    enum class DiscountInputType { Code, Percent, Amount }
 
     val initialType = remember(
         state.discountCode,
