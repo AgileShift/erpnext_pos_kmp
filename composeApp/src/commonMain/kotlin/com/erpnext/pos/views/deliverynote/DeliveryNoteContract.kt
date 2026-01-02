@@ -8,5 +8,6 @@ sealed class DeliveryNoteState {
 
 data class DeliveryNoteAction(
     val onBack: () -> Unit = {},
-    val onRefresh: () -> Unit = {}
+    val onRefresh: () -> Unit = {},
+    val onCreateInvoice: (String?) -> Unit = {}
 )

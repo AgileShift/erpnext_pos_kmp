@@ -8,5 +8,7 @@ sealed class SalesOrderState {
 
 data class SalesOrderAction(
     val onBack: () -> Unit = {},
-    val onRefresh: () -> Unit = {}
+    val onRefresh: () -> Unit = {},
+    val onCreateDeliveryNote: (String?) -> Unit = {},
+    val onCreateInvoice: (String?) -> Unit = {}
 )

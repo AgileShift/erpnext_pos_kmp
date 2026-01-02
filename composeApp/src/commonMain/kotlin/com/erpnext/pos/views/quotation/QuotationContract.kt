@@ -8,5 +8,7 @@ sealed class QuotationState {
 
 data class QuotationAction(
     val onBack: () -> Unit = {},
-    val onRefresh: () -> Unit = {}
+    val onRefresh: () -> Unit = {},
+    val onCreateSalesOrder: (String?) -> Unit = {},
+    val onCreateInvoice: (String?) -> Unit = {}
 )

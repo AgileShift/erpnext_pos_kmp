@@ -7,6 +7,7 @@ import com.erpnext.pos.domain.models.ItemBO
 import com.erpnext.pos.domain.models.POSCurrencyOption
 import com.erpnext.pos.domain.models.POSPaymentModeOption
 import com.erpnext.pos.domain.models.PaymentTermBO
+import com.erpnext.pos.views.salesflow.SalesFlowContext
 
 data class PaymentLine(
     val modeOfPayment: String,
@@ -30,6 +31,7 @@ sealed interface BillingState {
         val customers: List<CustomerBO> = emptyList(),
         val selectedCustomer: CustomerBO? = null,
         val customerSearchQuery: String = "",
+        val salesFlowContext: SalesFlowContext? = null,
 
         // Product-related state
         val productSearchQuery: String = "",

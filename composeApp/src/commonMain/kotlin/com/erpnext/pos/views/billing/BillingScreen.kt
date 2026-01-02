@@ -66,6 +66,7 @@ import com.erpnext.pos.utils.view.SnackbarController
 import com.erpnext.pos.utils.view.SnackbarHost
 import com.erpnext.pos.utils.view.SnackbarPosition
 import com.erpnext.pos.utils.view.SnackbarType
+import com.erpnext.pos.views.salesflow.SalesFlowContextSummary
 import org.jetbrains.compose.ui.tooling.preview.Preview
 import org.koin.compose.koinInject
 
@@ -209,6 +210,21 @@ private fun BillingContent(
         modifier = Modifier.padding(padding).fillMaxSize()
             .padding(horizontal = 16.dp, vertical = 8.dp)
     ) {
+        state.salesFlowContext?.let { context ->
+            CollapsibleSection(
+                title = "Sales flow",
+                defaultExpanded = true
+            ) {
+                Column(
+                    modifier = Modifier.padding(end = 12.dp, start = 12.dp, bottom = 8.dp)
+                ) {
+                    SalesFlowContextSummary(context)
+                }
+            }
+
+            Spacer(Modifier.height(8.dp))
+        }
+
         CollapsibleSection(
             title = "Cliente", defaultExpanded = true
         ) {

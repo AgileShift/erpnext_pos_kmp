@@ -48,6 +48,11 @@ import com.erpnext.pos.utils.oauth.toDouble
 import com.erpnext.pos.views.CashBoxManager
 import com.erpnext.pos.views.POSContext
 import com.erpnext.pos.views.billing.BillingCalculationHelper.resolveDiscountInfo
+import com.erpnext.pos.views.salesflow.SalesFlowContext
+import com.erpnext.pos.views.salesflow.SalesFlowContextStore
+import com.erpnext.pos.views.salesflow.SalesFlowSource
+import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
@@ -62,6 +67,7 @@ class BillingViewModel(
     private val paymentTermsUseCase: FetchPaymentTermsUseCase,
     private val deliveryChargesUseCase: FetchDeliveryChargesUseCase,
     private val navManager: NavigationManager,
+    private val salesFlowStore: SalesFlowContextStore,
     private val createSalesInvoiceUseCase: CreateSalesInvoiceUseCase,
     private val createPaymentEntryUseCase: CreatePaymentEntryUseCase,
     private val saveInvoicePaymentsUseCase: SaveInvoicePaymentsUseCase,
@@ -73,6 +79,7 @@ class BillingViewModel(
 
     private var customers: List<CustomerBO> = emptyList()
     private var products: List<ItemBO> = emptyList()
+    private var pendingSalesFlowContext: SalesFlowContext? = null
 
     /**
      * Mapa de definiciones de modo de pago.
@@ -83,7 +90,19 @@ class BillingViewModel(
     private var paymentModeDetails: Map<String, ModeOfPaymentEntity> = emptyMap()
 
     init {
+        observeSalesFlowContext()
         loadInitialData()
+    }
+
+    private fun observeSalesFlowContext() {
+        viewModelScope.launch {
+            salesFlowStore.context.collect { context ->
+                if (context != null) {
+                    applySalesFlowContext(context)
+                    salesFlowStore.clear()
+                }
+            }
+        }
     }
 
     fun loadInitialData() {
@@ -131,9 +150,16 @@ class BillingViewModel(
                     // Cache de tasas "paymentCurrency -> invoiceCurrency"
                     val exchangeRateByCurrency = mapOf(invoiceCurrency.uppercase() to 1.0)
 
+                    val contextSelection = pendingSalesFlowContext
+                    val selectedCustomer = contextSelection?.customerId?.let { customerId ->
+                        customers.firstOrNull { it.name == customerId }
+                    }
+
                     _state.update {
                         BillingState.Success(
                             customers = customers,
+                            selectedCustomer = selectedCustomer,
+                            customerSearchQuery = selectedCustomer?.customerName.orEmpty(),
                             productSearchResults = products,
                             currency = invoiceCurrency,
                             paymentModes = paymentModes,
@@ -142,9 +168,11 @@ class BillingViewModel(
                             paymentTerms = paymentTerms,
                             deliveryCharges = deliveryCharges,
                             exchangeRateByCurrency = exchangeRateByCurrency,
-                            paymentModeCurrencyByMode = paymentModeCurrencyByMode
+                            paymentModeCurrencyByMode = paymentModeCurrencyByMode,
+                            salesFlowContext = contextSelection
                         )
                     }
+                    pendingSalesFlowContext = null
                 }
             }
         }, exceptionHandler = {
@@ -159,6 +187,26 @@ class BillingViewModel(
             is BillingState.Success -> current
             is BillingState.Error -> current.previous?.also { _state.value = it }
             else -> null
+        }
+    }
+
+    private fun applySalesFlowContext(context: SalesFlowContext) {
+        val current = requireSuccessState()
+        if (current == null) {
+            pendingSalesFlowContext = context
+            return
+        }
+
+        val selectedCustomer = context.customerId?.let { customerId ->
+            customers.firstOrNull { it.name == customerId }
+        }
+
+        _state.update {
+            current.copy(
+                selectedCustomer = selectedCustomer ?: current.selectedCustomer,
+                customerSearchQuery = selectedCustomer?.customerName ?: current.customerSearchQuery,
+                salesFlowContext = context
+            )
         }
     }
 
@@ -238,10 +286,15 @@ class BillingViewModel(
 
     fun onCustomerSelected(customer: CustomerBO) {
         val current = requireSuccessState() ?: return
+        val updatedFlowContext = current.salesFlowContext?.withCustomer(
+            customerId = customer.name,
+            customerName = customer.customerName
+        )
         _state.update {
             current.copy(
                 selectedCustomer = customer,
-                customerSearchQuery = customer.customerName
+                customerSearchQuery = customer.customerName,
+                salesFlowContext = updatedFlowContext
             )
         }
     }
@@ -775,7 +828,7 @@ class BillingViewModel(
     ): SalesInvoiceDto {
         val items = buildInvoiceItems(current, context, discountPercent, discountAmount)
         val paymentMetadata =
-            buildPaymentMetadata(current, paymentLines, totals.shipping, baseCurrency)
+            buildInvoiceRemarks(current, paymentLines, totals.shipping, baseCurrency)
 
         val paymentMode = paymentLines.firstOrNull()?.modeOfPayment
             ?: current.selectedPaymentTerm?.modeOfPayment
@@ -815,6 +868,11 @@ class BillingViewModel(
         discountPercent: Double?,
         discountAmount: Double
     ): MutableList<SalesInvoiceItemDto> {
+        val source = current.salesFlowContext
+        val sourceId = source?.sourceId
+        val salesOrderId = if (source?.sourceType == SalesFlowSource.SalesOrder) sourceId else null
+        val deliveryNoteId = if (source?.sourceType == SalesFlowSource.DeliveryNote) sourceId else null
+
         val items = current.cartItems.map { cart ->
             SalesInvoiceItemDto(
                 itemCode = cart.itemCode,
@@ -824,7 +882,9 @@ class BillingViewModel(
                 amount = cart.quantity * cart.price,
                 discountPercentage = discountPercent,
                 warehouse = context.warehouse,
-                incomeAccount = context.incomeAccount
+                incomeAccount = context.incomeAccount,
+                salesOrder = salesOrderId,
+                deliveryNote = deliveryNoteId
             )
         }.toMutableList()
 
@@ -845,13 +905,21 @@ class BillingViewModel(
         return items
     }
 
-    private fun buildPaymentMetadata(
+    private fun buildInvoiceRemarks(
         current: BillingState.Success,
         paymentLines: List<PaymentLine>,
         shippingAmount: Double,
         baseCurrency: String
     ): String? {
         return buildList {
+            current.salesFlowContext?.let { context ->
+                val label = context.sourceLabel()
+                if (label != null && context.sourceType != SalesFlowSource.Customer) {
+                    val sourceText = context.sourceId?.let { "Source: $label (ID: $it)" }
+                        ?: "Source: $label"
+                    add(sourceText)
+                }
+            }
             addAll(
                 paymentLines.mapNotNull { line ->
                     if (line.currency.equals(baseCurrency, ignoreCase = true)) null

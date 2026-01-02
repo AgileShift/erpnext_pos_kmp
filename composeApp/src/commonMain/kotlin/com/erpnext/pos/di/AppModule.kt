@@ -65,6 +65,7 @@ import com.erpnext.pos.views.salesorder.SalesOrderViewModel
 import com.erpnext.pos.views.settings.SettingsViewModel
 import com.erpnext.pos.views.splash.SplashViewModel
 import com.erpnext.pos.views.paymententry.PaymentEntryViewModel
+import com.erpnext.pos.views.salesflow.SalesFlowContextStore
 import io.ktor.client.HttpClient
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.plugins.logging.LogLevel
@@ -115,6 +116,7 @@ val appModule = module {
     }
 
     single { SnackbarController() }
+    single { SalesFlowContextStore() }
 
     single<CoroutineScope> { CoroutineScope(SupervisorJob() + Dispatchers.IO) }
     single { NavigationManager(get()) }
@@ -204,18 +206,19 @@ val appModule = module {
     single { PaymentEntryRepository(get(named("apiService"))) }
     single {
         BillingViewModel(
-            get(),
-            get(),
-            get(),
-            get(),
-            get(),
-            get(),
-            get(),
-            get(),
-            get(),
-            get(),
-            get(),
-            get(named("apiService"))
+            customersUseCase = get(),
+            itemsUseCase = get(),
+            adjustLocalInventoryUseCase = get(),
+            contextProvider = get(),
+            modeOfPaymentDao = get(),
+            paymentTermsUseCase = get(),
+            deliveryChargesUseCase = get(),
+            navManager = get(),
+            salesFlowStore = get(),
+            createSalesInvoiceUseCase = get(),
+            createPaymentEntryUseCase = get(),
+            saveInvoicePaymentsUseCase = get(),
+            api = get(named("apiService"))
         )
     }
     single { SalesInvoiceRemoteSource(get(named("apiService")), get()) }

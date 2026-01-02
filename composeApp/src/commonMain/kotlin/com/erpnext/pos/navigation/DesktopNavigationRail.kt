@@ -33,7 +33,8 @@ fun DesktopNavigationRail(
         NavRoute.Inventory,
         NavRoute.Billing,
         NavRoute.Customer,
-        NavRoute.Credits
+        NavRoute.Credits,
+        NavRoute.Settings
     )
 
     NavigationRail(
@@ -53,6 +54,7 @@ fun DesktopNavigationRail(
                     NavRoute.Billing,
                     NavRoute.Customer,
                     NavRoute.Credits -> isCashBoxOpen
+                    NavRoute.Settings -> true
                     else -> true
                 }
                 val isSelected = currentRoutePath == navRoute.path
