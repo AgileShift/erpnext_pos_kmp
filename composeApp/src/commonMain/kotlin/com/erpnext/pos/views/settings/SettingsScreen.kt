@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
@@ -21,6 +22,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.unit.dp
+import com.erpnext.pos.utils.toErpDateTime
 import com.erpnext.pos.utils.view.SnackbarController
 import com.erpnext.pos.utils.view.SnackbarPosition
 import com.erpnext.pos.utils.view.SnackbarType
@@ -41,7 +43,14 @@ fun SettingsScreenPreview() {
                 offlineMode = true,
                 printerEnabled = true,
                 cashDrawerEnabled = true
-            )
+            ),
+            syncSettings = com.erpnext.pos.localSource.preferences.SyncSettings(
+                autoSync = true,
+                syncOnStartup = true,
+                wifiOnly = false,
+                lastSyncAt = null
+            ),
+            syncState = com.erpnext.pos.sync.SyncState.IDLE
         ), POSSettingAction()
     )
 }
@@ -86,6 +95,15 @@ fun PosSettingsScreen(
                             state.settings.priceList
                         ) { action.onSelect("price_list") }
                     }
+                )
+
+                SyncSettingsCard(
+                    syncSettings = state.syncSettings,
+                    syncState = state.syncState,
+                    onSyncNow = action.onSyncNow,
+                    onAutoSyncChanged = action.onAutoSyncChanged,
+                    onSyncOnStartupChanged = action.onSyncOnStartupChanged,
+                    onWifiOnlyChanged = action.onWifiOnlyChanged
                 )
 
                 PosSettingsCard(
@@ -203,3 +221,49 @@ fun SwitchRow(
     }
 }
 
+@Composable
+private fun SyncSettingsCard(
+    syncSettings: com.erpnext.pos.localSource.preferences.SyncSettings,
+    syncState: com.erpnext.pos.sync.SyncState,
+    onSyncNow: () -> Unit,
+    onAutoSyncChanged: (Boolean) -> Unit,
+    onSyncOnStartupChanged: (Boolean) -> Unit,
+    onWifiOnlyChanged: (Boolean) -> Unit
+) {
+    val lastSyncLabel = syncSettings.lastSyncAt?.toErpDateTime() ?: "Never synced"
+    val statusLabel = when (syncState) {
+        com.erpnext.pos.sync.SyncState.IDLE -> "Idle"
+        com.erpnext.pos.sync.SyncState.SUCCESS -> "Synced"
+        is com.erpnext.pos.sync.SyncState.ERROR -> "Error"
+        is com.erpnext.pos.sync.SyncState.SYNCING -> "Syncing"
+    }
+
+    PosSettingsCard(
+        title = "Synchronization",
+        items = {
+            SettingsRow("Status", statusLabel) {}
+            SettingsRow("Last sync", lastSyncLabel) {}
+            Button(
+                onClick = onSyncNow,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Sync now")
+            }
+            SwitchRow(
+                label = "Auto-sync",
+                checked = syncSettings.autoSync,
+                onCheckedChange = onAutoSyncChanged
+            )
+            SwitchRow(
+                label = "Sync on startup",
+                checked = syncSettings.syncOnStartup,
+                onCheckedChange = onSyncOnStartupChanged
+            )
+            SwitchRow(
+                label = "Wi-Fi only",
+                checked = syncSettings.wifiOnly,
+                onCheckedChange = onWifiOnlyChanged
+            )
+        }
+    )
+}

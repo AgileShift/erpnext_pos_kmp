@@ -296,7 +296,9 @@ private fun BillingContent(
 
     if (showSourceSheet) {
         SourceDocumentSheet(
+            state = state,
             onDismiss = { showSourceSheet = false },
+            onLoad = action.onLoadSourceDocuments,
             onApply = { source, reference ->
                 action.onLinkSource(source, reference)
                 showSourceSheet = false
@@ -332,12 +334,25 @@ private fun SourceDocumentRow(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun SourceDocumentSheet(
+    state: BillingState.Success,
     onDismiss: () -> Unit,
+    onLoad: (SalesFlowSource) -> Unit,
     onApply: (SalesFlowSource, String) -> Unit
 ) {
     var sourceType by remember { mutableStateOf(SalesFlowSource.SalesOrder) }
     var reference by remember { mutableStateOf("") }
     var expanded by remember { mutableStateOf(false) }
+    var searchQuery by remember { mutableStateOf("") }
+
+    LaunchedEffect(sourceType) {
+        reference = ""
+    }
+
+    LaunchedEffect(sourceType, state.selectedCustomer?.name) {
+        if (state.selectedCustomer != null) {
+            onLoad(sourceType)
+        }
+    }
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -400,12 +415,87 @@ private fun SourceDocumentSheet(
                 }
             }
 
-            OutlinedTextField(
-                value = reference,
-                onValueChange = { reference = it },
-                label = { Text("Document ID") },
-                modifier = Modifier.fillMaxWidth()
-            )
+            if (state.selectedCustomer == null) {
+                Text(
+                    text = "Select a customer to load documents.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            } else {
+                OutlinedTextField(
+                    value = searchQuery,
+                    onValueChange = { searchQuery = it },
+                    label = { Text("Filter by ID or status") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                when {
+                    state.isLoadingSourceDocuments -> {
+                        CircularProgressIndicator()
+                    }
+
+                    !state.sourceDocumentsError.isNullOrBlank() -> {
+                        Text(
+                            text = state.sourceDocumentsError.orEmpty(),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error
+                        )
+                    }
+
+                    state.sourceDocuments.isEmpty() -> {
+                        Text(
+                            text = "No documents found.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+
+                    else -> {
+                        val filtered = state.sourceDocuments.filter { doc ->
+                            val query = searchQuery.trim()
+                            if (query.isBlank()) true else {
+                                doc.id.contains(query, ignoreCase = true) ||
+                                    (doc.status?.contains(query, ignoreCase = true) == true)
+                            }
+                        }
+                        filtered.forEach { doc ->
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = if (doc.id == reference) {
+                                        MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f)
+                                    } else {
+                                        MaterialTheme.colorScheme.surface
+                                    }
+                                )
+                            ) {
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable { reference = doc.id }
+                                        .padding(12.dp),
+                                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    Text(
+                                        text = doc.id,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        fontWeight = FontWeight.SemiBold
+                                    )
+                                    Text(
+                                        text = "Date: ${doc.date ?: "N/A"}",
+                                        style = MaterialTheme.typography.bodySmall
+                                    )
+                                    Text(
+                                        text = "Status: ${doc.status ?: "Unknown"}",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
 
             Button(
                 onClick = { onApply(sourceType, reference) },
@@ -1084,31 +1174,55 @@ private fun DiscountShippingInputs(
     state: BillingState.Success, action: BillingAction
 ) {
     val baseCurrency = state.currency ?: "USD"
+    var usePercent by rememberSaveable(state.manualDiscountPercent, state.manualDiscountAmount) {
+        mutableStateOf(state.manualDiscountPercent > 0.0 || state.manualDiscountAmount == 0.0)
+    }
     Column(
         modifier = Modifier.padding(end = 12.dp, start = 12.dp, bottom = 8.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         Text("Descuento manual", style = MaterialTheme.typography.bodyMedium)
-        AppTextField(
-            value = if (state.manualDiscountPercent > 0.0) state.manualDiscountPercent.toString() else "",
-            onValueChange = action.onManualDiscountPercentChanged,
-            label = "Porcentaje (%)",
-            trailingIcon = { Icon(Icons.Default.Percent, contentDescription = null) },
-            keyboardOptions = KeyboardOptions(
-                keyboardType = KeyboardType.Number, imeAction = ImeAction.Next
-            ),
-            modifier = Modifier.fillMaxWidth()
-        )
-        AppTextField(
-            value = if (state.manualDiscountAmount > 0.0) state.manualDiscountAmount.toString() else "",
-            onValueChange = action.onManualDiscountAmountChanged,
-            label = "Monto (${baseCurrency.toCurrencySymbol()})",
-            trailingIcon = { Icon(Icons.Default.Money, contentDescription = null) },
-            keyboardOptions = KeyboardOptions(
-                keyboardType = KeyboardType.Number, imeAction = ImeAction.Next
-            ),
-            modifier = Modifier.fillMaxWidth()
-        )
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            FilterChip(
+                selected = usePercent,
+                onClick = {
+                    usePercent = true
+                    action.onManualDiscountAmountChanged("")
+                },
+                label = { Text("Percent") }
+            )
+            FilterChip(
+                selected = !usePercent,
+                onClick = {
+                    usePercent = false
+                    action.onManualDiscountPercentChanged("")
+                },
+                label = { Text("Amount") }
+            )
+        }
+        if (usePercent) {
+            AppTextField(
+                value = if (state.manualDiscountPercent > 0.0) state.manualDiscountPercent.toString() else "",
+                onValueChange = action.onManualDiscountPercentChanged,
+                label = "Porcentaje (%)",
+                trailingIcon = { Icon(Icons.Default.Percent, contentDescription = null) },
+                keyboardOptions = KeyboardOptions(
+                    keyboardType = KeyboardType.Number, imeAction = ImeAction.Next
+                ),
+                modifier = Modifier.fillMaxWidth()
+            )
+        } else {
+            AppTextField(
+                value = if (state.manualDiscountAmount > 0.0) state.manualDiscountAmount.toString() else "",
+                onValueChange = action.onManualDiscountAmountChanged,
+                label = "Monto (${baseCurrency.toCurrencySymbol()})",
+                trailingIcon = { Icon(Icons.Default.Money, contentDescription = null) },
+                keyboardOptions = KeyboardOptions(
+                    keyboardType = KeyboardType.Number, imeAction = ImeAction.Next
+                ),
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
         Text("Código de descuento", style = MaterialTheme.typography.bodyMedium)
         AppTextField(
             value = state.discountCode,

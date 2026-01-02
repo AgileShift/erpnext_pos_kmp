@@ -7,6 +7,7 @@ import com.erpnext.pos.domain.models.ItemBO
 import com.erpnext.pos.domain.models.POSCurrencyOption
 import com.erpnext.pos.domain.models.POSPaymentModeOption
 import com.erpnext.pos.domain.models.PaymentTermBO
+import com.erpnext.pos.domain.models.SourceDocumentOption
 import com.erpnext.pos.views.salesflow.SalesFlowContext
 import com.erpnext.pos.views.salesflow.SalesFlowSource
 
@@ -33,6 +34,9 @@ sealed interface BillingState {
         val selectedCustomer: CustomerBO? = null,
         val customerSearchQuery: String = "",
         val salesFlowContext: SalesFlowContext? = null,
+        val sourceDocuments: List<SourceDocumentOption> = emptyList(),
+        val isLoadingSourceDocuments: Boolean = false,
+        val sourceDocumentsError: String? = null,
 
         // Product-related state
         val productSearchQuery: String = "",
@@ -120,5 +124,6 @@ data class BillingAction(
     val onClearSuccessMessage: () -> Unit = {},
     val onBack: () -> Unit = {},
     val onLinkSource: (SalesFlowSource, String) -> Unit = { _, _ -> },
-    val onClearSource: () -> Unit = {}
+    val onClearSource: () -> Unit = {},
+    val onLoadSourceDocuments: (SalesFlowSource) -> Unit = {}
 )

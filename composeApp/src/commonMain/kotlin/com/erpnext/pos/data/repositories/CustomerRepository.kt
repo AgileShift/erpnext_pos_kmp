@@ -28,7 +28,7 @@ class CustomerRepository(
     override suspend fun getCustomers(
         search: String?, state: String?
     ): Flow<List<CustomerBO>> {
-        val territory = context.requireContext().route
+        val territory: String? = null
         return networkBoundResource(
             query = {
                 // 🔹 Consultamos localmente según filtros dinámicos
@@ -105,7 +105,7 @@ class CustomerRepository(
     }
 
     override suspend fun sync(): Flow<Resource<List<CustomerBO>>> {
-        val territory = context.requireContext().territory
+        val territory: String? = null
         return networkBoundResource(
             query = { localSource.getAll().toBO() },
             fetch = { remoteSource.fetchCustomers(territory).toBO() },

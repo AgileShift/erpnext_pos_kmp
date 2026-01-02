@@ -80,10 +80,8 @@ import androidx.compose.ui.unit.sp
 import com.erpnext.pos.domain.models.POSProfileSimpleBO
 import com.erpnext.pos.domain.models.PaymentModesBO
 import com.erpnext.pos.domain.models.UserBO
-import com.erpnext.pos.localSource.preferences.SyncSettings
 import com.erpnext.pos.sync.SyncState
 import com.erpnext.pos.utils.datetimeNow
-import com.erpnext.pos.utils.toErpDateTime
 import com.erpnext.pos.utils.toCurrencySymbol
 import com.erpnext.pos.views.PaymentModeWithAmount
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -99,7 +97,6 @@ fun HomeScreen(
     var showDialog by remember { mutableStateOf(false) }
     var currentProfiles by remember { mutableStateOf(emptyList<POSProfileSimpleBO>()) }
     val syncState by actions.syncState.collectAsState()
-    val syncSettings by actions.syncSettings.collectAsState()
     val isCashboxOpen by actions.isCashboxOpen().collectAsState()
 
     LaunchedEffect(uiState) {
@@ -174,17 +171,6 @@ fun HomeScreen(
                                 fontWeight = FontWeight.Bold
                             )
                         }
-
-                        Spacer(Modifier.height(24.dp))
-
-                        SyncCenterCard(
-                            syncState = syncState,
-                            settings = syncSettings,
-                            onSyncNow = actions.sync,
-                            onAutoSyncChanged = actions.onAutoSyncChanged,
-                            onSyncOnStartupChanged = actions.onSyncOnStartupChanged,
-                            onWifiOnlyChanged = actions.onWifiOnlyChanged
-                        )
 
                         Spacer(Modifier.height(24.dp))
 
@@ -645,96 +631,6 @@ private fun FullScreenErrorMessage(
 }
 
 @Composable
-private fun SyncCenterCard(
-    syncState: SyncState,
-    settings: SyncSettings,
-    onSyncNow: () -> Unit,
-    onAutoSyncChanged: (Boolean) -> Unit,
-    onSyncOnStartupChanged: (Boolean) -> Unit,
-    onWifiOnlyChanged: (Boolean) -> Unit
-) {
-    val lastSyncLabel = settings.lastSyncAt?.toErpDateTime() ?: "Never synced"
-    val statusLabel = when (syncState) {
-        SyncState.IDLE -> "Idle"
-        SyncState.SUCCESS -> "Synced"
-        is SyncState.ERROR -> "Error"
-        is SyncState.SYNCING -> "Syncing"
-    }
-
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column {
-                    Text(
-                        text = "Synchronization",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                    Text(
-                        text = "Status: $statusLabel",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Text(
-                        text = "Last sync: $lastSyncLabel",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-                Button(onClick = onSyncNow) {
-                    Text("Sync now")
-                }
-            }
-
-            Divider()
-
-            SyncToggleRow(
-                label = "Auto-sync",
-                checked = settings.autoSync,
-                onCheckedChange = onAutoSyncChanged
-            )
-            SyncToggleRow(
-                label = "Sync on startup",
-                checked = settings.syncOnStartup,
-                onCheckedChange = onSyncOnStartupChanged
-            )
-            SyncToggleRow(
-                label = "Wi-Fi only",
-                checked = settings.wifiOnly,
-                onCheckedChange = onWifiOnlyChanged
-            )
-        }
-    }
-}
-
-@Composable
-private fun SyncToggleRow(
-    label: String,
-    checked: Boolean,
-    onCheckedChange: (Boolean) -> Unit
-) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(text = label, style = MaterialTheme.typography.bodyMedium)
-        Switch(checked = checked, onCheckedChange = onCheckedChange)
-    }
-}
-
 @Composable
 private fun FullScreenLoadingIndicator(modifier: Modifier = Modifier) {
     Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.Center) {

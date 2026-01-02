@@ -21,7 +21,11 @@ fun rememberSettingsActions(coordinator: SettingsCoordinator): POSSettingAction 
         POSSettingAction(
             loadSettings = coordinator::loadSettings,
             onToggle = coordinator::onToggle,
-            onSelect = coordinator::onSelect
+            onSelect = coordinator::onSelect,
+            onSyncNow = coordinator::onSyncNow,
+            onAutoSyncChanged = coordinator::onAutoSyncChanged,
+            onSyncOnStartupChanged = coordinator::onSyncOnStartupChanged,
+            onWifiOnlyChanged = coordinator::onWifiOnlyChanged
 
         )
     }

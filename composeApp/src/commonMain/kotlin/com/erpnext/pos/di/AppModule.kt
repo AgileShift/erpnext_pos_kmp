@@ -238,6 +238,7 @@ val appModule = module {
             deliveryChargesUseCase = get(),
             navManager = get(),
             salesFlowStore = get(),
+            loadSourceDocumentsUseCase = get(),
             createSalesInvoiceUseCase = get(),
             createPaymentEntryUseCase = get(),
             saveInvoicePaymentsUseCase = get(),
@@ -250,7 +251,7 @@ val appModule = module {
     //endregion
 
     //region Settings
-    single { SettingsViewModel() }
+    single { SettingsViewModel(get(), get()) }
     //endregion
 
     //region UseCases DI
@@ -279,7 +280,7 @@ fun initKoin(
 ) {
     startKoin {
         config?.invoke(this)
-        modules(appModule + modules)
+        modules(appModule + appModulev2 + modules)
         koin.get<AppDatabase> { parametersOf(builder) }
     }
 }

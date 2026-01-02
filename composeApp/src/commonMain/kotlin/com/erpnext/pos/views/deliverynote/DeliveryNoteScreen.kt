@@ -83,7 +83,7 @@ fun DeliveryNoteScreen(
                     var itemName by rememberSaveable { mutableStateOf("") }
                     var itemQty by rememberSaveable { mutableStateOf("") }
                     var itemRate by rememberSaveable { mutableStateOf("") }
-                    var items by rememberSaveable { mutableStateOf(listOf<String>()) }
+                    var items by remember { mutableStateOf(listOf<DraftItem>()) }
 
                     SalesFlowContextSummary(context)
                     Spacer(modifier = Modifier.height(12.dp))
@@ -159,8 +159,10 @@ fun DeliveryNoteScreen(
                             }
                             Button(
                                 onClick = {
+                                    val qty = itemQty.toDoubleOrNull() ?: 1.0
+                                    val rate = itemRate.toDoubleOrNull() ?: 0.0
                                     if (itemName.isNotBlank()) {
-                                        items = items + "$itemName | Qty: ${itemQty.ifBlank { "1" }} | Rate: ${itemRate.ifBlank { "0" }}"
+                                        items = items + DraftItem(itemName, qty, rate)
                                         itemName = ""
                                         itemQty = ""
                                         itemRate = ""
@@ -171,9 +173,19 @@ fun DeliveryNoteScreen(
                                 Text("Add item")
                             }
 
+                            val subtotal = items.sumOf { it.amount }
                             items.forEach { item ->
-                                Text(text = item, style = MaterialTheme.typography.bodySmall)
+                                Text(
+                                    text = "${item.name} | Qty: ${item.qty} | Rate: ${item.rate} | Amount: ${item.amount}",
+                                    style = MaterialTheme.typography.bodySmall
+                                )
                             }
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                text = "Subtotal: $subtotal",
+                                style = MaterialTheme.typography.bodySmall,
+                                fontWeight = FontWeight.SemiBold
+                            )
                         }
                     }
 
@@ -188,4 +200,12 @@ fun DeliveryNoteScreen(
             }
         }
     }
+}
+
+private data class DraftItem(
+    val name: String,
+    val qty: Double,
+    val rate: Double
+) {
+    val amount: Double = qty * rate
 }

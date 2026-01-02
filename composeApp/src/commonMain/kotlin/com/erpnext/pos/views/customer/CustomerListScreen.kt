@@ -563,6 +563,12 @@ fun CustomerItem(
                     overflow = TextOverflow.Ellipsis,
                     color = if (isOverLimit) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface
                 )
+                if ((customer.pendingInvoices ?: 0) > 0) {
+                    StatusPill(
+                        label = "Overdue",
+                        isCritical = true
+                    )
+                }
                 Text(
                     customer.mobileNo ?: "",
                     style = MaterialTheme.typography.bodyMedium,
@@ -649,6 +655,27 @@ fun CustomerItem(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun StatusPill(label: String, isCritical: Boolean) {
+    val background = if (isCritical) {
+        MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.3f)
+    } else {
+        MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.3f)
+    }
+    val textColor = if (isCritical) {
+        MaterialTheme.colorScheme.error
+    } else {
+        MaterialTheme.colorScheme.secondary
+    }
+    Box(
+        modifier = Modifier
+            .background(background, RoundedCornerShape(12.dp))
+            .padding(horizontal = 8.dp, vertical = 2.dp)
+    ) {
+        Text(label, style = MaterialTheme.typography.labelSmall, color = textColor)
     }
 }
 
