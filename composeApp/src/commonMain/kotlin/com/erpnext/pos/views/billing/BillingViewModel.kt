@@ -306,15 +306,69 @@ class BillingViewModel(
 
     fun linkSourceDocument(sourceType: SalesFlowSource, sourceId: String) {
         val current = requireSuccessState() ?: return
-        val updated = (current.salesFlowContext ?: SalesFlowContext())
+        val selectedDoc = current.sourceDocuments.firstOrNull {
+            it.sourceType == sourceType && it.id == sourceId
+        }
+
+        if (selectedDoc == null) {
+            val updated = (current.salesFlowContext ?: SalesFlowContext())
+                .withSource(sourceType, sourceId)
+            _state.update { current.copy(salesFlowContext = updated) }
+            return
+        }
+
+        val updatedCustomer = selectedDoc.customerId?.let { id ->
+            customers.firstOrNull { it.name == id }
+        } ?: current.selectedCustomer
+
+        val updatedContext = (current.salesFlowContext ?: SalesFlowContext())
+            .withCustomer(
+                customerId = updatedCustomer?.name ?: selectedDoc.customerId,
+                customerName = updatedCustomer?.customerName ?: selectedDoc.customerName
+            )
             .withSource(sourceType, sourceId)
-        _state.update { current.copy(salesFlowContext = updated) }
+
+        val cartItems = selectedDoc.items.map { item ->
+            CartItem(
+                itemCode = item.itemCode,
+                name = item.itemName ?: item.itemCode,
+                currency = selectedDoc.totals?.currency?.toCurrencySymbol()
+                    ?: current.currency?.toCurrencySymbol(),
+                quantity = item.qty,
+                price = item.rate
+            )
+        }
+
+        val next = current.copy(
+            selectedCustomer = updatedCustomer,
+            customerSearchQuery = updatedCustomer?.customerName ?: current.customerSearchQuery,
+            salesFlowContext = updatedContext,
+            cartItems = cartItems,
+            discountCode = "",
+            manualDiscountAmount = 0.0,
+            manualDiscountPercent = 0.0,
+            shippingAmount = 0.0,
+            selectedDeliveryCharge = null,
+            isCreditSale = false,
+            selectedPaymentTerm = null,
+            paymentLines = emptyList(),
+            paidAmountBase = 0.0,
+            balanceDueBase = 0.0,
+            changeDueBase = 0.0,
+            paymentErrorMessage = null,
+            cartErrorMessage = null,
+            sourceDocument = selectedDoc,
+            isSourceDocumentApplied = true
+        )
+
+        _state.update { recalculateTotals(next) }
     }
 
     fun clearSourceDocument() {
         val current = requireSuccessState() ?: return
         val updated = current.salesFlowContext?.copy(sourceType = null, sourceId = null)
-        _state.update { current.copy(salesFlowContext = updated) }
+        val reset = resetFromSource(current).copy(salesFlowContext = updated)
+        _state.update { reset }
     }
 
     fun loadSourceDocuments(sourceType: SalesFlowSource) {
@@ -830,7 +884,9 @@ class BillingViewModel(
                     changeDueBase = 0.0,
                     paymentErrorMessage = null,
                     cartErrorMessage = null,
-                    successMessage = "Factura ${created.name ?: ""} creada correctamente."
+                    successMessage = "Factura ${created.name ?: ""} creada correctamente.",
+                    sourceDocument = null,
+                    isSourceDocumentApplied = false
                 )
             }
         }, exceptionHandler = { e ->
@@ -854,6 +910,31 @@ class BillingViewModel(
             discount = totals.discount,
             total = totals.total
         ).recalculatePaymentTotals()
+    }
+
+    private fun resetFromSource(current: BillingState.Success): BillingState.Success {
+        return current.copy(
+            cartItems = emptyList(),
+            subtotal = 0.0,
+            taxes = 0.0,
+            discount = 0.0,
+            discountCode = "",
+            manualDiscountAmount = 0.0,
+            manualDiscountPercent = 0.0,
+            shippingAmount = 0.0,
+            selectedDeliveryCharge = null,
+            total = 0.0,
+            isCreditSale = false,
+            selectedPaymentTerm = null,
+            paymentLines = emptyList(),
+            paidAmountBase = 0.0,
+            balanceDueBase = 0.0,
+            changeDueBase = 0.0,
+            paymentErrorMessage = null,
+            cartErrorMessage = null,
+            sourceDocument = null,
+            isSourceDocumentApplied = false
+        )
     }
 
     private fun buildQtyErrorMessage(itemName: String, maxQty: Double): String {

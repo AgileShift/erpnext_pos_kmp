@@ -34,6 +34,8 @@ sealed interface BillingState {
         val selectedCustomer: CustomerBO? = null,
         val customerSearchQuery: String = "",
         val salesFlowContext: SalesFlowContext? = null,
+        val sourceDocument: SourceDocumentOption? = null,
+        val isSourceDocumentApplied: Boolean = false,
         val sourceDocuments: List<SourceDocumentOption> = emptyList(),
         val isLoadingSourceDocuments: Boolean = false,
         val sourceDocumentsError: String? = null,
