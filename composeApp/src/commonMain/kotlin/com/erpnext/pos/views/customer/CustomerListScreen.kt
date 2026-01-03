@@ -865,17 +865,18 @@ private fun CustomerOutstandingInvoicesSheet(
                         ) {
                             items(invoicesState.invoices, key = { it.invoiceId }) { invoice ->
                                 val isSelected = invoice.invoiceId == selectedInvoice?.invoiceId
+                                val companyBaseCurrency = "USD"
                                 val invoiceCurrency = invoice.currency?.trim()?.uppercase()
                                     ?.takeIf { it.isNotBlank() }
-                                    ?: baseCurrency
-                                val baseSymbol = baseCurrency.toCurrencySymbol().ifBlank {
-                                    baseCurrency
+                                    ?: companyBaseCurrency
+                                val baseSymbol = companyBaseCurrency.toCurrencySymbol().ifBlank {
+                                    companyBaseCurrency
                                 }
                                 val invoiceSymbol = invoiceCurrency.toCurrencySymbol().ifBlank {
                                     invoiceCurrency
                                 }
                                 val convertedOutstanding = if (invoiceCurrency.equals(
-                                        baseCurrency,
+                                        companyBaseCurrency,
                                         ignoreCase = true
                                     )
                                 ) {
@@ -913,14 +914,20 @@ private fun CustomerOutstandingInvoicesSheet(
                                                 val amountToUse =
                                                     convertedOutstanding ?: invoice.outstandingAmount
                                                 amountRaw = amountToUse.toString()
+                                                val preferredCurrency =
+                                                    if (convertedOutstanding != null) {
+                                                        invoiceCurrency
+                                                    } else {
+                                                        companyBaseCurrency
+                                                    }
                                                 if (allowedCodes.any {
                                                         it.equals(
-                                                            invoiceCurrency,
+                                                            preferredCurrency,
                                                             ignoreCase = true
                                                         )
                                                     }
                                                 ) {
-                                                    selectedCurrency = invoiceCurrency
+                                                    selectedCurrency = preferredCurrency
                                                 }
                                             }
                                             .padding(12.dp),
@@ -952,14 +959,20 @@ private fun CustomerOutstandingInvoicesSheet(
                                                         convertedOutstanding
                                                             ?: invoice.outstandingAmount
                                                     amountRaw = amountToUse.toString()
+                                                    val preferredCurrency =
+                                                        if (convertedOutstanding != null) {
+                                                            invoiceCurrency
+                                                        } else {
+                                                            companyBaseCurrency
+                                                        }
                                                     if (allowedCodes.any {
                                                             it.equals(
-                                                                invoiceCurrency,
+                                                                preferredCurrency,
                                                                 ignoreCase = true
                                                             )
                                                         }
                                                     ) {
-                                                        selectedCurrency = invoiceCurrency
+                                                        selectedCurrency = preferredCurrency
                                                     }
                                                 }
                                             )
@@ -970,7 +983,7 @@ private fun CustomerOutstandingInvoicesSheet(
                                             color = MaterialTheme.colorScheme.primary
                                         )
                                         if (!invoiceCurrency.equals(
-                                                baseCurrency,
+                                                companyBaseCurrency,
                                                 ignoreCase = true
                                             )
                                         ) {
