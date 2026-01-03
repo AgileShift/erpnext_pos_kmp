@@ -60,7 +60,7 @@ fun CustomerBO.toEntity(): CustomerEntity {
 
 fun CustomerDto.toEntity(
     creditLimit: Double? = null,
-    availableCredit: Double,
+    availableCredit: Double?,
     pendingInvoicesCount: Int,
     totalPendingAmount: Double,
     state: String? = null,

@@ -70,15 +70,42 @@ val fields: List<DocTypeFields> = listOf(
     ),
     DocTypeFields(
         ERPDocType.Customer,
-        listOf("name", "customer_name", "customer_type", "customer_group", "territory", "credit_limits", "payment_terms", "default_price_list", "default_currency", "primary_address", "mobile_no", "disabled")
+        listOf(
+            "name",
+            "customer_name",
+            "customer_type",
+            "customer_group",
+            "territory",
+            "credit_limits",
+            "payment_terms",
+            "default_price_list",
+            "default_currency",
+            "primary_address",
+            "mobile_no",
+            "disabled"
+        )
     ),
     DocTypeFields(
         ERPDocType.SalesInvoice,
-        listOf("name", "posting_date", "due_date", "grand_total", "outstanding_amount", "status", )
+        listOf("name", "posting_date", "due_date", "grand_total", "outstanding_amount", "status")
     ),
     DocTypeFields(
         ERPDocType.Address,
-        listOf("name", "address_title", "address_line1", "address_line2", "city", "county", "state", "country", "pincode", "is_primary_address", "is_shipping_address", "disabled", "links")
+        listOf(
+            "name",
+            "address_title",
+            "address_line1",
+            "address_line2",
+            "city",
+            "county",
+            "state",
+            "country",
+            "pincode",
+            "is_primary_address",
+            "is_shipping_address",
+            "disabled",
+            "links"
+        )
     ),
 
 
@@ -165,7 +192,8 @@ val fields: List<DocTypeFields> = listOf(
             "customer_type",
             "disabled",
             "credit_limits.credit_limit",
-            "credit_limits.company"
+            "credit_limits.company",
+            "credit_limits.bypass_credit_limit_check"
         )
     ),
     DocTypeFields(
