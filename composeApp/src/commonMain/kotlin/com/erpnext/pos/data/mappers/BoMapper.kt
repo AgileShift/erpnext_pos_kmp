@@ -20,7 +20,6 @@ import com.erpnext.pos.localSource.entities.SalesInvoiceEntity
 import com.erpnext.pos.localSource.entities.SalesInvoiceItemEntity
 import com.erpnext.pos.localSource.entities.SalesInvoiceWithItemsAndPayments
 import com.erpnext.pos.remoteSource.dto.CategoryDto
-import com.erpnext.pos.remoteSource.dto.ContactChildDto
 import com.erpnext.pos.remoteSource.dto.CustomerDto
 import com.erpnext.pos.remoteSource.dto.ItemDto
 import com.erpnext.pos.remoteSource.dto.POSProfileDto
@@ -29,7 +28,6 @@ import com.erpnext.pos.remoteSource.dto.PaymentModesDto
 import com.erpnext.pos.remoteSource.dto.UserDto
 import com.erpnext.pos.remoteSource.dto.WarehouseItemDto
 import com.erpnext.pos.remoteSource.mapper.toBO
-import com.erpnext.pos.utils.datetimeNow
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.transform
 import kotlin.jvm.JvmName
@@ -81,7 +79,7 @@ fun CustomerDto.toBO(): CustomerBO {
         territory = this.territory,
         mobileNo = this.mobileNo,
         customerType = this.customerType,
-        creditLimit = this.creditLimit,
+        creditLimit = null, //this.creditLimits,
         totalPendingAmount = this.totalPendingAmount,
         address = "",
         currentBalance = this.totalPendingAmount,
@@ -222,7 +220,8 @@ fun SalesInvoiceEntity.toBO(): SalesInvoiceBO {
         isPos = false,
         total = this.grandTotal,
         customerId = this.customer,
-        postingDate = this.postingDate
+        postingDate = this.postingDate,
+        partyAccountCurrency = this.partyAccountCurrency
     )
 }
 
@@ -250,7 +249,8 @@ fun SalesInvoiceWithItemsAndPayments.toBO(): SalesInvoiceBO {
         status = invoice.status,
         syncStatus = invoice.syncStatus,
         items = items.toBO(),
-        payments = payments.toBO()
+        payments = payments.toBO(),
+        partyAccountCurrency = invoice.partyAccountCurrency
     )
 }
 

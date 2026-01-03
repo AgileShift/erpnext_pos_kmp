@@ -76,7 +76,7 @@ class CustomerRepository(
                             val address = remoteSource.getCustomerAddress(dto.name)
                             val contact = remoteSource.getCustomerContact(dto.name)
                             val resolvedLimit = dto.creditLimitForCompany(contextCompany)
-                            val creditLimit = resolvedLimit?.creditLimit ?: dto.creditLimit
+                            val creditLimit = resolvedLimit?.creditLimit// ?: dto.creditLimits
                             val availableCredit = creditLimit?.let { it - totalOutstanding }
 
                             dto.toEntity(
@@ -138,14 +138,14 @@ class CustomerRepository(
                             val customerInvoices = outstandingByCustomer[dto.name] ?: emptyList()
                             val totalOutstanding =
                                 customerInvoices.sumOf { it.grandTotal - it.paidAmount }
-                            val creditLimit = dto.creditLimit
-                            val availableCredit = (creditLimit ?: 0.0) - totalOutstanding
+                            val creditLimit = dto.creditLimits
+                            val availableCredit = creditLimit - totalOutstanding
                             val address = remoteSource.getCustomerAddress(dto.name)
                             val contact = remoteSource.getCustomerContact(dto.name)
 
                             dto.toEntity(
-                                creditLimit = creditLimit,
-                                availableCredit = availableCredit,
+                                creditLimit = 0.0, //creditLimit,
+                                availableCredit = 0.0, //availableCredit,
                                 pendingInvoicesCount = customerInvoices.size,
                                 totalPendingAmount = totalOutstanding,
                                 state = if (totalOutstanding > 0) "Pendientes" else "Sin Pendientes",

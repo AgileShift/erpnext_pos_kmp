@@ -19,7 +19,8 @@ data class SalesInvoiceBO(
     val status: String?,
     val syncStatus: String? = "Pending",
     val items: List<SalesInvoiceItemsBO> = emptyList(),
-    val payments: List<SalesInvoicePaymentsBO> = emptyList()
+    val payments: List<SalesInvoicePaymentsBO> = emptyList(),
+    val partyAccountCurrency: String? = null
 )
 
 data class SalesInvoiceItemsBO(

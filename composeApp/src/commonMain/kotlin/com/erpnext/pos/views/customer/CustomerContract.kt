@@ -16,7 +16,11 @@ sealed class CustomerState {
 sealed class CustomerInvoicesState {
     data object Idle : CustomerInvoicesState()
     data object Loading : CustomerInvoicesState()
-    data class Success(val invoices: List<SalesInvoiceBO>) : CustomerInvoicesState()
+    data class Success(
+        val invoices: List<SalesInvoiceBO>,
+        val exchangeRateByCurrency: Map<String, Double> = emptyMap()
+    ) : CustomerInvoicesState()
+
     data class Error(val message: String) : CustomerInvoicesState()
 }
 
@@ -34,7 +38,7 @@ data class CustomerAction(
     val onSearchQueryChanged: (String) -> Unit = {},
     val onStateSelected: (String?) -> Unit = {},
     val onRefresh: () -> Unit = {},
-    val checkCredit: (String, Double, (Boolean, String) -> Unit) -> Unit = { _, _, _ ->  },
+    val checkCredit: (String, Double, (Boolean, String) -> Unit) -> Unit = { _, _, _ -> },
     val fetchAll: () -> Unit = {},
     val toDetails: (String) -> Unit = {},
     val onViewPendingInvoices: (CustomerBO) -> Unit = {},

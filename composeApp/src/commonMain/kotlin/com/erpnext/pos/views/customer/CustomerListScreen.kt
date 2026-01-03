@@ -220,11 +220,13 @@ fun CustomerListScreen(
                                 isDesktop = isDesktop,
                                 onOpenQuickActions = { quickActionsCustomer = it },
                                 onQuickAction = { customer, actionType ->
+                                    handleQuickAction(actions, customer, actionType)
                                     when (actionType) {
                                         CustomerQuickActionType.PendingInvoices,
                                         CustomerQuickActionType.RegisterPayment -> {
                                             outstandingCustomer = customer
                                         }
+
                                         else -> handleQuickAction(actions, customer, actionType)
                                     }
                                 }
@@ -281,6 +283,7 @@ fun CustomerListScreen(
                     CustomerQuickActionType.RegisterPayment -> {
                         outstandingCustomer = customer
                     }
+
                     else -> handleQuickAction(actions, customer, actionType)
                 }
             }
@@ -288,19 +291,19 @@ fun CustomerListScreen(
     }
 
     outstandingCustomer?.let { customer ->
-    CustomerOutstandingInvoicesSheet(
-        customer = customer,
-        invoicesState = invoicesState,
-        paymentState = paymentState,
-        onDismiss = {
-            outstandingCustomer = null
-            actions.clearOutstandingInvoices()
-        },
-        onRegisterPayment = { invoiceId, mode, amount ->
-            actions.registerPayment(customer.name, invoiceId, mode, amount)
-        }
-    )
-}
+        CustomerOutstandingInvoicesSheet(
+            customer = customer,
+            invoicesState = invoicesState,
+            paymentState = paymentState,
+            onDismiss = {
+                outstandingCustomer = null
+                actions.clearOutstandingInvoices()
+            },
+            onRegisterPayment = { invoiceId, mode, amount ->
+                actions.registerPayment(customer.name, invoiceId, mode, amount)
+            }
+        )
+    }
 }
 
 @Composable
@@ -765,13 +768,18 @@ private fun CustomerOutstandingInvoicesSheet(
     var selectedInvoice by remember { mutableStateOf<SalesInvoiceBO?>(null) }
     var amountRaw by remember { mutableStateOf("") }
     var amountValue by remember { mutableStateOf(0.0) }
-    val baseCurrency = paymentState.baseCurrency.ifBlank { "USD" }
-    val allowedCodes = remember(paymentState.allowedCurrencies, baseCurrency) {
+    val posBaseCurrency = paymentState.baseCurrency.ifBlank { "USD" }
+    val invoiceBaseCurrency = selectedInvoice?.partyAccountCurrency
+        ?.trim()
+        ?.uppercase()
+        ?.takeIf { it.isNotBlank() }
+        ?: posBaseCurrency
+    val allowedCodes = remember(paymentState.allowedCurrencies, posBaseCurrency) {
         val codes = paymentState.allowedCurrencies.map { it.code }.filter { it.isNotBlank() }
-        val normalizedBase = baseCurrency.trim().uppercase()
+        val normalizedBase = posBaseCurrency.trim().uppercase()
         val supported = codes.filter { code ->
             code.equals(normalizedBase, ignoreCase = true) ||
-                (code.equals("USD", ignoreCase = true) && !normalizedBase.equals("USD", true))
+                    (code.equals("USD", ignoreCase = true) && !normalizedBase.equals("USD", true))
         }
         val fallback = if (supported.isNotEmpty()) supported else listOf(normalizedBase)
         if (fallback.any { it.equals(normalizedBase, ignoreCase = true) }) {
@@ -780,11 +788,11 @@ private fun CustomerOutstandingInvoicesSheet(
             (fallback + normalizedBase).distinct()
         }
     }
-    var selectedCurrency by remember(allowedCodes, baseCurrency) {
+    var selectedCurrency by remember(allowedCodes, posBaseCurrency) {
         mutableStateOf(
-            allowedCodes.firstOrNull { it.equals(baseCurrency, ignoreCase = true) }
+            allowedCodes.firstOrNull { it.equals(posBaseCurrency, ignoreCase = true) }
                 ?: allowedCodes.firstOrNull()
-                ?: baseCurrency
+                ?: posBaseCurrency
         )
     }
     val paymentModes = remember(paymentState.paymentModes) {
@@ -795,23 +803,31 @@ private fun CustomerOutstandingInvoicesSheet(
     var currencyExpanded by remember { mutableStateOf(false) }
     var modeExpanded by remember { mutableStateOf(false) }
 
-    val exchangeRate = remember(selectedCurrency, baseCurrency, paymentState.exchangeRate) {
-        val normalizedBase = baseCurrency.trim().uppercase()
+    val exchangeRate = remember(selectedCurrency, invoiceBaseCurrency, invoicesState) {
+        val normalizedBase = invoiceBaseCurrency.trim().uppercase()
         val normalizedSelected = selectedCurrency.trim().uppercase()
         when {
             normalizedSelected == normalizedBase -> 1.0
-            normalizedSelected == "USD" && normalizedBase != "USD" ->
-                paymentState.exchangeRate.takeIf { it > 0.0 }
+            invoicesState is CustomerInvoicesState.Success ->
+                invoicesState.exchangeRateByCurrency[normalizedSelected]
+
             else -> null
         }
     }
     val conversionError = exchangeRate == null
-    val baseAmount = exchangeRate?.let { amountValue * it } ?: 0.0
+    val baseAmount = exchangeRate?.let { rate ->
+        if (rate <= 0.0) 0.0 else amountValue / rate
+    } ?: 0.0
+    val outstandingBase = selectedInvoice?.outstandingAmount ?: 0.0
+    val outstandingInSelectedCurrency = exchangeRate?.let { rate ->
+        outstandingBase * rate
+    }
+    val changeDue = outstandingInSelectedCurrency?.let { amountValue - it } ?: 0.0
     val isSubmitEnabled = !paymentState.isSubmitting &&
-        selectedInvoice?.invoiceId?.isNotBlank() == true &&
-        paymentMode.isNotBlank() &&
-        amountValue > 0.0 &&
-        !conversionError
+            selectedInvoice?.invoiceId?.isNotBlank() == true &&
+            paymentMode.isNotBlank() &&
+            amountValue > 0.0 &&
+            !conversionError
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -836,6 +852,7 @@ private fun CustomerOutstandingInvoicesSheet(
                         style = MaterialTheme.typography.bodyMedium
                     )
                 }
+
                 CustomerInvoicesState.Loading -> {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -844,6 +861,7 @@ private fun CustomerOutstandingInvoicesSheet(
                         CircularProgressIndicator()
                     }
                 }
+
                 is CustomerInvoicesState.Error -> {
                     Text(
                         text = invoicesState.message,
@@ -851,6 +869,7 @@ private fun CustomerOutstandingInvoicesSheet(
                         color = MaterialTheme.colorScheme.error
                     )
                 }
+
                 is CustomerInvoicesState.Success -> {
                     if (invoicesState.invoices.isEmpty()) {
                         Text(
@@ -866,8 +885,36 @@ private fun CustomerOutstandingInvoicesSheet(
                         ) {
                             items(invoicesState.invoices, key = { it.invoiceId }) { invoice ->
                                 val isSelected = invoice.invoiceId == selectedInvoice?.invoiceId
-                                val outstandingLabel =
-                                    "${invoice.currency?.toCurrencySymbol().orEmpty()}${invoice.outstandingAmount}"
+                                val invoiceBaseCurrency = invoice.partyAccountCurrency
+                                    ?.trim()
+                                    ?.uppercase()
+                                    ?.takeIf { it.isNotBlank() }
+                                    ?: posBaseCurrency
+                                val invoiceCurrency = invoice.currency?.trim()?.uppercase()
+                                    ?.takeIf { it.isNotBlank() }
+                                    ?: invoiceBaseCurrency
+                                val baseSymbol = invoiceBaseCurrency.toCurrencySymbol().ifBlank {
+                                    invoiceBaseCurrency
+                                }
+                                val invoiceSymbol = invoiceCurrency.toCurrencySymbol().ifBlank {
+                                    invoiceCurrency
+                                }
+                                val convertedOutstanding = if (invoiceCurrency.equals(
+                                        invoiceBaseCurrency,
+                                        ignoreCase = true
+                                    )
+                                ) {
+                                    invoice.outstandingAmount
+                                } else {
+                                    invoicesState.exchangeRateByCurrency[invoiceCurrency]
+                                        ?.takeIf { it > 0.0 }
+                                        ?.let { rate -> invoice.outstandingAmount * rate }
+                                }
+                                val outstandingLabel = if (convertedOutstanding != null) {
+                                    "$invoiceSymbol$convertedOutstanding"
+                                } else {
+                                    "$baseSymbol${invoice.outstandingAmount}"
+                                }
                                 Card(
                                     modifier = Modifier.fillMaxWidth(),
                                     colors = CardDefaults.cardColors(
@@ -888,7 +935,25 @@ private fun CustomerOutstandingInvoicesSheet(
                                             .fillMaxWidth()
                                             .clickable {
                                                 selectedInvoice = invoice
-                                                amountRaw = invoice.outstandingAmount.toString()
+                                                val amountToUse =
+                                                    convertedOutstanding
+                                                        ?: invoice.outstandingAmount
+                                                amountRaw = amountToUse.toString()
+                                                val preferredCurrency =
+                                                    if (convertedOutstanding != null) {
+                                                        invoiceCurrency
+                                                    } else {
+                                                        invoiceBaseCurrency
+                                                    }
+                                                if (allowedCodes.any {
+                                                        it.equals(
+                                                            preferredCurrency,
+                                                            ignoreCase = true
+                                                        )
+                                                    }
+                                                ) {
+                                                    selectedCurrency = preferredCurrency
+                                                }
                                             }
                                             .padding(12.dp),
                                         verticalArrangement = Arrangement.spacedBy(6.dp)
@@ -915,7 +980,25 @@ private fun CustomerOutstandingInvoicesSheet(
                                                 selected = isSelected,
                                                 onClick = {
                                                     selectedInvoice = invoice
-                                                    amountRaw = invoice.outstandingAmount.toString()
+                                                    val amountToUse =
+                                                        convertedOutstanding
+                                                            ?: invoice.outstandingAmount
+                                                    amountRaw = amountToUse.toString()
+                                                    val preferredCurrency =
+                                                        if (convertedOutstanding != null) {
+                                                            invoiceCurrency
+                                                        } else {
+                                                            invoiceBaseCurrency
+                                                        }
+                                                    if (allowedCodes.any {
+                                                            it.equals(
+                                                                preferredCurrency,
+                                                                ignoreCase = true
+                                                            )
+                                                        }
+                                                    ) {
+                                                        selectedCurrency = preferredCurrency
+                                                    }
                                                 }
                                             )
                                         }
@@ -924,6 +1007,25 @@ private fun CustomerOutstandingInvoicesSheet(
                                             style = MaterialTheme.typography.bodySmall,
                                             color = MaterialTheme.colorScheme.primary
                                         )
+                                        if (!invoiceCurrency.equals(
+                                                invoiceBaseCurrency,
+                                                ignoreCase = true
+                                            )
+                                        ) {
+                                            val baseLabel =
+                                                "$baseSymbol${invoice.outstandingAmount}"
+                                            val helperText =
+                                                if (convertedOutstanding != null) {
+                                                    "Base currency: $baseLabel"
+                                                } else {
+                                                    "Exchange rate unavailable. Base: $baseLabel"
+                                                }
+                                            Text(
+                                                text = helperText,
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
                                     }
                                 }
                             }
@@ -932,7 +1034,7 @@ private fun CustomerOutstandingInvoicesSheet(
                 }
             }
 
-            Divider()
+            HorizontalDivider()
 
             Text(
                 text = "Register payment",
@@ -953,7 +1055,7 @@ private fun CustomerOutstandingInvoicesSheet(
                     modifier = Modifier.menuAnchor(MenuAnchorType.PrimaryNotEditable),
                     leadingIcon = { Icon(Icons.Default.Money, contentDescription = null) },
                     trailingIcon = {
-                        TrailingIcon(expanded = modeExpanded)
+                        ExposedDropdownMenuDefaults.TrailingIcon(expanded = modeExpanded)
                     }
                 )
                 ExposedDropdownMenu(
@@ -984,7 +1086,7 @@ private fun CustomerOutstandingInvoicesSheet(
                     placeholder = "Select currency",
                     modifier = Modifier.menuAnchor(MenuAnchorType.PrimaryNotEditable),
                     trailingIcon = {
-                        TrailingIcon(expanded = currencyExpanded)
+                        ExposedDropdownMenuDefaults.TrailingIcon(expanded = currencyExpanded)
                     }
                 )
                 ExposedDropdownMenu(
@@ -1012,15 +1114,26 @@ private fun CustomerOutstandingInvoicesSheet(
                 supportingText = {
                     if (conversionError) {
                         Text(
-                            text = "Exchange rate unavailable for $selectedCurrency to $baseCurrency.",
+                            text = "Exchange rate unavailable for $selectedCurrency to $invoiceBaseCurrency.",
                             color = MaterialTheme.colorScheme.error
                         )
-                    } else if (!selectedCurrency.equals(baseCurrency, ignoreCase = true)) {
-                        val symbol = baseCurrency.toCurrencySymbol().ifBlank { baseCurrency }
+                    } else if (!selectedCurrency.equals(invoiceBaseCurrency, ignoreCase = true)) {
+                        val symbol =
+                            invoiceBaseCurrency.toCurrencySymbol().ifBlank { invoiceBaseCurrency }
                         Text("POS base: $symbol$baseAmount")
                     }
                 }
             )
+
+            if (changeDue > 0.0) {
+                val currencySymbol =
+                    selectedCurrency.toCurrencySymbol().ifBlank { selectedCurrency }
+                Text(
+                    text = "Change due: $currencySymbol$changeDue",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
 
             paymentState.errorMessage?.let { message ->
                 Text(
@@ -1041,7 +1154,7 @@ private fun CustomerOutstandingInvoicesSheet(
             Button(
                 onClick = {
                     val invoiceId = selectedInvoice?.invoiceId?.trim().orEmpty()
-                    val amount = baseAmount
+                    val amount = minOf(baseAmount, outstandingBase)
                     onRegisterPayment(invoiceId, paymentMode, amount)
                 },
                 enabled = isSubmitEnabled

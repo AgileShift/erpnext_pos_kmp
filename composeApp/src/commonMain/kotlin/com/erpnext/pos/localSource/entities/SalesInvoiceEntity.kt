@@ -59,6 +59,8 @@ data class SalesInvoiceEntity(
     var warehouse: String? = null,
     var currency: String = "USD",
 
+    @ColumnInfo(name = "party_account_currency")
+    var partyAccountCurrency: String? = null,
     // 📅 Fechas clave
     @ColumnInfo(name = "posting_date")
     var postingDate: String, // Fecha de emisión
