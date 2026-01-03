@@ -99,7 +99,6 @@ fun SalesInvoiceDto.toEntity(): SalesInvoiceWithItemsAndPayments {
         postingDate = postingDate,
         dueDate = dueDate,
         currency = currency ?: "NIO",
-        partyAccountCurrency = partyAccountCurrency,
         netTotal = items.sumOf { it.amount },
         taxTotal = totalTaxesAndCharges ?: 0.0,
         grandTotal = grandTotal,

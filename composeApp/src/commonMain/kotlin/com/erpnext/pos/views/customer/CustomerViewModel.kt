@@ -143,29 +143,7 @@ class CustomerViewModel(
         executeUseCase(
             action = {
                 val invoices = fetchOutstandingInvoicesUseCase.invoke(customerId)
-                val baseCurrency =
-                    cashboxManager.getContext()?.currency?.trim()?.uppercase().orEmpty()
-                val exchangeRates = mutableMapOf<String, Double>()
-                invoices.mapNotNull { it.currency?.trim()?.uppercase() }
-                    .filter { it.isNotBlank() }
-                    .distinct()
-                    .forEach { currency ->
-                        val resolved = if (baseCurrency.isNotBlank()) {
-                            cashboxManager.resolveExchangeRateBetween(
-                                fromCurrency = baseCurrency,
-                                toCurrency = currency
-                            )
-                        } else {
-                            null
-                        }
-                        if (resolved != null && resolved > 0.0) {
-                            exchangeRates[currency] = resolved
-                        }
-                    }
-                _invoicesState.value = CustomerInvoicesState.Success(
-                    invoices = invoices,
-                    exchangeRateByCurrency = exchangeRates
-                )
+                _invoicesState.value = CustomerInvoicesState.Success(invoices)
             },
             exceptionHandler = {
                 _invoicesState.value = CustomerInvoicesState.Error(
