@@ -192,13 +192,13 @@ class CustomerViewModel(
                         amount = amount
                     )
                 )
-                _paymentState.value = CustomerPaymentState(
+                _paymentState.value = buildPaymentState(
                     successMessage = "Pago registrado correctamente.",
                 )
                 loadOutstandingInvoices(customerId)
             },
             exceptionHandler = {
-                _paymentState.value = CustomerPaymentState(
+                _paymentState.value = buildPaymentState(
                     errorMessage = it.message ?: "No se pudo registrar el pago."
                 )
             }

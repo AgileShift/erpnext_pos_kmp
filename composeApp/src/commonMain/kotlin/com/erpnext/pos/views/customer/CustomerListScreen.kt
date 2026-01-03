@@ -57,20 +57,13 @@ import com.erpnext.pos.utils.toCurrencySymbol
 import org.jetbrains.compose.ui.tooling.preview.Preview
 
 enum class CustomerQuickActionType {
-    PendingInvoices,
-    CreateQuotation,
-    CreateSalesOrder,
-    CreateDeliveryNote,
-    CreateInvoice,
-    RegisterPayment
+    PendingInvoices, CreateQuotation, CreateSalesOrder, CreateDeliveryNote, CreateInvoice, RegisterPayment
 }
 
 private const val AllCustomersFilter = "Todos"
 
 private data class CustomerQuickAction(
-    val type: CustomerQuickActionType,
-    val label: String,
-    val icon: ImageVector
+    val type: CustomerQuickActionType, val label: String, val icon: ImageVector
 )
 
 private fun customerQuickActions(strings: CustomerStrings): List<CustomerQuickAction> = listOf(
@@ -78,28 +71,23 @@ private fun customerQuickActions(strings: CustomerStrings): List<CustomerQuickAc
         type = CustomerQuickActionType.PendingInvoices,
         label = strings.outstandingInvoicesTitle,
         icon = Icons.Filled.ReceiptLong
-    ),
-    CustomerQuickAction(
+    ), CustomerQuickAction(
         type = CustomerQuickActionType.CreateQuotation,
         label = strings.createQuotationLabel,
         icon = Icons.Filled.Description
-    ),
-    CustomerQuickAction(
+    ), CustomerQuickAction(
         type = CustomerQuickActionType.CreateSalesOrder,
         label = strings.createSalesOrderLabel,
         icon = Icons.Filled.PointOfSale
-    ),
-    CustomerQuickAction(
+    ), CustomerQuickAction(
         type = CustomerQuickActionType.CreateDeliveryNote,
         label = strings.createDeliveryNoteLabel,
         icon = Icons.Filled.LocalShipping
-    ),
-    CustomerQuickAction(
+    ), CustomerQuickAction(
         type = CustomerQuickActionType.CreateInvoice,
         label = strings.createInvoiceLabel,
         icon = Icons.Filled.Receipt
-    ),
-    CustomerQuickAction(
+    ), CustomerQuickAction(
         type = CustomerQuickActionType.RegisterPayment,
         label = strings.registerPaymentTitle,
         icon = Icons.Filled.Payments
@@ -130,8 +118,7 @@ fun CustomerListScreen(
     val isDesktop = getPlatformName() == "Desktop"
 
     val filterElevation by animateDpAsState(
-        targetValue = if (customers.isNotEmpty()) 4.dp else 0.dp,
-        label = "filterElevation"
+        targetValue = if (customers.isNotEmpty()) 4.dp else 0.dp, label = "filterElevation"
     )
 
     LaunchedEffect(outstandingCustomer?.name) {
@@ -141,28 +128,21 @@ fun CustomerListScreen(
     }
 
     Scaffold(
-        modifier = Modifier.nestedScroll(topAppBarScrollBehavior.nestedScrollConnection),
-        topBar = {
+        modifier = Modifier.nestedScroll(topAppBarScrollBehavior.nestedScrollConnection), topBar = {
             TopAppBar(
                 title = {
                     Text(
-                        strings.customer.title,
-                        style = MaterialTheme.typography.titleLarge
+                        strings.customer.title, style = MaterialTheme.typography.titleLarge
                     )
-                },
-                actions = {
+                }, actions = {
                     IconButton(onClick = actions.fetchAll) {
                         Icon(Icons.Filled.Refresh, strings.customer.refreshCustomers)
                     }
-                },
-                scrollBehavior = topAppBarScrollBehavior
+                }, scrollBehavior = topAppBarScrollBehavior
             )
-        }
-    ) { paddingValues ->
+        }) { paddingValues ->
         BoxWithConstraints(
-            modifier = Modifier
-                .padding(paddingValues)
-                .fillMaxSize()
+            modifier = Modifier.padding(paddingValues).fillMaxSize()
         ) {
             val isWideLayout = maxWidth >= 840.dp || isDesktop
             val contentPadding = if (isWideLayout) 24.dp else 16.dp
@@ -197,29 +177,25 @@ fun CustomerListScreen(
                 // Contenido principal según estado
                 // Slot-based rendering: estructura fija con visibilidad dinámica
                 Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(contentPadding)
+                    modifier = Modifier.fillMaxSize().padding(contentPadding)
                 ) {
 
                     // SLOT: LISTA DE CLIENTES
                     androidx.compose.animation.AnimatedVisibility(
-                        visible = state is CustomerState.Success &&
-                                (state.customers.isNotEmpty()),
+                        visible = state is CustomerState.Success && (state.customers.isNotEmpty()),
                         enter = fadeIn(),
                         exit = fadeOut()
                     ) {
                         val filtered = customers.filter { customer ->
-                            customer.customerName.contains(searchQuery, ignoreCase = true) ||
-                                    (customer.mobileNo ?: "").contains(searchQuery)
+                            customer.customerName.contains(
+                                searchQuery, ignoreCase = true
+                            ) || (customer.mobileNo ?: "").contains(searchQuery)
                         }
 
                         if (filtered.isEmpty()) {
                             EmptyStateMessage(
-                                message = if (searchQuery.isEmpty())
-                                    strings.customer.emptyCustomers
-                                else
-                                    strings.customer.emptySearchCustomers,
+                                message = if (searchQuery.isEmpty()) strings.customer.emptyCustomers
+                                else strings.customer.emptySearchCustomers,
                                 icon = Icons.Filled.People
                             )
                         } else {
@@ -231,44 +207,35 @@ fun CustomerListScreen(
                                 onOpenQuickActions = { quickActionsCustomer = it },
                                 onQuickAction = { customer, actionType ->
                                     when (actionType) {
-                                        CustomerQuickActionType.PendingInvoices,
-                                        CustomerQuickActionType.RegisterPayment -> {
+                                        CustomerQuickActionType.PendingInvoices, CustomerQuickActionType.RegisterPayment -> {
                                             outstandingCustomer = customer
                                         }
 
                                         else -> handleQuickAction(actions, customer, actionType)
                                     }
-                                }
-                            )
+                                })
                         }
                     }
 
                     // SLOT: LOADING
                     androidx.compose.animation.AnimatedVisibility(
-                        visible = state is CustomerState.Loading,
-                        enter = fadeIn(),
-                        exit = fadeOut()
+                        visible = state is CustomerState.Loading, enter = fadeIn(), exit = fadeOut()
                     ) {
                         CustomerShimmerList()
                     }
 
                     // SLOT: EMPTY
                     androidx.compose.animation.AnimatedVisibility(
-                        visible = state is CustomerState.Empty,
-                        enter = fadeIn(),
-                        exit = fadeOut()
+                        visible = state is CustomerState.Empty, enter = fadeIn(), exit = fadeOut()
                     ) {
                         EmptyStateMessage(
-                            message = strings.customer.emptyCustomers,
-                            icon = Icons.Filled.People
+                            message = strings.customer.emptyCustomers, icon = Icons.Filled.People
                         )
                     }
 
                     // SLOT: ERROR
                     androidx.compose.animation.AnimatedVisibility(
-                        visible = state is CustomerState.Error,
-                        enter = fadeIn(),
-                        exit = fadeOut()
+                        visible = state is CustomerState.Error, enter = fadeIn(), exit = fadeOut()
                     ) {
                         FullScreenErrorMessage(
                             errorMessage = (state as CustomerState.Error).message,
@@ -276,7 +243,6 @@ fun CustomerListScreen(
                         )
                     }
                 }
-
             }
         }
     }
@@ -288,15 +254,13 @@ fun CustomerListScreen(
             onActionSelected = { actionType ->
                 quickActionsCustomer = null
                 when (actionType) {
-                    CustomerQuickActionType.PendingInvoices,
-                    CustomerQuickActionType.RegisterPayment -> {
+                    CustomerQuickActionType.PendingInvoices, CustomerQuickActionType.RegisterPayment -> {
                         outstandingCustomer = customer
                     }
 
                     else -> handleQuickAction(actions, customer, actionType)
                 }
-            }
-        )
+            })
     }
 
     outstandingCustomer?.let { customer ->
@@ -310,8 +274,7 @@ fun CustomerListScreen(
             },
             onRegisterPayment = { invoiceId, mode, amount ->
                 actions.registerPayment(customer.name, invoiceId, mode, amount)
-            }
-        )
+            })
     }
 }
 
@@ -399,8 +362,7 @@ fun SearchTextField(
     val keyboardController = LocalSoftwareKeyboardController.current
     val strings = LocalAppStrings.current
     OutlinedTextField(
-        value =
-            searchQuery,
+        value = searchQuery,
         onValueChange = { query -> onSearchQueryChange(query) },
         modifier = modifier.fillMaxWidth().padding(vertical = 8.dp),
         placeholder = {
@@ -457,18 +419,11 @@ fun SearchTextField(
 @Composable
 private fun FilterChipItem(label: String, selected: Boolean, onClick: () -> Unit) {
     FilterChip(
-        selected = selected,
-        onClick = onClick,
-        label = { Text(label) },
-        leadingIcon = {
+        selected = selected, onClick = onClick, label = { Text(label) }, leadingIcon = {
             if (selected) Icon(
-                Icons.Default.Check,
-                contentDescription = null,
-                modifier = Modifier.size(18.dp)
+                Icons.Default.Check, contentDescription = null, modifier = Modifier.size(18.dp)
             )
-        },
-        shape = MaterialTheme.shapes.small,
-        colors = FilterChipDefaults.filterChipColors(
+        }, shape = MaterialTheme.shapes.small, colors = FilterChipDefaults.filterChipColors(
             selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
             selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
             containerColor = MaterialTheme.colorScheme.surface,
@@ -501,8 +456,7 @@ private fun CustomerListContent(
                     isDesktop = isDesktop,
                     onClick = { actions.toDetails(customer.name) },
                     onOpenQuickActions = { onOpenQuickActions(customer) },
-                    onQuickAction = { actionType -> onQuickAction(customer, actionType) }
-                )
+                    onQuickAction = { actionType -> onQuickAction(customer, actionType) })
             }
         }
     } else {
@@ -517,8 +471,7 @@ private fun CustomerListContent(
                     isDesktop = isDesktop,
                     onClick = { actions.toDetails(customer.name) },
                     onOpenQuickActions = { onOpenQuickActions(customer) },
-                    onQuickAction = { actionType -> onQuickAction(customer, actionType) }
-                )
+                    onQuickAction = { actionType -> onQuickAction(customer, actionType) })
             }
         }
     }
@@ -542,25 +495,19 @@ fun CustomerItem(
     val avatarSize = if (isDesktop) 52.dp else 44.dp
 
     Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .pointerInput(customer.name, isDesktop) {
-                if (!isDesktop) {
-                    var totalDrag = 0f
-                    detectHorizontalDragGestures(
-                        onDragEnd = {
-                            if (kotlin.math.abs(totalDrag) > 64) {
-                                onOpenQuickActions()
-                            }
-                            totalDrag = 0f
-                        },
-                        onHorizontalDrag = { _, dragAmount ->
-                            totalDrag += dragAmount
-                        }
-                    )
-                }
+        modifier = Modifier.fillMaxWidth().pointerInput(customer.name, isDesktop) {
+            if (!isDesktop) {
+                var totalDrag = 0f
+                detectHorizontalDragGestures(onDragEnd = {
+                    if (kotlin.math.abs(totalDrag) > 64) {
+                        onOpenQuickActions()
+                    }
+                    totalDrag = 0f
+                }, onHorizontalDrag = { _, dragAmount ->
+                    totalDrag += dragAmount
+                })
             }
-            .clickable { onClick() },
+        }.clickable { onClick() },
         elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(
@@ -572,9 +519,7 @@ fun CustomerItem(
         )
     ) {
         Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(if (isDesktop) 16.dp else 14.dp),
+            modifier = Modifier.fillMaxWidth().padding(if (isDesktop) 16.dp else 14.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Row(
@@ -606,8 +551,7 @@ fun CustomerItem(
                 )
                 if ((customer.pendingInvoices ?: 0) > 0) {
                     StatusPill(
-                        label = strings.customer.overdueLabel,
-                        isCritical = true
+                        label = strings.customer.overdueLabel, isCritical = true
                     )
                 }
                 Text(
@@ -645,8 +589,7 @@ fun CustomerItem(
             }
 
             Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(4.dp)
+                modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 Text(
                     customer.customerName,
@@ -663,8 +606,7 @@ fun CustomerItem(
                     )
                     if (pendingInvoices > 0) {
                         StatusPill(
-                            label = "Pending invoices",
-                            isCritical = true
+                            label = "Pending invoices", isCritical = true
                         )
                     }
                 }
@@ -709,19 +651,14 @@ fun CustomerItem(
 
             DropdownMenu(
                 expanded = isDesktop && isMenuExpanded,
-                onDismissRequest = { isMenuExpanded = false }
-            ) {
+                onDismissRequest = { isMenuExpanded = false }) {
                 quickActions.forEach { action ->
-                    DropdownMenuItem(
-                        text = { Text(action.label) },
-                        leadingIcon = {
-                            Icon(action.icon, contentDescription = null)
-                        },
-                        onClick = {
-                            isMenuExpanded = false
-                            onQuickAction(action.type)
-                        }
-                    )
+                    DropdownMenuItem(text = { Text(action.label) }, leadingIcon = {
+                        Icon(action.icon, contentDescription = null)
+                    }, onClick = {
+                        isMenuExpanded = false
+                        onQuickAction(action.type)
+                    })
                 }
             }
         }
@@ -776,8 +713,7 @@ private fun StatusPill(label: String, isCritical: Boolean) {
         MaterialTheme.colorScheme.secondary
     }
     Box(
-        modifier = Modifier
-            .background(background, RoundedCornerShape(12.dp))
+        modifier = Modifier.background(background, RoundedCornerShape(12.dp))
             .padding(horizontal = 8.dp, vertical = 2.dp)
     ) {
         Text(label, style = MaterialTheme.typography.labelSmall, color = textColor)
@@ -787,16 +723,12 @@ private fun StatusPill(label: String, isCritical: Boolean) {
 @Composable
 fun CustomerShimmerList() {
     Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(horizontal = 16.dp, vertical = 8.dp),
+        modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         repeat(6) {
             Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(96.dp)
+                modifier = Modifier.fillMaxWidth().height(96.dp)
                     .shimmerBackground(RoundedCornerShape(16.dp))
             )
         }
@@ -806,21 +738,15 @@ fun CustomerShimmerList() {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun CustomerQuickActionsSheet(
-    customer: CustomerBO,
-    onDismiss: () -> Unit,
-    onActionSelected: (CustomerQuickActionType) -> Unit
+    customer: CustomerBO, onDismiss: () -> Unit, onActionSelected: (CustomerQuickActionType) -> Unit
 ) {
     val strings = LocalAppStrings.current
     val quickActions = remember(strings) { customerQuickActions(strings.customer) }
 
     ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        dragHandle = { BottomSheetDefaults.DragHandle() }
-    ) {
+        onDismissRequest = onDismiss, dragHandle = { BottomSheetDefaults.DragHandle() }) {
         Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 24.dp, vertical = 8.dp),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             Text(
@@ -836,8 +762,7 @@ private fun CustomerQuickActionsSheet(
                 ListItem(
                     headlineContent = { Text(action.label) },
                     leadingContent = { Icon(action.icon, contentDescription = null) },
-                    modifier = Modifier.clickable { onActionSelected(action.type) }
-                )
+                    modifier = Modifier.clickable { onActionSelected(action.type) })
             }
             Spacer(modifier = Modifier.height(12.dp))
         }
@@ -855,6 +780,7 @@ private fun CustomerOutstandingInvoicesSheet(
 ) {
     var paymentAmount by remember { mutableStateOf("") }
     val strings = LocalAppStrings.current
+
     var selectedInvoice by remember { mutableStateOf<SalesInvoiceBO?>(null) }
     var amountRaw by remember { mutableStateOf("") }
     var amountValue by remember { mutableStateOf(0.0) }
@@ -863,8 +789,10 @@ private fun CustomerOutstandingInvoicesSheet(
         val codes = paymentState.allowedCurrencies.map { it.code }.filter { it.isNotBlank() }
         val normalizedBase = baseCurrency.trim().uppercase()
         val supported = codes.filter { code ->
-            code.equals(normalizedBase, ignoreCase = true) ||
-                    (code.equals("USD", ignoreCase = true) && !normalizedBase.equals("USD", true))
+            code.equals(normalizedBase, ignoreCase = true) || (code.equals(
+                "USD",
+                ignoreCase = true
+            ) && !normalizedBase.equals("USD", true))
         }
         val fallback = if (supported.isNotEmpty()) supported else listOf(normalizedBase)
         if (fallback.any { it.equals(normalizedBase, ignoreCase = true) }) {
@@ -874,11 +802,8 @@ private fun CustomerOutstandingInvoicesSheet(
         }
     }
     var selectedCurrency by remember(allowedCodes, baseCurrency) {
-        mutableStateOf(
-            allowedCodes.firstOrNull { it.equals(baseCurrency, ignoreCase = true) }
-                ?: allowedCodes.firstOrNull()
-                ?: baseCurrency
-        )
+        mutableStateOf(allowedCodes.firstOrNull { it.equals(baseCurrency, ignoreCase = true) }
+            ?: allowedCodes.firstOrNull() ?: baseCurrency)
     }
     val paymentModes = remember(paymentState.paymentModes) {
         paymentState.paymentModes.map { it.modeOfPayment }.distinct()
@@ -891,30 +816,21 @@ private fun CustomerOutstandingInvoicesSheet(
     val exchangeRate = remember(selectedCurrency, baseCurrency, paymentState.exchangeRate) {
         val normalizedBase = baseCurrency.trim().uppercase()
         val normalizedSelected = selectedCurrency.trim().uppercase()
-        when {
-            normalizedSelected == normalizedBase -> 1.0
-            normalizedSelected == "USD" && normalizedBase != "USD" ->
-                paymentState.exchangeRate.takeIf { it > 0.0 }
-
+        when (normalizedSelected) {
+            normalizedBase -> 1.0
+            "USD" if normalizedBase != "USD" -> paymentState.exchangeRate.takeIf { it > 0.0 }
             else -> null
         }
     }
     val conversionError = exchangeRate == null
     val baseAmount = exchangeRate?.let { amountValue * it } ?: 0.0
-    val isSubmitEnabled = !paymentState.isSubmitting &&
-            selectedInvoice?.invoiceId?.isNotBlank() == true &&
-            paymentMode.isNotBlank() &&
-            amountValue > 0.0 &&
-            !conversionError
+    val isSubmitEnabled =
+        !paymentState.isSubmitting && selectedInvoice?.invoiceId?.isNotBlank() == true && paymentMode.isNotBlank() && amountValue > 0.0 && !conversionError
 
     ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        dragHandle = { BottomSheetDefaults.DragHandle() }
-    ) {
+        onDismissRequest = onDismiss, dragHandle = { BottomSheetDefaults.DragHandle() }) {
         Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 24.dp, vertical = 12.dp),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             Text(
@@ -954,28 +870,29 @@ private fun CustomerOutstandingInvoicesSheet(
                         )
                     } else {
                         LazyColumn(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .heightIn(max = 320.dp),
+                            modifier = Modifier.fillMaxWidth().heightIn(max = 320.dp),
                             verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             items(invoicesState.invoices, key = { it.invoiceId }) { invoice ->
                                 val isSelected = invoice.invoiceId == selectedInvoice?.invoiceId
-                                val outstandingLabel =
-                                    "${
-                                        invoice.currency?.toCurrencySymbol().orEmpty()
-                                    } ${invoice.outstandingAmount}"
+                                val outstandingLabel = "${
+                                    invoice.currency?.toCurrencySymbol().orEmpty()
+                                } ${invoice.outstandingAmount}"
                                 Card(
                                     modifier = Modifier.fillMaxWidth(),
                                     colors = CardDefaults.cardColors(
                                         containerColor = if (isSelected) {
-                                            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f)
+                                            MaterialTheme.colorScheme.primaryContainer.copy(
+                                                alpha = 0.4f
+                                            )
                                         } else {
                                             MaterialTheme.colorScheme.surface
                                         }
                                     ),
                                     border = if (isSelected) {
-                                        BorderStroke(1.dp, MaterialTheme.colorScheme.primary)
+                                        BorderStroke(
+                                            1.dp, MaterialTheme.colorScheme.primary
+                                        )
                                     } else {
                                         null
                                     }
@@ -996,100 +913,77 @@ private fun CustomerOutstandingInvoicesSheet(
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.primary
                                     )
-                                    Column(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .clickable {
-                                                selectedInvoice = invoice
-                                                amountRaw = invoice.outstandingAmount.toString()
-                                            }
-                                            .padding(12.dp),
-                                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
                                     ) {
-                                        Row(
-                                            modifier = Modifier.fillMaxWidth(),
-                                            horizontalArrangement = Arrangement.SpaceBetween,
-                                            verticalAlignment = Alignment.CenterVertically
+                                        Column(
+                                            verticalArrangement = Arrangement.spacedBy(4.dp)
                                         ) {
-                                            Column(
-                                                verticalArrangement = Arrangement.spacedBy(4.dp)
-                                            ) {
-                                                Text(
-                                                    text = invoice.invoiceId,
-                                                    style = MaterialTheme.typography.bodyMedium,
-                                                    fontWeight = FontWeight.SemiBold
-                                                )
-                                                Text(
-                                                    text = "Posted: ${invoice.postingDate}",
-                                                    style = MaterialTheme.typography.bodySmall
-                                                )
-                                            }
-                                            RadioButton(
-                                                selected = isSelected,
-                                                onClick = {
-                                                    selectedInvoice = invoice
-                                                    amountRaw = invoice.outstandingAmount.toString()
-                                                }
+                                            Text(
+                                                text = invoice.invoiceId,
+                                                style = MaterialTheme.typography.bodyMedium,
+                                                fontWeight = FontWeight.SemiBold
+                                            )
+                                            Text(
+                                                text = "Posted: ${invoice.postingDate}",
+                                                style = MaterialTheme.typography.bodySmall
                                             )
                                         }
-                                        Text(
-                                            text = "Outstanding: $outstandingLabel",
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.primary
-                                        )
+                                        RadioButton(
+                                            selected = isSelected, onClick = {
+                                                selectedInvoice = invoice
+                                            })
                                     }
+                                    Text(
+                                        text = "Outstanding: $outstandingLabel",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
                                 }
                             }
                         }
                     }
                 }
             }
+        }
 
-            HorizontalDivider()
+        HorizontalDivider()
 
-            Text(
-                text = strings.customer.registerPaymentTitle,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold
-            )
+        Text(
+            text = strings.customer.registerPaymentTitle,
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.SemiBold
+        )
 
+        Text("Payment mode", style = MaterialTheme.typography.bodyMedium)
+        ExposedDropdownMenuBox(
+            expanded = modeExpanded, onExpandedChange = { modeExpanded = it }) {
             AppTextField(
                 value = paymentMode,
                 onValueChange = {},
                 label = "Select payment mode",
                 placeholder = "Select payment mode",
-                //modifier = Modifier.menuAnchor(MenuAnchorType.PrimaryNotEditable),
+                modifier = Modifier.menuAnchor(MenuAnchorType.PrimaryNotEditable),
                 leadingIcon = { Icon(Icons.Default.Money, contentDescription = null) },
                 trailingIcon = {
-                    TrailingIcon(expanded = modeExpanded)
-                }
-            )
-            ExposedDropdownMenuBox(
-                expanded = currencyExpanded,
-                onExpandedChange = { currencyExpanded = it }
-            ) {
-                ExposedDropdownMenu(
-                    expanded = modeExpanded,
-                    onDismissRequest = { modeExpanded = false }
-                ) {
-                    paymentModes.forEach { mode ->
-                        DropdownMenuItem(
-                            text = { Text(mode) },
-                            onClick = {
-                                paymentMode = mode
-                                modeExpanded = false
-                            }
-                        )
-                    }
+                    ExposedDropdownMenuDefaults.TrailingIcon(expanded = modeExpanded)
+                })
+            ExposedDropdownMenu(
+                expanded = modeExpanded, onDismissRequest = { modeExpanded = false }) {
+                paymentModes.forEach { mode ->
+                    DropdownMenuItem(text = { Text(mode) }, onClick = {
+                        paymentMode = mode
+                        modeExpanded = false
+                    })
                 }
             }
         }
 
         Text("Payment currency", style = MaterialTheme.typography.bodyMedium)
         ExposedDropdownMenuBox(
-            expanded = currencyExpanded,
-            onExpandedChange = { currencyExpanded = it }
-        ) {
+            expanded = currencyExpanded, onExpandedChange = { currencyExpanded = it }) {
             AppTextField(
                 value = selectedCurrency,
                 onValueChange = {},
@@ -1097,21 +991,16 @@ private fun CustomerOutstandingInvoicesSheet(
                 placeholder = "Select currency",
                 modifier = Modifier.menuAnchor(MenuAnchorType.PrimaryNotEditable),
                 trailingIcon = {
-                    TrailingIcon(expanded = currencyExpanded)
-                }
-            )
+                    ExposedDropdownMenuDefaults.TrailingIcon(expanded = currencyExpanded)
+                })
             ExposedDropdownMenu(
                 expanded = currencyExpanded,
-                onDismissRequest = { currencyExpanded = false }
-            ) {
+                onDismissRequest = { currencyExpanded = false }) {
                 allowedCodes.forEach { currency ->
-                    DropdownMenuItem(
-                        text = { Text(currency) },
-                        onClick = {
-                            selectedCurrency = currency
-                            currencyExpanded = false
-                        }
-                    )
+                    DropdownMenuItem(text = { Text(currency) }, onClick = {
+                        selectedCurrency = currency
+                        currencyExpanded = false
+                    })
                 }
             }
         }
@@ -1120,7 +1009,7 @@ private fun CustomerOutstandingInvoicesSheet(
             currencyCode = selectedCurrency,
             rawValue = amountRaw,
             onRawValueChange = { amountRaw = it },
-            label = "Amount",
+            label = "Monto",
             onAmountChanged = { amountValue = it },
             supportingText = {
                 if (conversionError) {
@@ -1129,11 +1018,11 @@ private fun CustomerOutstandingInvoicesSheet(
                         color = MaterialTheme.colorScheme.error
                     )
                 } else if (!selectedCurrency.equals(baseCurrency, ignoreCase = true)) {
-                    val symbol = baseCurrency.toCurrencySymbol().ifBlank { baseCurrency }
+                    val symbol =
+                        baseCurrency.toCurrencySymbol().ifBlank { baseCurrency }
                     Text("POS base: $symbol$baseAmount")
                 }
-            }
-        )
+            })
 
         paymentState.errorMessage?.let { message ->
             Text(
@@ -1151,21 +1040,56 @@ private fun CustomerOutstandingInvoicesSheet(
             )
         }
 
-        Button(
-            onClick = {
-                val invoiceId = selectedInvoice?.invoiceId?.trim().orEmpty()
-                val amount = baseAmount
-                onRegisterPayment(invoiceId, paymentMode, amount)
-            },
-            enabled = isSubmitEnabled
-        ) {
-            Text(
-                if (paymentState.isSubmitting) strings.customer.processing
-                else strings.customer.registerPaymentButton
-            )
-        }
-        Spacer(modifier = Modifier.height(12.dp))
+
+    MoneyTextField(
+        currencyCode = selectedCurrency,
+        rawValue = amountRaw,
+        onRawValueChange = { amountRaw = it },
+        label = "Amount",
+        onAmountChanged = { amountValue = it },
+        supportingText = {
+            if (conversionError) {
+                Text(
+                    text = "Exchange rate unavailable for $selectedCurrency to $baseCurrency.",
+                    color = MaterialTheme.colorScheme.error
+                )
+            } else if (!selectedCurrency.equals(baseCurrency, ignoreCase = true)) {
+                val symbol = baseCurrency.toCurrencySymbol().ifBlank { baseCurrency }
+                Text("POS base: $symbol$baseAmount")
+            }
+        })
+
+    paymentState.errorMessage?.let { message ->
+        Text(
+            text = message,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.error
+        )
     }
+
+    paymentState.successMessage?.let { message ->
+        Text(
+            text = message,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.primary
+        )
+    }
+
+    Button(
+        onClick = {
+            val invoiceId = selectedInvoice?.invoiceId?.trim().orEmpty()
+            val amount = baseAmount
+            onRegisterPayment(invoiceId, paymentMode, amount)
+        }, enabled = isSubmitEnabled
+    ) {
+        Text(
+            if (paymentState.isSubmitting) strings.customer.processing
+            else strings.customer.registerPaymentButton
+        )
+    }
+
+    Spacer(modifier = Modifier.height(12.dp))
+}
 }
 
 @Composable
@@ -1173,14 +1097,10 @@ private fun CustomerOutstandingSummary(customer: CustomerBO) {
     val currencySymbol = customer.currency.toCurrencySymbol()
     val strings = LocalAppStrings.current
     Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(
-                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                RoundedCornerShape(12.dp)
-            )
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
+        modifier = Modifier.fillMaxWidth().background(
+            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+            RoundedCornerShape(12.dp)
+        ).padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         Text(
             text = strings.customer.outstandingSummaryTitle,
@@ -1205,9 +1125,7 @@ private fun CustomerOutstandingSummary(customer: CustomerBO) {
 }
 
 private fun handleQuickAction(
-    actions: CustomerAction,
-    customer: CustomerBO,
-    actionType: CustomerQuickActionType
+    actions: CustomerAction, customer: CustomerBO, actionType: CustomerQuickActionType
 ) {
     when (actionType) {
         CustomerQuickActionType.PendingInvoices -> actions.onViewPendingInvoices(customer)
@@ -1226,7 +1144,8 @@ private fun FullScreenErrorMessage(
     val strings = LocalAppStrings.current
     val common = strings.common
     Box(
-        modifier = modifier.fillMaxSize().padding(16.dp), contentAlignment = Alignment.Center
+        modifier = modifier.fillMaxSize().padding(16.dp),
+        contentAlignment = Alignment.Center
     ) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
@@ -1260,7 +1179,8 @@ private fun EmptyStateMessage(
     message: String, icon: ImageVector, modifier: Modifier = Modifier
 ) {
     Box(
-        modifier = modifier.fillMaxSize().padding(16.dp), contentAlignment = Alignment.Center
+        modifier = modifier.fillMaxSize().padding(16.dp),
+        contentAlignment = Alignment.Center
     ) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
@@ -1291,13 +1211,10 @@ fun Modifier.shimmerBackground(
 ): Modifier = composed {
     val transition = rememberInfiniteTransition(label = "shimmerTransition")
     val translateAnim by transition.animateFloat(
-        initialValue = 0f,
-        targetValue = gradientWidth,
-        animationSpec = infiniteRepeatable(
+        initialValue = 0f, targetValue = gradientWidth, animationSpec = infiniteRepeatable(
             tween(durationMillis = durationMillis, easing = FastOutSlowInEasing),
             RepeatMode.Restart
-        ),
-        label = "shimmerTranslateAnim"
+        ), label = "shimmerTranslateAnim"
     )
 
     val shimmerColors = listOf(
@@ -1311,8 +1228,7 @@ fun Modifier.shimmerBackground(
             colors = shimmerColors,
             start = Offset(translateAnim - gradientWidth, translateAnim - gradientWidth),
             end = Offset(translateAnim, translateAnim)
-        ),
-        shape = shape
+        ), shape = shape
     )
 }
 
@@ -1395,12 +1311,7 @@ fun CustomerItemPreview() {
                 currentBalance = 13450.0,
                 pendingInvoices = 2,
                 availableCredit = 0.0
-            ),
-            isDesktop = false,
-            onClick = {},
-            onOpenQuickActions = {},
-            onQuickAction = {}
-        )
+            ), isDesktop = false, onClick = {}, onOpenQuickActions = {}, onQuickAction = {})
     }
 }
 
@@ -1418,11 +1329,6 @@ fun CustomerItemOverLimitPreview() {
                 currentBalance = 0.0,
                 pendingInvoices = 0,
                 availableCredit = -500.0  // Sobre límite para rojo
-            ),
-            isDesktop = false,
-            onClick = {},
-            onOpenQuickActions = {},
-            onQuickAction = {}
-        )
+            ), isDesktop = false, onClick = {}, onOpenQuickActions = {}, onQuickAction = {})
     }
 }
