@@ -8,7 +8,7 @@ import com.erpnext.pos.domain.models.SalesInvoiceBO
 sealed class CustomerState {
     object Loading : CustomerState()
     object Empty : CustomerState()
-    data class Success(val customers: List<CustomerBO>) : CustomerState()
+    data class Success(val customers: List<CustomerBO>, val totalCount: Int, val pendingCount: Int) : CustomerState()
 
     data class Error(val message: String) : CustomerState()
 }

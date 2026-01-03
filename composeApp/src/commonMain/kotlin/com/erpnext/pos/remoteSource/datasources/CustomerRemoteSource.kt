@@ -18,11 +18,18 @@ class CustomerRemoteSource(
     }
 
     suspend fun getCustomerAddress(customerId: String): String? {
-        return null
+        val address = api.getCustomerAddress(customerId) ?: return null
+        val parts = listOf(
+            address.line1.takeIf { it.isNotBlank() },
+            address.line2?.takeIf { it.isNotBlank() },
+            address.city.takeIf { it.isNotBlank() },
+            address.country.takeIf { it.isNotBlank() }
+        ).filterNotNull()
+        return parts.joinToString(", ").ifBlank { null }
     }
 
     suspend fun getCustomerContact(customerId: String): ContactChildDto? {
-        return null
+        return api.getCustomerContact(customerId)
     }
 
     suspend fun fetchInvoices(posProfile: String): List<SalesInvoiceDto> {

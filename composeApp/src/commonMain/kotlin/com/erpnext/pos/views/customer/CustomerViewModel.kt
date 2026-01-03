@@ -88,7 +88,10 @@ class CustomerViewModel(
                     .collectLatest { customers ->
                         _stateFlow.value = when {
                             customers.isEmpty() -> CustomerState.Empty
-                            else -> CustomerState.Success(customers)
+                            else -> CustomerState.Success(
+                                customers,
+                                customers.size,
+                                customers.count { (it.pendingInvoices ?: 0) > 0 })
                         }
                     }
             },

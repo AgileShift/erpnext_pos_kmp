@@ -115,8 +115,7 @@ fun InventoryList(
                     }
                 } else {
                     LazyColumn(
-                        modifier = modifier.fillMaxSize()
-                            .background(Color.Red),
+                        modifier = modifier.fillMaxSize(),
                         state = listState,
                         contentPadding = PaddingValues(horizontal = 14.dp, vertical = 12.dp),
                         verticalArrangement = Arrangement.spacedBy(10.dp)

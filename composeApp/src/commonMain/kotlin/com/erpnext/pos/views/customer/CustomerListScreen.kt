@@ -13,6 +13,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.*
@@ -36,6 +37,7 @@ import androidx.compose.ui.composed
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.input.pointer.pointerInput
@@ -68,6 +70,11 @@ private data class CustomerQuickAction(
     val type: CustomerQuickActionType,
     val label: String,
     val icon: ImageVector
+)
+
+private data class CustomerCounts(
+    val total: Int,
+    val pending: Int
 )
 
 private fun customerQuickActions(): List<CustomerQuickAction> = listOf(
@@ -123,6 +130,7 @@ fun CustomerListScreen(
     val customers = remember(state) {
         if (state is CustomerState.Success) state.customers else emptyList()
     }
+    var baseCounts by remember { mutableStateOf(CustomerCounts(0, 0)) }
     val isDesktop = getPlatformName() == "Desktop"
 
     val filterElevation by animateDpAsState(
@@ -133,6 +141,15 @@ fun CustomerListScreen(
     LaunchedEffect(outstandingCustomer?.name) {
         outstandingCustomer?.let { customer ->
             actions.loadOutstandingInvoices(customer)
+        }
+    }
+    LaunchedEffect(state, searchQuery, selectedState) {
+        if (searchQuery.isEmpty() && selectedState == "Todos" && state is CustomerState.Success) {
+            val pending = state.customers.count { (it.pendingInvoices ?: 0) > 0 }
+            baseCounts = CustomerCounts(
+                total = state.customers.size,
+                pending = pending
+            )
         }
     }
 
@@ -163,9 +180,7 @@ fun CustomerListScreen(
             val isWideLayout = maxWidth >= 840.dp || isDesktop
             val contentPadding = if (isWideLayout) 24.dp else 16.dp
 
-            Column(
-                modifier = Modifier.fillMaxSize()
-            ) {
+            Column(modifier = Modifier.fillMaxSize()) {
                 // Filtros y búsqueda
                 Surface(
                     modifier = Modifier.fillMaxWidth(),
@@ -176,6 +191,8 @@ fun CustomerListScreen(
                         searchQuery = searchQuery,
                         selectedState = selectedState,
                         isWideLayout = isWideLayout,
+                        totalCount = baseCounts.total,
+                        pendingCount = baseCounts.pending,
                         onQueryChange = {
                             searchQuery = it
                             actions.onSearchQueryChanged(it)
@@ -317,6 +334,8 @@ private fun CustomerFilters(
     searchQuery: String,
     selectedState: String,
     isWideLayout: Boolean,
+    totalCount: Int,
+    pendingCount: Int,
     states: List<String> = listOf("Pendientes", "Sin Pendientes"),
     onQueryChange: (String) -> Unit,
     onStateChange: (String?) -> Unit,
@@ -329,17 +348,37 @@ private fun CustomerFilters(
                 horizontalArrangement = Arrangement.spacedBy(16.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                LazyRow(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
                     modifier = Modifier.weight(1f)
                 ) {
-                    item {
-                        val isSelected = selectedState == "Todos"
-                        FilterChipItem("Todos", isSelected) { onStateChange("Todos") }
-                    }
-                    items(states) { state ->
+                    val allSelected = selectedState == "Todos"
+                    FilterSummaryTile(
+                        label = "Todos",
+                        value = "$totalCount",
+                        selected = allSelected,
+                        color = MaterialTheme.colorScheme.primary,
+                        onClick = { onStateChange("Todos") }
+                    )
+                    states.forEach { state ->
                         val isSelected = selectedState == state
-                        FilterChipItem(state, isSelected) { onStateChange(state) }
+                        val color = if (state == "Pendientes") {
+                            MaterialTheme.colorScheme.tertiary
+                        } else {
+                            MaterialTheme.colorScheme.secondary
+                        }
+                        val value = if (state == "Pendientes") {
+                            "$pendingCount"
+                        } else {
+                            "${(totalCount - pendingCount).coerceAtLeast(0)}"
+                        }
+                        FilterSummaryTile(
+                            label = state,
+                            value = value,
+                            selected = isSelected,
+                            color = color,
+                            onClick = { onStateChange(state) }
+                        )
                     }
                 }
 
@@ -357,11 +396,33 @@ private fun CustomerFilters(
             ) {
                 item {
                     val isSelected = selectedState == "Todos"
-                    FilterChipItem("Todos", isSelected) { onStateChange("Todos") }
+                    FilterSummaryTile(
+                        label = "Todos",
+                        value = "$totalCount",
+                        selected = isSelected,
+                        color = MaterialTheme.colorScheme.primary,
+                        onClick = { onStateChange("Todos") }
+                    )
                 }
                 items(states) { state ->
                     val isSelected = selectedState == state
-                    FilterChipItem(state, isSelected) { onStateChange(state) }
+                    val color = if (state == "Pendientes") {
+                        MaterialTheme.colorScheme.tertiary
+                    } else {
+                        MaterialTheme.colorScheme.secondary
+                    }
+                    val value = if (state == "Pendientes") {
+                        "$pendingCount"
+                    } else {
+                        "${(totalCount - pendingCount).coerceAtLeast(0)}"
+                    }
+                    FilterSummaryTile(
+                        label = state,
+                        value = value,
+                        selected = isSelected,
+                        color = color,
+                        onClick = { onStateChange(state) }
+                    )
                 }
             }
             Spacer(modifier = Modifier.height(8.dp))
@@ -384,7 +445,7 @@ fun SearchTextField(
     onSearchAction: (() -> Unit)? = null
 ) {
     val keyboardController = LocalSoftwareKeyboardController.current
-    OutlinedTextField(
+    TextField(
         value =
             searchQuery,
         onValueChange = { query -> onSearchQueryChange(query) },
@@ -430,36 +491,15 @@ fun SearchTextField(
                 keyboardController?.hide()
             }
         }, onDone = { keyboardController?.hide() }),
-        colors = OutlinedTextFieldDefaults.colors(
-            focusedBorderColor = MaterialTheme.colorScheme.primary,
-            unfocusedBorderColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f),
-            focusedLabelColor = MaterialTheme.colorScheme.primary,
+        colors = TextFieldDefaults.colors(
+            focusedIndicatorColor = Color.Transparent,
+            unfocusedIndicatorColor = Color.Transparent,
+            disabledIndicatorColor = Color.Transparent,
+            focusedContainerColor = MaterialTheme.colorScheme.surface,
+            unfocusedContainerColor = MaterialTheme.colorScheme.surface,
             cursorColor = MaterialTheme.colorScheme.primary
         ),
         shape = MaterialTheme.shapes.medium
-    )
-}
-
-@Composable
-private fun FilterChipItem(label: String, selected: Boolean, onClick: () -> Unit) {
-    FilterChip(
-        selected = selected,
-        onClick = onClick,
-        label = { Text(label) },
-        leadingIcon = {
-            if (selected) Icon(
-                Icons.Default.Check,
-                contentDescription = null,
-                modifier = Modifier.size(18.dp)
-            )
-        },
-        shape = MaterialTheme.shapes.small,
-        colors = FilterChipDefaults.filterChipColors(
-            selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
-            selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
-            containerColor = MaterialTheme.colorScheme.surface,
-            labelColor = MaterialTheme.colorScheme.onSurface
-        )
     )
 }
 
@@ -526,10 +566,26 @@ fun CustomerItem(
     var isMenuExpanded by remember { mutableStateOf(false) }
     val quickActions = remember { customerQuickActions() }
     val avatarSize = if (isDesktop) 52.dp else 44.dp
+    val pendingAmount = customer.totalPendingAmount ?: customer.currentBalance ?: 0.0
+    val statusLabel = when {
+        isOverLimit -> strings.customer.overdueLabel
+        pendingInvoices > 0 || pendingAmount > 0.0 -> strings.customer.pendingLabel
+        else -> strings.customer.activeLabel
+    }
+    val statusColor = when {
+        isOverLimit -> MaterialTheme.colorScheme.error
+        pendingInvoices > 0 -> MaterialTheme.colorScheme.tertiary
+        else -> MaterialTheme.colorScheme.primary
+    }
+    val emphasis = pendingInvoices > 0 || isOverLimit
+    val cardElevation = if (emphasis) 3.dp else 1.dp
 
+    val cardShape = RoundedCornerShape(20.dp)
     Card(
         modifier = Modifier
+            .background(MaterialTheme.colorScheme.background)
             .fillMaxWidth()
+            .clip(cardShape)
             .pointerInput(customer.name, isDesktop) {
                 if (!isDesktop) {
                     var totalDrag = 0f
@@ -547,8 +603,9 @@ fun CustomerItem(
                 }
             }
             .clickable { onClick() },
-        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
-        shape = RoundedCornerShape(16.dp),
+        // elevation = CardDefaults.cardElevation(defaultElevation = cardElevation),
+        shape = cardShape,
+        border = BorderStroke(1.2.dp, statusColor.copy(alpha = 0.35f)),
         colors = CardDefaults.cardColors(
             containerColor = if (isOverLimit) {
                 MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.1f)
@@ -560,31 +617,22 @@ fun CustomerItem(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(if (isDesktop) 16.dp else 14.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+                .border(1.dp, Color.Transparent, shape = cardShape)
+                .padding(if (isDesktop) 14.dp else 12.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Avatar circular
-                Card(
-                    modifier = Modifier.size(avatarSize).clip(CircleShape),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = if (isOverLimit) MaterialTheme.colorScheme.errorContainer.copy(
-                            alpha = 0.2f
-                        ) else MaterialTheme.colorScheme.surfaceVariant
-                    )
-                ) {
-                    Icon(
-                        Icons.Filled.Person,
-                        contentDescription = customer.customerName,
-                        modifier = Modifier.size(avatarSize).padding(12.dp),
-                        tint = if (isOverLimit) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
-                    )
-                }
+                Icon(
+                    Icons.Filled.Person,
+                    contentDescription = customer.customerName,
+                    modifier = Modifier.size(avatarSize).clip(CircleShape)
+                        .padding(12.dp),
+                    tint = statusColor
+                )
 
                 Column(
                     modifier = Modifier.weight(1f),
@@ -596,20 +644,12 @@ fun CustomerItem(
                         fontSize = 16.sp,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
-                        color = if (isOverLimit) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface
+                        color = MaterialTheme.colorScheme.onSurface
                     )
-                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        StatusPill(
-                            label = if (isOverLimit) strings.customer.overdueLabel else strings.customer.activeLabel,
-                            isCritical = isOverLimit
-                        )
-                        if (pendingInvoices > 0) {
-                            StatusPill(
-                                label = "Pending invoices",
-                                isCritical = true
-                            )
-                        }
-                    }
+                    StatusPill(
+                        label = statusLabel,
+                        isCritical = emphasis
+                    )
                 }
 
                 IconButton(onClick = {
@@ -621,7 +661,7 @@ fun CustomerItem(
                 }) {
                     Icon(
                         Icons.Filled.MoreVert,
-                        contentDescription = "More actions",
+                        contentDescription = strings.customer.moreActions,
                         tint = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
@@ -645,39 +685,54 @@ fun CustomerItem(
                 }
             }
 
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text(
-                    customer.mobileNo ?: "",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = if (isOverLimit) MaterialTheme.colorScheme.error.copy(alpha = 0.7f) else MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Text(
-                    customer.territory ?: "N/A",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.outline,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
+            Column(
+                modifier = Modifier.fillMaxWidth()
+                    .height(55.dp),
+                horizontalAlignment = Alignment.End,
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Row(
+                    modifier = Modifier.widthIn(min = 140.dp),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    MetricBlock(
+                        label = strings.customer.pendingLabel,
+                        value = "$currencySymbol$pendingAmount",
+                        isCritical = emphasis
+                    )
+                    MetricBlock(
+                        label = strings.customer.outstandingSummaryInvoicesLabel,
+                        value = "$pendingInvoices",
+                        isCritical = pendingInvoices > 0
+                    )
+                    MetricBlock(
+                        label = strings.customer.availableLabel,
+                        value = "$currencySymbol ${bd(availableCredit).moneyScale(2)}",
+                        isCritical = availableCredit < 0
+                    )
+                }
             }
 
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically
+            Column(
+                modifier = Modifier.fillMaxWidth()
+                    .height(32.dp),
+                horizontalAlignment = Alignment.Start,
+                verticalArrangement = Arrangement.Center
             ) {
-                StatusPill(
-                    label = "Available $currencySymbol${availableCredit}",
-                    isCritical = availableCredit < 0
-                )
-                StatusPill(
-                    label = "Pending $pendingInvoices",
-                    isCritical = pendingInvoices > 0
-                )
-                StatusPill(
-                    label = "Balance $currencySymbol${customer.currentBalance ?: 0.0}",
-                    isCritical = isOverLimit
-                )
+                Row(
+                    modifier = Modifier.weight(1f),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    CustomerInfoChip(
+                        icon = Icons.Filled.Phone,
+                        text = customer.mobileNo ?: "Residencial Palmanova #117"
+                    )
+                    CustomerInfoChip(
+                        icon = Icons.Filled.Place,
+                        text = customer.address?.takeIf { it.isNotBlank() } ?: "--"
+                    )
+                }
             }
         }
     }
@@ -695,12 +750,183 @@ private fun StatusPill(label: String, isCritical: Boolean) {
     } else {
         MaterialTheme.colorScheme.secondary
     }
-    Box(
-        modifier = Modifier
-            .background(background, RoundedCornerShape(12.dp))
-            .padding(horizontal = 8.dp, vertical = 2.dp)
+    Surface(
+        color = background,
+        shape = RoundedCornerShape(12.dp),
+        tonalElevation = 0.dp
     ) {
-        Text(label, style = MaterialTheme.typography.labelSmall, color = textColor)
+        Text(
+            label,
+            style = MaterialTheme.typography.labelSmall,
+            color = textColor,
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+        )
+    }
+}
+
+@Composable
+private fun MetricBlock(label: String, value: String, isCritical: Boolean) {
+    val background = if (isCritical) {
+        MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.33f)
+    } else {
+        MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.33f)
+    }
+    val textColor = if (isCritical) {
+        MaterialTheme.colorScheme.error
+    } else {
+        MaterialTheme.colorScheme.onSecondaryContainer
+    }
+    Surface(
+        color = background,
+        shape = RoundedCornerShape(12.dp),
+        tonalElevation = 0.dp
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(2.dp)
+        ) {
+            Text(label, style = MaterialTheme.typography.labelSmall, color = textColor)
+            Text(value, style = MaterialTheme.typography.titleSmall, color = textColor)
+        }
+    }
+}
+
+@Composable
+private fun CustomerInfoChip(icon: ImageVector, text: String) {
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
+        shape = RoundedCornerShape(10.dp),
+        tonalElevation = 0.dp
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Icon(
+                icon,
+                contentDescription = null,
+                modifier = Modifier.size(16.dp),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Text(
+                text = text,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+    }
+}
+
+@Composable
+private fun CustomerSummaryRow(
+    customers: List<CustomerBO>,
+    modifier: Modifier = Modifier
+) {
+    val strings = LocalAppStrings.current
+    val pendingCount = customers.count { (it.pendingInvoices ?: 0) > 0 }
+    val overdueCount = customers.count {
+        (it.availableCredit ?: 0.0) < 0 || (it.currentBalance ?: 0.0) > 0
+    }
+    Row(
+        modifier = modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        SummaryTile(
+            icon = Icons.Filled.People,
+            label = strings.customer.title,
+            value = "${customers.size}",
+            color = MaterialTheme.colorScheme.primary
+        )
+        SummaryTile(
+            icon = Icons.Filled.ReceiptLong,
+            label = strings.customer.pendingLabel,
+            value = "$pendingCount",
+            color = MaterialTheme.colorScheme.tertiary
+        )
+        SummaryTile(
+            icon = Icons.Filled.Warning,
+            label = strings.customer.overdueLabel,
+            value = "$overdueCount",
+            color = MaterialTheme.colorScheme.error
+        )
+    }
+}
+
+@Composable
+private fun SummaryTile(
+    icon: ImageVector,
+    label: String,
+    value: String,
+    color: androidx.compose.ui.graphics.Color
+) {
+    Surface(
+        color = color.copy(alpha = 0.08f),
+        shape = RoundedCornerShape(14.dp),
+        tonalElevation = 0.dp
+    ) {
+        Row(
+            modifier = Modifier
+                .padding(horizontal = 12.dp, vertical = 10.dp)
+                .heightIn(min = 44.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Icon(
+                icon,
+                contentDescription = null,
+                tint = color,
+                modifier = Modifier.size(20.dp)
+            )
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(label, style = MaterialTheme.typography.labelSmall, color = color)
+                Text(value, style = MaterialTheme.typography.titleMedium, color = color)
+            }
+        }
+    }
+}
+
+@Composable
+private fun FilterSummaryTile(
+    label: String,
+    value: String,
+    selected: Boolean,
+    color: androidx.compose.ui.graphics.Color,
+    onClick: () -> Unit
+) {
+    val background = if (selected) color.copy(alpha = 0.18f) else color.copy(alpha = 0.08f)
+    Surface(
+        color = background,
+        shape = RoundedCornerShape(18.dp),
+        tonalElevation = 0.dp,
+        border = if (selected) BorderStroke(1.dp, color.copy(alpha = 0.4f)) else null,
+        modifier = Modifier.clickable { onClick() }
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                label,
+                style = MaterialTheme.typography.labelMedium,
+                color = if (selected) color else MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Surface(
+                color = color.copy(alpha = 0.18f),
+                shape = RoundedCornerShape(999.dp),
+                tonalElevation = 0.dp
+            ) {
+                Text(
+                    value,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = color,
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp)
+                )
+            }
+        }
     }
 }
 
@@ -1341,9 +1567,10 @@ fun CustomerListScreenPreview() {
                         customerType = "Individual",
                         currentBalance = 13450.0,
                         pendingInvoices = 2,
-                        availableCredit = 0.0
+                        availableCredit = 0.0,
+                        address = "Residencial Palmanova #117",
                     )
-                )
+                ), 10, 5
             ),
             invoicesState = CustomerInvoicesState.Idle,
             paymentState = CustomerPaymentState(),

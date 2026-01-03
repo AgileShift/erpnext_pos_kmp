@@ -1,15 +1,18 @@
 package com.erpnext.pos.views.inventory.components
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
@@ -20,6 +23,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -48,129 +52,125 @@ fun ProductCard(
     }
     val context = LocalPlatformContext.current
     val strings = LocalAppStrings.current
-    val imageSize = if (isDesktop) 96.dp else 72.dp
+    val imageWidth = if (isDesktop) 200.dp else 150.dp
+    val cardHeight = if (isDesktop) 190.dp else 170.dp
     val statusLabel =
         if (product.actualQty <= 0) strings.customer.outOfStock else strings.customer.inStock
+    val hasStock = product.actualQty > 0
+    val priceLabel =
+        "${product.currency?.toCurrencySymbol().orEmpty()} $formattedPrice"
+    val colorLabel = product.brand?.takeIf { it.isNotBlank() } ?: "--"
+    val sizeLabel = "--"
 
+    val cardShape = RoundedCornerShape(16.dp)
     Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(12.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(cardHeight)
+            .clip(cardShape),
+        shape = cardShape,
         onClick = { actions.onItemClick(product) } // asegúrate de pasar product
     ) {
-        Column(
+        Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(if (isDesktop) 16.dp else 12.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
+                .padding(if (isDesktop) 18.dp else 14.dp),
+            horizontalArrangement = Arrangement.spacedBy(16.dp),
+            verticalAlignment = Alignment.Top
         ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(product.name, style = MaterialTheme.typography.titleMedium, maxLines = 2)
-                Text(
-                    "${strings.inventory.productAvailableLabel}: $formattedQty",
-                    style = MaterialTheme.typography.bodyMedium
-                )
-                Text(
-                    "${strings.inventory.productCategoryLabel}: ${
-                        product.itemGroup.lowercase().replaceFirstChar { it.titlecase() }
-                    }",
-                    style = MaterialTheme.typography.bodySmall
-                )
-                Text(
-                    "${strings.inventory.productUomLabel}: ${
-                        product.uom.lowercase().replaceFirstChar { it.titlecase() }
-                    }",
-                    style = MaterialTheme.typography.bodySmall
-                )
-                Text(
-                    "${strings.inventory.productCodeLabel}: ${product.itemCode}",
-                    style = MaterialTheme.typography.bodySmall
-                )
+            Surface(
+                shape = RoundedCornerShape(16.dp),
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
+                tonalElevation = 0.dp
+            ) {
+                Box(
+                    modifier = Modifier
+                        .width(imageWidth)
+                        .fillMaxHeight()
+                        .padding(6.dp)
+                ) {
+                    SubcomposeAsyncImage(
+                        model = remember(product.image) {
+                            ImageRequest.Builder(context)
+                                .data(product.image?.ifBlank { "https://placehold.co/600x400" })
+                                .crossfade(true)
+                                .build()
+                        },
+                        contentDescription = product.name,
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Crop,
+                        loading = {
+                            CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                        },
+                        error = {
+                            AsyncImage(
+                                model = "https://placehold.co/600x400",
+                                contentScale = ContentScale.Crop,
+                                contentDescription = "placeholder",
+                                modifier = Modifier.fillMaxSize()
+                            )
+                        }
+                    )
+                }
             }
 
             Column(
-                modifier = Modifier
-                    .fillMaxHeight()
-                    .widthIn(min = 90.dp),
-                verticalArrangement = Arrangement.Center,
-                horizontalAlignment = Alignment.CenterHorizontally
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                // Imagen con fallback
-                SubcomposeAsyncImage(
-                    model = remember(product.image) {
-                        ImageRequest.Builder(context)
-                            .data(product.image?.ifBlank { "https://placehold.co/600x400" }) // fallback
-                            .crossfade(true)
-                            .build()
-                    },
-                    contentDescription = product.name,
-                    modifier = Modifier.size(imageSize),
-                    loading = {
-                        // mientras carga
-                        CircularProgressIndicator(modifier = Modifier.size(24.dp))
-                    },
-                    error = {
-                        // si falla
-                        AsyncImage(
-                            model = "https://placehold.co/600x400",
-                            contentScale = ContentScale.Crop,
-                            contentDescription = "placeholder",
-                            modifier = Modifier.size(imageSize)
-                        )
-                    }
+                Text(
+                    product.name,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
                 )
-                if (product.actualQty <= 0) {
+
+                Surface(
+                    shape = RoundedCornerShape(10.dp),
+                    color = MaterialTheme.colorScheme.primaryContainer,
+                    tonalElevation = 0.dp
+                ) {
                     Text(
-                        strings.inventory.productOutOfStock,
-                        color = MaterialTheme.colorScheme.error
+                        text = priceLabel,
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
                     )
-
-                    Column(
-                        modifier = Modifier.weight(1f),
-                        verticalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            Text(
-                                product.name,
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.SemiBold,
-                                maxLines = 2,
-                                overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.weight(1f)
-                            )
-                            Surface(
-                                shape = RoundedCornerShape(10.dp),
-                                color = MaterialTheme.colorScheme.primaryContainer
-                            ) {
-                                Text(
-                                    text = "${product.currency?.toCurrencySymbol()} $formattedPrice",
-                                    style = MaterialTheme.typography.labelLarge,
-                                    color = MaterialTheme.colorScheme.onPrimaryContainer,
-                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
-                                )
-                            }
-                        }
-
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            InfoBadge(
-                                label = "Stock $formattedQty",
-                                isMuted = false
-                            )
-                            InfoBadge(
-                                label = statusLabel,
-                                isMuted = product.actualQty > 0
-                            )
-                        }
-                    }
                 }
 
-                ProductMetadataRow(
-                    category = product.itemGroup,
-                    uom = product.uom,
-                    itemCode = product.itemCode
-                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    InfoBadge(
+                        label = "${strings.inventory.productAvailableLabel} $formattedQty",
+                        isMuted = false
+                    )
+                    InfoBadge(
+                        label = statusLabel,
+                        isMuted = hasStock
+                    )
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    InfoBadge(label = "${strings.inventory.productUomLabel} ${product.uom}", isMuted = true)
+                    InfoBadge(label = "${strings.inventory.productCodeLabel} ${product.itemCode}", isMuted = true)
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    InfoBadge(label = "Color $colorLabel", isMuted = true)
+                    InfoBadge(label = "Talla $sizeLabel", isMuted = true)
+                }
             }
         }
     }
@@ -201,7 +201,8 @@ fun ProductMetadataRow(
 fun MetadataPill(label: String) {
     Surface(
         shape = RoundedCornerShape(8.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant
+        color = MaterialTheme.colorScheme.surfaceVariant,
+        tonalElevation = 0.dp
     ) {
         Text(
             text = label,
@@ -226,7 +227,8 @@ private fun InfoBadge(label: String, isMuted: Boolean) {
     }
     Surface(
         shape = RoundedCornerShape(10.dp),
-        color = containerColor
+        color = containerColor,
+        tonalElevation = 0.dp
     ) {
         Text(
             text = label,

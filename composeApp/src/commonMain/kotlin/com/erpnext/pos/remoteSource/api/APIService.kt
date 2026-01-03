@@ -5,6 +5,7 @@ import com.erpnext.pos.base.getPlatformName
 import com.erpnext.pos.remoteSource.dto.BinDto
 import com.erpnext.pos.remoteSource.dto.CategoryDto
 import com.erpnext.pos.remoteSource.dto.CurrencyDto
+import com.erpnext.pos.remoteSource.dto.ContactChildDto
 import com.erpnext.pos.remoteSource.dto.CustomerDto
 import com.erpnext.pos.remoteSource.dto.DeliveryChargeDto
 import com.erpnext.pos.remoteSource.dto.ExchangeRateResponse
@@ -28,6 +29,7 @@ import com.erpnext.pos.remoteSource.dto.SalesInvoiceDto
 import com.erpnext.pos.remoteSource.dto.TokenResponse
 import com.erpnext.pos.remoteSource.dto.UserDto
 import com.erpnext.pos.remoteSource.dto.WarehouseItemDto
+import com.erpnext.pos.remoteSource.dto.v2.CustomerAddressDto
 import com.erpnext.pos.remoteSource.dto.v2.PaymentEntryCreateDto
 import com.erpnext.pos.remoteSource.oauth.AuthInfoStore
 import com.erpnext.pos.remoteSource.oauth.OAuthConfig
@@ -538,6 +540,40 @@ class APIService(
             })
         val totalOutstanding = invoices.sumOf { it.grandTotal - it.paidAmount }
         return OutstandingInfo(totalOutstanding, invoices)
+    }
+
+    suspend fun getCustomerContact(customerId: String): ContactChildDto? {
+        val url = authStore.getCurrentSite()
+        return clientOAuth.getERPList<ContactChildDto>(
+            doctype = ERPDocType.CustomerContact.path,
+            fields = listOf("name", "mobile_no", "email_id", "phone"),
+            baseUrl = url,
+            filters = filters {
+                "link_doctype" eq "Customer"
+                "link_name" eq customerId
+            }
+        ).firstOrNull()
+    }
+
+    suspend fun getCustomerAddress(customerId: String): CustomerAddressDto? {
+        val url = authStore.getCurrentSite()
+        return clientOAuth.getERPList<CustomerAddressDto>(
+            doctype = "Address",
+            fields = listOf(
+                "name",
+                "address_title",
+                "address_type",
+                "address_line1",
+                "address_line2",
+                "city",
+                "country"
+            ),
+            baseUrl = url,
+            filters = filters {
+                "link_doctype" eq "Customer"
+                "link_name" eq customerId
+            }
+        ).firstOrNull()
     }
 
     // Batch method for all outstanding invoices

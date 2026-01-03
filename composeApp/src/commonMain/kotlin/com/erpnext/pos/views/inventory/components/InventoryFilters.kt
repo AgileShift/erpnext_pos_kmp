@@ -13,6 +13,7 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
@@ -32,7 +33,7 @@ fun InventoryFilters(
         if (categories != null && categories.isNotEmpty()) {
             LazyRow(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
-                contentPadding = PaddingValues(horizontal = 8.dp)
+                contentPadding = PaddingValues(horizontal = 4.dp)
             ) {
                 items(categories.reversed()) { category ->
                     val isSelected = category == selectedCategory
@@ -41,19 +42,46 @@ fun InventoryFilters(
                         onClick = {
                             onCategoryChange(category)
                         },
-                        label = { Text(category.lowercase().replaceFirstChar { it.titlecase() }) }
+                        label = {
+                            Text(
+                                category.lowercase().replaceFirstChar { it.titlecase() },
+                                style = MaterialTheme.typography.labelMedium
+                            )
+                        },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                            selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
+                            labelColor = MaterialTheme.colorScheme.onSurfaceVariant
+                        ),
+                        shape = RoundedCornerShape(12.dp),
+                        elevation = FilterChipDefaults.filterChipElevation(
+                            elevation = 0.dp,
+                            pressedElevation = 0.dp,
+                            focusedElevation = 0.dp,
+                            hoveredElevation = 0.dp,
+                            draggedElevation = 0.dp,
+                            disabledElevation = 0.dp
+                        )
                     )
                 }
             }
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(10.dp))
         }
 
-        SearchTextField(
-            searchQuery = searchQuery,
-            onSearchQueryChange = onQueryChange,
-            onSearchAction = onSearchQueryChanged(searchQuery),
-            placeholderText = "Buscar por nombre, código o descripcion..."
-        )
+        Surface(
+            tonalElevation = 0.dp,
+            shape = RoundedCornerShape(16.dp),
+            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+        ) {
+            SearchTextField(
+                searchQuery = searchQuery,
+                onSearchQueryChange = onQueryChange,
+                onSearchAction = onSearchQueryChanged(searchQuery),
+                placeholderText = "Buscar por nombre, código o descripcion...",
+                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+            )
+        }
     }
 }
 
@@ -67,12 +95,12 @@ fun SearchTextField(
 ) {
     val keyboardController = LocalSoftwareKeyboardController.current
 
-    OutlinedTextField(
+    TextField(
         value = searchQuery,
         onValueChange = onSearchQueryChange, // <- actualiza el estado externo
         modifier = modifier
             .fillMaxWidth()
-            .padding(vertical = 4.dp),
+            .padding(vertical = 2.dp),
         placeholder = { Text(placeholderText, maxLines = 1, overflow = TextOverflow.Ellipsis) },
         leadingIcon = {
             Icon(
@@ -96,9 +124,12 @@ fun SearchTextField(
                 keyboardController?.hide()
             }
         ),
-        colors = OutlinedTextFieldDefaults.colors(
-            focusedBorderColor = MaterialTheme.colorScheme.primary,
-            unfocusedBorderColor = MaterialTheme.colorScheme.outline,
+        colors = TextFieldDefaults.colors(
+            focusedIndicatorColor = Color.Transparent,
+            unfocusedIndicatorColor = Color.Transparent,
+            disabledIndicatorColor = Color.Transparent,
+            focusedContainerColor = MaterialTheme.colorScheme.surface,
+            unfocusedContainerColor = MaterialTheme.colorScheme.surface,
             cursorColor = MaterialTheme.colorScheme.primary
         ),
         shape = RoundedCornerShape(12.dp)
