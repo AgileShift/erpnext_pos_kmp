@@ -661,6 +661,8 @@ private fun CollapsibleSection(
 ) {
     var expanded by rememberSaveable { mutableStateOf(defaultExpanded) }
     val interactionSource = remember { MutableInteractionSource() }
+    val strings = LocalAppStrings.current
+
     Surface(
         tonalElevation = 1.dp,
         shadowElevation = 1.dp,

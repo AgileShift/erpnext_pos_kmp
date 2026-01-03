@@ -19,6 +19,7 @@ data class AppStrings(
     val inventory: InventoryStrings,
     val settings: SettingsStrings,
     val salesFlow: SalesFlowStrings,
+    val navigation: NavigationStrings,
     val common: CommonStrings
 )
 
@@ -206,6 +207,14 @@ data class SalesFlowStrings(
     val sourceLabel: String
 )
 
+data class NavigationStrings(
+    val home: String,
+    val customer: String,
+    val invoice: String,
+    val billing: String,
+    val inventory: String
+)
+
 object AppStringsFactory {
     fun forLanguage(language: AppLanguage): AppStrings {
         return when (language) {
@@ -379,6 +388,13 @@ object AppStringsFactory {
         salesFlow = SalesFlowStrings(
             customerLabel = "Cliente",
             sourceLabel = "Origen"
+        ),
+        navigation = NavigationStrings(
+            customer = "Cliente",
+            inventory = "Inventario",
+            home = "Inicio",
+            billing = "Ventas",
+            invoice = "Creditos"
         ),
         common = CommonStrings(
             back = "Atrás",
@@ -560,6 +576,13 @@ object AppStringsFactory {
         salesFlow = SalesFlowStrings(
             customerLabel = "Customer",
             sourceLabel = "Source"
+        ),
+        navigation = NavigationStrings(
+            customer = "Customer",
+            inventory = "Inventory",
+            invoice = "Credits",
+            home = "Home",
+            billing = "Billing"
         ),
         common = CommonStrings(
             back = "Back",
