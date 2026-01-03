@@ -20,31 +20,10 @@ data class CustomerDto(
     val disabled: Boolean = false,
     @SerialName("credit_limit")
     var creditLimit: Double? = null,
-    @SerialName("credit_limits")
-    val creditLimits: List<CustomerCreditLimitDto> = emptyList(),
 
     var availableCredit: Double? = null,
     var pendingInvoicesCount: Int? = null,
     var totalPendingAmount: Double? = null
-) {
-    fun creditLimitForCompany(company: String?): CustomerCreditLimitDto? {
-        val target = company?.trim().orEmpty()
-        if (target.isBlank()) return null
-        return creditLimits.firstOrNull { limit ->
-            limit.company?.trim()?.equals(target, ignoreCase = true) == true
-        }
-    }
-}
-
-@Serializable
-data class CustomerCreditLimitDto(
-    @SerialName("company")
-    val company: String? = null,
-    @SerialName("credit_limit")
-    val creditLimit: Double? = null,
-    @SerialName("bypass_credit_limit_check")
-    @Serializable(with = IntAsBooleanSerializer::class)
-    val bypassCreditLimitCheck: Boolean = false
 )
 
 @Serializable

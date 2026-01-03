@@ -25,16 +25,6 @@ data class CustomerDto(
     val primaryAddressId: String? = null,
     @SerialName("disabled")
     val disabled: Boolean = false,
-    @SerialName("credit_limits")
-    val creditLimits: List<CustomerCreditLimitDto> = emptyList(),
     val primaryContact: CustomerContactDto? = null,
     val primaryAddress: CustomerAddressDto? = null
-) {
-    fun creditLimitForCompany(companyId: String): CustomerCreditLimitDto? {
-        val target = companyId.trim()
-        if (target.isBlank()) return null
-        return creditLimits.firstOrNull { limit ->
-            limit.company?.trim()?.equals(target, ignoreCase = true) == true
-        }
-    }
-}
+)
