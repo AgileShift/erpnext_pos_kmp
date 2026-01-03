@@ -13,7 +13,6 @@ import androidx.paging.LoadState
 import androidx.paging.compose.LazyPagingItems
 import com.erpnext.pos.base.getPlatformName
 import com.erpnext.pos.domain.models.ItemBO
-import com.erpnext.pos.localization.LocalAppStrings
 import com.erpnext.pos.views.inventory.InventoryAction
 import com.erpnext.pos.views.inventory.InventoryState
 
@@ -28,7 +27,6 @@ fun InventoryContent(
     onQueryChanged: (String) -> Unit,
     onCategorySelected: (String) -> Unit
 ) {
-    val strings = LocalAppStrings.current
     val isDesktop = getPlatformName() == "Desktop"
     Column(Modifier.fillMaxSize()) {
         InventoryFilters(
@@ -54,12 +52,12 @@ fun InventoryContent(
 
             itemsLazy.loadState.refresh is LoadState.Error -> {
                 val error = (itemsLazy.loadState.refresh as LoadState.Error).error
-                EmptyStateMessage("${strings.inventory.errorPrefix}: ${error.message}", Icons.Default.Error)
+                EmptyStateMessage("Error: ${error.message}", Icons.Default.Error)
             }
 
             itemsLazy.itemCount == 0 -> {
                 // Ya cargó, pero no hay resultados
-                EmptyStateMessage(strings.inventory.emptySearchMessage, Icons.Default.Inventory2)
+                EmptyStateMessage("No se encontró el artículo", Icons.Default.Inventory2)
             }
 
             else -> {
