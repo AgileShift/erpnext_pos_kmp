@@ -17,6 +17,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.erpnext.pos.localization.LocalAppStrings
 
 data class SalesFlowActionItem(
     val label: String,
@@ -39,15 +40,16 @@ fun SalesFlowContextSummary(context: SalesFlowContext?) {
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
     ) {
+        val strings = LocalAppStrings.current
         Column(
             modifier = Modifier.fillMaxWidth().padding(12.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             if (customerLabel != null) {
-                InfoRow(label = "Customer", value = customerLabel, isCompact = true)
+                InfoRow(label = strings.salesFlow.customerLabel, value = customerLabel, isCompact = true)
             }
             if (sourceInfo != null) {
-                InfoRow(label = "Source", value = sourceInfo, isCompact = true)
+                InfoRow(label = strings.salesFlow.sourceLabel, value = sourceInfo, isCompact = true)
             }
         }
     }

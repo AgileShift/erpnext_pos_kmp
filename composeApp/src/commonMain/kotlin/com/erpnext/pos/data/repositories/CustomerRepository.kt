@@ -7,6 +7,7 @@ import com.erpnext.pos.domain.models.CustomerBO
 import com.erpnext.pos.domain.repositories.ICustomerRepository
 import com.erpnext.pos.localSource.datasources.CustomerLocalSource
 import com.erpnext.pos.remoteSource.datasources.CustomerRemoteSource
+import com.erpnext.pos.remoteSource.dto.CustomerDto
 import com.erpnext.pos.remoteSource.mapper.toBO
 import com.erpnext.pos.remoteSource.mapper.toEntities
 import com.erpnext.pos.remoteSource.mapper.toEntity
@@ -16,6 +17,7 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlin.collections.map
 
@@ -107,14 +109,52 @@ class CustomerRepository(
     override suspend fun sync(): Flow<Resource<List<CustomerBO>>> {
         val territory: String? = null
         return networkBoundResource(
-            query = { localSource.getAll().toBO() },
-            fetch = { remoteSource.fetchCustomers(territory).toBO() },
-            shouldFetch = { localData ->
-                localData.isEmpty() ||
-                        SyncTTL.isExpired(localData.maxOf { it.lastSyncedAt?.toDouble() ?: 0.0 }
-                            .toLong())
+            query = { flowOf(emptyList<CustomerDto>().toBO()) },
+            fetch = {
+                remoteSource.fetchCustomers(territory)
             },
-            saveFetchResult = { localSource.insertAll(it.toEntity()) },
+            shouldFetch = { localData ->
+                true
+                /*localData.isEmpty() ||
+                        SyncTTL.isExpired(localData.maxOf { it.lastSyncedAt?.toDouble() ?: 0.0 }
+                            .toLong())*/
+            },
+            saveFetchResult = { remoteData ->
+                // 🔹 Guardamos resultados en DB local
+                val invoices = remoteSource
+                    .fetchInvoices(context.requireContext().profileName)
+                    .toEntities()
+                localSource.saveInvoices(invoices)
+
+                // Fetch all outstanding invoices once
+                val allOutstanding = remoteSource.fetchAllOutstandingInvoices()
+                val outstandingByCustomer = allOutstanding.groupBy { it.customer }
+
+                coroutineScope {
+                    val entities = remoteData.map { dto ->
+                        async {
+                            val customerInvoices = outstandingByCustomer[dto.name] ?: emptyList()
+                            val totalOutstanding =
+                                customerInvoices.sumOf { it.grandTotal - it.paidAmount }
+                            val creditLimit = dto.creditLimit
+                            val availableCredit = (creditLimit ?: 0.0) - totalOutstanding
+                            val address = remoteSource.getCustomerAddress(dto.name)
+                            val contact = remoteSource.getCustomerContact(dto.name)
+
+                            dto.toEntity(
+                                creditLimit = creditLimit,
+                                availableCredit = availableCredit,
+                                pendingInvoicesCount = customerInvoices.size,
+                                totalPendingAmount = totalOutstanding,
+                                state = if (totalOutstanding > 0) "Pendientes" else "Sin Pendientes",
+                                address = address ?: "",
+                                contact = contact
+                            )
+                        }
+                    }.awaitAll()
+                    localSource.insertAll(entities)
+                }
+            },
             onFetchFailed = { it.printStackTrace() }
         )
     }

@@ -129,7 +129,7 @@ class CustomerViewModel(
                 }
                 onResult(isValid, message)
             },
-            exceptionHandler = { onResult(false, it.message ?: "Error") }
+            exceptionHandler = { onResult(false, it.message ?: "Error al validar crédito") }
         )
     }
 
@@ -147,7 +147,7 @@ class CustomerViewModel(
             },
             exceptionHandler = {
                 _invoicesState.value = CustomerInvoicesState.Error(
-                    it.message ?: "Unable to load outstanding invoices."
+                    it.message ?: "No se pudieron cargar las facturas pendientes."
                 )
             }
         )
@@ -165,16 +165,21 @@ class CustomerViewModel(
         amount: Double
     ) {
         if (modeOfPayment.isBlank()) {
-            _paymentState.value = buildPaymentState(errorMessage = "Select a mode of payment.")
+            _paymentState.value = CustomerPaymentState(
+                errorMessage = "Selecciona un modo de pago."
+            )
             return
         }
         if (invoiceId.isBlank()) {
-            _paymentState.value = buildPaymentState(errorMessage = "Select an invoice.")
+            _paymentState.value = CustomerPaymentState(
+                errorMessage = "Selecciona una factura."
+            )
             return
         }
         if (amount <= 0) {
-            _paymentState.value = buildPaymentState(errorMessage = "Enter a valid amount.")
-            return
+            _paymentState.value = CustomerPaymentState(
+                errorMessage = "Ingresa un monto válido."
+            )
         }
 
         _paymentState.value = buildPaymentState(isSubmitting = true)
@@ -188,13 +193,13 @@ class CustomerViewModel(
                     )
                 )
                 _paymentState.value = buildPaymentState(
-                    successMessage = "Payment registered successfully."
+                    successMessage = "Pago registrado correctamente.",
                 )
                 loadOutstandingInvoices(customerId)
             },
             exceptionHandler = {
                 _paymentState.value = buildPaymentState(
-                    errorMessage = it.message ?: "Unable to register payment."
+                    errorMessage = it.message ?: "No se pudo registrar el pago."
                 )
             }
         )
