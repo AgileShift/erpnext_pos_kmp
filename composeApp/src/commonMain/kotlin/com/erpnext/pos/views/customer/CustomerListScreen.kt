@@ -1,5 +1,7 @@
 package com.erpnext.pos.views.customer
 
+import AppTextField
+import MoneyTextField
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateDpAsState
@@ -27,6 +29,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
+import androidx.compose.material3.ExposedDropdownMenuDefaults.TrailingIcon
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -48,8 +51,6 @@ import androidx.compose.ui.unit.sp
 import com.erpnext.pos.base.getPlatformName
 import com.erpnext.pos.domain.models.CustomerBO
 import com.erpnext.pos.domain.models.SalesInvoiceBO
-import com.erpnext.pos.views.billing.AppTextField
-import com.erpnext.pos.views.billing.MoneyTextField
 import com.erpnext.pos.utils.toCurrencySymbol
 import org.jetbrains.compose.ui.tooling.preview.Preview
 
@@ -952,7 +953,7 @@ private fun CustomerOutstandingInvoicesSheet(
                     modifier = Modifier.menuAnchor(MenuAnchorType.PrimaryNotEditable),
                     leadingIcon = { Icon(Icons.Default.Money, contentDescription = null) },
                     trailingIcon = {
-                        ExposedDropdownMenuDefaults.TrailingIcon(expanded = modeExpanded)
+                        TrailingIcon(expanded = modeExpanded)
                     }
                 )
                 ExposedDropdownMenu(
@@ -983,7 +984,7 @@ private fun CustomerOutstandingInvoicesSheet(
                     placeholder = "Select currency",
                     modifier = Modifier.menuAnchor(MenuAnchorType.PrimaryNotEditable),
                     trailingIcon = {
-                        ExposedDropdownMenuDefaults.TrailingIcon(expanded = currencyExpanded)
+                        TrailingIcon(expanded = currencyExpanded)
                     }
                 )
                 ExposedDropdownMenu(
