@@ -1,6 +1,8 @@
 package com.erpnext.pos.views.customer
 
 import com.erpnext.pos.domain.models.CustomerBO
+import com.erpnext.pos.domain.models.POSCurrencyOption
+import com.erpnext.pos.domain.models.POSPaymentModeOption
 import com.erpnext.pos.domain.models.SalesInvoiceBO
 
 sealed class CustomerState {
@@ -21,7 +23,11 @@ sealed class CustomerInvoicesState {
 data class CustomerPaymentState(
     val isSubmitting: Boolean = false,
     val errorMessage: String? = null,
-    val successMessage: String? = null
+    val successMessage: String? = null,
+    val baseCurrency: String = "USD",
+    val allowedCurrencies: List<POSCurrencyOption> = emptyList(),
+    val paymentModes: List<POSPaymentModeOption> = emptyList(),
+    val exchangeRate: Double = 1.0
 )
 
 data class CustomerAction(
