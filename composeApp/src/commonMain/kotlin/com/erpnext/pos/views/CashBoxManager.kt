@@ -266,26 +266,6 @@ class CashBoxManager(
         currentContext = currentContext?.copy(exchangeRate = rate)
     }
 
-    suspend fun resolveExchangeRateBetween(
-        fromCurrency: String,
-        toCurrency: String
-    ): Double? {
-        val from = fromCurrency.trim().uppercase()
-        val to = toCurrency.trim().uppercase()
-        if (from.isBlank() || to.isBlank()) return null
-        if (from == to) return 1.0
-
-        val directRate = api.getExchangeRate(fromCurrency = from, toCurrency = to)
-            ?.takeIf { it > 0.0 }
-        if (directRate != null) return directRate
-
-        val reverseRate = api.getExchangeRate(fromCurrency = to, toCurrency = from)
-            ?.takeIf { it > 0.0 }
-            ?.let { 1 / it }
-
-        return reverseRate
-    }
-
     private suspend fun resolveExchangeRate(baseCurrency: String): Double {
         if (baseCurrency.equals("USD", ignoreCase = true)) return 1.0
         val apiRate = api.getExchangeRate(
