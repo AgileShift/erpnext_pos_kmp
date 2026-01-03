@@ -46,6 +46,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.erpnext.pos.base.getPlatformName
 import com.erpnext.pos.domain.models.CustomerBO
+import com.erpnext.pos.localization.CustomerStrings
+import com.erpnext.pos.localization.LocalAppStrings
 import com.erpnext.pos.utils.toCurrencySymbol
 import org.jetbrains.compose.ui.tooling.preview.Preview
 
@@ -58,41 +60,43 @@ enum class CustomerQuickActionType {
     RegisterPayment
 }
 
+private const val AllCustomersFilter = "Todos"
+
 private data class CustomerQuickAction(
     val type: CustomerQuickActionType,
     val label: String,
     val icon: ImageVector
 )
 
-private fun customerQuickActions(): List<CustomerQuickAction> = listOf(
+private fun customerQuickActions(strings: CustomerStrings): List<CustomerQuickAction> = listOf(
     CustomerQuickAction(
         type = CustomerQuickActionType.PendingInvoices,
-        label = "Ver facturas pendientes",
+        label = strings.outstandingInvoicesTitle,
         icon = Icons.Filled.ReceiptLong
     ),
     CustomerQuickAction(
         type = CustomerQuickActionType.CreateQuotation,
-        label = "Crear cotización",
+        label = strings.createQuotationLabel,
         icon = Icons.Filled.Description
     ),
     CustomerQuickAction(
         type = CustomerQuickActionType.CreateSalesOrder,
-        label = "Crear orden de venta",
+        label = strings.createSalesOrderLabel,
         icon = Icons.Filled.PointOfSale
     ),
     CustomerQuickAction(
         type = CustomerQuickActionType.CreateDeliveryNote,
-        label = "Crear nota de entrega",
+        label = strings.createDeliveryNoteLabel,
         icon = Icons.Filled.LocalShipping
     ),
     CustomerQuickAction(
         type = CustomerQuickActionType.CreateInvoice,
-        label = "Crear factura",
+        label = strings.createInvoiceLabel,
         icon = Icons.Filled.Receipt
     ),
     CustomerQuickAction(
         type = CustomerQuickActionType.RegisterPayment,
-        label = "Registrar pago",
+        label = strings.registerPaymentTitle,
         icon = Icons.Filled.Payments
     )
 )
@@ -105,12 +109,13 @@ fun CustomerListScreen(
     paymentState: CustomerPaymentState,
     actions: CustomerAction
 ) {
+    val strings = LocalAppStrings.current
     val topAppBarScrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(
         state = rememberTopAppBarState()
     )
 
     var searchQuery by remember { mutableStateOf("") }
-    var selectedState by remember { mutableStateOf("Todos") }
+    var selectedState by remember { mutableStateOf(AllCustomersFilter) }
     var quickActionsCustomer by remember { mutableStateOf<CustomerBO?>(null) }
     var outstandingCustomer by remember { mutableStateOf<CustomerBO?>(null) }
 
@@ -128,10 +133,10 @@ fun CustomerListScreen(
         modifier = Modifier.nestedScroll(topAppBarScrollBehavior.nestedScrollConnection),
         topBar = {
             TopAppBar(
-                title = { Text("Clientes", style = MaterialTheme.typography.titleLarge) },
+                title = { Text(strings.customer.title, style = MaterialTheme.typography.titleLarge) },
                 actions = {
                     IconButton(onClick = actions.fetchAll) {
-                        Icon(Icons.Filled.Refresh, "Actualizar Clientes")
+                        Icon(Icons.Filled.Refresh, strings.customer.refreshCustomers)
                     }
                 },
                 scrollBehavior = topAppBarScrollBehavior
@@ -164,7 +169,7 @@ fun CustomerListScreen(
                             actions.onSearchQueryChanged(it)
                         },
                         onStateChange = {
-                            selectedState = it ?: "Todos"
+                            selectedState = it ?: AllCustomersFilter
                             actions.onStateSelected(it)
                         },
                         modifier = Modifier.padding(horizontal = contentPadding, vertical = 8.dp)
@@ -196,9 +201,9 @@ fun CustomerListScreen(
                         if (filtered.isEmpty()) {
                             EmptyStateMessage(
                                 message = if (searchQuery.isEmpty())
-                                    "No hay clientes disponibles."
+                                    strings.customer.emptyCustomers
                                 else
-                                    "No se encontraron clientes que coincidan con tu búsqueda.",
+                                    strings.customer.emptySearchCustomers,
                                 icon = Icons.Filled.People
                             )
                         } else {
@@ -231,7 +236,7 @@ fun CustomerListScreen(
                         exit = fadeOut()
                     ) {
                         EmptyStateMessage(
-                            message = "No hay clientes disponibles.",
+                            message = strings.customer.emptyCustomers,
                             icon = Icons.Filled.People
                         )
                     }
@@ -292,11 +297,17 @@ private fun CustomerFilters(
     searchQuery: String,
     selectedState: String,
     isWideLayout: Boolean,
-    states: List<String> = listOf("Pendientes", "Sin Pendientes"),
     onQueryChange: (String) -> Unit,
     onStateChange: (String?) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val strings = LocalAppStrings.current
+    val filterOptions = remember(strings) {
+        listOf(
+            "Pendientes" to strings.customer.pendingFilterLabel,
+            "Sin Pendientes" to strings.customer.noPendingFilterLabel
+        )
+    }
     Column(modifier = modifier) {
         if (isWideLayout) {
             Row(
@@ -309,19 +320,21 @@ private fun CustomerFilters(
                     modifier = Modifier.weight(1f)
                 ) {
                     item {
-                        val isSelected = selectedState == "Todos"
-                        FilterChipItem("Todos", isSelected) { onStateChange("Todos") }
+                        val isSelected = selectedState == AllCustomersFilter
+                        FilterChipItem(strings.customer.allLabel, isSelected) {
+                            onStateChange(AllCustomersFilter)
+                        }
                     }
-                    items(states) { state ->
-                        val isSelected = selectedState == state
-                        FilterChipItem(state, isSelected) { onStateChange(state) }
+                    items(filterOptions) { (value, label) ->
+                        val isSelected = selectedState == value
+                        FilterChipItem(label, isSelected) { onStateChange(value) }
                     }
                 }
 
                 SearchTextField(
                     searchQuery = searchQuery,
                     onSearchQueryChange = onQueryChange,
-                    placeholderText = "Buscar cliente por nombre o teléfono...",
+                    placeholderText = strings.customer.searchPlaceholder,
                     modifier = Modifier.weight(1.2f)
                 )
             }
@@ -331,12 +344,14 @@ private fun CustomerFilters(
                 modifier = Modifier.fillMaxWidth()
             ) {
                 item {
-                    val isSelected = selectedState == "Todos"
-                    FilterChipItem("Todos", isSelected) { onStateChange("Todos") }
+                    val isSelected = selectedState == AllCustomersFilter
+                    FilterChipItem(strings.customer.allLabel, isSelected) {
+                        onStateChange(AllCustomersFilter)
+                    }
                 }
-                items(states) { state ->
-                    val isSelected = selectedState == state
-                    FilterChipItem(state, isSelected) { onStateChange(state) }
+                items(filterOptions) { (value, label) ->
+                    val isSelected = selectedState == value
+                    FilterChipItem(label, isSelected) { onStateChange(value) }
                 }
             }
             Spacer(modifier = Modifier.height(8.dp))
@@ -344,7 +359,7 @@ private fun CustomerFilters(
             SearchTextField(
                 searchQuery = searchQuery,
                 onSearchQueryChange = onQueryChange,
-                placeholderText = "Buscar cliente por nombre o teléfono..."
+                placeholderText = strings.customer.searchPlaceholder
             )
         }
     }
@@ -359,6 +374,7 @@ fun SearchTextField(
     onSearchAction: (() -> Unit)? = null
 ) {
     val keyboardController = LocalSoftwareKeyboardController.current
+    val strings = LocalAppStrings.current
     OutlinedTextField(
         value =
             searchQuery,
@@ -376,7 +392,7 @@ fun SearchTextField(
         leadingIcon = {
             Icon(
                 imageVector = Icons.Filled.Search,
-                contentDescription = "Icono de búsqueda",
+                contentDescription = strings.customer.searchIconDescription,
                 tint = MaterialTheme.colorScheme.onSurfaceVariant
             )
         },
@@ -389,7 +405,7 @@ fun SearchTextField(
                     }) {
                     Icon(
                         imageVector = Icons.Filled.Clear,
-                        contentDescription = "Borrar búsqueda",
+                        contentDescription = strings.customer.clearSearchDescription,
                         tint = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
@@ -495,7 +511,8 @@ fun CustomerItem(
 ) {
     val isOverLimit = (customer.availableCredit ?: 0.0) < 0 || (customer.currentBalance ?: 0.0) > 0
     var isMenuExpanded by remember { mutableStateOf(false) }
-    val quickActions = remember { customerQuickActions() }
+    val strings = LocalAppStrings.current
+    val quickActions = remember(strings) { customerQuickActions(strings.customer) }
 
     Card(
         modifier = Modifier
@@ -566,7 +583,7 @@ fun CustomerItem(
                 )
                 if ((customer.pendingInvoices ?: 0) > 0) {
                     StatusPill(
-                        label = "Overdue",
+                        label = strings.customer.overdueLabel,
                         isCritical = true
                     )
                 }
@@ -578,7 +595,7 @@ fun CustomerItem(
                     overflow = TextOverflow.Ellipsis
                 )
                 Text(
-                    customer.territory ?: "N/A",
+                    customer.territory ?: "N/D",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.outline,
                     maxLines = 1,
@@ -602,7 +619,7 @@ fun CustomerItem(
                     }
                 )
                 Text(
-                    "Pending: ${customer.pendingInvoices}",
+                    "${strings.customer.pendingLabel}: ${customer.pendingInvoices}",
                     style = MaterialTheme.typography.bodySmall,
                     color = if (isOverLimit) {
                         MaterialTheme.colorScheme.error.copy(alpha = 0.7f)
@@ -611,12 +628,12 @@ fun CustomerItem(
                     }
                 )
                 Text(
-                    "Available: $currencySymbol${customer.availableCredit ?: 0.0}",
+                    "${strings.customer.availableLabel}: $currencySymbol${customer.availableCredit ?: 0.0}",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Text(
-                    "Limit: $currencySymbol${customer.creditLimit ?: 0.0}",
+                    "${strings.customer.limitLabel}: $currencySymbol${customer.creditLimit ?: 0.0}",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -632,7 +649,7 @@ fun CustomerItem(
                 }) {
                     Icon(
                         Icons.Filled.MoreVert,
-                        contentDescription = "Más acciones",
+                        contentDescription = strings.customer.moreActions,
                         tint = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
@@ -706,7 +723,8 @@ private fun CustomerQuickActionsSheet(
     onDismiss: () -> Unit,
     onActionSelected: (CustomerQuickActionType) -> Unit
 ) {
-    val quickActions = remember { customerQuickActions() }
+    val strings = LocalAppStrings.current
+    val quickActions = remember(strings) { customerQuickActions(strings.customer) }
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -751,6 +769,7 @@ private fun CustomerOutstandingInvoicesSheet(
     var selectedInvoiceId by remember { mutableStateOf<String?>(null) }
     var paymentAmount by remember { mutableStateOf("") }
     var paymentMode by remember { mutableStateOf("") }
+    val strings = LocalAppStrings.current
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -763,14 +782,14 @@ private fun CustomerOutstandingInvoicesSheet(
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             Text(
-                text = "Outstanding invoices - ${customer.customerName}",
+                text = "${strings.customer.outstandingInvoicesTitle} - ${customer.customerName}",
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.SemiBold
             )
 
             when (invoicesState) {
                 CustomerInvoicesState.Idle -> Text(
-                    text = "Select a customer to view outstanding invoices.",
+                    text = strings.customer.selectCustomerToViewInvoices,
                     style = MaterialTheme.typography.bodyMedium
                 )
                 CustomerInvoicesState.Loading -> CircularProgressIndicator()
@@ -782,7 +801,7 @@ private fun CustomerOutstandingInvoicesSheet(
                 is CustomerInvoicesState.Success -> {
                     if (invoicesState.invoices.isEmpty()) {
                         Text(
-                            text = "No outstanding invoices for this customer.",
+                            text = strings.customer.noOutstandingInvoices,
                             style = MaterialTheme.typography.bodyMedium
                         )
                     } else {
@@ -814,11 +833,11 @@ private fun CustomerOutstandingInvoicesSheet(
                                         fontWeight = FontWeight.SemiBold
                                     )
                                     Text(
-                                        text = "Posted: ${invoice.postingDate}",
+                                        text = "${strings.customer.postedLabel}: ${invoice.postingDate}",
                                         style = MaterialTheme.typography.bodySmall
                                     )
                                     Text(
-                                        text = "Outstanding: ${invoice.currency?.toCurrencySymbol().orEmpty()}${invoice.outstandingAmount}",
+                                        text = "${strings.customer.outstandingLabel}: ${invoice.currency?.toCurrencySymbol().orEmpty()}${invoice.outstandingAmount}",
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.primary
                                     )
@@ -832,7 +851,7 @@ private fun CustomerOutstandingInvoicesSheet(
             Divider()
 
             Text(
-                text = "Register payment",
+                text = strings.customer.registerPaymentTitle,
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold
             )
@@ -840,21 +859,21 @@ private fun CustomerOutstandingInvoicesSheet(
             OutlinedTextField(
                 value = selectedInvoiceId ?: "",
                 onValueChange = { selectedInvoiceId = it },
-                label = { Text("Invoice ID") },
+                label = { Text(strings.customer.invoiceIdLabel) },
                 modifier = Modifier.fillMaxWidth()
             )
 
             OutlinedTextField(
                 value = paymentMode,
                 onValueChange = { paymentMode = it },
-                label = { Text("Mode of payment") },
+                label = { Text(strings.customer.paymentModeLabel) },
                 modifier = Modifier.fillMaxWidth()
             )
 
             OutlinedTextField(
                 value = paymentAmount,
                 onValueChange = { paymentAmount = it },
-                label = { Text("Amount") },
+                label = { Text(strings.customer.amountLabel) },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                 modifier = Modifier.fillMaxWidth()
             )
@@ -883,7 +902,10 @@ private fun CustomerOutstandingInvoicesSheet(
                 },
                 enabled = !paymentState.isSubmitting
             ) {
-                Text(if (paymentState.isSubmitting) "Processing..." else "Register payment")
+                Text(
+                    if (paymentState.isSubmitting) strings.customer.processing
+                    else strings.customer.registerPaymentButton
+                )
             }
             Spacer(modifier = Modifier.height(12.dp))
         }
@@ -893,6 +915,7 @@ private fun CustomerOutstandingInvoicesSheet(
 @Composable
 private fun CustomerOutstandingSummary(customer: CustomerBO) {
     val currencySymbol = customer.currency.toCurrencySymbol()
+    val strings = LocalAppStrings.current
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -904,7 +927,7 @@ private fun CustomerOutstandingSummary(customer: CustomerBO) {
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         Text(
-            text = "Resumen de pendientes",
+            text = strings.customer.outstandingSummaryTitle,
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.SemiBold
         )
@@ -912,14 +935,14 @@ private fun CustomerOutstandingSummary(customer: CustomerBO) {
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            Text("Facturas pendientes")
+            Text(strings.customer.outstandingSummaryInvoicesLabel)
             Text("${customer.pendingInvoices}")
         }
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            Text("Monto pendiente")
+            Text(strings.customer.outstandingSummaryAmountLabel)
             Text("$currencySymbol${customer.totalPendingAmount ?: customer.currentBalance}")
         }
     }
@@ -944,6 +967,7 @@ private fun handleQuickAction(
 private fun FullScreenErrorMessage(
     errorMessage: String, onRetry: () -> Unit, modifier: Modifier = Modifier
 ) {
+    val strings = LocalAppStrings.current
     Box(
         modifier = modifier.fillMaxSize().padding(16.dp), contentAlignment = Alignment.Center
     ) {
@@ -953,7 +977,7 @@ private fun FullScreenErrorMessage(
         ) {
             Icon(
                 Icons.Filled.Error,
-                "Error",
+                strings.common.errorLabel,
                 modifier = Modifier.size(64.dp),
                 tint = MaterialTheme.colorScheme.error
             )
@@ -968,7 +992,7 @@ private fun FullScreenErrorMessage(
                     containerColor = MaterialTheme.colorScheme.primary
                 )
             ) {
-                Text("Reintentar")
+                Text(strings.common.retry)
             }
         }
     }

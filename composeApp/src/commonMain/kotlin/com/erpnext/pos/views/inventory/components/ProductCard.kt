@@ -13,6 +13,7 @@ import coil3.compose.SubcomposeAsyncImage
 import coil3.request.ImageRequest
 import coil3.request.crossfade
 import com.erpnext.pos.domain.models.ItemBO
+import com.erpnext.pos.localization.LocalAppStrings
 import com.erpnext.pos.utils.toCurrencySymbol
 import com.erpnext.pos.views.inventory.InventoryAction
 import org.jetbrains.compose.ui.tooling.preview.Preview
@@ -25,6 +26,7 @@ fun ProductCard(actions: InventoryAction, product: ItemBO) {
         com.erpnext.pos.utils.formatDoubleToString(product.actualQty, 0)
     }
     val context = LocalPlatformContext.current
+    val strings = LocalAppStrings.current
 
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -54,7 +56,7 @@ fun ProductCard(actions: InventoryAction, product: ItemBO) {
                     // si falla
                     AsyncImage(
                         model = "https://placehold.co/600x400",
-                        contentDescription = "placeholder",
+                        contentDescription = strings.common.imagePlaceholderDescription,
                         modifier = Modifier.size(72.dp)
                     )
                 }
@@ -62,18 +64,26 @@ fun ProductCard(actions: InventoryAction, product: ItemBO) {
 
             Column(modifier = Modifier.weight(1f)) {
                 Text(product.name, style = MaterialTheme.typography.titleMedium, maxLines = 2)
-                Text("Disp: $formattedQty", style = MaterialTheme.typography.bodyMedium)
                 Text(
-                    "Categoria: ${
+                    "${strings.inventory.productAvailableLabel}: $formattedQty",
+                    style = MaterialTheme.typography.bodyMedium
+                )
+                Text(
+                    "${strings.inventory.productCategoryLabel}: ${
                         product.itemGroup.lowercase().replaceFirstChar { it.titlecase() }
                     }",
                     style = MaterialTheme.typography.bodySmall
                 )
                 Text(
-                    "UOM: ${product.uom.lowercase().replaceFirstChar { it.titlecase() }}",
+                    "${strings.inventory.productUomLabel}: ${
+                        product.uom.lowercase().replaceFirstChar { it.titlecase() }
+                    }",
                     style = MaterialTheme.typography.bodySmall
                 )
-                Text("Cód: ${product.itemCode}", style = MaterialTheme.typography.bodySmall)
+                Text(
+                    "${strings.inventory.productCodeLabel}: ${product.itemCode}",
+                    style = MaterialTheme.typography.bodySmall
+                )
             }
 
             Column(
@@ -89,7 +99,7 @@ fun ProductCard(actions: InventoryAction, product: ItemBO) {
                     color = MaterialTheme.colorScheme.primary,
                 )
                 if (product.actualQty <= 0) {
-                    Text("Agotado", color = MaterialTheme.colorScheme.error)
+                    Text(strings.inventory.productOutOfStock, color = MaterialTheme.colorScheme.error)
                 }
             }
         }

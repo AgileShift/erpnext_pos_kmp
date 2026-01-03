@@ -57,6 +57,7 @@ import coil3.request.ImageRequest
 import coil3.request.crossfade
 import com.erpnext.pos.utils.formatAmount
 import com.erpnext.pos.utils.toCurrencySymbol
+import com.erpnext.pos.localization.LocalAppStrings
 import com.erpnext.pos.views.billing.BillingAction
 import com.erpnext.pos.views.billing.BillingState
 import com.erpnext.pos.views.billing.PaymentLine
@@ -86,17 +87,18 @@ fun BillingScreen(
     state: BillingState, action: BillingAction
 ) {
     val snackbar = koinInject<SnackbarController>()
+    val strings = LocalAppStrings.current
     val uiSnackbar = snackbar.snackbar.collectAsState().value
 
     Box(Modifier.fillMaxSize()) {
         BottomSheetScaffold(sheetShadowElevation = 12.dp, topBar = {
             TopAppBar(title = {
-                Text("Nueva Factura")
+                Text(strings.billing.newInvoiceTitle)
             }, navigationIcon = {
                 IconButton(onClick = action.onBack) {
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = "Atrás"
+                        contentDescription = strings.common.back
                     )
                 }
             })
@@ -146,7 +148,7 @@ fun BillingScreen(
                 is BillingState.Empty -> {
                     LaunchedEffect(Unit) {
                         snackbar.show(
-                            "No hay productos en el carrito",
+                            strings.billing.emptyCartSnackbar,
                             SnackbarType.Info,
                             SnackbarPosition.Top
                         )
@@ -179,7 +181,7 @@ fun BillingScreen(
                                 )
                                 Spacer(Modifier.height(12.dp))
                                 Button(onClick = action.onBack) {
-                                    Text("Volver")
+                                    Text(strings.billing.returnButton)
                                 }
                             }
                         }
@@ -202,6 +204,7 @@ private fun BillingContent(
     snackbar: SnackbarController
 ) {
     var showSourceSheet by remember { mutableStateOf(false) }
+    val strings = LocalAppStrings.current
 
     LaunchedEffect(state.successMessage) {
         state.successMessage?.let {
@@ -214,7 +217,7 @@ private fun BillingContent(
             .padding(horizontal = 16.dp, vertical = 8.dp)
     ) {
         CollapsibleSection(
-            title = "Cliente", defaultExpanded = true
+            title = strings.billing.customerSectionTitle, defaultExpanded = true
         ) {
             Column(
                 modifier = Modifier.padding(end = 12.dp, start = 12.dp, bottom = 8.dp),
@@ -240,7 +243,7 @@ private fun BillingContent(
         Spacer(Modifier.height(8.dp))
 
         CollapsibleSection(
-            title = "Carrito", defaultExpanded = false
+            title = strings.billing.cartSectionTitle, defaultExpanded = false
         ) {
             ProductSelector(
                 query = state.productSearchQuery,
@@ -271,7 +274,7 @@ private fun BillingContent(
 
         if (state.paymentTerms.isNotEmpty()) {
             CollapsibleSection(
-                title = "Terminos de credito", defaultExpanded = false
+                title = strings.billing.creditTermsSectionTitle, defaultExpanded = false
             ) {
                 CreditTermsSection(
                     isCreditSale = state.isCreditSale,
@@ -290,7 +293,7 @@ private fun BillingContent(
             modifier = Modifier.fillMaxWidth(),
             enabled = state.selectedCustomer != null && state.cartItems.isNotEmpty() && (state.isCreditSale || state.paidAmountBase >= state.total) && (!state.isCreditSale || state.selectedPaymentTerm != null)
         ) {
-            Text("Finalizar venta")
+            Text(strings.billing.finalizeSale)
         }
     }
 
@@ -313,20 +316,21 @@ private fun SourceDocumentRow(
     onLink: () -> Unit,
     onClear: () -> Unit
 ) {
+    val strings = LocalAppStrings.current
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(
-            text = if (hasSource) "Source document linked" else "Link a source document",
+            text = if (hasSource) strings.billing.sourceDocumentLinked else strings.billing.linkSourceDocument,
             style = MaterialTheme.typography.bodySmall
         )
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             if (hasSource) {
-                TextButton(onClick = onClear) { Text("Clear") }
+                TextButton(onClick = onClear) { Text(strings.common.clear) }
             }
-            TextButton(onClick = onLink) { Text("Link") }
+            TextButton(onClick = onLink) { Text(strings.common.link) }
         }
     }
 }
@@ -343,6 +347,7 @@ private fun SourceDocumentSheet(
     var reference by remember { mutableStateOf("") }
     var expanded by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
+    val strings = LocalAppStrings.current
 
     LaunchedEffect(sourceType) {
         reference = ""
@@ -365,7 +370,7 @@ private fun SourceDocumentSheet(
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Text(
-                text = "Link source document",
+                text = strings.billing.linkSourceDocumentTitle,
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold
             )
@@ -375,14 +380,14 @@ private fun SourceDocumentSheet(
             ) {
                 OutlinedTextField(
                     value = when (sourceType) {
-                        SalesFlowSource.Quotation -> "Quotation"
-                        SalesFlowSource.SalesOrder -> "Sales Order"
-                        SalesFlowSource.DeliveryNote -> "Delivery Note"
-                        SalesFlowSource.Customer -> "Customer"
+                        SalesFlowSource.Quotation -> strings.billing.sourceTypeQuotation
+                        SalesFlowSource.SalesOrder -> strings.billing.sourceTypeSalesOrder
+                        SalesFlowSource.DeliveryNote -> strings.billing.sourceTypeDeliveryNote
+                        SalesFlowSource.Customer -> strings.billing.sourceTypeCustomer
                     },
                     onValueChange = {},
                     readOnly = true,
-                    label = { Text("Source type") },
+                    label = { Text(strings.billing.sourceTypeLabel) },
                     trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
                     modifier = Modifier.menuAnchor(MenuAnchorType.PrimaryEditable).fillMaxWidth()
                 )
@@ -399,10 +404,10 @@ private fun SourceDocumentSheet(
                             text = {
                                 Text(
                                     when (option) {
-                                        SalesFlowSource.Quotation -> "Quotation"
-                                        SalesFlowSource.SalesOrder -> "Sales Order"
-                                        SalesFlowSource.DeliveryNote -> "Delivery Note"
-                                        SalesFlowSource.Customer -> "Customer"
+                                        SalesFlowSource.Quotation -> strings.billing.sourceTypeQuotation
+                                        SalesFlowSource.SalesOrder -> strings.billing.sourceTypeSalesOrder
+                                        SalesFlowSource.DeliveryNote -> strings.billing.sourceTypeDeliveryNote
+                                        SalesFlowSource.Customer -> strings.billing.sourceTypeCustomer
                                     }
                                 )
                             },
@@ -417,7 +422,7 @@ private fun SourceDocumentSheet(
 
             if (state.selectedCustomer == null) {
                 Text(
-                    text = "Select a customer to load documents.",
+                    text = strings.billing.selectCustomerForDocuments,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -425,7 +430,7 @@ private fun SourceDocumentSheet(
                 OutlinedTextField(
                     value = searchQuery,
                     onValueChange = { searchQuery = it },
-                    label = { Text("Filter by ID or status") },
+                    label = { Text(strings.billing.filterByIdOrStatus) },
                     modifier = Modifier.fillMaxWidth()
                 )
 
@@ -444,7 +449,7 @@ private fun SourceDocumentSheet(
 
                     state.sourceDocuments.isEmpty() -> {
                         Text(
-                            text = "No documents found.",
+                            text = strings.billing.noDocumentsFound,
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -482,11 +487,11 @@ private fun SourceDocumentSheet(
                                         fontWeight = FontWeight.SemiBold
                                     )
                                     Text(
-                                        text = "Date: ${doc.date ?: "N/A"}",
+                                        text = "${strings.billing.dateLabel}: ${doc.date ?: "N/D"}",
                                         style = MaterialTheme.typography.bodySmall
                                     )
                                     Text(
-                                        text = "Status: ${doc.status ?: "Unknown"}",
+                                        text = "${strings.billing.statusLabel}: ${doc.status ?: strings.billing.unknownStatus}",
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
@@ -502,7 +507,7 @@ private fun SourceDocumentSheet(
                 modifier = Modifier.fillMaxWidth(),
                 enabled = reference.isNotBlank()
             ) {
-                Text("Apply")
+                Text(strings.common.apply)
             }
         }
     }
@@ -518,6 +523,7 @@ private fun CustomerSelector(
 ) {
     var expanded by remember { mutableStateOf(false) }
     val hasCustomers = customers.isNotEmpty()
+    val strings = LocalAppStrings.current
 
     //Text("Cliente", style = MaterialTheme.typography.titleMedium)
     ExposedDropdownMenuBox(
@@ -533,8 +539,8 @@ private fun CustomerSelector(
             /*.onFocusChanged { focusState ->
                 expanded = focusState.isFocused
             }*/
-            label = "Buscar o Seleccionar",
-            placeholder = "Nombre, codigo, telefono...",
+            label = strings.billing.searchCustomerLabel,
+            placeholder = strings.billing.searchCustomerPlaceholder,
             leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
         )
@@ -562,9 +568,10 @@ private fun ProductSelector(
     var expanded by remember { mutableStateOf(false) }
     val hasResults = results.isNotEmpty()
     val context = LocalPlatformContext.current
+    val strings = LocalAppStrings.current
 
     Column(modifier = Modifier.padding(horizontal = 12.dp)) {
-        Text("Producto", style = MaterialTheme.typography.titleMedium)
+        Text(strings.billing.productSectionTitle, style = MaterialTheme.typography.titleMedium)
         ExposedDropdownMenuBox(
             expanded = expanded && hasResults, onExpandedChange = { expanded = it }) {
             AppTextField(
@@ -578,8 +585,8 @@ private fun ProductSelector(
                     .menuAnchor(MenuAnchorType.PrimaryEditable)/*.onFocusChanged { focusState ->
                     expanded = focusState.isFocused
                 }*/,
-                label = "Buscar por nombre o código",
-                placeholder = "Nombre, codigo...",
+                label = strings.billing.productSearchLabel,
+                placeholder = strings.billing.productSearchPlaceholder,
                 leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
                 trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) })
 
@@ -611,18 +618,18 @@ private fun ProductSelector(
                                 error = {
                                     AsyncImage(
                                         model = "https://placehold.co/64x64",
-                                        contentDescription = "placeholder",
+                                        contentDescription = strings.common.imagePlaceholderDescription,
                                         modifier = Modifier.size(40.dp)
                                     )
                                 })
                             Column {
                                 Text(item.name)
                                 Text(
-                                    text = "Código: ${item.itemCode}",
+                                    text = "${strings.billing.productCodeLabel}: ${item.itemCode}",
                                     style = MaterialTheme.typography.bodySmall
                                 )
                                 Text(
-                                    "Precio: ${
+                                    "${strings.billing.productPriceLabel}: ${
                                         formatAmount(
                                             item.currency ?: "USD", item.price
                                         )
@@ -631,7 +638,7 @@ private fun ProductSelector(
                                     color = MaterialTheme.colorScheme.primary
                                 )
                                 Text(
-                                    "Disponible: ${item.actualQty.formatQty()}",
+                                    "${strings.billing.productAvailableLabel}: ${item.actualQty.formatQty()}",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -674,7 +681,8 @@ private fun CollapsibleSection(
                 ) {
                     Icon(
                         imageVector = if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
-                        contentDescription = if (expanded) "Colapsar sección" else "Expandir sección"
+                        contentDescription = if (expanded) strings.common.collapseSection
+                        else strings.common.expandSection
                     )
                 }
             }
@@ -693,10 +701,11 @@ private fun CartList(
     onQuantityChanged: (String, Double) -> Unit,
     onRemoveItem: (String) -> Unit
 ) {
+    val strings = LocalAppStrings.current
     Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
         if (cartItems.isEmpty()) {
             Text(
-                "Carrito vacío",
+                strings.billing.cartEmptyTitle,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -705,7 +714,7 @@ private fun CartList(
 
         Column(modifier = Modifier.fillMaxWidth()) {
             Text(
-                "Artículos (${cartItems.size})",
+                "${strings.billing.cartItemsLabel} (${cartItems.size})",
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -735,6 +744,7 @@ private fun CartItemRow(
 ) {
     val subtotal = item.price * item.quantity
     val displayQty = item.quantity.formatQty()
+    val strings = LocalAppStrings.current
 
     Surface(
         tonalElevation = 0.dp,
@@ -754,7 +764,7 @@ private fun CartItemRow(
                     overflow = TextOverflow.Ellipsis
                 )
                 Text(
-                    text = "Qty $displayQty • ${
+                    text = "${strings.billing.quantityLabelShort} $displayQty • ${
                         formatAmount(
                             currency.toCurrencySymbol(), item.price
                         )
@@ -779,7 +789,7 @@ private fun CartItemRow(
                     Icon(
                         Icons.Default.Remove,
                         tint = MaterialTheme.colorScheme.error,
-                        contentDescription = "Decrease quantity"
+                        contentDescription = strings.billing.decreaseQuantityDescription
                     )
                 }
                 IconButton(
@@ -787,7 +797,7 @@ private fun CartItemRow(
                     modifier = Modifier.size(26.dp)
                 ) {
                     Icon(
-                        Icons.Default.Add, contentDescription = "Increase quantity"
+                        Icons.Default.Add, contentDescription = strings.billing.increaseQuantityDescription
                     )
                 }
                 IconButton(
@@ -795,7 +805,7 @@ private fun CartItemRow(
                 ) {
                     Icon(
                         Icons.Default.Delete,
-                        contentDescription = "Eliminar",
+                        contentDescription = strings.billing.removeItemDescription,
                         tint = MaterialTheme.colorScheme.error
                     )
                 }
@@ -827,28 +837,29 @@ private fun SummaryRow(label: String, symbol: String, amount: Double, bold: Bool
 private fun TotalsPaymentsSheet(
     state: BillingState.Success, action: BillingAction
 ) {
+    val strings = LocalAppStrings.current
     LazyColumn(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         item {
             Text(
-                "Totales + Pagos", style = MaterialTheme.typography.titleMedium
+                strings.billing.totalsPaymentsTitle, style = MaterialTheme.typography.titleMedium
             )
         }
         item {
             val currency = state.currency ?: "USD"
-            CollapsibleSection(title = "Totales + Descuentos + Envío", defaultExpanded = true) {
+            CollapsibleSection(title = strings.billing.totalsDiscountsShippingTitle, defaultExpanded = true) {
                 Column(
                     modifier = Modifier.padding(horizontal = 12.dp),
                     verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    SummaryRow("Subtotal", currency, state.subtotal)
-                    SummaryRow("Impuestos", currency, state.taxes)
-                    SummaryRow("Descuento", currency, state.discount)
-                    SummaryRow("Envío", currency, state.shippingAmount)
+                    SummaryRow(strings.billing.subtotalLabel, currency, state.subtotal)
+                    SummaryRow(strings.billing.taxesLabel, currency, state.taxes)
+                    SummaryRow(strings.billing.discountLabel, currency, state.discount)
+                    SummaryRow(strings.billing.shippingLabel, currency, state.shippingAmount)
                     HorizontalDivider()
-                    SummaryRow("Total", currency, state.total, bold = true)
+                    SummaryRow(strings.billing.totalLabel, currency, state.total, bold = true)
                 }
                 Spacer(Modifier.height(12.dp))
                 DiscountShippingInputs(
@@ -857,7 +868,7 @@ private fun TotalsPaymentsSheet(
             }
         }
         item {
-            CollapsibleSection(title = "Pagos", defaultExpanded = true) {
+            CollapsibleSection(title = strings.billing.paymentsTitle, defaultExpanded = true) {
                 PaymentSection(
                     state = state,
                     baseCurrency = state.currency ?: "USD",
@@ -901,6 +912,7 @@ private fun PaymentSection(
     onRemovePaymentLine: (Int) -> Unit,
     onPaymentCurrencySelected: (String) -> Unit
 ) {
+    val strings = LocalAppStrings.current
     val modeOptions = remember(paymentModes) { paymentModes.map { it.modeOfPayment }.distinct() }
     val defaultMode = paymentModes.firstOrNull()?.modeOfPayment.orEmpty()
     var selectedMode by remember(modeOptions, defaultMode) { mutableStateOf(defaultMode) }
@@ -966,7 +978,7 @@ private fun PaymentSection(
 
         if (paymentLines.isEmpty()) {
             Text(
-                "Sin pagos registrados",
+                strings.billing.paymentsEmpty,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -990,28 +1002,28 @@ private fun PaymentSection(
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(line.modeOfPayment, fontWeight = FontWeight.SemiBold)
                                 Text(
-                                    "Monto: ${
+                                    "${strings.billing.amountLabel}: ${
                                         formatAmount(
                                             line.currency.toCurrencySymbol(), line.enteredAmount
                                         )
                                     }"
                                 )
                                 Text(
-                                    "Base: ${
+                                    "${strings.billing.baseLabel}: ${
                                         formatAmount(
                                             baseCurrency.toCurrencySymbol(), line.baseAmount
                                         )
                                     }"
                                 )
-                                Text("Tasa: ${line.exchangeRate}")
+                                Text("${strings.billing.rateLabel}: ${line.exchangeRate}")
                                 if (!line.referenceNumber.isNullOrBlank()) {
-                                    Text("Referencia: ${line.referenceNumber}")
+                                    Text("${strings.billing.referenceLabel}: ${line.referenceNumber}")
                                 }
                             }
                             IconButton(onClick = { onRemovePaymentLine(index) }) {
                                 Icon(
                                     Icons.Default.Delete,
-                                    contentDescription = "Eliminar línea de pago",
+                                    contentDescription = strings.billing.removePaymentLineDescription,
                                     tint = MaterialTheme.colorScheme.error
                                 )
                             }
@@ -1025,14 +1037,14 @@ private fun PaymentSection(
 
         if (isCreditSale) {
             Text(
-                "Pago parcial (opcional). El restante quedará como saldo a crédito.",
+                strings.billing.partialPaymentHint,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
             Spacer(Modifier.height(8.dp))
         }
 
-        Text("Modo de pago", style = MaterialTheme.typography.bodyMedium)
+        Text(strings.billing.paymentModeLabel, style = MaterialTheme.typography.bodyMedium)
         var modeExpanded by remember { mutableStateOf(false) }
         ExposedDropdownMenuBox(
             expanded = modeExpanded, onExpandedChange = { modeExpanded = it }) {
@@ -1040,8 +1052,8 @@ private fun PaymentSection(
                 value = selectedMode,
                 onValueChange = {},
                 modifier = Modifier.fillMaxWidth().menuAnchor(MenuAnchorType.PrimaryNotEditable),
-                label = "Selecciona metodo de pago",
-                placeholder = "Selecciona metodo de pago",
+                label = strings.billing.paymentModePlaceholder,
+                placeholder = strings.billing.paymentModePlaceholder,
                 leadingIcon = { Icon(Icons.Default.Money, contentDescription = null) },
                 trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = modeExpanded) })
             ExposedDropdownMenu(
@@ -1057,7 +1069,7 @@ private fun PaymentSection(
 
         Spacer(Modifier.height(12.dp))
         Text(
-            text = "Moneda base de factura: $baseCurrency",
+            text = "${strings.billing.invoiceBaseCurrencyLabel}: $baseCurrency",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
@@ -1071,14 +1083,14 @@ private fun PaymentSection(
             currencyCode = currency,
             rawValue = amountInput,
             onRawValueChange = { amountInput = it },
-            label = "Monto",
+            label = strings.billing.amountLabel,
             enabled = true,
             onAmountChanged = { amountValue = it },
             supportingText = {
                 if (selectedCurrency != baseCurrency) {
                     val rate = rateInput.toDoubleOrNull() ?: 0.0
                     val base = amountValue * rate
-                    Text("Base: ${formatAmount(baseCurrency.toCurrencySymbol(), base)}")
+                    Text("${strings.billing.baseLabel}: ${formatAmount(baseCurrency.toCurrencySymbol(), base)}")
                 }
             })/*OutlinedTextField(
             value = amountInput,
@@ -1096,12 +1108,12 @@ private fun PaymentSection(
             AppTextField(
                 value = referenceInput,
                 onValueChange = { referenceInput = it },
-                label = "Número de referencia",
+                label = strings.billing.referenceNumberLabel,
                 placeholder = "#11231",
                 leadingIcon = { Icon(Icons.Default.ConfirmationNumber, contentDescription = null) },
                 supportingText = {
                     if (referenceInput.isBlank()) {
-                        Text("Requerido para pagos con ${selectedMode}.")
+                        Text("${strings.billing.referenceRequiredHint} ${selectedMode}.")
                     }
                 },
                 isError = referenceInput.isBlank(),
@@ -1139,7 +1151,7 @@ private fun PaymentSection(
                     }
                 }, modifier = Modifier.weight(1f), enabled = canAdd
             ) {
-                Text("Agregar pago")
+                Text(strings.billing.addPayment)
             }
 
             OutlinedButton(
@@ -1149,7 +1161,7 @@ private fun PaymentSection(
                     }
                 }, modifier = Modifier.weight(1f), enabled = paymentLines.isNotEmpty()
             ) {
-                Text("Eliminar")
+                Text(strings.billing.removePayment)
             }
         }
 
@@ -1163,9 +1175,9 @@ private fun PaymentSection(
 
         Spacer(Modifier.height(12.dp))
 
-        SummaryRow("Pagado (base)", baseCurrency, paidAmountBase, bold = true)
-        SummaryRow("Balance pendiente", baseCurrency, balanceDueBase, bold = true)
-        SummaryRow("Cambio", baseCurrency, changeDueBase, bold = true)
+        SummaryRow(strings.billing.paidBaseLabel, baseCurrency, paidAmountBase, bold = true)
+        SummaryRow(strings.billing.balanceDueLabel, baseCurrency, balanceDueBase, bold = true)
+        SummaryRow(strings.billing.changeLabel, baseCurrency, changeDueBase, bold = true)
     }
 }
 
@@ -1175,6 +1187,7 @@ enum class DiscountInputType { Code, Percent, Amount }
 private fun DiscountShippingInputs(
     state: BillingState.Success, action: BillingAction
 ) {
+    val strings = LocalAppStrings.current
     val baseCurrency = state.currency ?: "USD"
 
     val initialType = remember(
@@ -1215,22 +1228,22 @@ private fun DiscountShippingInputs(
         modifier = Modifier.padding(end = 12.dp, start = 12.dp, bottom = 8.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        Text("Discount", style = MaterialTheme.typography.bodyMedium)
+        Text(strings.billing.discountSectionTitle, style = MaterialTheme.typography.bodyMedium)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             FilterChip(
                 selected = discountType == DiscountInputType.Code,
                 onClick = { selectDiscountType(DiscountInputType.Code) },
-                label = { Text("Code") }
+                label = { Text(strings.billing.discountTypeCode) }
             )
             FilterChip(
                 selected = discountType == DiscountInputType.Percent,
                 onClick = { selectDiscountType(DiscountInputType.Percent) },
-                label = { Text("Percent") }
+                label = { Text(strings.billing.discountTypePercent) }
             )
             FilterChip(
                 selected = discountType == DiscountInputType.Amount,
                 onClick = { selectDiscountType(DiscountInputType.Amount) },
-                label = { Text("Amount") }
+                label = { Text(strings.billing.discountTypeAmount) }
             )
         }
         when (discountType) {
@@ -1238,8 +1251,8 @@ private fun DiscountShippingInputs(
                 AppTextField(
                     value = state.discountCode,
                     onValueChange = action.onDiscountCodeChanged,
-                    label = "Discount code",
-                    placeholder = "Enter discount code",
+                    label = strings.billing.discountCodeLabel,
+                    placeholder = strings.billing.discountCodePlaceholder,
                     trailingIcon = { Icon(Icons.Default.Money, contentDescription = null) },
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -1249,7 +1262,7 @@ private fun DiscountShippingInputs(
                 AppTextField(
                     value = if (state.manualDiscountPercent > 0.0) state.manualDiscountPercent.toString() else "",
                     onValueChange = action.onManualDiscountPercentChanged,
-                    label = "Percent (%)",
+                    label = strings.billing.discountPercentLabel,
                     trailingIcon = { Icon(Icons.Default.Percent, contentDescription = null) },
                     keyboardOptions = KeyboardOptions(
                         keyboardType = KeyboardType.Number, imeAction = ImeAction.Next
@@ -1262,7 +1275,7 @@ private fun DiscountShippingInputs(
                 AppTextField(
                     value = if (state.manualDiscountAmount > 0.0) state.manualDiscountAmount.toString() else "",
                     onValueChange = action.onManualDiscountAmountChanged,
-                    label = "Amount (${baseCurrency.toCurrencySymbol()})",
+                    label = "${strings.billing.discountAmountLabel} (${baseCurrency.toCurrencySymbol()})",
                     trailingIcon = { Icon(Icons.Default.Money, contentDescription = null) },
                     keyboardOptions = KeyboardOptions(
                         keyboardType = KeyboardType.Number, imeAction = ImeAction.Next
@@ -1271,22 +1284,23 @@ private fun DiscountShippingInputs(
                 )
             }
         }
-        Text("Envío", style = MaterialTheme.typography.bodyMedium)
-        val deliveryChargeLabel = state.selectedDeliveryCharge?.label ?: "Selecciona cargo de envío"
+        Text(strings.billing.shippingSectionTitle, style = MaterialTheme.typography.bodyMedium)
+        val deliveryChargeLabel =
+            state.selectedDeliveryCharge?.label ?: strings.billing.deliveryChargePlaceholder
         var deliveryExpanded by remember { mutableStateOf(false) }
         ExposedDropdownMenuBox(
             expanded = deliveryExpanded, onExpandedChange = { deliveryExpanded = it }) {
             AppTextField(
                 value = deliveryChargeLabel,
                 onValueChange = {},
-                label = "Cargo de envío",
+                label = strings.billing.deliveryChargeLabel,
                 modifier = Modifier.fillMaxWidth().menuAnchor(MenuAnchorType.PrimaryNotEditable),
                 trailingIcon = {
                     ExposedDropdownMenuDefaults.TrailingIcon(expanded = deliveryExpanded)
                 })
             ExposedDropdownMenu(
                 expanded = deliveryExpanded, onDismissRequest = { deliveryExpanded = false }) {
-                DropdownMenuItem(text = { Text("Sin envío") }, onClick = {
+                DropdownMenuItem(text = { Text(strings.billing.noShippingOption) }, onClick = {
                     action.onDeliveryChargeSelected(null)
                     deliveryExpanded = false
                 })
@@ -1302,7 +1316,7 @@ private fun DiscountShippingInputs(
             }
         }
         Text(
-            "Se aplicará el descuento manual o código según corresponda.",
+            strings.billing.discountHint,
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Start
@@ -1318,6 +1332,7 @@ private fun CreditTermsSection(
     onCreditSaleChanged: (Boolean) -> Unit,
     onPaymentTermSelected: (com.erpnext.pos.domain.models.PaymentTermBO?) -> Unit
 ) {
+    val strings = LocalAppStrings.current
     Column(
         modifier = Modifier.padding(end = 12.dp, start = 12.dp, bottom = 8.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -1328,7 +1343,7 @@ private fun CreditTermsSection(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text("Venta de credito", style = MaterialTheme.typography.bodyMedium)
+            Text(strings.billing.creditSaleLabel, style = MaterialTheme.typography.bodyMedium)
             Switch(
                 checked = isCreditSale,
                 onCheckedChange = onCreditSaleChanged,
@@ -1337,16 +1352,17 @@ private fun CreditTermsSection(
         }
 
         if (isCreditSale) {
-            Text("Condiciones de pago", style = MaterialTheme.typography.bodyMedium)
+            Text(strings.billing.paymentTermsLabel, style = MaterialTheme.typography.bodyMedium)
             var templateExpanded by remember { mutableStateOf(false) }
-            val templateLabel = selectedPaymentTerm?.name ?: "Selecciona la condicion de pago"
+            val templateLabel =
+                selectedPaymentTerm?.name ?: strings.billing.paymentTermPlaceholder
             ExposedDropdownMenuBox(
                 expanded = templateExpanded, onExpandedChange = { templateExpanded = it }) {
                 AppTextField(
                     value = templateLabel,
                     onValueChange = {},
-                    label = "Selecciona la condicion de pago",
-                    placeholder = "Condicion de pago",
+                    label = strings.billing.paymentTermPlaceholder,
+                    placeholder = strings.billing.paymentTermLabel,
                     modifier = Modifier//.fillMaxWidth()
                         .menuAnchor(MenuAnchorType.PrimaryNotEditable),
                     trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = templateExpanded) },
@@ -1372,9 +1388,9 @@ private fun CreditTermsSection(
                         if (isNotEmpty()) append(" + ")
                         append("$creditDays dia(s)")
                     }
-                }.ifBlank { "Mismo dia" }
+                }.ifBlank { strings.billing.sameDayLabel }
                 Text(
-                    text = "Terminos: $termsLabel",
+                    text = "${strings.billing.termsLabel}: $termsLabel",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -1388,7 +1404,7 @@ private fun CreditTermsSection(
             }
         } else if (!canEnableCredit) {
             Text(
-                text = "No hay terminos de pago disponibles, Ventas de credito deshabilitadas.",
+                text = strings.billing.noPaymentTermsAvailable,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
