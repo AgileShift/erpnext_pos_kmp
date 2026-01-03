@@ -36,6 +36,7 @@ class SettingsViewModel(
         }
     }
 
+    //TODO: Esto debe de venir de API / POSContext no hardcoded
     private fun publishState(settings: SyncSettings, syncState: SyncState) {
         _uiState.update {
             POSSettingState.Success(

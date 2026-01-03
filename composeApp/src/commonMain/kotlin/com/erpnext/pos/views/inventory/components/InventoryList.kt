@@ -85,7 +85,7 @@ fun InventoryList(
                         ) { index ->
                             val item = items[index]
                             if (item != null) {
-                                ProductCard(actions, item, isDesktop = true)
+                                ProductCard(actions, item, isDesktop = isDesktop)
                             } else {
                                 ShimmerProductPlaceholder(
                                     Modifier
@@ -112,7 +112,7 @@ fun InventoryList(
                         ) { index ->
                             val item = items[index]
                             if (item != null) {
-                                ProductCard(actions, item, isDesktop = false)
+                                ProductCard(actions, item, isDesktop = isDesktop)
                             } else {
                                 // 🔹 Shimmer parcial discreto
                                 ShimmerProductPlaceholder(

@@ -16,6 +16,7 @@ import com.erpnext.pos.remoteSource.sdk.Operator
 import com.erpnext.pos.remoteSource.sdk.v2.ERPDocType
 import com.erpnext.pos.views.salesflow.SalesFlowSource
 
+//TODO: Esto deberia de seguir el patron actual de la app, LocalSource y RemoteSource, ellos consumen la API y el repositorio a los source
 class SourceDocumentRepository(
     private val api: APIServiceV2
 ) {
@@ -41,7 +42,7 @@ class SourceDocumentRepository(
                     ),
                     filters = listOf(Filter("party_name", Operator.EQ, customerId)),
                     orderBy = "transaction_date desc",
-                    limit = 20
+                    limit = Int.MAX_VALUE
                 )
                 val details = fetchQuotationDetails(rows.map { it.name })
                 val detailsById = details.associateBy { it.quotationId }
@@ -77,7 +78,8 @@ class SourceDocumentRepository(
                         totals = SourceDocumentTotals(
                             netTotal = it.netTotal,
                             grandTotal = it.grandTotal,
-                            taxTotal = it.totalTaxesAndCharges ?: taxes.sumOf { tax -> tax.taxAmount },
+                            taxTotal = it.totalTaxesAndCharges
+                                ?: taxes.sumOf { tax -> tax.taxAmount },
                             currency = it.priceListCurrency ?: it.currency
                         )
                     )
@@ -137,7 +139,8 @@ class SourceDocumentRepository(
                         totals = SourceDocumentTotals(
                             netTotal = it.netTotal,
                             grandTotal = it.grandTotal,
-                            taxTotal = it.totalTaxesAndCharges ?: taxes.sumOf { tax -> tax.taxAmount },
+                            taxTotal = it.totalTaxesAndCharges
+                                ?: taxes.sumOf { tax -> tax.taxAmount },
                             currency = it.priceListCurrency ?: it.currency
                         )
                     )
@@ -196,7 +199,8 @@ class SourceDocumentRepository(
                         totals = SourceDocumentTotals(
                             netTotal = it.netTotal,
                             grandTotal = it.grandTotal,
-                            taxTotal = it.totalTaxesAndCharges ?: taxes.sumOf { tax -> tax.taxAmount },
+                            taxTotal = it.totalTaxesAndCharges
+                                ?: taxes.sumOf { tax -> tax.taxAmount },
                             currency = it.currency
                         )
                     )

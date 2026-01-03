@@ -1072,7 +1072,7 @@ private fun PaymentSection(
             rawValue = amountInput,
             onRawValueChange = { amountInput = it },
             label = "Monto",
-            enabled = true,
+            enabled = true, //!isCreditSale,
             onAmountChanged = { amountValue = it },
             supportingText = {
                 if (selectedCurrency != baseCurrency) {
@@ -1176,6 +1176,9 @@ private fun DiscountShippingInputs(
     state: BillingState.Success, action: BillingAction
 ) {
     val baseCurrency = state.currency ?: "USD"
+    var usePercent by rememberSaveable(state.manualDiscountPercent, state.manualDiscountAmount) {
+        mutableStateOf(state.manualDiscountPercent > 0.0 || state.manualDiscountAmount == 0.0)
+    }
 
     val initialType = remember(
         state.discountCode,
@@ -1211,26 +1214,27 @@ private fun DiscountShippingInputs(
             }
         }
     }
+
     Column(
         modifier = Modifier.padding(end = 12.dp, start = 12.dp, bottom = 8.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        Text("Discount", style = MaterialTheme.typography.bodyMedium)
+        Text("Descuento", style = MaterialTheme.typography.bodyMedium)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             FilterChip(
                 selected = discountType == DiscountInputType.Code,
                 onClick = { selectDiscountType(DiscountInputType.Code) },
-                label = { Text("Code") }
+                label = { Text("Codigo") }
             )
             FilterChip(
                 selected = discountType == DiscountInputType.Percent,
                 onClick = { selectDiscountType(DiscountInputType.Percent) },
-                label = { Text("Percent") }
+                label = { Text("Porcentaje") }
             )
             FilterChip(
                 selected = discountType == DiscountInputType.Amount,
                 onClick = { selectDiscountType(DiscountInputType.Amount) },
-                label = { Text("Amount") }
+                label = { Text("Monto") }
             )
         }
         when (discountType) {

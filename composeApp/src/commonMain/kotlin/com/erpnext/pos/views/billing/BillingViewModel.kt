@@ -1090,7 +1090,8 @@ class BillingViewModel(
         val source = current.salesFlowContext
         val sourceId = source?.sourceId
         val salesOrderId = if (source?.sourceType == SalesFlowSource.SalesOrder) sourceId else null
-        val deliveryNoteId = if (source?.sourceType == SalesFlowSource.DeliveryNote) sourceId else null
+        val deliveryNoteId =
+            if (source?.sourceType == SalesFlowSource.DeliveryNote) sourceId else null
 
         val items = current.cartItems.map { cart ->
             SalesInvoiceItemDto(
@@ -1404,7 +1405,7 @@ class BillingViewModel(
     ): PaymentStatus {
         val paidAmount = paymentLines.sumOf { it.baseAmount }
         val outstandingAmount = (total - paidAmount).coerceAtLeast(0.0)
-        val status = if (outstandingAmount > 0.0) "Unpaid" else "Paid"
+        val status = if (outstandingAmount == total) "Unpaid" else if((total - outstandingAmount) > 0.0) "Partly Paid" else "Paid"
         return PaymentStatus(paidAmount, outstandingAmount, status)
     }
 
