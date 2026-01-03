@@ -16,7 +16,10 @@ sealed class CustomerState {
 sealed class CustomerInvoicesState {
     data object Idle : CustomerInvoicesState()
     data object Loading : CustomerInvoicesState()
-    data class Success(val invoices: List<SalesInvoiceBO>) : CustomerInvoicesState()
+    data class Success(
+        val invoices: List<SalesInvoiceBO>,
+        val exchangeRateByCurrency: Map<String, Double> = emptyMap()
+    ) : CustomerInvoicesState()
     data class Error(val message: String) : CustomerInvoicesState()
 }
 

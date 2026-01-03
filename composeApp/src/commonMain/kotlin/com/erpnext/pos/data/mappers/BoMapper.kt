@@ -222,7 +222,8 @@ fun SalesInvoiceEntity.toBO(): SalesInvoiceBO {
         isPos = false,
         total = this.grandTotal,
         customerId = this.customer,
-        postingDate = this.postingDate
+        postingDate = this.postingDate,
+        partyAccountCurrency = this.partyAccountCurrency
     )
 }
 
@@ -250,7 +251,8 @@ fun SalesInvoiceWithItemsAndPayments.toBO(): SalesInvoiceBO {
         status = invoice.status,
         syncStatus = invoice.syncStatus,
         items = items.toBO(),
-        payments = payments.toBO()
+        payments = payments.toBO(),
+        partyAccountCurrency = invoice.partyAccountCurrency
     )
 }
 

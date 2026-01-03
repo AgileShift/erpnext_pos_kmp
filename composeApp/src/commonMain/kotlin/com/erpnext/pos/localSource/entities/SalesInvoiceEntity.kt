@@ -58,6 +58,8 @@ data class SalesInvoiceEntity(
     var branch: String? = null,
     var warehouse: String? = null,
     var currency: String = "USD",
+    @ColumnInfo(name = "party_account_currency")
+    var partyAccountCurrency: String? = null,
 
     // 📅 Fechas clave
     @ColumnInfo(name = "posting_date")
