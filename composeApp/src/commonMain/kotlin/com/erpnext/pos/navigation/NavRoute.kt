@@ -11,7 +11,11 @@ import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material.icons.filled.Receipt
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Description
+import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.vector.ImageVector
+import com.erpnext.pos.localization.AppLanguage
+import com.erpnext.pos.localization.AppStringsFactory
+import com.erpnext.pos.localization.LocalAppStrings
 
 sealed class NavRoute(
     val path: String,
