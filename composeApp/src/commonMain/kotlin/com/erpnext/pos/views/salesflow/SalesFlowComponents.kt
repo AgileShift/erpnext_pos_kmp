@@ -17,6 +17,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.erpnext.pos.localization.LocalAppStrings
 
 data class SalesFlowActionItem(
     val label: String,
@@ -27,6 +28,7 @@ data class SalesFlowActionItem(
 fun SalesFlowContextSummary(context: SalesFlowContext?) {
     if (context == null) return
 
+    val strings = LocalAppStrings.current
     val sourceLabel = context.sourceLabel()
     val sourceInfo = sourceLabel?.let { label ->
         context.sourceId?.let { id -> "$label (ID: $id)" } ?: label
@@ -44,10 +46,10 @@ fun SalesFlowContextSummary(context: SalesFlowContext?) {
             verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             if (customerLabel != null) {
-                InfoRow(label = "Customer", value = customerLabel, isCompact = true)
+                InfoRow(label = strings.salesFlow.customerLabel, value = customerLabel, isCompact = true)
             }
             if (sourceInfo != null) {
-                InfoRow(label = "Source", value = sourceInfo, isCompact = true)
+                InfoRow(label = strings.salesFlow.sourceLabel, value = sourceInfo, isCompact = true)
             }
         }
     }

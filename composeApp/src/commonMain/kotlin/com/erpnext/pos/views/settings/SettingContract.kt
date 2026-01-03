@@ -1,6 +1,7 @@
 package com.erpnext.pos.views.settings
 
 import com.erpnext.pos.localSource.preferences.SyncSettings
+import com.erpnext.pos.localization.AppLanguage
 import com.erpnext.pos.sync.SyncState
 
 data class POSSettingBO(
@@ -19,7 +20,8 @@ sealed class POSSettingState {
     data class Success(
         val settings: POSSettingBO,
         val syncSettings: SyncSettings,
-        val syncState: SyncState
+        val syncState: SyncState,
+        val language: AppLanguage
     ) : POSSettingState()
     data class Error(val message: String) : POSSettingState()
 }
@@ -31,5 +33,6 @@ data class POSSettingAction(
     val onSyncNow: () -> Unit = {},
     val onAutoSyncChanged: (Boolean) -> Unit = {},
     val onSyncOnStartupChanged: (Boolean) -> Unit = {},
-    val onWifiOnlyChanged: (Boolean) -> Unit = {}
+    val onWifiOnlyChanged: (Boolean) -> Unit = {},
+    val onLanguageSelected: (AppLanguage) -> Unit = {}
 )

@@ -65,11 +65,11 @@ class CustomerRepository(
                         val customerInvoices = outstandingByCustomer[dto.name] ?: emptyList()
                         val totalOutstanding =
                             customerInvoices.sumOf { it.grandTotal - it.paidAmount }
+                        val resolvedLimit = dto.creditLimitForCompany(contextCompany)
+                        val creditLimit = resolvedLimit?.creditLimit //?: dto.creditLimit
+                        val availableCredit = creditLimit?.let { it - totalOutstanding }
                         val address = remoteSource.getCustomerAddress(dto.name)
                         val contact = remoteSource.getCustomerContact(dto.name)
-                        val resolvedLimit = dto.creditLimitForCompany(contextCompany)
-                        val creditLimit = resolvedLimit?.creditLimit// ?: dto.creditLimits
-                        val availableCredit = creditLimit?.let { it - totalOutstanding }
 
                         dto.toEntity(
                             creditLimit = creditLimit,
@@ -102,7 +102,8 @@ class CustomerRepository(
         return networkBoundResource(query = { flowOf(emptyList<CustomerDto>().toBO()) }, fetch = {
             remoteSource.fetchCustomers(territory)
         }, shouldFetch = { localData ->
-            true/*localData.isEmpty() ||
+            true
+            /*localData.isEmpty() ||
                         SyncTTL.isExpired(localData.maxOf { it.lastSyncedAt?.toDouble() ?: 0.0 }
                             .toLong())*/
         }, saveFetchResult = { remoteData ->

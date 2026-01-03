@@ -51,6 +51,8 @@ import androidx.compose.ui.unit.sp
 import com.erpnext.pos.base.getPlatformName
 import com.erpnext.pos.domain.models.CustomerBO
 import com.erpnext.pos.domain.models.SalesInvoiceBO
+import com.erpnext.pos.utils.oauth.bd
+import com.erpnext.pos.utils.oauth.moneyScale
 import com.erpnext.pos.utils.toCurrencySymbol
 import org.jetbrains.compose.ui.tooling.preview.Preview
 
@@ -908,12 +910,14 @@ private fun CustomerOutstandingInvoicesSheet(
                                 } else {
                                     invoicesState.exchangeRateByCurrency[invoiceCurrency]
                                         ?.takeIf { it > 0.0 }
-                                        ?.let { rate -> invoice.outstandingAmount * rate }
+                                        ?.let { rate ->
+                                            invoice.outstandingAmount * rate
+                                        }
                                 }
                                 val outstandingLabel = if (convertedOutstanding != null) {
-                                    "$invoiceSymbol$convertedOutstanding"
+                                    "$invoiceSymbol ${bd(convertedOutstanding).moneyScale(2)}"
                                 } else {
-                                    "$baseSymbol${invoice.outstandingAmount}"
+                                    "$baseSymbol ${bd(invoice.outstandingAmount).moneyScale(2)}"
                                 }
                                 Card(
                                     modifier = Modifier.fillMaxWidth(),
@@ -1013,7 +1017,11 @@ private fun CustomerOutstandingInvoicesSheet(
                                             )
                                         ) {
                                             val baseLabel =
-                                                "$baseSymbol${invoice.outstandingAmount}"
+                                                "$baseSymbol ${
+                                                    bd(invoice.outstandingAmount).moneyScale(
+                                                        2
+                                                    )
+                                                }"
                                             val helperText =
                                                 if (convertedOutstanding != null) {
                                                     "Base currency: $baseLabel"

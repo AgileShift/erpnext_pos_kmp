@@ -389,7 +389,7 @@ class BillingViewModel(
         }, exceptionHandler = { e ->
             _state.update {
                 current.copy(
-                    cartErrorMessage = e.toUserMessage("Unable to apply source document.")
+                    cartErrorMessage = e.toUserMessage("No se pudo aplicar el documento de origen.")
                 )
             }
         })
@@ -410,7 +410,7 @@ class BillingViewModel(
                 current.copy(
                     sourceDocuments = emptyList(),
                     isLoadingSourceDocuments = false,
-                    sourceDocumentsError = "Select a customer first."
+                    sourceDocumentsError = "Selecciona un cliente primero."
                 )
             }
             return
@@ -435,7 +435,8 @@ class BillingViewModel(
                     current.copy(
                         sourceDocuments = emptyList(),
                         isLoadingSourceDocuments = false,
-                        sourceDocumentsError = throwable.message ?: "Unable to load documents."
+                        sourceDocumentsError = throwable.message
+                            ?: "No se pudieron cargar los documentos."
                     )
                 }
             }
@@ -758,7 +759,7 @@ class BillingViewModel(
             return
         }
 
-        val customer = current.selectedCustomer ?: error("Customer must be selected.")
+        val customer = current.selectedCustomer ?: error("Debes seleccionar un cliente.")
         val context = contextProvider.getContext() ?: error("El contexto POS no está inicializado.")
 
         executeUseCase(action = {
@@ -963,7 +964,7 @@ class BillingViewModel(
             fromCurrency = from,
             toCurrency = to,
             exchangeRateByCurrency = exchangeRateByCurrency
-        ) ?: error("Unable to resolve exchange rate $from -> $to")
+        ) ?: error("No se pudo resolver la tasa de cambio $from -> $to")
     }
 
     private fun convertSourceDocument(
@@ -1136,7 +1137,7 @@ class BillingViewModel(
                 val label = context.sourceLabel()
                 if (label != null && context.sourceType != SalesFlowSource.Customer) {
                     val sourceText = context.sourceId?.let { "Source: $label (ID: $it)" }
-                        ?: "Source: $label"
+                        ?: "Origen: $label"
                     add(sourceText)
                 }
             }
@@ -1405,7 +1406,8 @@ class BillingViewModel(
     ): PaymentStatus {
         val paidAmount = paymentLines.sumOf { it.baseAmount }
         val outstandingAmount = (total - paidAmount).coerceAtLeast(0.0)
-        val status = if (outstandingAmount == total) "Unpaid" else if((total - outstandingAmount) > 0.0) "Partly Paid" else "Paid"
+        val status =
+            if (outstandingAmount == total) "Unpaid" else if ((total - outstandingAmount) > 0.0) "Partly Paid" else "Paid"
         return PaymentStatus(paidAmount, outstandingAmount, status)
     }
 
@@ -1478,7 +1480,7 @@ class BillingViewModel(
         }*/
 
         if (!current.isCreditSale && current.paymentLines.isEmpty())
-            return "Add at least one payment or mark the sale as credit."
+            return "Agrega al menos un pago o marca la venta como crédito."
 
         return null
     }
