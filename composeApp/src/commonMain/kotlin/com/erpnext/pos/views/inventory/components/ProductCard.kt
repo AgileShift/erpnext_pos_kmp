@@ -27,6 +27,7 @@ fun ProductCard(actions: InventoryAction, product: ItemBO) {
     }
     val context = LocalPlatformContext.current
     val strings = LocalAppStrings.current
+    val common = strings.common
 
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -56,7 +57,7 @@ fun ProductCard(actions: InventoryAction, product: ItemBO) {
                     // si falla
                     AsyncImage(
                         model = "https://placehold.co/600x400",
-                        contentDescription = strings.common.imagePlaceholderDescription,
+                        contentDescription = common.imagePlaceholderDescription,
                         modifier = Modifier.size(72.dp)
                     )
                 }

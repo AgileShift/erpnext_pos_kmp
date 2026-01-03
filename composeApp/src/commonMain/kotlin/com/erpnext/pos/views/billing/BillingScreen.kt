@@ -88,6 +88,7 @@ fun BillingScreen(
 ) {
     val snackbar = koinInject<SnackbarController>()
     val strings = LocalAppStrings.current
+    val common = strings.common
     val uiSnackbar = snackbar.snackbar.collectAsState().value
 
     Box(Modifier.fillMaxSize()) {
@@ -98,7 +99,7 @@ fun BillingScreen(
                 IconButton(onClick = action.onBack) {
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = strings.common.back
+                        contentDescription = common.back
                     )
                 }
             })
@@ -317,6 +318,7 @@ private fun SourceDocumentRow(
     onClear: () -> Unit
 ) {
     val strings = LocalAppStrings.current
+    val common = strings.common
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
@@ -328,9 +330,9 @@ private fun SourceDocumentRow(
         )
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             if (hasSource) {
-                TextButton(onClick = onClear) { Text(strings.common.clear) }
+                TextButton(onClick = onClear) { Text(common.clear) }
             }
-            TextButton(onClick = onLink) { Text(strings.common.link) }
+            TextButton(onClick = onLink) { Text(common.link) }
         }
     }
 }
@@ -348,6 +350,7 @@ private fun SourceDocumentSheet(
     var expanded by remember { mutableStateOf(false) }
     var searchQuery by remember { mutableStateOf("") }
     val strings = LocalAppStrings.current
+    val common = strings.common
 
     LaunchedEffect(sourceType) {
         reference = ""
@@ -507,7 +510,7 @@ private fun SourceDocumentSheet(
                 modifier = Modifier.fillMaxWidth(),
                 enabled = reference.isNotBlank()
             ) {
-                Text(strings.common.apply)
+                Text(common.apply)
             }
         }
     }
@@ -569,6 +572,7 @@ private fun ProductSelector(
     val hasResults = results.isNotEmpty()
     val context = LocalPlatformContext.current
     val strings = LocalAppStrings.current
+    val common = strings.common
 
     Column(modifier = Modifier.padding(horizontal = 12.dp)) {
         Text(strings.billing.productSectionTitle, style = MaterialTheme.typography.titleMedium)
@@ -618,7 +622,7 @@ private fun ProductSelector(
                                 error = {
                                     AsyncImage(
                                         model = "https://placehold.co/64x64",
-                                        contentDescription = strings.common.imagePlaceholderDescription,
+                                        contentDescription = common.imagePlaceholderDescription,
                                         modifier = Modifier.size(40.dp)
                                     )
                                 })
@@ -662,7 +666,6 @@ private fun CollapsibleSection(
     var expanded by rememberSaveable { mutableStateOf(defaultExpanded) }
     val interactionSource = remember { MutableInteractionSource() }
     val strings = LocalAppStrings.current
-
     Surface(
         tonalElevation = 1.dp,
         shadowElevation = 1.dp,
@@ -683,8 +686,7 @@ private fun CollapsibleSection(
                 ) {
                     Icon(
                         imageVector = if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
-                        contentDescription = if (expanded) strings.common.collapseSection
-                        else strings.common.expandSection
+                        contentDescription = if (expanded) strings.common.collapseSection else strings.common.expandSection
                     )
                 }
             }
