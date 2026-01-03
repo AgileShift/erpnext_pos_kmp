@@ -494,8 +494,12 @@ fun CustomerItem(
     onQuickAction: (CustomerQuickActionType) -> Unit
 ) {
     val isOverLimit = (customer.availableCredit ?: 0.0) < 0 || (customer.currentBalance ?: 0.0) > 0
+    val pendingInvoices = customer.pendingInvoices ?: 0
+    val availableCredit = customer.availableCredit ?: 0.0
+    val currencySymbol = customer.currency.toCurrencySymbol()
     var isMenuExpanded by remember { mutableStateOf(false) }
     val quickActions = remember { customerQuickActions() }
+    val avatarSize = if (isDesktop) 52.dp else 44.dp
 
     Card(
         modifier = Modifier
@@ -527,101 +531,60 @@ fun CustomerItem(
             }
         )
     ) {
-        Row(
-            modifier = Modifier.padding(16.dp).fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(if (isDesktop) 16.dp else 14.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            // Avatar circular
-            Card(
-                modifier = Modifier.size(48.dp).clip(CircleShape),
-                elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = if (isOverLimit) MaterialTheme.colorScheme.errorContainer.copy(
-                        alpha = 0.2f
-                    ) else MaterialTheme.colorScheme.surfaceVariant
-                )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(
-                    Icons.Filled.Person,
-                    contentDescription = customer.customerName,
-                    modifier = Modifier.size(48.dp).padding(12.dp),
-                    tint = if (isOverLimit) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
-                )
-            }
-
-            Spacer(modifier = Modifier.width(12.dp))
-
-            // Contenido expandible
-            Column(
-                modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)
-            ) {
-                Text(
-                    customer.customerName,
-                    fontWeight = FontWeight.SemiBold,
-                    fontSize = 16.sp,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    color = if (isOverLimit) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface
-                )
-                if ((customer.pendingInvoices ?: 0) > 0) {
-                    StatusPill(
-                        label = "Overdue",
-                        isCritical = true
+                // Avatar circular
+                Card(
+                    modifier = Modifier.size(avatarSize).clip(CircleShape),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = if (isOverLimit) MaterialTheme.colorScheme.errorContainer.copy(
+                            alpha = 0.2f
+                        ) else MaterialTheme.colorScheme.surfaceVariant
+                    )
+                ) {
+                    Icon(
+                        Icons.Filled.Person,
+                        contentDescription = customer.customerName,
+                        modifier = Modifier.size(avatarSize).padding(12.dp),
+                        tint = if (isOverLimit) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
                     )
                 }
-                Text(
-                    customer.mobileNo ?: "",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = if (isOverLimit) MaterialTheme.colorScheme.error.copy(alpha = 0.7f) else MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Text(
-                    customer.territory ?: "N/A",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.outline,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
 
-            Spacer(modifier = Modifier.width(12.dp))
-
-            // Columna derecha para balance/pendientes
-            val currencySymbol = customer.currency.toCurrencySymbol()
-            Column(horizontalAlignment = Alignment.End, verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Text(
-                    "$currencySymbol${customer.currentBalance ?: 0.0}",
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 14.sp,
-                    color = if (isOverLimit) {
-                        MaterialTheme.colorScheme.error
-                    } else {
-                        MaterialTheme.colorScheme.primary
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Text(
+                        customer.customerName,
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 16.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        color = if (isOverLimit) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        StatusPill(
+                            label = if (isOverLimit) "Over limit" else "Active",
+                            isCritical = isOverLimit
+                        )
+                        if (pendingInvoices > 0) {
+                            StatusPill(
+                                label = "Pending invoices",
+                                isCritical = true
+                            )
+                        }
                     }
-                )
-                Text(
-                    "Pending: ${customer.pendingInvoices}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = if (isOverLimit) {
-                        MaterialTheme.colorScheme.error.copy(alpha = 0.7f)
-                    } else {
-                        MaterialTheme.colorScheme.onSurfaceVariant
-                    }
-                )
-                Text(
-                    "Available: $currencySymbol${customer.availableCredit ?: 0.0}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Text(
-                    "Limit: $currencySymbol${customer.creditLimit ?: 0.0}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-
-                Spacer(modifier = Modifier.height(6.dp))
+                }
 
                 IconButton(onClick = {
                     if (isDesktop) {
@@ -632,7 +595,7 @@ fun CustomerItem(
                 }) {
                     Icon(
                         Icons.Filled.MoreVert,
-                        contentDescription = "Más acciones",
+                        contentDescription = "More actions",
                         tint = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
@@ -654,6 +617,41 @@ fun CustomerItem(
                         )
                     }
                 }
+            }
+
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(
+                    customer.mobileNo ?: "",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = if (isOverLimit) MaterialTheme.colorScheme.error.copy(alpha = 0.7f) else MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    customer.territory ?: "N/A",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.outline,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                StatusPill(
+                    label = "Available $currencySymbol${availableCredit}",
+                    isCritical = availableCredit < 0
+                )
+                StatusPill(
+                    label = "Pending $pendingInvoices",
+                    isCritical = pendingInvoices > 0
+                )
+                StatusPill(
+                    label = "Balance $currencySymbol${customer.currentBalance ?: 0.0}",
+                    isCritical = isOverLimit
+                )
             }
         }
     }

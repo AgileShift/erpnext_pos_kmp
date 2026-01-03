@@ -71,10 +71,10 @@ fun InventoryList(
                 if (isDesktop) {
                     LazyVerticalGrid(
                         modifier = modifier.fillMaxSize(),
-                        columns = GridCells.Adaptive(minSize = 260.dp),
-                        contentPadding = PaddingValues(16.dp),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                        columns = GridCells.Adaptive(minSize = 280.dp),
+                        contentPadding = PaddingValues(horizontal = 20.dp, vertical = 16.dp),
+                        horizontalArrangement = Arrangement.spacedBy(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
                         items(
                             count = items.itemCount,
@@ -85,12 +85,12 @@ fun InventoryList(
                         ) { index ->
                             val item = items[index]
                             if (item != null) {
-                                ProductCard(actions, item)
+                                ProductCard(actions, item, isDesktop = true)
                             } else {
                                 ShimmerProductPlaceholder(
                                     Modifier
                                         .fillMaxWidth()
-                                        .height(160.dp)
+                                        .height(180.dp)
                                 )
                             }
                         }
@@ -99,8 +99,8 @@ fun InventoryList(
                     androidx.compose.foundation.lazy.LazyColumn(
                         modifier = modifier.fillMaxSize(),
                         state = listState,
-                        contentPadding = PaddingValues(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 12.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
                         items(
                             count = items.itemCount,
@@ -112,7 +112,7 @@ fun InventoryList(
                         ) { index ->
                             val item = items[index]
                             if (item != null) {
-                                ProductCard(actions, item)
+                                ProductCard(actions, item, isDesktop = false)
                             } else {
                                 // 🔹 Shimmer parcial discreto
                                 ShimmerProductPlaceholder(
