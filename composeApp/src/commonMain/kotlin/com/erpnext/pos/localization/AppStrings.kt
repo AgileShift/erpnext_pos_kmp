@@ -134,6 +134,7 @@ data class CustomerStrings(
     val pendingFilterLabel: String,
     val noPendingFilterLabel: String,
     val overdueLabel: String,
+    val activeLabel: String,
     val pendingLabel: String,
     val availableLabel: String,
     val limitLabel: String,
@@ -157,6 +158,9 @@ data class CustomerStrings(
     val registerPaymentButton: String,
     val moreActions: String,
     val balance: String,
+    val outOfStock: String,
+    val inStock: String,
+    val baseCurrency: String
 )
 
 data class InventoryStrings(
@@ -344,6 +348,10 @@ object AppStringsFactory {
             registerPaymentButton = "Registrar pago",
             moreActions = "Más acciones",
             balance = "Balance",
+            activeLabel = "Activo",
+            outOfStock = "Fuera de Stock",
+            inStock = "En Stock",
+            baseCurrency = "Moneda principal"
         ),
         inventory = InventoryStrings(
             loadInventoryError = "Error al cargar inventario",
@@ -533,6 +541,10 @@ object AppStringsFactory {
             registerPaymentButton = "Register payment",
             moreActions = "More actions",
             balance = "Balance",
+            activeLabel = "Active",
+            outOfStock = "Out of stock",
+            inStock = "In Stock",
+            baseCurrency = "Base currency"
         ),
         inventory = InventoryStrings(
             loadInventoryError = "Unable to load inventory",

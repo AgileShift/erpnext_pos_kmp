@@ -2,7 +2,9 @@ package com.erpnext.pos.views.inventory.components
 
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.ExperimentalAnimationApi
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -24,10 +26,23 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.paging.LoadState
+import androidx.paging.PagingData
 import androidx.paging.compose.LazyPagingItems
+import androidx.paging.compose.collectAsLazyPagingItems
 import com.erpnext.pos.domain.models.ItemBO
 import com.erpnext.pos.localization.LocalAppStrings
 import com.erpnext.pos.views.inventory.InventoryAction
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flowOf
+import org.jetbrains.compose.ui.tooling.preview.Preview
+import kotlin.time.Clock
+import kotlin.time.ExperimentalTime
+
+@Composable
+fun <T : Any> rememberPreviewLazyPagingItems(items: List<T>): LazyPagingItems<T> {
+    val flow: Flow<PagingData<T>> = remember(items) { flowOf(PagingData.from(items)) }
+    return flow.collectAsLazyPagingItems()
+}
 
 @OptIn(ExperimentalAnimationApi::class)
 @Composable
@@ -99,8 +114,9 @@ fun InventoryList(
                         }
                     }
                 } else {
-                    androidx.compose.foundation.lazy.LazyColumn(
-                        modifier = modifier.fillMaxSize(),
+                    LazyColumn(
+                        modifier = modifier.fillMaxSize()
+                            .background(Color.Red),
                         state = listState,
                         contentPadding = PaddingValues(horizontal = 14.dp, vertical = 12.dp),
                         verticalArrangement = Arrangement.spacedBy(10.dp)
@@ -204,4 +220,37 @@ fun ErrorItem(
             Text(text = strings.inventory.retry)
         }
     }
+}
+
+@OptIn(ExperimentalTime::class)
+@Preview
+@Composable
+fun InventoryListPreview() {
+    InventoryList(
+        items = rememberPreviewLazyPagingItems(
+            listOf(
+                ItemBO(
+                    name = "Palazzos a cuadros de paletones con faja incluida-ROJO VINO-S",
+                    description = "Palazzos a cuadros de paletones con faja incluida-ROJO VINO-S",
+                    itemCode = "P14823-ROJO VINO-S\n",
+                    barcode = "",
+                    image = "https://i.imgur.com/ZMqFEY9.jpeg",
+                    currency = "USD",
+                    itemGroup = "Palazzos",
+                    brand = "",
+                    price = 18.00,
+                    actualQty = 4.0,
+                    discount = 0.0,
+                    isService = false,
+                    isStocked = true,
+                    uom = "Unidad(es)",
+                    lastSyncedAt = Clock.System.now().toEpochMilliseconds()
+                )
+            )
+        ),
+        listState = LazyListState(),
+        actions = InventoryAction(),
+        isDesktop = true,
+        modifier = Modifier
+    )
 }

@@ -20,6 +20,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -48,7 +49,8 @@ fun ProductCard(
     val context = LocalPlatformContext.current
     val strings = LocalAppStrings.current
     val imageSize = if (isDesktop) 96.dp else 72.dp
-    val statusLabel = if (product.actualQty <= 0) "Out of stock" else "In stock"
+    val statusLabel =
+        if (product.actualQty <= 0) strings.customer.outOfStock else strings.customer.inStock
 
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -61,30 +63,6 @@ fun ProductCard(
                 .padding(if (isDesktop) 16.dp else 12.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            // Imagen con fallback
-            SubcomposeAsyncImage(
-                model = remember(product.image) {
-                    ImageRequest.Builder(context)
-                        .data(product.image?.ifBlank { "https://placehold.co/600x400" }) // fallback
-                        .crossfade(true)
-                        .build()
-                },
-                contentDescription = product.name,
-                modifier = Modifier.size(90.dp),
-                loading = {
-                    // mientras carga
-                    CircularProgressIndicator(modifier = Modifier.size(24.dp))
-                },
-                error = {
-                    // si falla
-                    AsyncImage(
-                        model = "https://placehold.co/600x400",
-                        contentDescription = strings.common.imagePlaceholderDescription,
-                        modifier = Modifier.size(72.dp)
-                    )
-                }
-            )
-
             Column(modifier = Modifier.weight(1f)) {
                 Text(product.name, style = MaterialTheme.typography.titleMedium, maxLines = 2)
                 Text(
@@ -134,6 +112,7 @@ fun ProductCard(
                         // si falla
                         AsyncImage(
                             model = "https://placehold.co/600x400",
+                            contentScale = ContentScale.Crop,
                             contentDescription = "placeholder",
                             modifier = Modifier.size(imageSize)
                         )

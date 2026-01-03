@@ -29,7 +29,6 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
-import androidx.compose.material3.ExposedDropdownMenuDefaults.TrailingIcon
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -43,7 +42,6 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -51,6 +49,7 @@ import androidx.compose.ui.unit.sp
 import com.erpnext.pos.base.getPlatformName
 import com.erpnext.pos.domain.models.CustomerBO
 import com.erpnext.pos.domain.models.SalesInvoiceBO
+import com.erpnext.pos.localization.LocalAppStrings
 import com.erpnext.pos.utils.oauth.bd
 import com.erpnext.pos.utils.oauth.moneyScale
 import com.erpnext.pos.utils.toCurrencySymbol
@@ -115,7 +114,7 @@ fun CustomerListScreen(
     val topAppBarScrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(
         state = rememberTopAppBarState()
     )
-
+    var strings = LocalAppStrings.current
     var searchQuery by remember { mutableStateOf("") }
     var selectedState by remember { mutableStateOf("Todos") }
     var quickActionsCustomer by remember { mutableStateOf<CustomerBO?>(null) }
@@ -141,10 +140,15 @@ fun CustomerListScreen(
         modifier = Modifier.nestedScroll(topAppBarScrollBehavior.nestedScrollConnection),
         topBar = {
             TopAppBar(
-                title = { Text("Clientes", style = MaterialTheme.typography.titleLarge) },
+                title = {
+                    Text(
+                        strings.customer.title,
+                        style = MaterialTheme.typography.titleLarge
+                    )
+                },
                 actions = {
                     IconButton(onClick = actions.fetchAll) {
-                        Icon(Icons.Filled.Refresh, "Actualizar Clientes")
+                        Icon(Icons.Filled.Refresh, strings.customer.refreshCustomers)
                     }
                 },
                 scrollBehavior = topAppBarScrollBehavior
@@ -209,9 +213,9 @@ fun CustomerListScreen(
                         if (filtered.isEmpty()) {
                             EmptyStateMessage(
                                 message = if (searchQuery.isEmpty())
-                                    "No hay clientes disponibles."
+                                    strings.customer.emptyCustomers
                                 else
-                                    "No se encontraron clientes que coincidan con tu búsqueda.",
+                                    strings.customer.emptySearchCustomers,
                                 icon = Icons.Filled.People
                             )
                         } else {
@@ -252,7 +256,7 @@ fun CustomerListScreen(
                         exit = fadeOut()
                     ) {
                         EmptyStateMessage(
-                            message = "No hay clientes disponibles.",
+                            message = strings.customer.emptyCustomers,
                             icon = Icons.Filled.People
                         )
                     }
@@ -514,6 +518,7 @@ fun CustomerItem(
     onOpenQuickActions: () -> Unit,
     onQuickAction: (CustomerQuickActionType) -> Unit
 ) {
+    val strings = LocalAppStrings.current
     val isOverLimit = (customer.availableCredit ?: 0.0) < 0 || (customer.currentBalance ?: 0.0) > 0
     val pendingInvoices = customer.pendingInvoices ?: 0
     val availableCredit = customer.availableCredit ?: 0.0
@@ -595,7 +600,7 @@ fun CustomerItem(
                     )
                     Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         StatusPill(
-                            label = if (isOverLimit) "Over limit" else "Active",
+                            label = if (isOverLimit) strings.customer.overdueLabel else strings.customer.activeLabel,
                             isCritical = isOverLimit
                         )
                         if (pendingInvoices > 0) {
@@ -767,6 +772,7 @@ private fun CustomerOutstandingInvoicesSheet(
     onDismiss: () -> Unit,
     onRegisterPayment: (invoiceId: String, modeOfPayment: String, amount: Double) -> Unit
 ) {
+    val strings = LocalAppStrings.current
     var selectedInvoice by remember { mutableStateOf<SalesInvoiceBO?>(null) }
     var amountRaw by remember { mutableStateOf("") }
     var amountValue by remember { mutableStateOf(0.0) }
@@ -780,8 +786,10 @@ private fun CustomerOutstandingInvoicesSheet(
         val codes = paymentState.allowedCurrencies.map { it.code }.filter { it.isNotBlank() }
         val normalizedBase = posBaseCurrency.trim().uppercase()
         val supported = codes.filter { code ->
-            code.equals(normalizedBase, ignoreCase = true) ||
-                    (code.equals("USD", ignoreCase = true) && !normalizedBase.equals("USD", true))
+            code.equals(normalizedBase, ignoreCase = true) || (code.equals(
+                "USD",
+                ignoreCase = true
+            ) && !normalizedBase.equals("USD", true))
         }
         val fallback = if (supported.isNotEmpty()) supported else listOf(normalizedBase)
         if (fallback.any { it.equals(normalizedBase, ignoreCase = true) }) {
@@ -791,11 +799,8 @@ private fun CustomerOutstandingInvoicesSheet(
         }
     }
     var selectedCurrency by remember(allowedCodes, posBaseCurrency) {
-        mutableStateOf(
-            allowedCodes.firstOrNull { it.equals(posBaseCurrency, ignoreCase = true) }
-                ?: allowedCodes.firstOrNull()
-                ?: posBaseCurrency
-        )
+        mutableStateOf(allowedCodes.firstOrNull { it.equals(posBaseCurrency, ignoreCase = true) }
+            ?: allowedCodes.firstOrNull() ?: posBaseCurrency)
     }
     val paymentModes = remember(paymentState.paymentModes) {
         paymentState.paymentModes.map { it.modeOfPayment }.distinct()
@@ -805,8 +810,8 @@ private fun CustomerOutstandingInvoicesSheet(
     var currencyExpanded by remember { mutableStateOf(false) }
     var modeExpanded by remember { mutableStateOf(false) }
 
-    val exchangeRate = remember(selectedCurrency, invoiceBaseCurrency, invoicesState) {
-        val normalizedBase = invoiceBaseCurrency.trim().uppercase()
+    val exchangeRate = remember(selectedCurrency, posBaseCurrency, paymentState.exchangeRate) {
+        val normalizedBase = posBaseCurrency.trim().uppercase()
         val normalizedSelected = selectedCurrency.trim().uppercase()
         when {
             normalizedSelected == normalizedBase -> 1.0
@@ -850,7 +855,7 @@ private fun CustomerOutstandingInvoicesSheet(
             when (invoicesState) {
                 CustomerInvoicesState.Idle -> {
                     Text(
-                        text = "Select a customer to view outstanding invoices.",
+                        text = strings.customer.selectCustomerToViewInvoices,
                         style = MaterialTheme.typography.bodyMedium
                     )
                 }
@@ -910,9 +915,7 @@ private fun CustomerOutstandingInvoicesSheet(
                                 } else {
                                     invoicesState.exchangeRateByCurrency[invoiceCurrency]
                                         ?.takeIf { it > 0.0 }
-                                        ?.let { rate ->
-                                            invoice.outstandingAmount * rate
-                                        }
+                                        ?.let { rate -> invoice.outstandingAmount * rate }
                                 }
                                 val outstandingLabel = if (convertedOutstanding != null) {
                                     "$invoiceSymbol ${bd(convertedOutstanding).moneyScale(2)}"
@@ -976,7 +979,7 @@ private fun CustomerOutstandingInvoicesSheet(
                                                     fontWeight = FontWeight.SemiBold
                                                 )
                                                 Text(
-                                                    text = "Posted: ${invoice.postingDate}",
+                                                    text = "${strings.customer.postedLabel}: ${invoice.postingDate}",
                                                     style = MaterialTheme.typography.bodySmall
                                                 )
                                             }
@@ -1007,7 +1010,7 @@ private fun CustomerOutstandingInvoicesSheet(
                                             )
                                         }
                                         Text(
-                                            text = "Outstanding: $outstandingLabel",
+                                            text = "${strings.customer.outstandingLabel}: $outstandingLabel",
                                             style = MaterialTheme.typography.bodySmall,
                                             color = MaterialTheme.colorScheme.primary
                                         )
@@ -1024,7 +1027,7 @@ private fun CustomerOutstandingInvoicesSheet(
                                                 }"
                                             val helperText =
                                                 if (convertedOutstanding != null) {
-                                                    "Base currency: $baseLabel"
+                                                    "${strings.customer.baseCurrency}: $baseLabel"
                                                 } else {
                                                     "Exchange rate unavailable. Base: $baseLabel"
                                                 }
@@ -1045,12 +1048,12 @@ private fun CustomerOutstandingInvoicesSheet(
             HorizontalDivider()
 
             Text(
-                text = "Register payment",
+                text = strings.customer.registerPaymentTitle,
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold
             )
 
-            Text("Payment mode", style = MaterialTheme.typography.bodyMedium)
+            Text(strings.customer.paymentModeLabel, style = MaterialTheme.typography.bodyMedium)
             ExposedDropdownMenuBox(
                 expanded = modeExpanded,
                 onExpandedChange = { modeExpanded = it }
@@ -1117,7 +1120,7 @@ private fun CustomerOutstandingInvoicesSheet(
                 currencyCode = selectedCurrency,
                 rawValue = amountRaw,
                 onRawValueChange = { amountRaw = it },
-                label = "Amount",
+                label = strings.customer.amountLabel,
                 onAmountChanged = { amountValue = it },
                 supportingText = {
                     if (conversionError) {
@@ -1137,7 +1140,7 @@ private fun CustomerOutstandingInvoicesSheet(
                 val currencySymbol =
                     selectedCurrency.toCurrencySymbol().ifBlank { selectedCurrency }
                 Text(
-                    text = "Change due: $currencySymbol$changeDue",
+                    text = "Change due: $currencySymbol ${bd(changeDue).moneyScale(2)}",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.primary
                 )
@@ -1167,7 +1170,11 @@ private fun CustomerOutstandingInvoicesSheet(
                 },
                 enabled = isSubmitEnabled
             ) {
-                Text(if (paymentState.isSubmitting) "Processing..." else "Register payment")
+                Text(
+                    if (paymentState.isSubmitting)
+                        strings.customer.processing
+                    else strings.customer.registerPaymentButton
+                )
             }
             Spacer(modifier = Modifier.height(12.dp))
         }
