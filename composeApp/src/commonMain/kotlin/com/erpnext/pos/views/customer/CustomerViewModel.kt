@@ -42,6 +42,23 @@ class CustomerViewModel(
     private val _paymentState = MutableStateFlow(CustomerPaymentState())
     val paymentState = _paymentState
 
+    private fun buildPaymentState(
+        isSubmitting: Boolean = false,
+        errorMessage: String? = null,
+        successMessage: String? = null
+    ): CustomerPaymentState {
+        val context = cashboxManager.getContext()
+        return CustomerPaymentState(
+            isSubmitting = isSubmitting,
+            errorMessage = errorMessage,
+            successMessage = successMessage,
+            baseCurrency = context?.currency ?: "USD",
+            allowedCurrencies = context?.allowedCurrencies ?: emptyList(),
+            paymentModes = context?.paymentModes ?: emptyList(),
+            exchangeRate = context?.exchangeRate ?: 1.0
+        )
+    }
+
     private var searchFilter by mutableStateOf<String?>(null)
     private var selectedState by mutableStateOf<String?>(null)
     private val searchFlow = MutableStateFlow<String?>(null)
@@ -122,10 +139,33 @@ class CustomerViewModel(
 
     fun loadOutstandingInvoices(customerId: String) {
         _invoicesState.value = CustomerInvoicesState.Loading
+        _paymentState.value = buildPaymentState()
         executeUseCase(
             action = {
                 val invoices = fetchOutstandingInvoicesUseCase.invoke(customerId)
-                _invoicesState.value = CustomerInvoicesState.Success(invoices)
+                val baseCurrency =
+                    cashboxManager.getContext()?.currency?.trim()?.uppercase().orEmpty()
+                val exchangeRates = mutableMapOf<String, Double>()
+                invoices.mapNotNull { it.currency?.trim()?.uppercase() }
+                    .filter { it.isNotBlank() }
+                    .distinct()
+                    .forEach { currency ->
+                        val resolved = if (baseCurrency.isNotBlank()) {
+                            cashboxManager.resolveExchangeRateBetween(
+                                fromCurrency = baseCurrency,
+                                toCurrency = currency
+                            )
+                        } else {
+                            null
+                        }
+                        if (resolved != null && resolved > 0.0) {
+                            exchangeRates[currency] = resolved
+                        }
+                    }
+                _invoicesState.value = CustomerInvoicesState.Success(
+                    invoices = invoices,
+                    exchangeRateByCurrency = exchangeRates
+                )
             },
             exceptionHandler = {
                 _invoicesState.value = CustomerInvoicesState.Error(
@@ -137,7 +177,7 @@ class CustomerViewModel(
 
     fun clearOutstandingInvoices() {
         _invoicesState.value = CustomerInvoicesState.Idle
-        _paymentState.value = CustomerPaymentState()
+        _paymentState.value = buildPaymentState()
     }
 
     fun registerPayment(
@@ -147,25 +187,19 @@ class CustomerViewModel(
         amount: Double
     ) {
         if (modeOfPayment.isBlank()) {
-            _paymentState.value = CustomerPaymentState(
-                errorMessage = "Select a mode of payment."
-            )
+            _paymentState.value = buildPaymentState(errorMessage = "Select a mode of payment.")
             return
         }
         if (invoiceId.isBlank()) {
-            _paymentState.value = CustomerPaymentState(
-                errorMessage = "Select an invoice."
-            )
+            _paymentState.value = buildPaymentState(errorMessage = "Select an invoice.")
             return
         }
         if (amount <= 0) {
-            _paymentState.value = CustomerPaymentState(
-                errorMessage = "Enter a valid amount."
-            )
+            _paymentState.value = buildPaymentState(errorMessage = "Enter a valid amount.")
             return
         }
 
-        _paymentState.value = CustomerPaymentState(isSubmitting = true)
+        _paymentState.value = buildPaymentState(isSubmitting = true)
         executeUseCase(
             action = {
                 registerInvoicePaymentUseCase(
@@ -175,13 +209,13 @@ class CustomerViewModel(
                         amount = amount
                     )
                 )
-                _paymentState.value = CustomerPaymentState(
+                _paymentState.value = buildPaymentState(
                     successMessage = "Payment registered successfully."
                 )
                 loadOutstandingInvoices(customerId)
             },
             exceptionHandler = {
-                _paymentState.value = CustomerPaymentState(
+                _paymentState.value = buildPaymentState(
                     errorMessage = it.message ?: "Unable to register payment."
                 )
             }
