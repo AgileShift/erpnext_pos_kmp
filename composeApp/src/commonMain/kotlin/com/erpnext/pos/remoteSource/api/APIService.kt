@@ -513,6 +513,8 @@ class APIService(
             ERPDocType.Customer.path,
             ERPDocType.Customer.getFields(),
             baseUrl = url,
+            offset = 0,
+            limit = Int.MAX_VALUE,
             orderBy = "customer_name asc",
             filters = filters {
                 "disabled" eq false

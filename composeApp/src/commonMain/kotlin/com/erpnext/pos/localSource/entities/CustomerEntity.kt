@@ -20,6 +20,7 @@ data class CustomerEntity(
     var totalPendingAmount: Double? = 0.0,  // Sum outstanding_amount
     var pendingInvoicesCount: Int? = 0,
     var availableCredit: Double? = 0.0,
+    var image: String? = null,
     var address: String? = null,
     var state: String? = null,
     @ColumnInfo(name = "last_synced_at")

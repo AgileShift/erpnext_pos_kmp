@@ -2,7 +2,7 @@
   "formatVersion": 1,
   "database": {
     "version": 11,
-    "identityHash": "2f9b52b1817f949925195c5538e3fe34",
+    "identityHash": "548b9fd3ed0c43059e59426cad6a7705",
     "entities": [
       {
         "tableName": "tabUser",
@@ -636,7 +636,7 @@
       },
       {
         "tableName": "customers",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `customerName` TEXT NOT NULL, `territory` TEXT, `email` TEXT, `mobileNo` TEXT, `customerType` TEXT NOT NULL, `creditLimit` REAL, `currentBalance` REAL, `totalPendingAmount` REAL, `pendingInvoicesCount` INTEGER, `availableCredit` REAL, `address` TEXT, `state` TEXT, `last_synced_at` INTEGER, PRIMARY KEY(`id`))",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `customerName` TEXT NOT NULL, `territory` TEXT, `email` TEXT, `mobileNo` TEXT, `customerType` TEXT NOT NULL, `creditLimit` REAL, `currentBalance` REAL, `totalPendingAmount` REAL, `pendingInvoicesCount` INTEGER, `availableCredit` REAL, `image` TEXT, `address` TEXT, `state` TEXT, `last_synced_at` INTEGER, PRIMARY KEY(`id`))",
         "fields": [
           {
             "fieldPath": "name",
@@ -695,6 +695,11 @@
             "fieldPath": "availableCredit",
             "columnName": "availableCredit",
             "affinity": "REAL"
+          },
+          {
+            "fieldPath": "image",
+            "columnName": "image",
+            "affinity": "TEXT"
           },
           {
             "fieldPath": "address",
@@ -5204,7 +5209,7 @@
     ],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
-      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '2f9b52b1817f949925195c5538e3fe34')"
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '548b9fd3ed0c43059e59426cad6a7705')"
     ]
   }
 }

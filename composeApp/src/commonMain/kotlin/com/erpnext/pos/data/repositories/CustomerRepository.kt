@@ -7,6 +7,7 @@ import com.erpnext.pos.domain.models.CustomerBO
 import com.erpnext.pos.domain.repositories.ICustomerRepository
 import com.erpnext.pos.localSource.datasources.CustomerLocalSource
 import com.erpnext.pos.remoteSource.datasources.CustomerRemoteSource
+import com.erpnext.pos.remoteSource.dto.CustomerCreditLimitDto
 import com.erpnext.pos.remoteSource.dto.CustomerDto
 import com.erpnext.pos.remoteSource.mapper.toBO
 import com.erpnext.pos.remoteSource.mapper.toEntities
@@ -68,8 +69,8 @@ class CustomerRepository(
                         val resolvedLimit = dto.creditLimitForCompany(contextCompany)
                         val creditLimit = resolvedLimit?.creditLimit //?: dto.creditLimit
                         val availableCredit = creditLimit?.let { it - totalOutstanding }
-                        val address = remoteSource.getCustomerAddress(dto.name)
-                        val contact = remoteSource.getCustomerContact(dto.name)
+                        //val address = remoteSource.getCustomerAddress(dto.name)
+                        //val contact = remoteSource.getCustomerContact(dto.name)
 
                         dto.toEntity(
                             creditLimit = creditLimit,
@@ -77,8 +78,6 @@ class CustomerRepository(
                             pendingInvoicesCount = customerInvoices.size,
                             totalPendingAmount = totalOutstanding,
                             state = if (totalOutstanding > 0) "Pendientes" else "Sin Pendientes",
-                            address = address ?: "",
-                            contact = contact
                         )
                     }
                 }.awaitAll()
@@ -123,18 +122,19 @@ class CustomerRepository(
                         val totalOutstanding =
                             customerInvoices.sumOf { it.grandTotal - it.paidAmount }
                         val creditLimit = dto.creditLimits
-                        val availableCredit = creditLimit - totalOutstanding
-                        val address = remoteSource.getCustomerAddress(dto.name)
-                        val contact = remoteSource.getCustomerContact(dto.name)
+                        val available = if (creditLimit.isNotEmpty()) (creditLimit[0].creditLimit
+                            ?: 0.0) - totalOutstanding else 0.0
+                        //val address = remoteSource.getCustomerAddress(dto.name)
+                        //val contact = remoteSource.getCustomerContact(dto.name)
 
                         dto.toEntity(
-                            creditLimit = 0.0, //creditLimit,
-                            availableCredit = 0.0, //availableCredit,
+                            creditLimit = if (creditLimit.isNotEmpty()) creditLimit[0].creditLimit else 0.0,
+                            availableCredit = available, //availableCredit,
                             pendingInvoicesCount = customerInvoices.size,
                             totalPendingAmount = totalOutstanding,
                             state = if (totalOutstanding > 0) "Pendientes" else "Sin Pendientes",
-                            address = address ?: "",
-                            contact = contact
+                            //address = null, //address ?: "",
+                            //contact = null
                         )
                     }
                 }.awaitAll()

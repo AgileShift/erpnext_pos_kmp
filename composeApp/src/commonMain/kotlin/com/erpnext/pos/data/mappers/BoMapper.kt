@@ -20,6 +20,7 @@ import com.erpnext.pos.localSource.entities.SalesInvoiceEntity
 import com.erpnext.pos.localSource.entities.SalesInvoiceItemEntity
 import com.erpnext.pos.localSource.entities.SalesInvoiceWithItemsAndPayments
 import com.erpnext.pos.remoteSource.dto.CategoryDto
+import com.erpnext.pos.remoteSource.dto.CustomerCreditLimitDto
 import com.erpnext.pos.remoteSource.dto.CustomerDto
 import com.erpnext.pos.remoteSource.dto.ItemDto
 import com.erpnext.pos.remoteSource.dto.POSProfileDto
@@ -79,9 +80,11 @@ fun CustomerDto.toBO(): CustomerBO {
         territory = this.territory,
         mobileNo = this.mobileNo,
         customerType = this.customerType,
-        creditLimit = null, //this.creditLimits,
+        creditLimit = this.creditLimits.getOrElse(0, { CustomerCreditLimitDto("", 0.0, false) }).creditLimit,
         totalPendingAmount = this.totalPendingAmount,
-        address = "",
+        address = address,
+        image = image,
+        email = email,
         currentBalance = this.totalPendingAmount,
         pendingInvoices = this.pendingInvoicesCount,
         availableCredit = this.availableCredit,

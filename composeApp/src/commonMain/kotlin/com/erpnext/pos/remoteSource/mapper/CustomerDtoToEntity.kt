@@ -64,14 +64,13 @@ fun CustomerDto.toEntity(
     pendingInvoicesCount: Int,
     totalPendingAmount: Double,
     state: String? = null,
-    address: String,
-    contact: ContactChildDto?
 ): CustomerEntity = CustomerEntity(
     name = name,
     customerName = customerName,
     territory = territory,
-    mobileNo = contact?.mobileNo ?: "",
+    mobileNo = mobileNo,
     state = state,
+    image = image,
     customerType = customerType,
     creditLimit = creditLimit,
     currentBalance = totalPendingAmount,  // Map totalPendingAmount a currentBalance
@@ -79,7 +78,7 @@ fun CustomerDto.toEntity(
     pendingInvoicesCount = pendingInvoicesCount,
     availableCredit = availableCredit,
     address = address,
-    email = contact?.email ?: ""
+    email = email
 )
 
 fun List<BalanceDetailsDto>.toEntity(cashboxId: Long): List<BalanceDetailsEntity> {
@@ -101,6 +100,7 @@ fun CustomerEntity.toBO(): CustomerBO = CustomerBO(
     mobileNo = mobileNo,
     customerType = customerType,
     state = state,
+    image = image,
     creditLimit = creditLimit,
     address = address,
     currentBalance = currentBalance,

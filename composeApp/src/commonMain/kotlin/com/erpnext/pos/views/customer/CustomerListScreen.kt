@@ -41,6 +41,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -48,6 +49,10 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil3.compose.AsyncImage
+import coil3.compose.LocalPlatformContext
+import coil3.request.ImageRequest
+import coil3.request.crossfade
 import com.erpnext.pos.base.getPlatformName
 import com.erpnext.pos.domain.models.CustomerBO
 import com.erpnext.pos.domain.models.SalesInvoiceBO
@@ -585,6 +590,7 @@ fun CustomerItem(
         modifier = Modifier
             .background(MaterialTheme.colorScheme.background)
             .fillMaxWidth()
+            .height(180.dp)
             .clip(cardShape)
             .pointerInput(customer.name, isDesktop) {
                 if (!isDesktop) {
@@ -621,18 +627,35 @@ fun CustomerItem(
                 .padding(if (isDesktop) 14.dp else 12.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
+            val context = LocalPlatformContext.current
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth()
+                    .height(55.dp),
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(
-                    Icons.Filled.Person,
-                    contentDescription = customer.customerName,
-                    modifier = Modifier.size(avatarSize).clip(CircleShape)
-                        .padding(12.dp),
-                    tint = statusColor
-                )
+                if (!customer.image.isNullOrEmpty()) {
+                    AsyncImage(
+                        modifier = Modifier.size(60.dp)
+                            .clip(RoundedCornerShape(50.dp)),
+                        model = remember(customer.image) {
+                            ImageRequest.Builder(context)
+                                .data(customer.image?.ifBlank { "https://placehold.co/600x400" })
+                                .crossfade(true)
+                                .build()
+                        },
+                        contentDescription = customer.name,
+                        contentScale = ContentScale.Crop,
+                    )
+                } else {
+                    Icon(
+                        Icons.Filled.Person,
+                        contentDescription = customer.customerName,
+                        modifier = Modifier.size(avatarSize).clip(CircleShape)
+                            .padding(12.dp),
+                        tint = statusColor
+                    )
+                }
 
                 Column(
                     modifier = Modifier.weight(1f),
@@ -689,7 +712,7 @@ fun CustomerItem(
                 modifier = Modifier.fillMaxWidth()
                     .height(55.dp),
                 horizontalAlignment = Alignment.End,
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 Row(
                     modifier = Modifier.widthIn(min = 140.dp),
@@ -722,16 +745,20 @@ fun CustomerItem(
                 Row(
                     modifier = Modifier.weight(1f),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
-                    CustomerInfoChip(
-                        icon = Icons.Filled.Phone,
-                        text = customer.mobileNo ?: "Residencial Palmanova #117"
-                    )
-                    CustomerInfoChip(
-                        icon = Icons.Filled.Place,
-                        text = customer.address?.takeIf { it.isNotBlank() } ?: "--"
-                    )
+                    if(customer.mobileNo?.isNotEmpty() == true) {
+                        CustomerInfoChip(
+                            icon = Icons.Filled.Phone,
+                            text = customer.mobileNo ?: "Residencial Palmanova #117"
+                        )
+                    }
+                    if (customer.address?.isNotEmpty() == true) {
+                        CustomerInfoChip(
+                            icon = Icons.Filled.Place,
+                            text = customer.address
+                        )
+                    }
                 }
             }
         }
@@ -900,12 +927,13 @@ private fun FilterSummaryTile(
     Surface(
         color = background,
         shape = RoundedCornerShape(18.dp),
-        tonalElevation = 0.dp,
+        // tonalElevation = 0.dp,
         border = if (selected) BorderStroke(1.dp, color.copy(alpha = 0.4f)) else null,
-        modifier = Modifier.clickable { onClick() }
+        modifier = Modifier.clickable { onClick() }.clip(RoundedCornerShape(18.dp))
     ) {
         Row(
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
+                .clip(RoundedCornerShape(18.dp)),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -1564,6 +1592,7 @@ fun CustomerListScreenPreview() {
                         customerName = "Ricardo García",
                         territory = "Managua",
                         mobileNo = "+505 8888 0505",
+                        image = "https://images.unsplash.com/photo-1708467374959-e5588da12e8f?q=80&w=987&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA==",
                         customerType = "Individual",
                         currentBalance = 13450.0,
                         pendingInvoices = 2,

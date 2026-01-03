@@ -7,6 +7,7 @@ data class CustomerBO(
     val mobileNo: String? = null,
     val email: String? = null,
     val customerType: String,
+    val image: String? = null,
     val state: String? = null,
     val creditLimit: Double? = 0.0,  // BO version
     val totalPendingAmount: Double? = 0.0,

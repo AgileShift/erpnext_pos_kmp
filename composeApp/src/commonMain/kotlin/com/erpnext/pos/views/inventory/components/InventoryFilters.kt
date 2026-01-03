@@ -35,6 +35,30 @@ fun InventoryFilters(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 contentPadding = PaddingValues(horizontal = 4.dp)
             ) {
+                item {
+                    val isSelected = selectedCategory == "Todos los grupos de artículos"
+                    FilterChip(
+                        selected = isSelected,
+                        onClick = { onCategoryChange("Todos los grupos de artículos") },
+                        label = { Text("Todos", style = MaterialTheme.typography.labelMedium) },
+                        modifier = Modifier.height(32.dp),
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                            selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
+                            labelColor = MaterialTheme.colorScheme.onSurfaceVariant
+                        ),
+                        shape = RoundedCornerShape(12.dp),
+                        elevation = FilterChipDefaults.filterChipElevation(
+                            elevation = 0.dp,
+                            pressedElevation = 0.dp,
+                            focusedElevation = 0.dp,
+                            hoveredElevation = 0.dp,
+                            draggedElevation = 0.dp,
+                            disabledElevation = 0.dp
+                        )
+                    )
+                }
                 items(categories.reversed()) { category ->
                     val isSelected = category == selectedCategory
                     FilterChip(
@@ -48,6 +72,7 @@ fun InventoryFilters(
                                 style = MaterialTheme.typography.labelMedium
                             )
                         },
+                        modifier = Modifier.height(32.dp),
                         colors = FilterChipDefaults.filterChipColors(
                             selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
                             selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
@@ -100,6 +125,7 @@ fun SearchTextField(
         onValueChange = onSearchQueryChange, // <- actualiza el estado externo
         modifier = modifier
             .fillMaxWidth()
+            .heightIn(min = 52.dp)
             .padding(vertical = 2.dp),
         placeholder = { Text(placeholderText, maxLines = 1, overflow = TextOverflow.Ellipsis) },
         leadingIcon = {

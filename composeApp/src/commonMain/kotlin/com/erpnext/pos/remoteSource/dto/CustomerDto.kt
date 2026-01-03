@@ -20,6 +20,12 @@ data class CustomerDto(
     val disabled: Boolean = false,
     @SerialName("credit_limits")
     val creditLimits: List<CustomerCreditLimitDto> = emptyList(),
+    @SerialName("primary_address")
+    val address: String? = null,
+    @SerialName("email_id")
+    val email: String? = null,
+    @SerialName("image")
+    val image: String? = null,
 
     var availableCredit: Double? = null,
     var pendingInvoicesCount: Int? = null,
@@ -51,6 +57,8 @@ data class ContactChildDto(
     val name: String,
     @SerialName("mobile_no")
     val mobileNo: String? = null,
+    @SerialName("phone")
+    val phone: String? = null,
     @SerialName("email_id")
     val email: String? = null
 )
