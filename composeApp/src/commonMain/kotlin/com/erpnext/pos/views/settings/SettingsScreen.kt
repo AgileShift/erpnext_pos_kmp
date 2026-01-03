@@ -12,28 +12,16 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExposedDropdownMenuBox
-import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.unit.dp
-import com.erpnext.pos.localization.AppLanguage
-import com.erpnext.pos.localization.LocalAppStrings
 import com.erpnext.pos.utils.toErpDateTime
 import com.erpnext.pos.utils.view.SnackbarController
 import com.erpnext.pos.utils.view.SnackbarPosition
@@ -62,8 +50,7 @@ fun SettingsScreenPreview() {
                 wifiOnly = false,
                 lastSyncAt = null
             ),
-            syncState = com.erpnext.pos.sync.SyncState.IDLE,
-            language = AppLanguage.Spanish
+            syncState = com.erpnext.pos.sync.SyncState.IDLE
         ), POSSettingAction()
     )
 }
@@ -74,7 +61,6 @@ fun PosSettingsScreen(
     action: POSSettingAction
 ) {
     val snackbar = koinInject<SnackbarController>()
-    val strings = LocalAppStrings.current
 
     Column(
         modifier = Modifier
@@ -85,27 +71,27 @@ fun PosSettingsScreen(
         when (state) {
             is POSSettingState.Success -> {
                 Text(
-                    text = strings.settings.title,
+                    text = "Configuración POS",
                     style = MaterialTheme.typography.titleLarge,
                     modifier = Modifier.padding(bottom = 16.dp)
                 )
                 PosSettingsCard(
-                    title = strings.settings.generalTitle,
+                    title = "General",
                     items = {
                         SettingsRow(
-                            strings.settings.companyLabel,
+                            "Empresa",
                             state.settings.company
                         ) { action.onSelect("company") }
                         SettingsRow(
-                            strings.settings.posProfileLabel,
+                            "Perfil POS",
                             state.settings.posProfile
                         ) { action.onSelect("profile") }
                         SettingsRow(
-                            strings.settings.warehouseLabel,
+                            "Almacén",
                             state.settings.warehouse
                         ) { action.onSelect("warehouse") }
                         SettingsRow(
-                            strings.settings.priceListLabel,
+                            "Lista de precios",
                             state.settings.priceList
                         ) { action.onSelect("price_list") }
                     }
@@ -121,48 +107,32 @@ fun PosSettingsScreen(
                 )
 
                 PosSettingsCard(
-                    title = strings.settings.operationTitle,
+                    title = "Operación",
                     items = {
                         SwitchRow(
-                            label = strings.settings.taxesIncludedLabel,
+                            label = "Impuestos incluidos",
                             checked = state.settings.taxesIncluded
                         ) { action.onToggle("taxes", it) }
 
                         SwitchRow(
-                            label = strings.settings.offlineModeLabel,
+                            label = "Modo offline",
                             checked = state.settings.offlineMode
                         ) { action.onToggle("offline", it) }
                     }
                 )
 
                 PosSettingsCard(
-                    title = strings.settings.hardwareTitle,
+                    title = "Hardware",
                     items = {
                         SwitchRow(
-                            label = strings.settings.printerEnabledLabel,
+                            label = "Impresora habilitada",
                             checked = state.settings.printerEnabled
                         ) { action.onToggle("printer", it) }
 
                         SwitchRow(
-                            label = strings.settings.cashDrawerEnabledLabel,
+                            label = "Cajón de dinero",
                             checked = state.settings.cashDrawerEnabled
                         ) { action.onToggle("cash_drawer", it) }
-                    }
-                )
-
-                PosSettingsCard(
-                    title = strings.settings.languageTitle,
-                    items = {
-                        LanguageSelector(
-                            currentLanguage = state.language,
-                            onLanguageSelected = action.onLanguageSelected
-                        )
-                        Text(
-                            text = strings.settings.languageInstantHint,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(top = 8.dp)
-                        )
                     }
                 )
             }
@@ -260,92 +230,40 @@ private fun SyncSettingsCard(
     onSyncOnStartupChanged: (Boolean) -> Unit,
     onWifiOnlyChanged: (Boolean) -> Unit
 ) {
-    val strings = LocalAppStrings.current
-    val lastSyncLabel = syncSettings.lastSyncAt?.toErpDateTime() ?: strings.settings.lastSyncNever
+    val lastSyncLabel = syncSettings.lastSyncAt?.toErpDateTime() ?: "Never synced"
     val statusLabel = when (syncState) {
-        com.erpnext.pos.sync.SyncState.IDLE -> strings.settings.syncStatusIdle
-        com.erpnext.pos.sync.SyncState.SUCCESS -> strings.settings.syncStatusSuccess
-        is com.erpnext.pos.sync.SyncState.ERROR -> strings.settings.syncStatusError
-        is com.erpnext.pos.sync.SyncState.SYNCING -> strings.settings.syncStatusSyncing
+        com.erpnext.pos.sync.SyncState.IDLE -> "Idle"
+        com.erpnext.pos.sync.SyncState.SUCCESS -> "Synced"
+        is com.erpnext.pos.sync.SyncState.ERROR -> "Error"
+        is com.erpnext.pos.sync.SyncState.SYNCING -> "Syncing"
     }
 
     PosSettingsCard(
-        title = strings.settings.syncTitle,
+        title = "Synchronization",
         items = {
-            SettingsRow(strings.settings.syncStatusLabel, statusLabel) {}
-            SettingsRow(strings.settings.syncLastLabel, lastSyncLabel) {}
+            SettingsRow("Status", statusLabel) {}
+            SettingsRow("Last sync", lastSyncLabel) {}
             Button(
                 onClick = onSyncNow,
-                modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                modifier = Modifier.fillMaxWidth()
             ) {
-                Text(strings.settings.syncNowButton)
+                Text("Sync now")
             }
             SwitchRow(
-                label = strings.settings.autoSyncLabel,
+                label = "Auto-sync",
                 checked = syncSettings.autoSync,
                 onCheckedChange = onAutoSyncChanged
             )
             SwitchRow(
-                label = strings.settings.syncOnStartupLabel,
+                label = "Sync on startup",
                 checked = syncSettings.syncOnStartup,
                 onCheckedChange = onSyncOnStartupChanged
             )
             SwitchRow(
-                label = strings.settings.wifiOnlyLabel,
+                label = "Wi-Fi only",
                 checked = syncSettings.wifiOnly,
                 onCheckedChange = onWifiOnlyChanged
             )
         }
     )
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun LanguageSelector(
-    currentLanguage: AppLanguage,
-    onLanguageSelected: (AppLanguage) -> Unit
-) {
-    val strings = LocalAppStrings.current
-    var expanded by remember { mutableStateOf(false) }
-
-    val currentLabel = when (currentLanguage) {
-        AppLanguage.Spanish -> strings.settings.languageSpanish
-        AppLanguage.English -> strings.settings.languageEnglish
-    }
-
-    ExposedDropdownMenuBox(
-        expanded = expanded,
-        onExpandedChange = { expanded = !expanded }
-    ) {
-        OutlinedTextField(
-            value = currentLabel,
-            onValueChange = {},
-            modifier = Modifier
-                .fillMaxWidth()
-                .menuAnchor(),
-            readOnly = true,
-            label = { Text(strings.settings.languageLabel) },
-            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) }
-        )
-        ExposedDropdownMenu(
-            expanded = expanded,
-            onDismissRequest = { expanded = false }
-        ) {
-            DropdownMenuItem(
-                text = { Text(strings.settings.languageSpanish) },
-                onClick = {
-                    onLanguageSelected(AppLanguage.Spanish)
-                    expanded = false
-                }
-            )
-            DropdownMenuItem(
-                text = { Text(strings.settings.languageEnglish) },
-                onClick = {
-                    onLanguageSelected(AppLanguage.English)
-                    expanded = false
-                }
-            )
-        }
-    }
 }

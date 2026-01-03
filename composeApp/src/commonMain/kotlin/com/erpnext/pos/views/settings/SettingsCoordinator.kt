@@ -19,8 +19,6 @@ class SettingsCoordinator(
     fun onAutoSyncChanged(enabled: Boolean) = viewModel.setAutoSync(enabled)
     fun onSyncOnStartupChanged(enabled: Boolean) = viewModel.setSyncOnStartup(enabled)
     fun onWifiOnlyChanged(enabled: Boolean) = viewModel.setWifiOnly(enabled)
-    fun onLanguageSelected(language: com.erpnext.pos.localization.AppLanguage) =
-        viewModel.setLanguage(language)
 }
 
 @Composable

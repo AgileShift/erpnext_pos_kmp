@@ -13,7 +13,6 @@ import androidx.navigation.compose.rememberNavController
 import androidx.compose.runtime.getValue
 import com.erpnext.pos.NavGraph.Setup
 import com.erpnext.pos.base.getPlatformName
-import com.erpnext.pos.localization.ProvideAppStrings
 import com.erpnext.pos.navigation.DesktopNavigationRail
 import com.erpnext.pos.navigation.NavRoute
 import com.erpnext.pos.navigation.NavigationManager
@@ -44,58 +43,56 @@ fun AppNavigation() {
     val currentRoute = visibleEntries.lastOrNull()?.destination?.route ?: ""
     val isDesktop = getPlatformName() == "Desktop"
 
-    ProvideAppStrings {
-        Scaffold(
-            bottomBar = {
-                if (!isDesktop && shouldShowBottomBar(currentRoute)) {
-                    BottomBarWithCenterFab(
-                        snackbarController = snackbarController,
-                        navController = navController,
-                        contextProvider = cashBoxManager,
-                        leftItems = listOf(NavRoute.Home, NavRoute.Inventory),
-                        rightItems = listOf(NavRoute.Customer, NavRoute.Settings),
-                        fabItem = NavRoute.Billing
-                    )
-                }
+    Scaffold(
+        bottomBar = {
+            if (!isDesktop && shouldShowBottomBar(currentRoute)) {
+                BottomBarWithCenterFab(
+                    snackbarController = snackbarController,
+                    navController = navController,
+                    contextProvider = cashBoxManager,
+                    leftItems = listOf(NavRoute.Home, NavRoute.Inventory),
+                    rightItems = listOf(NavRoute.Customer, NavRoute.Settings),
+                    fabItem = NavRoute.Billing
+                )
             }
-        ) { padding ->
-            Row(
-                modifier = Modifier
-                    .padding(padding)
-                    .fillMaxSize()
+        }
+    ) { padding ->
+        Row(
+            modifier = Modifier
+                .padding(padding)
+                .fillMaxSize()
+        ) {
+            if (isDesktop && shouldShowBottomBar(currentRoute)) {
+                DesktopNavigationRail(
+                    navController = navController,
+                    contextProvider = cashBoxManager
+                )
+            }
+            Box(
+                modifier = Modifier.weight(1f)
             ) {
-                if (isDesktop && shouldShowBottomBar(currentRoute)) {
-                    DesktopNavigationRail(
-                        navController = navController,
-                        contextProvider = cashBoxManager
-                    )
-                }
-                Box(
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Setup(navController, false)
+                Setup(navController, false)
 
-                    SnackbarHost(
-                        snackbar = snackbar,
-                        onDismiss = snackbarController::dismiss
-                    )
+                SnackbarHost(
+                    snackbar = snackbar,
+                    onDismiss = snackbarController::dismiss
+                )
 
-                    val navManager: NavigationManager = koinInject()
-                    LaunchedEffect(Unit) {
-                        navManager.navigationEvents.collect { event ->
-                            when (event) {
-                                is NavRoute.Login -> navController.navigate(NavRoute.Login.path)
-                                is NavRoute.Home -> navController.navigate(NavRoute.Home.path)
-                                is NavRoute.Billing -> navController.navigate(NavRoute.Billing.path)
-                                is NavRoute.Credits -> navController.navigate(NavRoute.Credits.path)
-                                is NavRoute.Quotation -> navController.navigate(NavRoute.Quotation.path)
-                                is NavRoute.SalesOrder -> navController.navigate(NavRoute.SalesOrder.path)
-                                is NavRoute.DeliveryNote -> navController.navigate(NavRoute.DeliveryNote.path)
-                                is NavRoute.Settings -> navController.navigate(NavRoute.Settings.path)
-                                is NavRoute.PaymentEntry -> navController.navigate(event.path)
-                                is NavRoute.NavigateUp -> navController.popBackStack()
-                                else -> {}
-                            }
+                val navManager: NavigationManager = koinInject()
+                LaunchedEffect(Unit) {
+                    navManager.navigationEvents.collect { event ->
+                        when (event) {
+                            is NavRoute.Login -> navController.navigate(NavRoute.Login.path)
+                            is NavRoute.Home -> navController.navigate(NavRoute.Home.path)
+                            is NavRoute.Billing -> navController.navigate(NavRoute.Billing.path)
+                            is NavRoute.Credits -> navController.navigate(NavRoute.Credits.path)
+                            is NavRoute.Quotation -> navController.navigate(NavRoute.Quotation.path)
+                            is NavRoute.SalesOrder -> navController.navigate(NavRoute.SalesOrder.path)
+                            is NavRoute.DeliveryNote -> navController.navigate(NavRoute.DeliveryNote.path)
+                            is NavRoute.Settings -> navController.navigate(NavRoute.Settings.path)
+                            is NavRoute.PaymentEntry -> navController.navigate(event.path)
+                            is NavRoute.NavigateUp -> navController.popBackStack()
+                            else -> {}
                         }
                     }
                 }

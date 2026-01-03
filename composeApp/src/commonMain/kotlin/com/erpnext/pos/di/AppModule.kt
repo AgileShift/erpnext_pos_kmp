@@ -43,7 +43,6 @@ import com.erpnext.pos.localSource.datasources.InvoiceLocalSource
 import com.erpnext.pos.localSource.datasources.ModeOfPaymentLocalSource
 import com.erpnext.pos.localSource.datasources.POSProfileLocalSource
 import com.erpnext.pos.localSource.preferences.ExchangeRatePreferences
-import com.erpnext.pos.localSource.preferences.LanguagePreferences
 import com.erpnext.pos.localSource.preferences.SyncPreferences
 import com.erpnext.pos.navigation.NavigationManager
 import com.erpnext.pos.remoteSource.api.APIService
@@ -132,7 +131,6 @@ val appModule = module {
         }
     }
     single { ExchangeRatePreferences(get()) }
-    single { LanguagePreferences(get()) }
     single { SyncPreferences(get()) }
     single<CashBoxManager> {
         CashBoxManager(
@@ -259,7 +257,7 @@ val appModule = module {
     //endregion
 
     //region Settings
-    single { SettingsViewModel(get(), get(), get()) }
+    single { SettingsViewModel(get(), get()) }
     //endregion
 
     //region UseCases DI
