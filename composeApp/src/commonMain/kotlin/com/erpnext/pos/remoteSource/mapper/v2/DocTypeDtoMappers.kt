@@ -46,7 +46,6 @@ data class CustomerMappedEntities(
 )
 
 fun CustomerDto.toEntities(instanceId: String, companyId: String): CustomerMappedEntities {
-    val creditLimit = creditLimitForCompany(companyId)?.creditLimit
     val customer = CustomerEntity(
         customerId = customerId,
         customerName = customerName,
@@ -55,7 +54,7 @@ fun CustomerDto.toEntities(instanceId: String, companyId: String): CustomerMappe
         disabled = disabled,
         customerGroup = customerGroup,
         territory = territory,
-        creditLimit = creditLimit,
+        creditLimit = null,
         paymentTerms = null,
         defaultCurrency = defaultCurrency,
         defaultPriceList = defaultPriceList,

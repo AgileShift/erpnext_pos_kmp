@@ -67,15 +67,13 @@ class CustomerRepository(
                 val outstandingByCustomer = allOutstanding.groupBy { it.customer }
 
                 coroutineScope {
-                    val contextCompany = context.requireContext().company
                     val entities = remoteData.map { dto ->
                         async {
                             val customerInvoices = outstandingByCustomer[dto.name] ?: emptyList()
                             val totalOutstanding =
                                 customerInvoices.sumOf { it.grandTotal - it.paidAmount }
-                            val resolvedLimit = dto.creditLimitForCompany(contextCompany)
-                            val creditLimit = resolvedLimit?.creditLimit ?: dto.creditLimit
-                            val availableCredit = creditLimit?.let { it - totalOutstanding }
+                            val creditLimit = dto.creditLimit
+                            val availableCredit = (creditLimit ?: 0.0) - totalOutstanding
                             val address = remoteSource.getCustomerAddress(dto.name)
                             val contact = remoteSource.getCustomerContact(dto.name)
 
