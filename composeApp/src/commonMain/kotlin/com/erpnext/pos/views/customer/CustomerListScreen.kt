@@ -1,5 +1,7 @@
 package com.erpnext.pos.views.customer
 
+import AppTextField
+import MoneyTextField
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateDpAsState
@@ -48,8 +50,6 @@ import androidx.compose.ui.unit.sp
 import com.erpnext.pos.base.getPlatformName
 import com.erpnext.pos.domain.models.CustomerBO
 import com.erpnext.pos.domain.models.SalesInvoiceBO
-import com.erpnext.pos.views.billing.AppTextField
-import com.erpnext.pos.views.billing.MoneyTextField
 import com.erpnext.pos.utils.toCurrencySymbol
 import org.jetbrains.compose.ui.tooling.preview.Preview
 
@@ -1071,7 +1071,7 @@ private fun CustomerOutstandingInvoicesSheet(
                 currencyCode = selectedCurrency,
                 rawValue = amountRaw,
                 onRawValueChange = { amountRaw = it },
-                label = "Amount",
+                label = "Monto",
                 onAmountChanged = { amountValue = it },
                 supportingText = {
                     if (conversionError) {
