@@ -968,6 +968,7 @@ private fun FullScreenErrorMessage(
     errorMessage: String, onRetry: () -> Unit, modifier: Modifier = Modifier
 ) {
     val strings = LocalAppStrings.current
+    val common = strings.common
     Box(
         modifier = modifier.fillMaxSize().padding(16.dp), contentAlignment = Alignment.Center
     ) {
@@ -977,7 +978,7 @@ private fun FullScreenErrorMessage(
         ) {
             Icon(
                 Icons.Filled.Error,
-                strings.common.errorLabel,
+                common.errorLabel,
                 modifier = Modifier.size(64.dp),
                 tint = MaterialTheme.colorScheme.error
             )
@@ -992,7 +993,7 @@ private fun FullScreenErrorMessage(
                     containerColor = MaterialTheme.colorScheme.primary
                 )
             ) {
-                Text(strings.common.retry)
+                Text(common.retry)
             }
         }
     }
