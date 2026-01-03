@@ -165,7 +165,8 @@ val fields: List<DocTypeFields> = listOf(
             "customer_type",
             "disabled",
             "credit_limits.credit_limit",
-            "credit_limits.company"
+            "credit_limits.company",
+            "credit_limits.bypass_credit_limit_check"
         )
     ),
     DocTypeFields(

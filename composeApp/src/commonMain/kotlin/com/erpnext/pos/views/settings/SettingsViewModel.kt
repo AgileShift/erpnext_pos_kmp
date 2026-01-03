@@ -2,6 +2,8 @@ package com.erpnext.pos.views.settings
 
 import androidx.lifecycle.viewModelScope
 import com.erpnext.pos.base.BaseViewModel
+import com.erpnext.pos.localization.AppLanguage
+import com.erpnext.pos.localSource.preferences.LanguagePreferences
 import com.erpnext.pos.localSource.preferences.SyncPreferences
 import com.erpnext.pos.localSource.preferences.SyncSettings
 import com.erpnext.pos.sync.SyncManager
@@ -14,6 +16,7 @@ import kotlinx.coroutines.launch
 
 class SettingsViewModel(
     private val syncPreferences: SyncPreferences,
+    private val languagePreferences: LanguagePreferences,
     private val syncManager: SyncManager
 ) : BaseViewModel() {
 
@@ -21,22 +24,33 @@ class SettingsViewModel(
         MutableStateFlow(POSSettingState.Loading)
     val uiState = _uiState.asStateFlow()
 
+    private var currentSyncSettings =
+        SyncSettings(autoSync = true, syncOnStartup = true, wifiOnly = false, lastSyncAt = null)
+    private var currentSyncState: SyncState = SyncState.IDLE
+    private var currentLanguage: AppLanguage = AppLanguage.Spanish
+
     init {
         viewModelScope.launch {
             syncPreferences.settings.collect { settings ->
-                publishState(settings, syncManager.state.value)
+                currentSyncSettings = settings
+                publishState()
             }
         }
         viewModelScope.launch {
             syncManager.state.collect { state ->
-                val current = (uiState.value as? POSSettingState.Success)?.syncSettings
-                    ?: SyncSettings(autoSync = true, syncOnStartup = true, wifiOnly = false, lastSyncAt = null)
-                publishState(current, state)
+                currentSyncState = state
+                publishState()
+            }
+        }
+        viewModelScope.launch {
+            languagePreferences.language.collect { language ->
+                currentLanguage = language
+                publishState()
             }
         }
     }
 
-    private fun publishState(settings: SyncSettings, syncState: SyncState) {
+    private fun publishState() {
         _uiState.update {
             POSSettingState.Success(
                 settings = POSSettingBO(
@@ -49,8 +63,9 @@ class SettingsViewModel(
                     printerEnabled = true,
                     cashDrawerEnabled = true
                 ),
-                syncSettings = settings,
-                syncState = syncState
+                syncSettings = currentSyncSettings,
+                syncState = currentSyncState,
+                language = currentLanguage
             )
         }
     }
@@ -69,5 +84,9 @@ class SettingsViewModel(
 
     fun setWifiOnly(enabled: Boolean) {
         viewModelScope.launch { syncPreferences.setWifiOnly(enabled) }
+    }
+
+    fun setLanguage(language: AppLanguage) {
+        viewModelScope.launch { languagePreferences.setLanguage(language) }
     }
 }

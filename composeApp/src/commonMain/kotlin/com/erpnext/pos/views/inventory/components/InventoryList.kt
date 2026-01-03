@@ -26,6 +26,7 @@ import androidx.compose.ui.unit.dp
 import androidx.paging.LoadState
 import androidx.paging.compose.LazyPagingItems
 import com.erpnext.pos.domain.models.ItemBO
+import com.erpnext.pos.localization.LocalAppStrings
 import com.erpnext.pos.views.inventory.InventoryAction
 
 @OptIn(ExperimentalAnimationApi::class)
@@ -37,6 +38,7 @@ fun InventoryList(
     isDesktop: Boolean,
     modifier: Modifier = Modifier
 ) {
+    val strings = LocalAppStrings.current
     AnimatedContent(
         targetState = items.loadState.refresh,
         label = "InventoryListAnimation"
@@ -62,7 +64,7 @@ fun InventoryList(
 
             state is LoadState.Error && items.itemCount == 0 -> {
                 ErrorItem(
-                    message = "Error al cargar inventario",
+                    message = strings.inventory.loadInventoryError,
                     onRetry = { items.retry() }
                 )
             }
@@ -131,7 +133,7 @@ fun InventoryList(
                             is LoadState.Error -> {
                                 item {
                                     ErrorItem(
-                                        "Error al cargar más items",
+                                        strings.inventory.loadMoreError,
                                         onRetry = { items.retry() }
                                     )
                                 }
@@ -164,6 +166,7 @@ fun ErrorItem(
     onRetry: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val strings = LocalAppStrings.current
     Column(
         modifier = modifier
             .fillMaxWidth()
@@ -194,10 +197,10 @@ fun ErrorItem(
         ) {
             Icon(
                 imageVector = Icons.Default.Refresh,
-                contentDescription = "Reintentar"
+                contentDescription = strings.inventory.retry
             )
             Spacer(modifier = Modifier.width(8.dp))
-            Text(text = "Reintentar")
+            Text(text = strings.inventory.retry)
         }
     }
 }
