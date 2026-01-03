@@ -42,6 +42,23 @@ class CustomerViewModel(
     private val _paymentState = MutableStateFlow(CustomerPaymentState())
     val paymentState = _paymentState
 
+    private fun buildPaymentState(
+        isSubmitting: Boolean = false,
+        errorMessage: String? = null,
+        successMessage: String? = null
+    ): CustomerPaymentState {
+        val context = cashboxManager.getContext()
+        return CustomerPaymentState(
+            isSubmitting = isSubmitting,
+            errorMessage = errorMessage,
+            successMessage = successMessage,
+            baseCurrency = context?.currency ?: "USD",
+            allowedCurrencies = context?.allowedCurrencies ?: emptyList(),
+            paymentModes = context?.paymentModes ?: emptyList(),
+            exchangeRate = context?.exchangeRate ?: 1.0
+        )
+    }
+
     private var searchFilter by mutableStateOf<String?>(null)
     private var selectedState by mutableStateOf<String?>(null)
     private val searchFlow = MutableStateFlow<String?>(null)
@@ -122,6 +139,7 @@ class CustomerViewModel(
 
     fun loadOutstandingInvoices(customerId: String) {
         _invoicesState.value = CustomerInvoicesState.Loading
+        _paymentState.value = buildPaymentState()
         executeUseCase(
             action = {
                 val invoices = fetchOutstandingInvoicesUseCase.invoke(customerId)
@@ -137,7 +155,7 @@ class CustomerViewModel(
 
     fun clearOutstandingInvoices() {
         _invoicesState.value = CustomerInvoicesState.Idle
-        _paymentState.value = CustomerPaymentState()
+        _paymentState.value = buildPaymentState()
     }
 
     fun registerPayment(
@@ -162,10 +180,9 @@ class CustomerViewModel(
             _paymentState.value = CustomerPaymentState(
                 errorMessage = "Ingresa un monto válido."
             )
-            return
         }
 
-        _paymentState.value = CustomerPaymentState(isSubmitting = true)
+        _paymentState.value = buildPaymentState(isSubmitting = true)
         executeUseCase(
             action = {
                 registerInvoicePaymentUseCase(
@@ -176,7 +193,7 @@ class CustomerViewModel(
                     )
                 )
                 _paymentState.value = CustomerPaymentState(
-                    successMessage = "Pago registrado correctamente."
+                    successMessage = "Pago registrado correctamente.",
                 )
                 loadOutstandingInvoices(customerId)
             },
