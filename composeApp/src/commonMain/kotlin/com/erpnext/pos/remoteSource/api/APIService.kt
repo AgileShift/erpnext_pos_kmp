@@ -527,7 +527,14 @@ class APIService(
             baseUrl = url,
             filters = filters {
                 "customer" eq customer
-                "status" `in` listOf("Unpaid", "Overdue")
+                "status" `in` listOf(
+                    "Unpaid",
+                    "Overdue",
+                    "Partly Paid",
+                    "Overdue and Discounted",
+                    "Unpaid and Discounted",
+                    "Partly Paid and Discounted"
+                )
             })
         val totalOutstanding = invoices.sumOf { it.grandTotal - it.paidAmount }
         return OutstandingInfo(totalOutstanding, invoices)
@@ -541,13 +548,20 @@ class APIService(
             fields = ERPDocType.SalesInvoice.getFields(),
             baseUrl = url,
             filters = filters {
-                "status" `in` listOf("Unpaid", "Overdue")
+                "status" `in` listOf(
+                    "Unpaid",
+                    "Overdue",
+                    "Partly Paid",
+                    "Overdue and Discounted",
+                    "Unpaid and Discounted",
+                    "Partly Paid and Discounted"
+                )
             })
     }
 
     //Para facturas pendientes (lista simple de overdue)
     suspend fun fetchAllInvoices(
-        posProfile: String, offset: Int = 0, limit: Int = 20
+        posProfile: String, offset: Int = 0, limit: Int = Int.MAX_VALUE
     ): List<SalesInvoiceDto> {
         return try {
             val url = authStore.getCurrentSite()
@@ -559,7 +573,14 @@ class APIService(
                 baseUrl = url,
                 filters = filters {
                     "pos_profile" eq posProfile
-                    "status" `in` listOf("Unpaid", "Overdue")
+                    "status" `in` listOf(
+                        "Unpaid",
+                        "Overdue",
+                        "Partly Paid",
+                        "Overdue and Discounted",
+                        "Unpaid and Discounted",
+                        "Partly Paid and Discounted"
+                    )
                     "outstanding_amount" gt 0
                 })
         } catch (e: Exception) {

@@ -20,6 +20,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlin.time.Clock
+import kotlin.time.ExperimentalTime
 
 interface ISyncManager {
     val state: StateFlow<SyncState>
@@ -40,6 +42,7 @@ class SyncManager(
     private val _state = MutableStateFlow<SyncState>(SyncState.IDLE)
     override val state: StateFlow<SyncState> = _state.asStateFlow()
 
+    @OptIn(ExperimentalTime::class)
     override fun fullSync(ttlHours: Int) {
         if (_state.value is SyncState.SYNCING) return
 
@@ -91,7 +94,7 @@ class SyncManager(
                     jobs.awaitAll()
                 }
                 _state.value = SyncState.SUCCESS
-                syncPreferences.setLastSyncAt(System.currentTimeMillis())
+                syncPreferences.setLastSyncAt(Clock.System.now().toEpochMilliseconds())
             } catch (e: Exception) {
                 e.printStackTrace()
                 _state.value = SyncState.ERROR("Error durante la sincronización: ${e.message}")
