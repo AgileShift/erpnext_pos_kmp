@@ -29,6 +29,7 @@ import com.erpnext.pos.domain.usecases.FetchDeliveryChargesUseCase
 import com.erpnext.pos.domain.usecases.FetchInventoryItemUseCase
 import com.erpnext.pos.domain.usecases.FetchPendingInvoiceUseCase
 import com.erpnext.pos.domain.usecases.FetchOutstandingInvoicesForCustomerUseCase
+import com.erpnext.pos.domain.usecases.FetchSalesInvoiceRemoteUseCase
 import com.erpnext.pos.domain.usecases.FetchPaymentTermsUseCase
 import com.erpnext.pos.domain.usecases.FetchPosProfileInfoUseCase
 import com.erpnext.pos.domain.usecases.FetchPosProfileUseCase
@@ -188,7 +189,10 @@ val appModule = module {
             checkCustomerCreditUseCase = get(),
             fetchCustomerDetailUseCase = get(),
             fetchOutstandingInvoicesUseCase = get(),
-            registerInvoicePaymentUseCase = get()
+            registerInvoicePaymentUseCase = get(),
+            createPaymentEntryUseCase = get(),
+            fetchSalesInvoiceRemoteUseCase = get(),
+            modeOfPaymentDao = get()
         )
     }
     //endregion
@@ -268,6 +272,7 @@ val appModule = module {
     single { CheckCustomerCreditUseCase(get()) }
     single { FetchPendingInvoiceUseCase(get()) }
     single { FetchOutstandingInvoicesForCustomerUseCase(get()) }
+    single { FetchSalesInvoiceRemoteUseCase(get()) }
     single { SaveInvoicePaymentsUseCase(get()) }
     single { FetchCustomersUseCase(get()) }
     single { FetchPaymentTermsUseCase(get()) }

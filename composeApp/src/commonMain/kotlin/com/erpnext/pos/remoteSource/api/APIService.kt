@@ -383,8 +383,10 @@ class APIService(
             orderBy = "item_code",
             baseUrl = url
         ) {
-            "warehouse" eq warehouse
+            if (warehouse.isNotEmpty())
+                "warehouse" eq warehouse
             "actual_qty" gt 0.0
+            "valuation_rate" gt 0.0
         }
 
         val itemCodes = bins.map { it.itemCode }.distinct()

@@ -22,7 +22,8 @@ class SalesInvoiceRemoteSource(
         posProfile: String
     ): List<SalesInvoiceDto> = apiService.fetchAllInvoices(posProfile)
 
-    suspend fun fetchInvoice(name: String): SalesInvoiceDto? = null
+    suspend fun fetchInvoice(name: String): SalesInvoiceDto? =
+        runCatching { apiService.getSalesInvoiceByName(name) }.getOrNull()
     //apiService.getInvoiceDetail(name, baseUrl, headers)
 
     suspend fun createInvoice(invoice: SalesInvoiceDto): SalesInvoiceDto =

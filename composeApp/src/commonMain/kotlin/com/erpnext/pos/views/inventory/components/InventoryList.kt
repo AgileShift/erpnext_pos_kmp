@@ -50,17 +50,19 @@ fun InventoryList(
     items: LazyPagingItems<ItemBO>,
     listState: LazyListState,
     actions: InventoryAction,
+    isWideLayout: Boolean,
     isDesktop: Boolean,
     modifier: Modifier = Modifier
 ) {
     val strings = LocalAppStrings.current
 
     AnimatedContent(
+        modifier = Modifier.fillMaxWidth(),
         targetState = items.loadState.refresh,
         label = "InventoryListAnimation"
     ) { state ->
-        when {
-            state is LoadState.Loading && items.itemCount == 0 -> {
+        when (state) {
+            is LoadState.Loading if items.itemCount == 0 -> {
                 // 🔹 Shimmer elegante parcial (no cubre toda la card)
                 Column(
                     modifier = modifier
@@ -78,7 +80,7 @@ fun InventoryList(
                 }
             }
 
-            state is LoadState.Error && items.itemCount == 0 -> {
+            is LoadState.Error if items.itemCount == 0 -> {
                 ErrorItem(
                     message = strings.inventory.loadInventoryError,
                     onRetry = { items.retry() }
@@ -87,12 +89,14 @@ fun InventoryList(
 
             else -> {
                 if (isDesktop) {
+                    val spacing = if (isWideLayout) 16.dp else 12.dp
+
                     LazyVerticalGrid(
+                        columns = GridCells.Adaptive(minSize = 360.dp),
                         modifier = modifier.fillMaxSize(),
-                        columns = GridCells.Adaptive(minSize = 280.dp),
-                        contentPadding = PaddingValues(horizontal = 20.dp, vertical = 16.dp),
-                        horizontalArrangement = Arrangement.spacedBy(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 8.dp),
+                        verticalArrangement = Arrangement.spacedBy(spacing),
+                        horizontalArrangement = Arrangement.spacedBy(spacing),
                     ) {
                         items(
                             count = items.itemCount,
@@ -103,7 +107,11 @@ fun InventoryList(
                         ) { index ->
                             val item = items[index]
                             if (item != null) {
-                                ProductCard(actions, item, isDesktop = isDesktop)
+                                ProductCard(
+                                    actions,
+                                    item,
+                                    isDesktop = isDesktop
+                                )
                             } else {
                                 ShimmerProductPlaceholder(
                                     Modifier
@@ -233,10 +241,10 @@ fun InventoryListPreview() {
                     description = "Palazzos a cuadros de paletones con faja incluida-ROJO VINO-S",
                     itemCode = "P14823-ROJO VINO-S\n",
                     barcode = "",
-                    image = "https://i.imgur.com/ZMqFEY9.jpeg",
-                    currency = "USD",
+                    image = "https://images.unsplash.com/photo-1708467374959-e5588da12e8f?q=80&w=987&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA==",
+                    currency = "NIO",
                     itemGroup = "Palazzos",
-                    brand = "",
+                    brand = "Shein",
                     price = 18.00,
                     actualQty = 4.0,
                     discount = 0.0,
@@ -250,6 +258,7 @@ fun InventoryListPreview() {
         listState = LazyListState(),
         actions = InventoryAction(),
         isDesktop = true,
-        modifier = Modifier
+        modifier = Modifier,
+        isWideLayout = true,
     )
 }

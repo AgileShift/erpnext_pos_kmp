@@ -16,6 +16,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.paging.PagingData
 import androidx.paging.compose.collectAsLazyPagingItems
+import com.erpnext.pos.base.getPlatformName
 import com.erpnext.pos.domain.models.CategoryBO
 import com.erpnext.pos.domain.models.ItemBO
 import com.erpnext.pos.views.inventory.components.*
@@ -71,12 +72,14 @@ fun InventoryScreen(
             }
         }
     ) { innerPadding ->
-        Box(
+        BoxWithConstraints(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
                 .pullRefresh(pullRefreshState)
         ) {
+            val isDesktop = getPlatformName() == "Desktop"
+            val isWideLayout = maxWidth >= 840.dp || isDesktop
 
             /**
              * 1️⃣ Animación localizada — sin destruir SearchBar ni filtros
@@ -111,7 +114,9 @@ fun InventoryScreen(
                                 onCategorySelected = { category ->
                                     selectedCategory = category
                                     actions.onCategorySelected(category)
-                                }
+                                },
+                                isWideLayout = isWideLayout,
+                                isDesktop = isDesktop
                             )
                             Box(
                                 Modifier
@@ -151,7 +156,9 @@ fun InventoryScreen(
                             onCategorySelected = { category ->
                                 selectedCategory = category
                                 actions.onCategorySelected(category)
-                            }
+                            },
+                            isDesktop = isDesktop,
+                            isWideLayout = isWideLayout
                         )
                     }
                 }
@@ -210,7 +217,11 @@ fun InventoryScreenPreview() {
                     )
                 )
             ),
-            categories = listOf<CategoryBO>(CategoryBO("Carne"), CategoryBO("Embutidos"), CategoryBO("Pollo"))
+            categories = listOf<CategoryBO>(
+                CategoryBO("Carne"),
+                CategoryBO("Embutidos"),
+                CategoryBO("Pollo")
+            )
         ),
         actions = InventoryAction(),
     )

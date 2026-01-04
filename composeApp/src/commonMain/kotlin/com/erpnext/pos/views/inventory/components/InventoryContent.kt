@@ -23,13 +23,14 @@ fun InventoryContent(
     itemsLazy: LazyPagingItems<ItemBO>?,
     listState: LazyListState,
     actions: InventoryAction,
+    isWideLayout: Boolean,
+    isDesktop: Boolean,
     searchQuery: String,
     selectedCategory: String,
     onQueryChanged: (String) -> Unit,
     onCategorySelected: (String) -> Unit
 ) {
     val strings = LocalAppStrings.current
-    val isDesktop = getPlatformName() == "Desktop"
     Column(Modifier.fillMaxSize()) {
         InventoryFilters(
             searchQuery = searchQuery,
@@ -68,7 +69,8 @@ fun InventoryContent(
                     items = itemsLazy,
                     listState = listState,
                     actions = actions,
-                    isDesktop = isDesktop
+                    isDesktop = isDesktop,
+                    isWideLayout = isWideLayout
                 )
             }
         }

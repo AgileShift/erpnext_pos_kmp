@@ -10,10 +10,20 @@ import com.erpnext.pos.domain.usecases.CustomerCreditInput
 import com.erpnext.pos.domain.usecases.CustomerQueryInput
 import com.erpnext.pos.domain.usecases.FetchCustomerDetailUseCase
 import com.erpnext.pos.domain.usecases.FetchCustomersUseCase
+import com.erpnext.pos.domain.usecases.CreatePaymentEntryInput
+import com.erpnext.pos.domain.usecases.CreatePaymentEntryUseCase
 import com.erpnext.pos.domain.usecases.FetchOutstandingInvoicesForCustomerUseCase
+import com.erpnext.pos.domain.usecases.FetchSalesInvoiceRemoteUseCase
 import com.erpnext.pos.domain.usecases.RegisterInvoicePaymentInput
 import com.erpnext.pos.domain.usecases.RegisterInvoicePaymentUseCase
+import com.erpnext.pos.localSource.dao.ModeOfPaymentDao
+import com.erpnext.pos.localSource.entities.ModeOfPaymentEntity
+import com.erpnext.pos.remoteSource.dto.SalesInvoiceDto
+import com.erpnext.pos.remoteSource.dto.v2.PaymentEntryCreateDto
+import com.erpnext.pos.remoteSource.dto.v2.PaymentEntryReferenceCreateDto
 import com.erpnext.pos.views.CashBoxManager
+import com.erpnext.pos.utils.toErpDateTime
+import io.ktor.util.date.getTimeMillis
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.collectLatest
@@ -29,7 +39,10 @@ class CustomerViewModel(
     private val checkCustomerCreditUseCase: CheckCustomerCreditUseCase,
     private val fetchCustomerDetailUseCase: FetchCustomerDetailUseCase,
     private val fetchOutstandingInvoicesUseCase: FetchOutstandingInvoicesForCustomerUseCase,
-    private val registerInvoicePaymentUseCase: RegisterInvoicePaymentUseCase
+    private val registerInvoicePaymentUseCase: RegisterInvoicePaymentUseCase,
+    private val createPaymentEntryUseCase: CreatePaymentEntryUseCase,
+    private val fetchSalesInvoiceRemoteUseCase: FetchSalesInvoiceRemoteUseCase,
+    private val modeOfPaymentDao: ModeOfPaymentDao
 ) : BaseViewModel() {
 
     private val _stateFlow: MutableStateFlow<CustomerState> =
@@ -41,6 +54,8 @@ class CustomerViewModel(
 
     private val _paymentState = MutableStateFlow(CustomerPaymentState())
     val paymentState = _paymentState
+
+    private var paymentModeDetails: Map<String, ModeOfPaymentEntity> = emptyMap()
 
     private fun buildPaymentState(
         isSubmitting: Boolean = false,
@@ -149,7 +164,12 @@ class CustomerViewModel(
                 val baseCurrency =
                     cashboxManager.getContext()?.currency?.trim()?.uppercase().orEmpty()
                 val exchangeRates = mutableMapOf<String, Double>()
-                invoices.mapNotNull { it.currency?.trim()?.uppercase() }
+                invoices.flatMap { invoice ->
+                    listOfNotNull(
+                        invoice.currency?.trim()?.uppercase(),
+                        invoice.partyAccountCurrency?.trim()?.uppercase()
+                    )
+                }
                     .filter { it.isNotBlank() }
                     .distinct()
                     .forEach { currency ->
@@ -169,6 +189,7 @@ class CustomerViewModel(
                     invoices = invoices,
                     exchangeRateByCurrency = exchangeRates
                 )
+                refreshPaymentModeDetails()
             },
             exceptionHandler = {
                 _invoicesState.value = CustomerInvoicesState.Error(
@@ -187,7 +208,9 @@ class CustomerViewModel(
         customerId: String,
         invoiceId: String,
         modeOfPayment: String,
-        amount: Double
+        enteredAmount: Double,
+        enteredCurrency: String,
+        baseAmount: Double
     ) {
         if (modeOfPayment.isBlank()) {
             _paymentState.value = buildPaymentState(errorMessage = "Selecciona un modo de pago.")
@@ -197,7 +220,7 @@ class CustomerViewModel(
             _paymentState.value = buildPaymentState(errorMessage = "Selecciona una factura.")
             return
         }
-        if (amount <= 0) {
+        if (enteredAmount <= 0 || baseAmount <= 0) {
             _paymentState.value = buildPaymentState(errorMessage = "Ingresa un monto válido.")
             return
         }
@@ -205,15 +228,34 @@ class CustomerViewModel(
         _paymentState.value = buildPaymentState(isSubmitting = true)
         executeUseCase(
             action = {
+                refreshPaymentModeDetails()
+                val invoice = fetchSalesInvoiceRemoteUseCase(invoiceId)
+                    ?: error("No se pudo cargar la factura.")
+                val entry = buildPaymentEntryDto(
+                    invoice = invoice,
+                    customerId = customerId,
+                    modeOfPayment = modeOfPayment,
+                    enteredAmount = enteredAmount,
+                    enteredCurrency = enteredCurrency,
+                    baseAmount = baseAmount
+                )
+                val remoteResult = runCatching {
+                    createPaymentEntryUseCase(CreatePaymentEntryInput(entry))
+                }
+
                 registerInvoicePaymentUseCase(
                     RegisterInvoicePaymentInput(
                         invoiceId = invoiceId,
                         modeOfPayment = modeOfPayment,
-                        amount = amount
+                        amount = baseAmount
                     )
                 )
                 _paymentState.value = buildPaymentState(
-                    successMessage = "Pago registrado correctamente.",
+                    successMessage = if (remoteResult.isFailure) {
+                        "Pago registrado localmente. No se pudo sincronizar."
+                    } else {
+                        "Pago registrado correctamente."
+                    }
                 )
                 loadOutstandingInvoices(customerId)
             },
@@ -222,6 +264,86 @@ class CustomerViewModel(
                     errorMessage = it.message ?: "No se pudo registrar el pago."
                 )
             }
+        )
+    }
+
+    private suspend fun refreshPaymentModeDetails() {
+        if (paymentModeDetails.isNotEmpty()) return
+        val company = cashboxManager.requireContext().company
+        val definitions = runCatching { modeOfPaymentDao.getAllModes(company) }
+            .getOrElse { emptyList() }
+        paymentModeDetails = buildPaymentModeDetailMap(definitions)
+    }
+
+    private fun buildPaymentModeDetailMap(
+        definitions: List<ModeOfPaymentEntity>
+    ): Map<String, ModeOfPaymentEntity> {
+        val map = mutableMapOf<String, ModeOfPaymentEntity>()
+        definitions.forEach { definition ->
+            map[definition.modeOfPayment] = definition
+            map[definition.name] = definition
+        }
+        return map
+    }
+
+    private suspend fun buildPaymentEntryDto(
+        invoice: SalesInvoiceDto,
+        customerId: String,
+        modeOfPayment: String,
+        enteredAmount: Double,
+        enteredCurrency: String,
+        baseAmount: Double
+    ): PaymentEntryCreateDto {
+        val context = cashboxManager.requireContext()
+        val receivableCurrency = invoice.partyAccountCurrency?.trim()?.uppercase()
+            ?: invoice.currency?.trim()?.uppercase()
+            ?: context.currency.trim().uppercase()
+        val paidFromAccount = invoice.debitTo?.takeIf { it.isNotBlank() }
+            ?: error("No se pudo resolver la cuenta de débito (debit_to).")
+
+        val modeDefinition = paymentModeDetails[modeOfPayment]
+        val paidToAccount = modeDefinition?.account?.takeIf { it.isNotBlank() }
+            ?: error("Modo de pago sin cuenta configurada.")
+        val paidToCurrency = modeDefinition.currency?.takeIf { it.isNotBlank() }
+            ?: enteredCurrency
+
+        val rate = if (paidToCurrency.equals(receivableCurrency, ignoreCase = true)) {
+            1.0
+        } else {
+            cashboxManager.resolveExchangeRateBetween(
+                fromCurrency = paidToCurrency,
+                toCurrency = receivableCurrency
+            )?.takeIf { it > 0.0 }
+                ?: error("No se pudo resolver tasa $paidToCurrency -> $receivableCurrency")
+        }
+
+        val allocatedRc = baseAmount.coerceAtMost(invoice.outstandingAmount ?: baseAmount)
+        val receivedAmount = if (rate <= 0.0) enteredAmount else (allocatedRc / rate)
+
+        return PaymentEntryCreateDto(
+            company = invoice.company,
+            postingDate = getTimeMillis().toErpDateTime(),
+            paymentType = "Receive",
+            partyType = "Customer",
+            partyId = customerId,
+            modeOfPayment = modeOfPayment,
+            paidAmount = allocatedRc,
+            receivedAmount = receivedAmount,
+            paidFrom = paidFromAccount,
+            paidTo = paidToAccount,
+            paidToAccountCurrency = paidToCurrency,
+            sourceExchangeRate = if (rate == 1.0) null else 1.0,
+            targetExchangeRate = if (rate == 1.0) null else rate,
+            references = listOf(
+                PaymentEntryReferenceCreateDto(
+                    referenceDoctype = "Sales Invoice",
+                    referenceName = invoice.name ?: error("Factura sin ID."),
+                    totalAmount = invoice.grandTotal,
+                    outstandingAmount = invoice.outstandingAmount ?: allocatedRc,
+                    allocatedAmount = allocatedRc
+                )
+            ),
+            docStatus = 1
         )
     }
 }

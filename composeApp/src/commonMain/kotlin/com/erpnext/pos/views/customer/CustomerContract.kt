@@ -49,6 +49,12 @@ data class CustomerAction(
     val onRegisterPayment: (CustomerBO) -> Unit = {},
     val loadOutstandingInvoices: (CustomerBO) -> Unit = {},
     val clearOutstandingInvoices: () -> Unit = {},
-    val registerPayment: (customerId: String, invoiceId: String, modeOfPayment: String, amount: Double) -> Unit =
-        { _, _, _, _ -> }
+    val registerPayment: (
+        customerId: String,
+        invoiceId: String,
+        modeOfPayment: String,
+        enteredAmount: Double,
+        enteredCurrency: String,
+        baseAmount: Double
+    ) -> Unit = { _, _, _, _, _, _ -> }
 )

@@ -82,6 +82,10 @@ class SalesInvoiceRepository(
             ?: throw IllegalArgumentException("Invoice not found after fetch: $name")*/
     }
 
+    suspend fun fetchRemoteInvoice(name: String): SalesInvoiceDto? {
+        return remoteSource.fetchInvoice(name)
+    }
+
     override suspend fun createRemoteInvoice(invoice: SalesInvoiceDto): SalesInvoiceDto {
         return remoteSource.createInvoice(invoice)
     }

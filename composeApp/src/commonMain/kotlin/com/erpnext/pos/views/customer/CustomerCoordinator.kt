@@ -32,8 +32,17 @@ class CustomerCoordinator(
         customerId: String,
         invoiceId: String,
         modeOfPayment: String,
-        amount: Double
-    ) = viewModel.registerPayment(customerId, invoiceId, modeOfPayment, amount)
+        enteredAmount: Double,
+        enteredCurrency: String,
+        baseAmount: Double
+    ) = viewModel.registerPayment(
+        customerId,
+        invoiceId,
+        modeOfPayment,
+        enteredAmount,
+        enteredCurrency,
+        baseAmount
+    )
 }
 
 @Composable

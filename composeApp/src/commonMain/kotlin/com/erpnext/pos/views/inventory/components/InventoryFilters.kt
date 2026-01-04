@@ -96,7 +96,7 @@ fun InventoryFilters(
 
         Surface(
             tonalElevation = 0.dp,
-            shape = RoundedCornerShape(16.dp),
+            shape = RoundedCornerShape(18.dp),
             color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
         ) {
             SearchTextField(
@@ -125,7 +125,7 @@ fun SearchTextField(
         onValueChange = onSearchQueryChange, // <- actualiza el estado externo
         modifier = modifier
             .fillMaxWidth()
-            .heightIn(min = 52.dp)
+            .heightIn(min = 50.dp)
             .padding(vertical = 2.dp),
         placeholder = { Text(placeholderText, maxLines = 1, overflow = TextOverflow.Ellipsis) },
         leadingIcon = {
