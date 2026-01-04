@@ -6,6 +6,7 @@ import com.erpnext.pos.domain.models.UserBO
 import com.erpnext.pos.remoteSource.dto.POSOpeningEntryDto
 import com.erpnext.pos.sync.SyncState
 import com.erpnext.pos.views.PaymentModeWithAmount
+import com.erpnext.pos.localSource.preferences.SyncSettings
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 
@@ -23,12 +24,17 @@ sealed class HomeState {
 data class HomeAction(
     val sync: () -> Unit = {},
     val syncState: StateFlow<SyncState> = MutableStateFlow(SyncState.IDLE),
+    val syncSettings: StateFlow<SyncSettings> = MutableStateFlow(
+        SyncSettings(autoSync = true, syncOnStartup = true, wifiOnly = false, lastSyncAt = null)
+    ),
+    val homeMetrics: StateFlow<HomeMetrics> = MutableStateFlow(HomeMetrics()),
     val loadInitialData: () -> Unit = {},
     val initialState: () -> Unit = {},
     val openCashbox: (pos: POSProfileSimpleBO, amounts: List<PaymentModeWithAmount>) -> Unit = { _, _ -> },
     val onPosSelected: (pos: POSProfileSimpleBO) -> Unit = {},
     val closeCashbox: () -> Unit = {},
     val isCashboxOpen: () -> StateFlow<Boolean> = { MutableStateFlow(false) },
+    val onOpenSettings: () -> Unit = {},
     val onLogout: () -> Unit = {},
     val onError: (error: String) -> Unit = {},
 )

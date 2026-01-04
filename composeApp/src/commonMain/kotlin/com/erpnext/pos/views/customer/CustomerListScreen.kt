@@ -58,6 +58,9 @@ import com.erpnext.pos.domain.models.CustomerBO
 import com.erpnext.pos.domain.models.SalesInvoiceBO
 import com.erpnext.pos.localization.LocalAppStrings
 import com.erpnext.pos.utils.formatDoubleToString
+import com.erpnext.pos.utils.oauth.bd
+import com.erpnext.pos.utils.oauth.moneyScale
+import com.erpnext.pos.utils.oauth.toDouble
 import com.erpnext.pos.utils.toCurrencySymbol
 import org.jetbrains.compose.ui.tooling.preview.Preview
 
@@ -577,7 +580,7 @@ fun CustomerItem(
     var isMenuExpanded by remember { mutableStateOf(false) }
     val quickActions = remember { customerQuickActions() }
     val avatarSize = if (isDesktop) 52.dp else 44.dp
-    val pendingAmount = customer.totalPendingAmount ?: customer.currentBalance ?: 0.0
+    val pendingAmount = bd(customer.totalPendingAmount ?: customer.currentBalance ?: 0.0).moneyScale(2).toDouble(2)
     val statusLabel = when {
         isOverLimit -> strings.customer.overdueLabel
         pendingInvoices > 0 || pendingAmount > 0.0 -> strings.customer.pendingLabel
@@ -726,7 +729,7 @@ fun CustomerItem(
                 ) {
                     MetricBlock(
                         label = strings.customer.pendingLabel,
-                        value = "$currencySymbol$pendingAmount",
+                        value = "$currencySymbol $pendingAmount",
                         isCritical = emphasis
                     )
                     MetricBlock(

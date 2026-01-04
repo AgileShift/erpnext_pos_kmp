@@ -26,6 +26,7 @@ fun WarehouseItemDto.toEntity(): ItemEntity {
         barcode = this.barcode,
         image = this.image,
         price = this.price,
+        valuationRate = this.valuationRate,
         discount = this.discount,
         isService = this.isService,
         isStocked = this.isStocked,

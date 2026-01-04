@@ -66,6 +66,123 @@ interface SalesInvoiceDao {
     @Query("SELECT SUM(grand_total) FROM tabSalesInvoice WHERE posting_date = :date AND docstatus = 1")
     suspend fun getTotalSalesForDate(date: String): Double?
 
+    @Query("SELECT COUNT(*) FROM tabSalesInvoice WHERE posting_date = :date AND docstatus = 1")
+    suspend fun getSalesCountForDate(date: String): Int
+
+    @Query("SELECT COUNT(DISTINCT customer) FROM tabSalesInvoice WHERE posting_date = :date AND docstatus = 1")
+    suspend fun getDistinctCustomersForDate(date: String): Int
+
+    @Query(
+        """
+        SELECT posting_date AS date, SUM(grand_total) AS total
+        FROM tabSalesInvoice
+        WHERE posting_date BETWEEN :startDate AND :endDate
+          AND docstatus = 1
+        GROUP BY posting_date
+        ORDER BY posting_date ASC
+        """
+    )
+    suspend fun getDailySalesTotals(
+        startDate: String,
+        endDate: String
+    ): List<DailySalesTotal>
+
+    @Query(
+        """
+        SELECT i.item_code AS itemCode,
+               i.item_name AS itemName,
+               SUM(i.qty) AS qty,
+               SUM(i.amount) AS total
+        FROM tabSalesInvoiceItem i
+        INNER JOIN tabSalesInvoice s ON s.invoice_name = i.parent_invoice
+        WHERE s.posting_date BETWEEN :startDate AND :endDate
+          AND s.docstatus = 1
+        GROUP BY i.item_code, i.item_name
+        ORDER BY total DESC
+        LIMIT :limit
+        """
+    )
+    suspend fun getTopProductsBySales(
+        startDate: String,
+        endDate: String,
+        limit: Int
+    ): List<TopProductSales>
+
+    @Query(
+        """
+        SELECT SUM(
+            (CASE WHEN i.net_amount > 0 THEN i.net_amount ELSE i.amount END)
+            - (IFNULL(t.valuation_rate, 0) * i.qty)
+        )
+        FROM tabSalesInvoiceItem i
+        INNER JOIN tabSalesInvoice s ON s.invoice_name = i.parent_invoice
+        LEFT JOIN tabItem t ON t.itemCode = i.item_code
+        WHERE s.posting_date BETWEEN :startDate AND :endDate
+          AND s.docstatus = 1
+        """
+    )
+    suspend fun getEstimatedMarginTotal(
+        startDate: String,
+        endDate: String
+    ): Double?
+
+    @Query(
+        """
+        SELECT COUNT(*)
+        FROM tabSalesInvoiceItem i
+        INNER JOIN tabSalesInvoice s ON s.invoice_name = i.parent_invoice
+        LEFT JOIN tabItem t ON t.itemCode = i.item_code
+        WHERE s.posting_date BETWEEN :startDate AND :endDate
+          AND s.docstatus = 1
+          AND IFNULL(t.valuation_rate, 0) > 0
+        """
+    )
+    suspend fun countItemsWithCost(
+        startDate: String,
+        endDate: String
+    ): Int
+
+    @Query(
+        """
+        SELECT COUNT(*)
+        FROM tabSalesInvoiceItem i
+        INNER JOIN tabSalesInvoice s ON s.invoice_name = i.parent_invoice
+        WHERE s.posting_date BETWEEN :startDate AND :endDate
+          AND s.docstatus = 1
+        """
+    )
+    suspend fun countItemsInRange(
+        startDate: String,
+        endDate: String
+    ): Int
+
+    @Query(
+        """
+        SELECT i.item_code AS itemCode,
+               i.item_name AS itemName,
+               SUM(i.qty) AS qty,
+               SUM(CASE WHEN i.net_amount > 0 THEN i.net_amount ELSE i.amount END) AS total,
+               SUM(
+                    (CASE WHEN i.net_amount > 0 THEN i.net_amount ELSE i.amount END)
+                    - (IFNULL(t.valuation_rate, 0) * i.qty)
+               ) AS margin
+        FROM tabSalesInvoiceItem i
+        INNER JOIN tabSalesInvoice s ON s.invoice_name = i.parent_invoice
+        LEFT JOIN tabItem t ON t.itemCode = i.item_code
+        WHERE s.posting_date BETWEEN :startDate AND :endDate
+          AND s.docstatus = 1
+          AND IFNULL(t.valuation_rate, 0) > 0
+        GROUP BY i.item_code, i.item_name
+        ORDER BY margin DESC
+        LIMIT :limit
+        """
+    )
+    suspend fun getTopProductsByMargin(
+        startDate: String,
+        endDate: String,
+        limit: Int
+    ): List<TopProductMargin>
+
     @Query("SELECT SUM(outstanding_amount) FROM tabSalesInvoice WHERE status IN ('Draft','Submitted')")
     suspend fun getTotalOutstanding(): Double?
 
@@ -150,3 +267,23 @@ interface SalesInvoiceDao {
     @Query("SELECT * FROM tabSalesInvoice ORDER BY last_synced_at ASC LIMIT 1")
     suspend fun getOldestItem(): SalesInvoiceEntity?
 }
+
+data class DailySalesTotal(
+    val date: String,
+    val total: Double
+)
+
+data class TopProductSales(
+    val itemCode: String,
+    val itemName: String?,
+    val qty: Double,
+    val total: Double
+)
+
+data class TopProductMargin(
+    val itemCode: String,
+    val itemName: String?,
+    val qty: Double,
+    val total: Double,
+    val margin: Double
+)

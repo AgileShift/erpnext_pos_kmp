@@ -14,6 +14,8 @@ class HomeCoordinator(
 ) {
     val screenStateFlow = viewModel.stateFlow
     val syncState = viewModel.syncState
+    val syncSettings = viewModel.syncSettings
+    val homeMetrics = viewModel.homeMetrics
 
     fun loadInitialData() {
         return viewModel.loadInitialData()
@@ -49,6 +51,10 @@ class HomeCoordinator(
 
     fun isCashboxOpen(): StateFlow<Boolean> {
         return viewModel.isCashboxOpen()
+    }
+
+    fun openSettings() {
+        viewModel.openSettings()
     }
 }
 

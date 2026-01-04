@@ -433,6 +433,7 @@ class APIService(
                 itemCode = bin.itemCode,
                 actualQty = bin.actualQty,
                 price = price,
+                valuationRate = bin.valuationRate,
                 name = item.itemName,
                 itemGroup = item.itemGroup,
                 description = item.description,

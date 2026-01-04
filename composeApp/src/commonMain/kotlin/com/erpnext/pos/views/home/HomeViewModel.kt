@@ -7,6 +7,7 @@ import com.erpnext.pos.domain.models.UserBO
 import com.erpnext.pos.domain.usecases.FetchPosProfileInfoUseCase
 import com.erpnext.pos.domain.usecases.FetchPosProfileUseCase
 import com.erpnext.pos.domain.usecases.FetchUserInfoUseCase
+import com.erpnext.pos.domain.usecases.LoadHomeMetricsUseCase
 import com.erpnext.pos.domain.usecases.LogoutUseCase
 import com.erpnext.pos.navigation.NavRoute
 import com.erpnext.pos.navigation.NavigationManager
@@ -31,7 +32,8 @@ class HomeViewModel(
     private val contextManager: CashBoxManager,
     private val syncManager: SyncManager,
     private val syncPreferences: SyncPreferences,
-    private val navManager: NavigationManager
+    private val navManager: NavigationManager,
+    private val loadHomeMetricsUseCase: LoadHomeMetricsUseCase
 ) : BaseViewModel() {
     private val _stateFlow: MutableStateFlow<HomeState> = MutableStateFlow(HomeState.Loading)
     val stateFlow = _stateFlow.asStateFlow()
@@ -41,6 +43,8 @@ class HomeViewModel(
         SyncSettings(autoSync = true, syncOnStartup = true, wifiOnly = false, lastSyncAt = null)
     )
     val syncSettings: StateFlow<SyncSettings> = _syncSettings.asStateFlow()
+    private val _homeMetrics = MutableStateFlow(HomeMetrics())
+    val homeMetrics: StateFlow<HomeMetrics> = _homeMetrics.asStateFlow()
 
     private var userInfo: UserBO = UserBO()
     private var posProfiles: List<POSProfileSimpleBO> = emptyList()
@@ -55,6 +59,13 @@ class HomeViewModel(
             isCashboxOpen().collectLatest {
                 if (it && _syncSettings.value.syncOnStartup) {
                     startInitialSync()
+                }
+            }
+        }
+        viewModelScope.launch {
+            syncState.collectLatest { state ->
+                if (state is SyncState.SUCCESS) {
+                    refreshMetrics()
                 }
             }
         }
@@ -79,10 +90,18 @@ class HomeViewModel(
         executeUseCase(action = {
             userInfo = fetchUserInfoUseCase.invoke(null)
             posProfiles = fetchPosProfileUseCase.invoke(userInfo.email)
+            _homeMetrics.value = loadHomeMetricsUseCase()
             _stateFlow.update { HomeState.POSProfiles(posProfiles, userInfo) }
         }, exceptionHandler = { e ->
             _stateFlow.update { HomeState.Error(e.message ?: "Error") }
         })
+    }
+
+    fun refreshMetrics() {
+        executeUseCase(
+            action = { _homeMetrics.value = loadHomeMetricsUseCase() },
+            exceptionHandler = { it.printStackTrace() }
+        )
     }
 
     fun isCashboxOpen(): StateFlow<Boolean> = contextManager.cashboxState
@@ -97,6 +116,10 @@ class HomeViewModel(
             _stateFlow.update { HomeState.Logout }
             navManager.navigateTo(NavRoute.Login)
         }, exceptionHandler = { it.printStackTrace() })
+    }
+
+    fun openSettings() {
+        navManager.navigateTo(NavRoute.Settings)
     }
 
     fun onError(error: String) {

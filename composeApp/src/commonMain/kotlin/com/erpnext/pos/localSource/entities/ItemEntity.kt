@@ -19,6 +19,8 @@ data class ItemEntity(
     var itemGroup: String = "",
     var brand: String? = null,
     var price: Double = 0.0,
+    @ColumnInfo(name = "valuation_rate", defaultValue = "0")
+    var valuationRate: Double? = 0.0,
     var discount: Double = 0.0,
     var isService: Boolean = false,
     var isStocked: Boolean = false,

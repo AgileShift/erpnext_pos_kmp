@@ -34,6 +34,7 @@ import com.erpnext.pos.domain.usecases.FetchPaymentTermsUseCase
 import com.erpnext.pos.domain.usecases.FetchPosProfileInfoUseCase
 import com.erpnext.pos.domain.usecases.FetchPosProfileUseCase
 import com.erpnext.pos.domain.usecases.FetchUserInfoUseCase
+import com.erpnext.pos.domain.usecases.LoadHomeMetricsUseCase
 import com.erpnext.pos.domain.usecases.LogoutUseCase
 import com.erpnext.pos.domain.usecases.RegisterInvoicePaymentUseCase
 import com.erpnext.pos.domain.usecases.SaveInvoicePaymentsUseCase
@@ -208,7 +209,8 @@ val appModule = module {
             contextManager = get(),
             syncManager = get(),
             syncPreferences = get(),
-            navManager = get()
+            navManager = get(),
+            loadHomeMetricsUseCase = get()
         )
     }
     single<IUserRepository> { UserRepository(get()) }
@@ -285,6 +287,7 @@ val appModule = module {
     single { FetchUserInfoUseCase(get()) }
     single { RegisterInvoicePaymentUseCase(get()) }
     single { CreatePaymentEntryUseCase(get()) }
+    single { LoadHomeMetricsUseCase(get()) }
     //endregion
 }
 

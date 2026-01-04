@@ -11,6 +11,8 @@ data class WarehouseItemDto(
     val actualQty: Double,
     @SerialName("price")
     val price: Double,
+    @SerialName("valuation_rate")
+    val valuationRate: Double = 0.0,
     val name: String,  // De item_name
     @SerialName("item_group")
     val itemGroup: String,

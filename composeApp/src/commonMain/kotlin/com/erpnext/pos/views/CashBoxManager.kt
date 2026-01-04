@@ -24,6 +24,10 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.IO
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.emitAll
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.withContext
@@ -212,6 +216,23 @@ class CashBoxManager(
 
     fun requireContext(): POSContext =
         currentContext ?: error("POS context not initialized. Call initializeContext() first.")
+
+    fun activeCashboxStart(): Flow<String?> = flow {
+        val ctx = currentContext ?: initializeContext()
+        if (ctx == null) {
+            emit(null)
+            return@flow
+        }
+        val user = userDao.getUserInfo()
+        if (user == null) {
+            emit(null)
+            return@flow
+        }
+        emitAll(
+            cashboxDao.getActiveEntry(user.email, ctx.profileName)
+                .map { it?.cashbox?.periodStartDate }
+        )
+    }
 
     private suspend fun resolveSupportedCurrencies(baseCurrency: String): List<POSCurrencyOption> {
         val currencies = runCatching { api.getEnabledCurrencies() }.getOrElse { emptyList() }

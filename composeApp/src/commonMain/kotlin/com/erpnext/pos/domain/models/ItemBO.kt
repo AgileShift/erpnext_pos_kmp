@@ -8,6 +8,7 @@ data class ItemBO(
     var image: String? = "",
     var currency: String? = "",
     var itemGroup: String = "",
+    var valuationRate: Double? = 0.0,
     var brand: String? = null,
     var price: Double = 0.0,
     var actualQty: Double = 0.0,

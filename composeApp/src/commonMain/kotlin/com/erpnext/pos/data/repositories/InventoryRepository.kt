@@ -138,8 +138,9 @@ class InventoryRepository(
             },
             saveFetchResult = { localSource.insertAll(it.toEntity()) },
             shouldFetch = {
-                val first = localSource.getOldestItem()
-                first == null || SyncTTL.isExpired(first.lastSyncedAt)
+                true
+                /*val first = localSource.getOldestItem()
+                first == null || SyncTTL.isExpired(first.lastSyncedAt)*/
             },
         )
     }

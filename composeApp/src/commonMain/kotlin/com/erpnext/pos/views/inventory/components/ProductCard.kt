@@ -157,10 +157,10 @@ fun ProductCard(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        InfoBadge(
+                        /*InfoBadge(
                             label = "${strings.inventory.productCodeLabel}: ${product.itemCode}",
                             isMuted = false
-                        )
+                        )*/
                         InfoBadge(label = "Color: $colorLabel", isMuted = false)
                         InfoBadge(label = "Talla: $sizeLabel", isMuted = false)
                     }

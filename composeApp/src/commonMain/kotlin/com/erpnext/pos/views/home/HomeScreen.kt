@@ -1,3 +1,5 @@
+@file:OptIn(ExperimentalTime::class)
+
 package com.erpnext.pos.views.home
 
 import androidx.compose.animation.core.LinearEasing
@@ -23,19 +25,22 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.CreditCard
-import androidx.compose.material.icons.filled.Logout
-import androidx.compose.material.icons.filled.OnlinePrediction
+import androidx.compose.material.icons.filled.Print
 import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Storage
+import androidx.compose.material.icons.filled.Wifi
+import androidx.compose.material.icons.filled.WifiOff
+import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material.icons.filled.Warehouse
+import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -52,17 +57,24 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TooltipBox
+import androidx.compose.material3.TooltipDefaults
+import androidx.compose.material3.PlainTooltip
+import androidx.compose.material3.rememberTooltipState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -72,6 +84,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -83,13 +98,28 @@ import androidx.compose.ui.unit.sp
 import com.erpnext.pos.domain.models.POSProfileSimpleBO
 import com.erpnext.pos.domain.models.PaymentModesBO
 import com.erpnext.pos.domain.models.UserBO
+import com.erpnext.pos.localSource.preferences.SyncSettings
 import com.erpnext.pos.sync.SyncState
+import kotlinx.coroutines.delay
 import com.erpnext.pos.utils.datetimeNow
 import com.erpnext.pos.utils.toCurrencySymbol
+import com.erpnext.pos.utils.NetworkMonitor
+import com.erpnext.pos.utils.formatDoubleToString
+import com.erpnext.pos.views.CashBoxManager
 import com.erpnext.pos.views.PaymentModeWithAmount
+import io.ktor.client.request.invoke
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.datetime.DayOfWeek
+import kotlinx.datetime.LocalDateTime
+import kotlinx.datetime.Month
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toInstant
 import org.jetbrains.compose.ui.tooling.preview.Preview
+import org.koin.compose.koinInject
+import kotlin.math.max
+import kotlin.time.Clock
+import kotlin.time.ExperimentalTime
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -100,7 +130,22 @@ fun HomeScreen(
     var showDialog by remember { mutableStateOf(false) }
     var currentProfiles by remember { mutableStateOf(emptyList<POSProfileSimpleBO>()) }
     val syncState by actions.syncState.collectAsState()
+    val syncSettings by actions.syncSettings.collectAsState()
+    val homeMetrics by actions.homeMetrics.collectAsState()
     val isCashboxOpen by actions.isCashboxOpen().collectAsState()
+    val networkMonitor: NetworkMonitor = koinInject()
+    val cashboxManager: CashBoxManager = koinInject()
+    val isOnline by networkMonitor.isConnected.collectAsState(false)
+    val shiftStart by cashboxManager.activeCashboxStart().collectAsState(null)
+    var profileMenuExpanded by remember { mutableStateOf(false) }
+    var tick by remember { mutableStateOf(0L) }
+
+    LaunchedEffect(Unit) {
+        while (true) {
+            tick = Clock.System.now().toEpochMilliseconds()
+            delay(1000)
+        }
+    }
 
     LaunchedEffect(uiState) {
         if (uiState is HomeState.POSProfiles) {
@@ -114,24 +159,101 @@ fun HomeScreen(
             TopAppBar(
                 modifier = Modifier.fillMaxWidth(),
                 title = {
-                    Text(
-                        text = "ERPNext POS",
-                        color = MaterialTheme.colorScheme.onSurface,
-                        style = MaterialTheme.typography.headlineMedium.copy(
-                            fontWeight = FontWeight.Bold, letterSpacing = 0.5.sp
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Text(
+                            text = "ERPNext POS",
+                            color = MaterialTheme.colorScheme.onSurface,
+                            style = MaterialTheme.typography.headlineMedium.copy(
+                                fontWeight = FontWeight.Bold, letterSpacing = 0.5.sp
+                            )
                         )
-                    )
+                        ShiftOpenChip(
+                            isOpen = isCashboxOpen,
+                            duration = formatShiftDuration(shiftStart, tick)
+                        )
+                    }
                 },
                 actions = {
-                    IconButton(onClick = { actions.onLogout() }) {
-                        Icon(Icons.AutoMirrored.Filled.Logout, contentDescription = "Logout")
+                    val isRecentlySynced =
+                        syncSettings.lastSyncAt?.let { tick - it < 10 * 60 * 1000 } == true
+                    val dbHealthy = isOnline && isRecentlySynced && syncState !is SyncState.ERROR
+                    val dbTint = when {
+                        syncState is SyncState.SYNCING -> Color(0xFFF59E0B)
+                        syncState is SyncState.ERROR -> MaterialTheme.colorScheme.error
+                        dbHealthy -> Color(0xFF2E7D32)
+                        else -> MaterialTheme.colorScheme.onSurfaceVariant
                     }
-                    IconButton(onClick = { actions.loadInitialData() }) {
-                        Icon(Icons.Filled.Refresh, contentDescription = "Refresh")
+                    val dbLabel = when (syncState) {
+                        is SyncState.SYNCING -> "Base de datos: Sincronizando"
+                        is SyncState.ERROR -> "Base de datos: Error de sincronización"
+                        is SyncState.SUCCESS -> "Base de datos: Sincronizada"
+                        else -> if (dbHealthy) "Base de datos: Saludable" else "Base de datos: Pendiente"
                     }
-                    IconButton(onClick = { actions.sync() }) {
+                    StatusIconButton(
+                        label = if (isOnline) "Internet: Conectado" else "Internet: Sin conexión",
+                        onClick = {},
+                        enabled = false,
+                        tint = if (isOnline) Color(0xFF2E7D32)
+                        else MaterialTheme.colorScheme.onSurfaceVariant,
+                    ) {
                         Icon(
-                            Icons.Filled.OnlinePrediction, contentDescription = "Online Prediction"
+                            if (isOnline) Icons.Filled.Wifi else Icons.Filled.WifiOff,
+                            contentDescription = null
+                        )
+                    }
+                    StatusIconButton(
+                        label = dbLabel,
+                        onClick = { actions.sync() },
+                        tint = dbTint,
+                    ) {
+                        if (syncState is SyncState.SYNCING) {
+                            CircularProgressIndicator(Modifier.size(18.dp))
+                        } else {
+                            Icon(Icons.Filled.Storage, contentDescription = null)
+                        }
+                    }
+                    StatusIconButton(
+                        label = "Refrescar",
+                        onClick = { actions.loadInitialData() },
+                    ) {
+                        Icon(Icons.Filled.Refresh, contentDescription = null)
+                    }
+                    val printerConnected = false
+                    StatusIconButton(
+                        label = if (printerConnected) "Impresora: Conectada" else "Impresora: Sin conexión",
+                        onClick = {},
+                        enabled = false,
+                        tint = if (printerConnected) MaterialTheme.colorScheme.primary
+                        else MaterialTheme.colorScheme.onSurfaceVariant
+                    ) {
+                        Icon(Icons.Filled.Print, contentDescription = null)
+                    }
+                    StatusIconButton(
+                        label = "Perfil",
+                        onClick = { profileMenuExpanded = true },
+                    ) {
+                        Icon(Icons.Filled.AccountCircle, contentDescription = null)
+                    }
+                    DropdownMenu(
+                        expanded = profileMenuExpanded,
+                        onDismissRequest = { profileMenuExpanded = false }
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("Configuración") },
+                            onClick = {
+                                profileMenuExpanded = false
+                                actions.onOpenSettings()
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Cerrar sesión") },
+                            onClick = {
+                                profileMenuExpanded = false
+                                actions.onLogout()
+                            }
                         )
                     }
                 }
@@ -177,8 +299,18 @@ fun HomeScreen(
 
                         Spacer(Modifier.height(24.dp))
 
+                        BISection(
+                            metrics = homeMetrics,
+                            currencySymbol = resolveHomeCurrencySymbol(
+                                cashboxManager = cashboxManager,
+                                profiles = currentProfiles
+                            )
+                        )
+
+                        Spacer(Modifier.height(24.dp))
+
                         // Tarjetas resumen
-                        Column(
+                        /*Column(
                             modifier = Modifier.fillMaxWidth(),
                             verticalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
@@ -196,7 +328,7 @@ fun HomeScreen(
                                         Text("Tienes 3 productos en espera")
                                     }
                                     Spacer(Modifier.width(8.dp))
-                                    Icon(Icons.Default.Warehouse, contentDescription = null)
+                                    Icon(Icons.Filled.Warehouse, contentDescription = null)
                                 }
                             }
 
@@ -214,12 +346,12 @@ fun HomeScreen(
                                         Text("Tienes 2 recargas en espera")
                                     }
                                     Spacer(Modifier.width(8.dp))
-                                    Icon(Icons.Default.CreditCard, contentDescription = null)
+                                    Icon(Icons.Filled.CreditCard, contentDescription = null)
                                 }
                             }
                         }
 
-                        Spacer(Modifier.height(36.dp))
+                        Spacer(Modifier.height(36.dp)) */
 
                         Column(
                             modifier = Modifier.fillMaxWidth(),
@@ -261,7 +393,7 @@ fun HomeScreen(
                                         ) {
                                             // Icono animado
                                             Icon(
-                                                imageVector = Icons.Default.Sync,
+                                                imageVector = Icons.Filled.Sync,
                                                 contentDescription = "Sincronizando",
                                                 modifier = Modifier
                                                     .size(40.dp)
@@ -374,6 +506,409 @@ fun HomeScreen(
             }
         }
     }
+}
+
+@Composable
+private fun ShiftOpenChip(isOpen: Boolean, duration: String) {
+    val openBg = Color(0xFFE8F5E9)
+    val openText = Color(0xFF2E7D32)
+    val closedBg = Color(0xFFFFEBEE)
+    val closedText = Color(0xFFC62828)
+    Surface(
+        color = if (isOpen) openBg else closedBg,
+        shape = RoundedCornerShape(18.dp),
+        tonalElevation = 0.dp
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Icon(
+                Icons.Outlined.CheckCircle,
+                contentDescription = null,
+                tint = if (isOpen) openText else closedText,
+                modifier = Modifier.size(16.dp)
+            )
+            Text(
+                text = "Shift Open: ${if (isOpen) duration else "--"}",
+                style = MaterialTheme.typography.labelMedium,
+                color = if (isOpen) openText else closedText
+            )
+        }
+    }
+}
+
+private fun parseLooseLocalDateTime(input: String): LocalDateTime? {
+    val s = input.trim().replace("T", " ")
+    val parts = s.split(" ", limit = 2)
+
+    val date = parts.getOrNull(0) ?: return null
+    val time = parts.getOrNull(1) ?: "00:00:00"
+
+    val d = date.split("-")
+    if (d.size != 3) return null
+
+    val t = time.split(":")
+    val year = d[0].toIntOrNull() ?: return null
+    val month = d[1].toIntOrNull() ?: return null
+    val day = d[2].toIntOrNull() ?: return null
+
+    val hour = t.getOrNull(0)?.toIntOrNull() ?: 0
+    val minute = t.getOrNull(1)?.toIntOrNull() ?: 0
+    val second = t.getOrNull(2)?.toIntOrNull() ?: 0
+
+    return LocalDateTime(
+        year = year,
+        month = Month(month).ordinal + 1,
+        day = DayOfWeek(day).ordinal + 1,
+        hour = hour,
+        minute = minute,
+        second = second,
+        nanosecond = 0,
+    )
+}
+
+private fun formatShiftDuration(start: String?, nowMillis: Long): String {
+    return try {
+        if (start.isNullOrBlank()) return "--"
+
+        val ldt = parseLooseLocalDateTime(start) ?: return "--"
+        val instant = ldt.toInstant(TimeZone.currentSystemDefault())
+
+        val diffMillis = nowMillis - instant.toEpochMilliseconds()
+        if (diffMillis < 0) return "--"
+
+        val totalSeconds = diffMillis / 1_000
+        val hours = totalSeconds / 3_600
+        val minutes = (totalSeconds % 3_600) / 60
+        val seconds = totalSeconds % 60
+
+        "${hours}h ${minutes}m ${seconds}s"
+    } catch (e: Exception) {
+        e.printStackTrace()
+        "--"
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun StatusIconButton(
+    label: String,
+    onClick: () -> Unit,
+    tint: Color = MaterialTheme.colorScheme.onSurfaceVariant,
+    enabled: Boolean = true,
+    content: @Composable () -> Unit
+) {
+    TooltipBox(
+        positionProvider = TooltipDefaults.rememberPlainTooltipPositionProvider(),
+        tooltip = { PlainTooltip { Text(label) } },
+        state = rememberTooltipState()
+    ) {
+        IconButton(onClick = onClick, enabled = enabled) {
+            CompositionLocalProvider(LocalContentColor provides tint) {
+                content()
+            }
+        }
+    }
+}
+
+@Composable
+private fun BISection(metrics: HomeMetrics, currencySymbol: String) {
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        Text(
+            text = "Resumen BI",
+            style = MaterialTheme.typography.titleLarge,
+            fontWeight = FontWeight.Bold
+        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            MetricCard(
+                title = "Ventas hoy",
+                value = "$currencySymbol ${formatAmount(metrics.totalSalesToday)}",
+                modifier = Modifier.weight(1f)
+            )
+            MetricCard(
+                title = "Facturas",
+                value = metrics.invoicesToday.toString(),
+                modifier = Modifier.weight(1f)
+            )
+            MetricCard(
+                title = "Ticket promedio",
+                value = "$currencySymbol ${formatAmount(metrics.avgTicket)}",
+                modifier = Modifier.weight(1f)
+            )
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            MetricCard(
+                title = "Clientes hoy",
+                value = metrics.customersToday.toString(),
+                modifier = Modifier.weight(1f)
+            )
+            MetricCard(
+                title = "Cuentas por cobrar",
+                value = "$currencySymbol ${formatAmount(metrics.outstandingTotal)}",
+                modifier = Modifier.weight(1f)
+            )
+            MetricCard(
+                title = "Margen hoy",
+                value = formatMargin(metrics.marginToday, metrics.marginTodayPercent, currencySymbol),
+                modifier = Modifier.weight(1f)
+            )
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            MetricCard(
+                title = "Vs ayer",
+                value = formatPercent(metrics.compareVsYesterday),
+                modifier = Modifier.weight(1f)
+            )
+            MetricCard(
+                title = "Vs semana pasada",
+                value = formatPercent(metrics.compareVsLastWeek),
+                modifier = Modifier.weight(1f)
+            )
+            MetricCard(
+                title = "Margen 7 días",
+                value = formatMargin(metrics.marginLast7, metrics.marginLast7Percent, currencySymbol),
+                modifier = Modifier.weight(1f)
+            )
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            MetricCard(
+                title = "Cobertura costo",
+                value = formatPercent(metrics.costCoveragePercent),
+                modifier = Modifier.weight(1f)
+            )
+        }
+        SalesLineChart(metrics.weekSeries)
+        TopProductsCard(metrics.topProducts, currencySymbol)
+        TopProductsByMarginCard(metrics.topProductsByMargin, currencySymbol)
+    }
+}
+
+@Composable
+private fun MetricCard(title: String, value: String, modifier: Modifier = Modifier) {
+    Card(
+        modifier = modifier,
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+    ) {
+        Column(modifier = Modifier.padding(14.dp)) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(Modifier.height(6.dp))
+            Text(
+                text = value,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold
+            )
+        }
+    }
+}
+
+@Composable
+private fun SalesLineChart(series: List<DailyMetric>) {
+    val totals = series.map { it.total }
+    val maxValue = max(totals.maxOrNull() ?: 0.0, 1.0)
+    val lineColor = MaterialTheme.colorScheme.primary
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text(
+                text = "Ventas últimos 7 días",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold
+            )
+            Spacer(Modifier.height(12.dp))
+            Canvas(modifier = Modifier.fillMaxWidth().height(120.dp)) {
+                if (series.isEmpty()) return@Canvas
+                val stepX = size.width / (series.size - 1).coerceAtLeast(1)
+                val path = Path()
+                series.forEachIndexed { index, item ->
+                    val ratio = (item.total / maxValue).toFloat()
+                    val x = stepX * index
+                    val y = size.height - (size.height * ratio)
+                    if (index == 0) path.moveTo(x, y) else path.lineTo(x, y)
+                }
+                drawPath(
+                    path = path,
+                    color = lineColor,
+                    style = Stroke(width = 4f, cap = StrokeCap.Round)
+                )
+            }
+            if (series.isNotEmpty()) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(series.first().date, style = MaterialTheme.typography.labelSmall)
+                    Text(series.last().date, style = MaterialTheme.typography.labelSmall)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun TopProductsCard(products: List<TopProductMetric>, currencySymbol: String) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text(
+                text = "Top productos (7 días)",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold
+            )
+            Spacer(Modifier.height(12.dp))
+            if (products.isEmpty()) {
+                Text(
+                    text = "Sin datos",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            } else {
+                products.forEachIndexed { index, item ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "${index + 1}. ${item.itemName ?: item.itemCode}",
+                                style = MaterialTheme.typography.bodyMedium,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            Text(
+                                text = "Qty ${formatAmount(item.qty)} • ${item.itemCode}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Text(
+                            text = "$currencySymbol ${formatAmount(item.total)}",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                    if (index != products.lastIndex) {
+                        Spacer(Modifier.height(8.dp))
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun TopProductsByMarginCard(products: List<TopProductMarginMetric>, currencySymbol: String) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text(
+                text = "Top productos por margen (7 días)",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold
+            )
+            Spacer(Modifier.height(12.dp))
+            if (products.isEmpty()) {
+                Text(
+                    text = "Sin datos",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            } else {
+                products.forEachIndexed { index, item ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "${index + 1}. ${item.itemName ?: item.itemCode}",
+                                style = MaterialTheme.typography.bodyMedium,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            Text(
+                                text = "Qty ${formatAmount(item.qty)} • ${item.itemCode}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Text(
+                            text = "$currencySymbol ${formatAmount(item.margin)} (${formatPercent(item.marginPercent)})",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            textAlign = TextAlign.End
+                        )
+                    }
+                    if (index != products.lastIndex) {
+                        Spacer(Modifier.height(8.dp))
+                    }
+                }
+            }
+        }
+    }
+}
+
+private fun resolveHomeCurrencySymbol(
+    cashboxManager: CashBoxManager,
+    profiles: List<POSProfileSimpleBO>
+): String {
+    val ctx = cashboxManager.getContext()
+    val currency = ctx?.currency ?: profiles.firstOrNull()?.currency ?: "USD"
+    return currency.toCurrencySymbol()
+}
+
+private fun formatAmount(value: Double): String = formatDoubleToString(value, 2)
+
+private fun formatPercent(value: Double?): String {
+    if (value == null) return "N/D"
+    val sign = if (value >= 0) "+" else ""
+    return "$sign${formatDoubleToString(value, 1)}%"
+}
+
+private fun formatMargin(
+    margin: Double?,
+    percent: Double?,
+    currencySymbol: String
+): String {
+    if (margin == null || percent == null) return "N/D"
+    return "$currencySymbol ${formatAmount(margin)} (${formatPercent(percent)})"
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -660,7 +1195,16 @@ fun HomePreview() {
             ),
             HomeAction(
                 isCashboxOpen = { MutableStateFlow(true) },
-                syncState = stateFlow
+                syncState = stateFlow,
+                syncSettings = MutableStateFlow(
+                    SyncSettings(
+                        autoSync = true,
+                        syncOnStartup = true,
+                        wifiOnly = false,
+                        lastSyncAt = Clock.System.now().toEpochMilliseconds()
+                    )
+                ),
+                homeMetrics = MutableStateFlow(HomeMetrics())
             )
         )
     }

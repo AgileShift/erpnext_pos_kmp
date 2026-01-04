@@ -306,6 +306,7 @@ fun WarehouseItemDto.toBO(): ItemBO {
         image = this.image,
         currency = this.currency,
         itemGroup = this.itemGroup,
+        valuationRate = this.valuationRate,
         brand = this.brand,
         price = this.price,
         actualQty = this.actualQty,

@@ -62,6 +62,7 @@ fun ItemBO.toEntity(): ItemEntity {
         description = this.description,
         barcode = this.barcode,
         image = this.image,
+        valuationRate = valuationRate,
         itemGroup = this.itemGroup,
         brand = this.brand,
         price = this.price,
