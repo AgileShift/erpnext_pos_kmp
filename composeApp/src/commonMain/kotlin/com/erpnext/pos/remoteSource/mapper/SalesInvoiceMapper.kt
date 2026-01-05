@@ -96,6 +96,7 @@ fun SalesInvoiceDto.toEntity(): SalesInvoiceWithItemsAndPayments {
         customerPhone = customerPhone,
         customerName = customerName,
         company = company,
+        debitTo = debitTo,
         postingDate = postingDate,
         dueDate = dueDate,
         currency = currency ?: "NIO",

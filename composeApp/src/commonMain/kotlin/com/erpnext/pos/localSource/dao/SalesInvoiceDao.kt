@@ -243,6 +243,11 @@ interface SalesInvoiceDao {
     @Update
     suspend fun updateInvoice(invoice: SalesInvoiceEntity)
 
+    @Query("""
+       UPDATE tabSalesInvoice SET status = :status WHERE invoice_name = :invoiceId
+    """)
+    suspend fun updatePaymentStatus(invoiceId: String, status: String)
+
     @Transaction
     suspend fun applyPayments(
         invoice: SalesInvoiceEntity,

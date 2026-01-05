@@ -56,10 +56,25 @@ class SalesInvoiceRepository(
         localSource.saveInvoiceLocally(invoice, items, payments)
     }
 
+    //TODO:
     override suspend fun applyLocalPayment(
         invoice: SalesInvoiceEntity,
         payments: List<POSInvoicePaymentEntity>
     ) {
+        val totalPayed = payments.sumOf { it.amount }
+        val invoiceId = invoice.invoiceName!!
+        val outstandingAmount = invoice.outstandingAmount
+        invoice.outstandingAmount = totalPayed - invoice.outstandingAmount
+        invoice.paidAmount = totalPayed
+
+        if (totalPayed < outstandingAmount)
+            invoice.status = "Partly Paid"
+        if (totalPayed >= outstandingAmount)
+            invoice.status = "Paid"
+        if (totalPayed == 0.0)
+            invoice.status = "Unpaid"
+
+        // Ok
         localSource.applyPayments(invoice, payments)
     }
 
@@ -87,7 +102,8 @@ class SalesInvoiceRepository(
     }
 
     override suspend fun createRemoteInvoice(invoice: SalesInvoiceDto): SalesInvoiceDto {
-        return remoteSource.createInvoice(invoice)
+        val created = remoteSource.createInvoice(invoice)
+        return remoteSource.fetchInvoice(created.name!!)!!
     }
 
     override suspend fun updateRemoteInvoice(

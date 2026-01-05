@@ -14,6 +14,7 @@ interface IInvoiceLocalSource {
     suspend fun getAllLocalInvoicesPaged(): PagingSource<Int, SalesInvoiceWithItemsAndPayments>
     suspend fun getAllLocalInvoices(): List<SalesInvoiceWithItemsAndPayments>
     suspend fun getInvoiceByName(invoiceName: String): SalesInvoiceWithItemsAndPayments?
+    suspend fun updatePaymentStatus(invoiceId: String, status: String)
     suspend fun saveInvoiceLocally(
         invoice: SalesInvoiceEntity,
         items: List<SalesInvoiceItemEntity>,
@@ -30,6 +31,7 @@ interface IInvoiceLocalSource {
         invoice: SalesInvoiceEntity,
         payments: List<POSInvoicePaymentEntity>
     )
+
     suspend fun getOutstandingInvoicesForCustomer(
         customerName: String
     ): List<SalesInvoiceWithItemsAndPayments>
@@ -53,6 +55,10 @@ class InvoiceLocalSource(
 
     override suspend fun getInvoiceByName(invoiceName: String): SalesInvoiceWithItemsAndPayments? {
         return salesInvoiceDao.getInvoiceByName(invoiceName)
+    }
+
+    override suspend fun updatePaymentStatus(invoiceId: String, status: String) {
+        salesInvoiceDao.updatePaymentStatus(invoiceId, status)
     }
 
     override suspend fun saveInvoiceLocally(

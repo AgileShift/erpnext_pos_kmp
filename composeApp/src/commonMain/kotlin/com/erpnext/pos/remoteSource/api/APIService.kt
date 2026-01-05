@@ -367,7 +367,7 @@ class APIService(
     // Para Inventario Total: Fetch batch con extras
     suspend fun getInventoryForWarehouse(
         warehouse: String?,
-        priceList: String? = "Standard Selling",
+        priceList: String?,
         offset: Int? = null,
         limit: Int? = null,
     ): List<WarehouseItemDto> {
@@ -378,7 +378,7 @@ class APIService(
         val bins = clientOAuth.getERPList<BinDto>(
             doctype = ERPDocType.Bin.path,
             fields = ERPDocType.Bin.getFields(),
-            limit = limit,
+            limit = Int.MAX_VALUE, //limit,
             offset = offset,
             orderBy = "item_code",
             baseUrl = url
@@ -411,8 +411,9 @@ class APIService(
             limit = itemCodes.size,
             baseUrl = url
         ) {
-            "item_code" `in` itemCodes/*if (priceList != null)
-                "price_list" eq priceList*/
+            "item_code" `in` itemCodes
+            if (!priceList.isNullOrEmpty())
+                "price_list" eq priceList
         }
 
         val priceMap = prices.associate { it.itemCode to it.priceListRate }

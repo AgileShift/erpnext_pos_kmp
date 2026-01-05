@@ -66,6 +66,7 @@ import com.erpnext.pos.utils.view.SnackbarController
 import com.erpnext.pos.utils.view.SnackbarHost
 import com.erpnext.pos.utils.view.SnackbarPosition
 import com.erpnext.pos.utils.view.SnackbarType
+import com.erpnext.pos.utils.view.UiSnackbar
 import com.erpnext.pos.views.salesflow.SalesFlowContextSummary
 import com.erpnext.pos.views.salesflow.SalesFlowSource
 import org.jetbrains.compose.ui.tooling.preview.Preview
@@ -83,9 +84,9 @@ data class CartItem(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun BillingScreen(
-    state: BillingState, action: BillingAction
+    state: BillingState, action: BillingAction,
+    snackbar: SnackbarController
 ) {
-    val snackbar = koinInject<SnackbarController>()
     val uiSnackbar = snackbar.snackbar.collectAsState().value
 
     Box(Modifier.fillMaxSize()) {
@@ -624,7 +625,7 @@ private fun ProductSelector(
                                 Text(
                                     "Precio: ${
                                         formatAmount(
-                                            item.currency ?: "USD", item.price
+                                            item.currency?.toCurrencySymbol() ?: "", item.price
                                         )
                                     }",
                                     style = MaterialTheme.typography.bodySmall,
@@ -721,7 +722,7 @@ private fun CartList(
                             onQuantityChanged(item.itemCode, newQuantity)
                         },
                         onRemoveItem = { onRemoveItem(item.itemCode) },
-                        currency = item.currency ?: currency
+                        currency = currency
                     )
                 }
             }
@@ -1802,7 +1803,8 @@ private fun BillingScreenPreview() {
                 balanceDueBase = 255.0,
                 changeDueBase = 0.0,
                 exchangeRate = 1.0
-            ), action = BillingAction()
+            ), action = BillingAction(),
+            snackbar = SnackbarController()
         )
     }
 }

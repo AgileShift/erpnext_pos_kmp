@@ -109,8 +109,12 @@ data class SalesInvoiceEntity(
     @Serializable(IntAsBooleanSerializer::class)
     var isPos: Boolean = true,
 
+    @ColumnInfo(name = "debit_to", defaultValue = "")
+    @Serializable()
+    var debitTo: String? = null,
+
     @ColumnInfo(name = "last_synced_at")
-    override var lastSyncedAt: Long? =  Clock.System.now().toEpochMilliseconds()
+    override var lastSyncedAt: Long? = Clock.System.now().toEpochMilliseconds()
 ) : SyncableEntity
 
 

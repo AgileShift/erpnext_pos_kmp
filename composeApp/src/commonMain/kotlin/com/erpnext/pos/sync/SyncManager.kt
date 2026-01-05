@@ -79,7 +79,6 @@ class SyncManager(
                         },
                         async {
                             _state.value = SyncState.SYNCING("Inventario...")
-
                             inventoryRepo.sync()
                                 .filter { it !is Resource.Loading }
                                 .first()

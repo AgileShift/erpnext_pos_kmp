@@ -96,3 +96,5 @@
 - [ ] Agregar capacidad de scrolling en Home y tambien hacer collapsible por secciones de BI
 - [ ] Tenemos que seguir el ciclo de venta de ERP, esto quiere decir que la factura puede ser creada (Quotation → Sales Order → Delivery Note → Sales Invoice → Payment).
 - [ ] Mejorar y mapear las variantes de los productos
+- [ ] Paginacion automatica de todos los llamados al API para enviar "Request Failed - URI Too large"
+- [ ] Paginar resultados en la vistas con PagingData e investigar la forma de hacerlo dentro de los Dropdown

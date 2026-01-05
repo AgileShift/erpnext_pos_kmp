@@ -59,6 +59,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.update
+import kotlin.math.pow
 
 class BillingViewModel(
     private val customersUseCase: FetchCustomersUseCase,
@@ -806,12 +807,12 @@ class BillingViewModel(
 
                 val currencySpecs = buildCurrencySpecs(context)
 
-                val rc = resolveInvoiceAmountsInReceivable(
+                /*val rc = resolveInvoiceAmountsInReceivable(
                     created = created,
                     fallbackTotal = totals.total
-                )
+                )*/
 
-                var remainingOutstandingRc = rc.outstandingRc
+                var remainingOutstandingRc = created.outstandingAmount ?: 0.0 // rc.outstandingRc
 
                 paymentLines.forEach { line ->
                     if (remainingOutstandingRc <= 0.0) return@forEach
@@ -822,10 +823,10 @@ class BillingViewModel(
                         customer = customer,
                         postingDate = postingDate,
                         invoiceId = invoiceId,
-                        invoiceTotalRc = rc.totalRc,
+                        invoiceTotalRc = created.grandTotal,
                         outstandingRc = remainingOutstandingRc,
                         paidFromAccount = created.debitTo,
-                        partyAccountCurrency = rc.receivableCurrency,
+                        partyAccountCurrency = created.partyAccountCurrency,
                         exchangeRateByCurrency = current.exchangeRateByCurrency,
                         currencySpecs = currencySpecs
                     )
@@ -841,7 +842,7 @@ class BillingViewModel(
                     }
 
                     val allocated = paymentEntry.references.firstOrNull()?.allocatedAmount ?: 0.0
-                    remainingOutstandingRc = (remainingOutstandingRc - allocated).coerceAtLeast(0.0)
+                    remainingOutstandingRc = bd((remainingOutstandingRc - allocated).coerceAtLeast(0.0)).toDouble(2)
                 }
 
                 val localPayments = buildLocalPayments(invoiceId, postingDate, paymentLines)
@@ -1188,6 +1189,12 @@ class BillingViewModel(
      * - Si receivableCurrency != invoiceCurrency, convertimos usando:
      *   rate = base_grand_total / grand_total  (invoice -> receivable)
      */
+    /**
+     * ✅ CORREGIDO:
+     * - outstanding_amount viene en moneda de la factura.
+     * - Si receivableCurrency != invoiceCurrency, convertimos usando:
+     *   rate = base_grand_total / grand_total  (invoice -> receivable)
+     */
     private fun resolveInvoiceAmountsInReceivable(
         created: SalesInvoiceDto,
         fallbackTotal: Double
@@ -1244,6 +1251,13 @@ class BillingViewModel(
         val totalRc: Double,
         val outstandingRc: Double
     )
+
+    private fun isSameMoneyAmount(a: Double, b: Double, decimals: Int): Boolean {
+        val factor = decimals.toDouble().pow(10.0)
+        val ra = kotlin.math.round(a * factor) / factor
+        val rb = kotlin.math.round(b * factor) / factor
+        return ra == rb
+    }
 
     private suspend fun buildPaymentEntryDto(
         line: PaymentLine,

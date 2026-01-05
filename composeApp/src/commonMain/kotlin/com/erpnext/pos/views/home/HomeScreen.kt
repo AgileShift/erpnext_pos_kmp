@@ -660,7 +660,11 @@ private fun BISection(metrics: HomeMetrics, currencySymbol: String) {
             )
             MetricCard(
                 title = "Margen hoy",
-                value = formatMargin(metrics.marginToday, metrics.marginTodayPercent, currencySymbol),
+                value = formatMargin(
+                    metrics.marginToday,
+                    metrics.marginTodayPercent,
+                    currencySymbol
+                ),
                 modifier = Modifier.weight(1f)
             )
         }
@@ -680,7 +684,11 @@ private fun BISection(metrics: HomeMetrics, currencySymbol: String) {
             )
             MetricCard(
                 title = "Margen 7 días",
-                value = formatMargin(metrics.marginLast7, metrics.marginLast7Percent, currencySymbol),
+                value = formatMargin(
+                    metrics.marginLast7,
+                    metrics.marginLast7Percent,
+                    currencySymbol
+                ),
                 modifier = Modifier.weight(1f)
             )
         }
@@ -695,8 +703,8 @@ private fun BISection(metrics: HomeMetrics, currencySymbol: String) {
             )
         }
         SalesLineChart(metrics.weekSeries)
-        TopProductsCard(metrics.topProducts, currencySymbol)
-        TopProductsByMarginCard(metrics.topProductsByMargin, currencySymbol)
+        //TopProductsCard(metrics.topProducts, currencySymbol)
+        //TopProductsByMarginCard(metrics.topProductsByMargin, currencySymbol)
     }
 }
 
@@ -829,7 +837,10 @@ private fun TopProductsCard(products: List<TopProductMetric>, currencySymbol: St
 }
 
 @Composable
-private fun TopProductsByMarginCard(products: List<TopProductMarginMetric>, currencySymbol: String) {
+private fun TopProductsByMarginCard(
+    products: List<TopProductMarginMetric>,
+    currencySymbol: String
+) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
@@ -870,7 +881,11 @@ private fun TopProductsByMarginCard(products: List<TopProductMarginMetric>, curr
                             )
                         }
                         Text(
-                            text = "$currencySymbol ${formatAmount(item.margin)} (${formatPercent(item.marginPercent)})",
+                            text = "$currencySymbol ${formatAmount(item.margin)} (${
+                                formatPercent(
+                                    item.marginPercent
+                                )
+                            })",
                             style = MaterialTheme.typography.bodyMedium,
                             fontWeight = FontWeight.SemiBold,
                             textAlign = TextAlign.End
