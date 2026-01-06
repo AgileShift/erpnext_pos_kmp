@@ -20,8 +20,9 @@ import kotlin.time.ExperimentalTime
 // ------------------------------------------------------
 
 fun SalesInvoiceWithItemsAndPayments.toDto(): SalesInvoiceDto {
+    val invoiceName = invoice.invoiceName?.takeUnless { it.startsWith("LOCAL-") }
     return SalesInvoiceDto(
-        name = invoice.invoiceName,
+        name = invoiceName,
         customer = invoice.customer,
         company = invoice.company,
         postingDate = invoice.postingDate,

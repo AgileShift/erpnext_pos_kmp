@@ -13,6 +13,7 @@ import com.erpnext.pos.data.repositories.POSProfileRepository
 import com.erpnext.pos.data.repositories.PaymentEntryRepository
 import com.erpnext.pos.data.repositories.SalesInvoiceRepository
 import com.erpnext.pos.data.repositories.UserRepository
+import com.erpnext.pos.data.repositories.ExchangeRateRepository
 import com.erpnext.pos.data.repositories.v2.SourceDocumentRepository
 import com.erpnext.pos.di.v2.appModulev2
 import com.erpnext.pos.domain.repositories.IPOSRepository
@@ -20,6 +21,10 @@ import com.erpnext.pos.domain.repositories.IUserRepository
 import com.erpnext.pos.domain.usecases.AdjustLocalInventoryUseCase
 import com.erpnext.pos.domain.usecases.CheckCustomerCreditUseCase
 import com.erpnext.pos.domain.usecases.CreatePaymentEntryUseCase
+import com.erpnext.pos.domain.usecases.CreateSalesInvoiceLocalUseCase
+import com.erpnext.pos.domain.usecases.CreateSalesInvoiceRemoteOnlyUseCase
+import com.erpnext.pos.domain.usecases.FetchBillingProductsLocalUseCase
+import com.erpnext.pos.domain.usecases.FetchCustomersLocalUseCase
 import com.erpnext.pos.domain.usecases.CreateSalesInvoiceUseCase
 import com.erpnext.pos.domain.usecases.FetchBillingProductsWithPriceUseCase
 import com.erpnext.pos.domain.usecases.FetchCategoriesUseCase
@@ -29,20 +34,27 @@ import com.erpnext.pos.domain.usecases.FetchDeliveryChargesUseCase
 import com.erpnext.pos.domain.usecases.FetchInventoryItemUseCase
 import com.erpnext.pos.domain.usecases.FetchPendingInvoiceUseCase
 import com.erpnext.pos.domain.usecases.FetchOutstandingInvoicesForCustomerUseCase
+import com.erpnext.pos.domain.usecases.FetchSalesInvoiceLocalUseCase
 import com.erpnext.pos.domain.usecases.FetchSalesInvoiceRemoteUseCase
+import com.erpnext.pos.domain.usecases.SyncSalesInvoiceFromRemoteUseCase
 import com.erpnext.pos.domain.usecases.FetchPaymentTermsUseCase
 import com.erpnext.pos.domain.usecases.FetchPosProfileInfoUseCase
 import com.erpnext.pos.domain.usecases.FetchPosProfileUseCase
 import com.erpnext.pos.domain.usecases.FetchUserInfoUseCase
 import com.erpnext.pos.domain.usecases.LoadHomeMetricsUseCase
+import com.erpnext.pos.domain.usecases.MarkSalesInvoiceSyncedUseCase
 import com.erpnext.pos.domain.usecases.LogoutUseCase
 import com.erpnext.pos.domain.usecases.RegisterInvoicePaymentUseCase
 import com.erpnext.pos.domain.usecases.SaveInvoicePaymentsUseCase
 import com.erpnext.pos.domain.usecases.v2.LoadSourceDocumentsUseCase
+import com.erpnext.pos.domain.usecases.UpdateLocalInvoiceFromRemoteUseCase
 import com.erpnext.pos.localSource.datasources.CustomerLocalSource
 import com.erpnext.pos.localSource.datasources.InventoryLocalSource
 import com.erpnext.pos.localSource.datasources.InvoiceLocalSource
+import com.erpnext.pos.localSource.datasources.DeliveryChargeLocalSource
+import com.erpnext.pos.localSource.datasources.ExchangeRateLocalSource
 import com.erpnext.pos.localSource.datasources.ModeOfPaymentLocalSource
+import com.erpnext.pos.localSource.datasources.PaymentTermLocalSource
 import com.erpnext.pos.localSource.datasources.POSProfileLocalSource
 import com.erpnext.pos.localSource.preferences.ExchangeRatePreferences
 import com.erpnext.pos.localSource.preferences.LanguagePreferences
@@ -146,6 +158,7 @@ val appModule = module {
             get(),
             get(),
             get(),
+            get(),
             get()
         )
     }
@@ -193,8 +206,9 @@ val appModule = module {
             fetchOutstandingInvoicesUseCase = get(),
             registerInvoicePaymentUseCase = get(),
             createPaymentEntryUseCase = get(),
-            fetchSalesInvoiceRemoteUseCase = get(),
-            modeOfPaymentDao = get()
+            fetchSalesInvoiceLocalUseCase = get(),
+            syncSalesInvoiceFromRemoteUseCase = get(),
+            modeOfPaymentDao = get(),
         )
     }
     //endregion
@@ -214,7 +228,7 @@ val appModule = module {
             loadHomeMetricsUseCase = get()
         )
     }
-    single<IUserRepository> { UserRepository(get()) }
+    single<IUserRepository> { UserRepository(get(), get()) }
     //endregion
 
     //region Invoices
@@ -225,8 +239,12 @@ val appModule = module {
     //endregion
 
     //region Payment Terms
-    single { PaymentTermsRepository(get(named("apiService"))) }
-    single { DeliveryChargesRepository(get(named("apiService"))) }
+    single { PaymentTermLocalSource(get()) }
+    single { DeliveryChargeLocalSource(get()) }
+    single { ExchangeRateLocalSource(get()) }
+    single { PaymentTermsRepository(get(named("apiService")), get()) }
+    single { DeliveryChargesRepository(get(named("apiService")), get()) }
+    single { ExchangeRateRepository(get(), get(named("apiService"))) }
     //endregion
 
     //region Quotation/Sales Order/Delivery Note
@@ -244,8 +262,8 @@ val appModule = module {
     single { PaymentEntryRepository(get(named("apiService"))) }
     single {
         BillingViewModel(
-            customersUseCase = get(),
-            itemsUseCase = get(),
+            customersUseCase = get<FetchCustomersLocalUseCase>(),
+            itemsUseCase = get<FetchBillingProductsLocalUseCase>(),
             adjustLocalInventoryUseCase = get(),
             contextProvider = get(),
             modeOfPaymentDao = get(),
@@ -254,9 +272,13 @@ val appModule = module {
             navManager = get(),
             salesFlowStore = get(),
             loadSourceDocumentsUseCase = get(),
-            createSalesInvoiceUseCase = get(),
+            createSalesInvoiceLocalUseCase = get(),
+            createSalesInvoiceRemoteOnlyUseCase = get(),
             createPaymentEntryUseCase = get(),
             saveInvoicePaymentsUseCase = get(),
+            syncSalesInvoiceFromRemoteUseCase = get(),
+            updateLocalInvoiceFromRemoteUseCase = get(),
+            markSalesInvoiceSyncedUseCase = get(),
             api = get(named("apiService"))
         )
     }
@@ -272,12 +294,20 @@ val appModule = module {
     //region UseCases DI
     single { LogoutUseCase(get(named("apiService"))) }
     single { FetchBillingProductsWithPriceUseCase(get()) }
+    single { FetchBillingProductsLocalUseCase(get()) }
     single { CheckCustomerCreditUseCase(get()) }
     single { FetchPendingInvoiceUseCase(get()) }
     single { FetchOutstandingInvoicesForCustomerUseCase(get()) }
     single { FetchSalesInvoiceRemoteUseCase(get()) }
+    single { FetchSalesInvoiceLocalUseCase(get()) }
+    single { SyncSalesInvoiceFromRemoteUseCase(get()) }
+    single { CreateSalesInvoiceLocalUseCase(get()) }
+    single { CreateSalesInvoiceRemoteOnlyUseCase(get()) }
+    single { UpdateLocalInvoiceFromRemoteUseCase(get()) }
     single { SaveInvoicePaymentsUseCase(get()) }
+    single { MarkSalesInvoiceSyncedUseCase(get()) }
     single { FetchCustomersUseCase(get()) }
+    single { FetchCustomersLocalUseCase(get()) }
     single { FetchPaymentTermsUseCase(get()) }
     single { FetchDeliveryChargesUseCase(get()) }
     single { FetchCustomerDetailUseCase(get()) }

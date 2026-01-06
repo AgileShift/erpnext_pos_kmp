@@ -318,6 +318,54 @@ interface SalesInvoiceDao {
     @Query("DELETE FROM tabSalesInvoice")
     suspend fun deleteAll()
 
+    @Query(
+        """
+        UPDATE tabSalesInvoice
+        SET invoice_name = :newName,
+            customer_name = :customerName,
+            customer_phone = :customerPhone,
+            posting_date = :postingDate,
+            due_date = :dueDate,
+            currency = :currency,
+            party_account_currency = :partyAccountCurrency,
+            net_total = :netTotal,
+            tax_total = :taxTotal,
+            grand_total = :grandTotal,
+            paid_amount = :paidAmount,
+            outstanding_amount = :outstandingAmount,
+            status = :status,
+            docstatus = :docstatus,
+            mode_of_payment = :modeOfPayment,
+            debit_to = :debitTo,
+            remarks = :remarks,
+            sync_status = :syncStatus,
+            modified_at = :modifiedAt
+        WHERE invoice_name = :oldName
+        """
+    )
+    suspend fun updateFromRemote(
+        oldName: String,
+        newName: String,
+        customerName: String?,
+        customerPhone: String?,
+        postingDate: String,
+        dueDate: String?,
+        currency: String,
+        partyAccountCurrency: String?,
+        netTotal: Double,
+        taxTotal: Double,
+        grandTotal: Double,
+        paidAmount: Double,
+        outstandingAmount: Double,
+        status: String,
+        docstatus: Int,
+        modeOfPayment: String?,
+        debitTo: String?,
+        remarks: String?,
+        syncStatus: String,
+        modifiedAt: Long
+    )
+
     @Query("SELECT * FROM tabSalesInvoice ORDER BY last_synced_at ASC LIMIT 1")
     suspend fun getOldestItem(): SalesInvoiceEntity?
 }

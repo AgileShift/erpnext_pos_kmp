@@ -97,6 +97,52 @@ class InvoiceLocalSource(
         salesInvoiceDao.applyPayments(invoice, payments)
     }
 
+    suspend fun updateFromRemote(
+        oldName: String,
+        newName: String,
+        customerName: String?,
+        customerPhone: String?,
+        postingDate: String,
+        dueDate: String?,
+        currency: String,
+        partyAccountCurrency: String?,
+        netTotal: Double,
+        taxTotal: Double,
+        grandTotal: Double,
+        paidAmount: Double,
+        outstandingAmount: Double,
+        status: String,
+        docstatus: Int,
+        modeOfPayment: String?,
+        debitTo: String?,
+        remarks: String?,
+        syncStatus: String,
+        modifiedAt: Long
+    ) {
+        salesInvoiceDao.updateFromRemote(
+            oldName = oldName,
+            newName = newName,
+            customerName = customerName,
+            customerPhone = customerPhone,
+            postingDate = postingDate,
+            dueDate = dueDate,
+            currency = currency,
+            partyAccountCurrency = partyAccountCurrency,
+            netTotal = netTotal,
+            taxTotal = taxTotal,
+            grandTotal = grandTotal,
+            paidAmount = paidAmount,
+            outstandingAmount = outstandingAmount,
+            status = status,
+            docstatus = docstatus,
+            modeOfPayment = modeOfPayment,
+            debitTo = debitTo,
+            remarks = remarks,
+            syncStatus = syncStatus,
+            modifiedAt = modifiedAt
+        )
+    }
+
     override suspend fun refreshCustomerSummary(customerId: String) {
         salesInvoiceDao.refreshCustomerSummary(customerId)
     }

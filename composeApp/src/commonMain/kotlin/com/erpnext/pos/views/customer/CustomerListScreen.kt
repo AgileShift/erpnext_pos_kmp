@@ -1263,31 +1263,54 @@ private fun CustomerOutstandingInvoicesSheet(
                                                     style = MaterialTheme.typography.bodySmall
                                                 )
                                             }
-                                            RadioButton(
-                                                selected = isSelected,
-                                                onClick = {
-                                                    selectedInvoice = invoice
-                                                    val amountToUse =
-                                                        convertedOutstanding
-                                                            ?: invoice.outstandingAmount
-                                                    amountRaw = amountToUse.toString()
-                                                    val preferredCurrency =
-                                                        if (convertedOutstanding != null) {
-                                                            invoiceCurrency
-                                                        } else {
-                                                            invoiceBaseCurrency
-                                                        }
-                                                    if (allowedCodes.any {
-                                                            it.equals(
-                                                                preferredCurrency,
-                                                                ignoreCase = true
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                            ) {
+                                                when (invoice.syncStatus) {
+                                                    "Pending" -> {
+                                                        AssistChip(
+                                                            onClick = {},
+                                                            label = { Text("Pendiente sync") }
+                                                        )
+                                                    }
+                                                    "Failed" -> {
+                                                        AssistChip(
+                                                            onClick = {},
+                                                            label = { Text("Sync falló") },
+                                                            colors = AssistChipDefaults.assistChipColors(
+                                                                containerColor = MaterialTheme.colorScheme.errorContainer,
+                                                                labelColor = MaterialTheme.colorScheme.onErrorContainer
                                                             )
-                                                        }
-                                                    ) {
-                                                        selectedCurrency = preferredCurrency
+                                                        )
                                                     }
                                                 }
-                                            )
+                                                RadioButton(
+                                                    selected = isSelected,
+                                                    onClick = {
+                                                        selectedInvoice = invoice
+                                                        val amountToUse =
+                                                            convertedOutstanding
+                                                                ?: invoice.outstandingAmount
+                                                        amountRaw = amountToUse.toString()
+                                                        val preferredCurrency =
+                                                            if (convertedOutstanding != null) {
+                                                                invoiceCurrency
+                                                            } else {
+                                                                invoiceBaseCurrency
+                                                            }
+                                                        if (allowedCodes.any {
+                                                                it.equals(
+                                                                    preferredCurrency,
+                                                                    ignoreCase = true
+                                                                )
+                                                            }
+                                                        ) {
+                                                            selectedCurrency = preferredCurrency
+                                                        }
+                                                    }
+                                                )
+                                            }
                                         }
                                         Text(
                                             text = "${strings.customer.outstandingLabel}: $outstandingLabel",

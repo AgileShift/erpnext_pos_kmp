@@ -13,12 +13,12 @@ import com.erpnext.pos.domain.usecases.FetchCustomersUseCase
 import com.erpnext.pos.domain.usecases.CreatePaymentEntryInput
 import com.erpnext.pos.domain.usecases.CreatePaymentEntryUseCase
 import com.erpnext.pos.domain.usecases.FetchOutstandingInvoicesForCustomerUseCase
-import com.erpnext.pos.domain.usecases.FetchSalesInvoiceRemoteUseCase
+import com.erpnext.pos.domain.usecases.FetchSalesInvoiceLocalUseCase
+import com.erpnext.pos.domain.usecases.SyncSalesInvoiceFromRemoteUseCase
 import com.erpnext.pos.domain.usecases.RegisterInvoicePaymentInput
 import com.erpnext.pos.domain.usecases.RegisterInvoicePaymentUseCase
 import com.erpnext.pos.localSource.dao.ModeOfPaymentDao
 import com.erpnext.pos.localSource.entities.ModeOfPaymentEntity
-import com.erpnext.pos.remoteSource.dto.SalesInvoiceDto
 import com.erpnext.pos.remoteSource.dto.v2.PaymentEntryCreateDto
 import com.erpnext.pos.remoteSource.dto.v2.PaymentEntryReferenceCreateDto
 import com.erpnext.pos.views.CashBoxManager
@@ -41,7 +41,8 @@ class CustomerViewModel(
     private val fetchOutstandingInvoicesUseCase: FetchOutstandingInvoicesForCustomerUseCase,
     private val registerInvoicePaymentUseCase: RegisterInvoicePaymentUseCase,
     private val createPaymentEntryUseCase: CreatePaymentEntryUseCase,
-    private val fetchSalesInvoiceRemoteUseCase: FetchSalesInvoiceRemoteUseCase,
+    private val fetchSalesInvoiceLocalUseCase: FetchSalesInvoiceLocalUseCase,
+    private val syncSalesInvoiceFromRemoteUseCase: SyncSalesInvoiceFromRemoteUseCase,
     private val modeOfPaymentDao: ModeOfPaymentDao
 ) : BaseViewModel() {
 
@@ -229,8 +230,8 @@ class CustomerViewModel(
         executeUseCase(
             action = {
                 refreshPaymentModeDetails()
-                val invoice = fetchSalesInvoiceRemoteUseCase(invoiceId)
-                    ?: error("No se pudo cargar la factura.")
+                val invoice = fetchSalesInvoiceLocalUseCase(invoiceId)
+                    ?: error("No se pudo cargar la factura local.")
                 val entry = buildPaymentEntryDto(
                     invoice = invoice,
                     customerId = customerId,
@@ -241,6 +242,10 @@ class CustomerViewModel(
                 )
                 val remoteResult = runCatching {
                     createPaymentEntryUseCase(CreatePaymentEntryInput(entry))
+                }
+
+                if (remoteResult.isSuccess) {
+                    runCatching { syncSalesInvoiceFromRemoteUseCase(invoiceId) }
                 }
 
                 registerInvoicePaymentUseCase(
@@ -287,7 +292,7 @@ class CustomerViewModel(
     }
 
     private suspend fun buildPaymentEntryDto(
-        invoice: SalesInvoiceDto,
+        invoice: com.erpnext.pos.localSource.entities.SalesInvoiceEntity,
         customerId: String,
         modeOfPayment: String,
         enteredAmount: Double,
@@ -296,7 +301,7 @@ class CustomerViewModel(
     ): PaymentEntryCreateDto {
         val context = cashboxManager.requireContext()
         val receivableCurrency = invoice.partyAccountCurrency?.trim()?.uppercase()
-            ?: invoice.currency?.trim()?.uppercase()
+            ?: invoice.currency.trim().uppercase()
             ?: context.currency.trim().uppercase()
         val paidFromAccount = invoice.debitTo?.takeIf { it.isNotBlank() }
             ?: error("No se pudo resolver la cuenta de débito (debit_to).")
@@ -317,7 +322,7 @@ class CustomerViewModel(
                 ?: error("No se pudo resolver tasa $paidToCurrency -> $receivableCurrency")
         }
 
-        val allocatedRc = baseAmount.coerceAtMost(invoice.outstandingAmount ?: baseAmount)
+        val allocatedRc = baseAmount.coerceAtMost(invoice.outstandingAmount.takeIf { it > 0.0 } ?: baseAmount)
         val receivedAmount = if (rate <= 0.0) enteredAmount else (allocatedRc / rate)
 
         return PaymentEntryCreateDto(
@@ -337,9 +342,9 @@ class CustomerViewModel(
             references = listOf(
                 PaymentEntryReferenceCreateDto(
                     referenceDoctype = "Sales Invoice",
-                    referenceName = invoice.name ?: error("Factura sin ID."),
+                    referenceName = invoice.invoiceName ?: error("Factura sin ID."),
                     totalAmount = invoice.grandTotal,
-                    outstandingAmount = invoice.outstandingAmount ?: allocatedRc,
+                    outstandingAmount = invoice.outstandingAmount.takeIf { it > 0.0 } ?: allocatedRc,
                     allocatedAmount = allocatedRc
                 )
             ),

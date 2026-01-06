@@ -15,6 +15,7 @@ import com.erpnext.pos.remoteSource.datasources.SalesInvoiceRemoteSource
 import com.erpnext.pos.remoteSource.dto.SalesInvoiceDto
 import com.erpnext.pos.remoteSource.mapper.toDto
 import com.erpnext.pos.remoteSource.mapper.toEntities
+import com.erpnext.pos.remoteSource.mapper.toEntity
 import com.erpnext.pos.sync.SyncTTL
 import com.erpnext.pos.utils.RepoTrace
 import com.erpnext.pos.views.CashBoxManager
@@ -60,6 +61,23 @@ class SalesInvoiceRepository(
         RepoTrace.breadcrumb("SalesInvoiceRepository", "saveInvoiceLocally", invoice.invoiceName)
         localSource.saveInvoiceLocally(invoice, items, payments)
         localSource.refreshCustomerSummary(invoice.customer)
+    }
+
+    suspend fun saveInvoiceLocallyPending(
+        localInvoiceName: String,
+        dto: SalesInvoiceDto
+    ) {
+        val entity = dto.toEntity()
+        val now = Clock.System.now().toEpochMilliseconds()
+
+        entity.invoice.invoiceName = localInvoiceName
+        entity.invoice.syncStatus = "Pending"
+        entity.invoice.status = dto.status ?: entity.invoice.status
+        entity.invoice.modifiedAt = now
+        entity.items.forEach { it.parentInvoice = localInvoiceName }
+        entity.payments.forEach { it.parentInvoice = localInvoiceName }
+
+        saveInvoiceLocally(entity.invoice, entity.items, entity.payments)
     }
 
     //TODO:
@@ -114,6 +132,44 @@ class SalesInvoiceRepository(
 
     suspend fun fetchRemoteInvoice(name: String): SalesInvoiceDto? {
         return remoteSource.fetchInvoice(name)
+    }
+
+    suspend fun refreshInvoiceFromRemote(invoiceName: String): SalesInvoiceWithItemsAndPayments? {
+        val remote = fetchRemoteInvoice(invoiceName) ?: return null
+        val entity = remote.toEntity()
+        saveInvoiceLocally(entity.invoice, entity.items, entity.payments)
+        return entity
+    }
+
+    suspend fun updateLocalInvoiceFromRemote(
+        localInvoiceName: String,
+        remote: SalesInvoiceDto
+    ) {
+        val remoteName = remote.name ?: return
+        val now = Clock.System.now().toEpochMilliseconds()
+        localSource.updateFromRemote(
+            oldName = localInvoiceName,
+            newName = remoteName,
+            customerName = remote.customerName,
+            customerPhone = remote.customerPhone,
+            postingDate = remote.postingDate,
+            dueDate = remote.dueDate,
+            currency = remote.currency ?: "NIO",
+            partyAccountCurrency = remote.partyAccountCurrency,
+            netTotal = remote.netTotal,
+            taxTotal = remote.totalTaxesAndCharges ?: 0.0,
+            grandTotal = remote.grandTotal,
+            paidAmount = remote.paidAmount,
+            outstandingAmount = remote.outstandingAmount ?: 0.0,
+            status = remote.status ?: "Draft",
+            docstatus = remote.docStatus,
+            modeOfPayment = remote.payments.firstOrNull()?.modeOfPayment,
+            debitTo = remote.debitTo,
+            remarks = remote.remarks,
+            syncStatus = "Synced",
+            modifiedAt = now
+        )
+        localSource.refreshCustomerSummary(remote.customer)
     }
 
     override suspend fun createRemoteInvoice(invoice: SalesInvoiceDto): SalesInvoiceDto {

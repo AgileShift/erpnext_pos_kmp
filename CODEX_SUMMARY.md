@@ -101,3 +101,6 @@
 - [ ] Configurar redondeo/tolerancia por moneda desde configuraciones (alineado con ERPNext)
 - [ ] En las ordenes de venta poner opcion para reservar inventario por la cantidad de tiempo que la misma orden
 - [ ] Aplicar tema oscuro a movil y desktop, por defecto del sistema o desde Configuracion
+- [ ] Aplicar exactamente la misma logica de pagos en billing que en Customer para la seccion de pagos de facturas pendientes, aunque dupliquemos, o bien podemos hacer un modulo de PaymentUtils o algun otro nombre y poner ahi para que ambas vistas compartan esa logica
+- [ ] Tenemos que guardar el exchange_rate en local
+- [ ] Tenemos un problema al inciar, hace un llamado a /api/resource/User/{user} y esto rompe el patron Offline-First

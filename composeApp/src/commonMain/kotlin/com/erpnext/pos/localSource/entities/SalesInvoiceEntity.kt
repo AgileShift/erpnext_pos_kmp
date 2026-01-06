@@ -53,6 +53,7 @@ data class SalesInvoiceEntity(
     var customer: String,
     @ColumnInfo(name = "customer_name")
     var customerName: String? = null,
+    @ColumnInfo(name = "customer_phone")
     var customerPhone: String? = null,
     var company: String,
     var branch: String? = null,

@@ -18,6 +18,7 @@ import com.erpnext.pos.remoteSource.dto.POSClosingEntryDto
 import com.erpnext.pos.remoteSource.dto.POSOpeningEntryDto
 import com.erpnext.pos.remoteSource.mapper.toDto
 import com.erpnext.pos.remoteSource.mapper.toEntity
+import com.erpnext.pos.data.repositories.ExchangeRateRepository
 import com.erpnext.pos.utils.toErpDateTime
 import io.ktor.util.date.getTimeMillis
 import kotlinx.coroutines.Dispatchers
@@ -63,6 +64,7 @@ class CashBoxManager(
     private val cashboxDao: CashboxDao,
     private val userDao: UserDao,
     private val exchangeRatePreferences: ExchangeRatePreferences,
+    private val exchangeRateRepository: ExchangeRateRepository,
     private val modeOfPaymentDao: ModeOfPaymentDao
 ) {
 
@@ -296,26 +298,18 @@ class CashBoxManager(
         if (from.isBlank() || to.isBlank()) return null
         if (from == to) return 1.0
 
-        val directRate = api.getExchangeRate(fromCurrency = from, toCurrency = to)
-            ?.takeIf { it > 0.0 }
-        if (directRate != null) return directRate
-
-        val reverseRate = api.getExchangeRate(fromCurrency = to, toCurrency = from)
-            ?.takeIf { it > 0.0 }
-            ?.let { 1 / it }
-
-        return reverseRate
+        return exchangeRateRepository.getRate(from, to)
     }
 
     private suspend fun resolveExchangeRate(baseCurrency: String): Double {
-        if (baseCurrency.equals("USD", ignoreCase = true)) return 1.0
-        val apiRate = api.getExchangeRate(
-            fromCurrency = "USD",
-            toCurrency = baseCurrency
-        )
-        if (apiRate != null && apiRate > 0.0) {
-            return apiRate
+        val normalized = baseCurrency.trim().uppercase()
+        if (normalized == "USD") return 1.0
+
+        val cached = exchangeRateRepository.getRate("USD", normalized)
+        if (cached != null && cached > 0.0) {
+            return cached
         }
+
         return exchangeRatePreferences.loadManualRate()
             ?: ExchangeRatePreferences.DEFAULT_MANUAL_RATE
     }

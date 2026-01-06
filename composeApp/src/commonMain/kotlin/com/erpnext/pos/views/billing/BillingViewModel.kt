@@ -6,16 +6,22 @@ import com.erpnext.pos.domain.models.CustomerBO
 import com.erpnext.pos.domain.models.DeliveryChargeBO
 import com.erpnext.pos.domain.models.ItemBO
 import com.erpnext.pos.domain.models.PaymentTermBO
-import com.erpnext.pos.domain.usecases.FetchBillingProductsWithPriceUseCase
-import com.erpnext.pos.domain.usecases.FetchCustomersUseCase
+import com.erpnext.pos.domain.usecases.FetchBillingProductsLocalUseCase
+import com.erpnext.pos.domain.usecases.FetchCustomersLocalUseCase
 import com.erpnext.pos.domain.usecases.FetchDeliveryChargesUseCase
 import com.erpnext.pos.domain.usecases.FetchPaymentTermsUseCase
 import com.erpnext.pos.domain.usecases.CreatePaymentEntryInput
 import com.erpnext.pos.domain.usecases.CreatePaymentEntryUseCase
-import com.erpnext.pos.domain.usecases.CreateSalesInvoiceInput
-import com.erpnext.pos.domain.usecases.CreateSalesInvoiceUseCase
+import com.erpnext.pos.domain.usecases.CreateSalesInvoiceLocalInput
+import com.erpnext.pos.domain.usecases.CreateSalesInvoiceLocalUseCase
+import com.erpnext.pos.domain.usecases.CreateSalesInvoiceRemoteOnlyInput
+import com.erpnext.pos.domain.usecases.CreateSalesInvoiceRemoteOnlyUseCase
 import com.erpnext.pos.domain.usecases.SaveInvoicePaymentsInput
 import com.erpnext.pos.domain.usecases.SaveInvoicePaymentsUseCase
+import com.erpnext.pos.domain.usecases.SyncSalesInvoiceFromRemoteUseCase
+import com.erpnext.pos.domain.usecases.UpdateLocalInvoiceFromRemoteInput
+import com.erpnext.pos.domain.usecases.UpdateLocalInvoiceFromRemoteUseCase
+import com.erpnext.pos.domain.usecases.MarkSalesInvoiceSyncedUseCase
 import com.erpnext.pos.localSource.dao.ModeOfPaymentDao
 import com.erpnext.pos.localSource.entities.ModeOfPaymentEntity
 import com.erpnext.pos.localSource.entities.POSInvoicePaymentEntity
@@ -53,6 +59,7 @@ import com.erpnext.pos.views.billing.BillingCalculationHelper.resolveDiscountInf
 import com.erpnext.pos.views.salesflow.SalesFlowContext
 import com.erpnext.pos.views.salesflow.SalesFlowContextStore
 import com.erpnext.pos.views.salesflow.SalesFlowSource
+import com.erpnext.pos.domain.utils.UUIDGenerator
 import androidx.lifecycle.viewModelScope
 import com.erpnext.pos.utils.toErpDateTime
 import kotlinx.coroutines.launch
@@ -64,8 +71,8 @@ import kotlin.math.pow
 import kotlin.time.Clock
 
 class BillingViewModel(
-    private val customersUseCase: FetchCustomersUseCase,
-    private val itemsUseCase: FetchBillingProductsWithPriceUseCase,
+    private val customersUseCase: FetchCustomersLocalUseCase,
+    private val itemsUseCase: FetchBillingProductsLocalUseCase,
     private val adjustLocalInventoryUseCase: AdjustLocalInventoryUseCase,
     private val contextProvider: CashBoxManager,
     private val modeOfPaymentDao: ModeOfPaymentDao,
@@ -74,9 +81,13 @@ class BillingViewModel(
     private val navManager: NavigationManager,
     private val salesFlowStore: SalesFlowContextStore,
     private val loadSourceDocumentsUseCase: LoadSourceDocumentsUseCase,
-    private val createSalesInvoiceUseCase: CreateSalesInvoiceUseCase,
+    private val createSalesInvoiceLocalUseCase: CreateSalesInvoiceLocalUseCase,
+    private val createSalesInvoiceRemoteOnlyUseCase: CreateSalesInvoiceRemoteOnlyUseCase,
     private val createPaymentEntryUseCase: CreatePaymentEntryUseCase,
     private val saveInvoicePaymentsUseCase: SaveInvoicePaymentsUseCase,
+    private val syncSalesInvoiceFromRemoteUseCase: SyncSalesInvoiceFromRemoteUseCase,
+    private val updateLocalInvoiceFromRemoteUseCase: UpdateLocalInvoiceFromRemoteUseCase,
+    private val markSalesInvoiceSyncedUseCase: MarkSalesInvoiceSyncedUseCase,
     private val api: APIService,
 ) : BaseViewModel() {
 
@@ -809,60 +820,94 @@ class BillingViewModel(
                 dueDate = dueDate
             )
 
-            val created = createSalesInvoiceUseCase(CreateSalesInvoiceInput(invoiceDto))
+            val localInvoiceName = "LOCAL-${UUIDGenerator().newId()}"
+            createSalesInvoiceLocalUseCase(
+                CreateSalesInvoiceLocalInput(
+                    localInvoiceName = localInvoiceName,
+                    invoice = invoiceDto
+                )
+            )
 
+            val created = runCatching {
+                createSalesInvoiceRemoteOnlyUseCase(
+                    CreateSalesInvoiceRemoteOnlyInput(invoiceDto.copy(name = null))
+                )
+            }.getOrNull()
+
+            var invoiceNameForLocal = localInvoiceName
+            if (created?.name != null) {
+                val updateResult = runCatching {
+                    updateLocalInvoiceFromRemoteUseCase(
+                        UpdateLocalInvoiceFromRemoteInput(
+                            localInvoiceName = localInvoiceName,
+                            remoteInvoice = created
+                        )
+                    )
+                }
+                if (updateResult.isSuccess) {
+                    invoiceNameForLocal = created.name
+                }
+            }
+
+            var remotePaymentsSucceeded = false
             if (paymentLines.isNotEmpty()) {
-                val invoiceId = created.name ?: error("No se devolvió el ID de la factura.")
-
                 val currencySpecs = buildCurrencySpecs(context)
 
-                /*val rc = resolveInvoiceAmountsInReceivable(
-                    created = created,
-                    fallbackTotal = totals.total
-                )*/
+                if (created != null) {
+                    var remainingOutstandingRc =
+                        created.outstandingAmount?.takeIf { it > 0.0 } ?: created.grandTotal
 
-                var remainingOutstandingRc = created.outstandingAmount ?: 0.0 // rc.outstandingRc
+                    var remotePaymentFailed = false
+                    paymentLines.forEach { line ->
+                        if (remainingOutstandingRc <= 0.0) return@forEach
 
-                paymentLines.forEach { line ->
-                    if (remainingOutstandingRc <= 0.0) return@forEach
+                        val paymentEntry = buildPaymentEntryDto(
+                            line = line,
+                            context = context,
+                            customer = customer,
+                            postingDate = postingDate,
+                            invoiceId = created.name ?: invoiceNameForLocal,
+                            invoiceTotalRc = created.grandTotal,
+                            outstandingRc = remainingOutstandingRc,
+                            paidFromAccount = created.debitTo,
+                            partyAccountCurrency = created.partyAccountCurrency,
+                            exchangeRateByCurrency = current.exchangeRateByCurrency,
+                            currencySpecs = currencySpecs
+                        )
 
-                    val paymentEntry = buildPaymentEntryDto(
-                        line = line,
-                        context = context,
-                        customer = customer,
-                        postingDate = postingDate,
-                        invoiceId = invoiceId,
-                        invoiceTotalRc = created.grandTotal,
-                        outstandingRc = remainingOutstandingRc,
-                        paidFromAccount = created.debitTo,
-                        partyAccountCurrency = created.partyAccountCurrency,
-                        exchangeRateByCurrency = current.exchangeRateByCurrency,
-                        currencySpecs = currencySpecs
-                    )
+                        val paymentResult = runCatching {
+                            createPaymentEntryUseCase(CreatePaymentEntryInput(paymentEntry))
+                        }
+                        if (paymentResult.isFailure) {
+                            remotePaymentFailed = true
+                        }
 
-                    val paymentResult = runCatching {
-                        createPaymentEntryUseCase(CreatePaymentEntryInput(paymentEntry))
+                        val allocated = paymentEntry.references.firstOrNull()?.allocatedAmount ?: 0.0
+                        remainingOutstandingRc =
+                            bd((remainingOutstandingRc - allocated).coerceAtLeast(0.0)).toDouble(2)
                     }
 
-                    if (paymentResult.isFailure) {
-                        val reason = paymentResult.exceptionOrNull()
-                            ?.toUserMessage("No se pudo registrar el pago.")
-                        throw IllegalStateException("La factura ${created.name} se creó, pero falló el pago. $reason")
+                    if (remotePaymentFailed) {
+                        // Keep local payments as the source of truth until sync retries.
+                    } else {
+                        remotePaymentsSucceeded = true
                     }
-
-                    val allocated = paymentEntry.references.firstOrNull()?.allocatedAmount ?: 0.0
-                    remainingOutstandingRc =
-                        bd((remainingOutstandingRc - allocated).coerceAtLeast(0.0)).toDouble(2)
                 }
 
-                val localPayments = buildLocalPayments(invoiceId, postingDate, paymentLines)
+                val localPayments = buildLocalPayments(invoiceNameForLocal, postingDate, paymentLines)
 
                 saveInvoicePaymentsUseCase(
                     SaveInvoicePaymentsInput(
-                        invoiceName = invoiceId,
+                        invoiceName = invoiceNameForLocal,
                         payments = localPayments
                     )
                 )
+            }
+
+            if (remotePaymentsSucceeded) {
+                runCatching {
+                    markSalesInvoiceSyncedUseCase(invoiceNameForLocal)
+                }
             }
 
             runCatching {
@@ -881,7 +926,7 @@ class BillingViewModel(
                 _state.update { st ->
                     val s = st as? BillingState.Success ?: return@update st
                     s.copy(
-                        successMessage = "Factura ${created.name ?: ""} creada, pero fallo la actualizacion de inventario local. Reintenta sincronizacion/recarga."
+                        successMessage = "Factura ${(created?.name ?: localInvoiceName)} creada, pero fallo la actualizacion de inventario local. Reintenta sincronizacion/recarga."
                     )
                 }
             }
@@ -927,7 +972,20 @@ class BillingViewModel(
                     changeDueBase = 0.0,
                     paymentErrorMessage = null,
                     cartErrorMessage = null,
-                    successMessage = "Factura ${created.name ?: ""} creada correctamente.",
+                    successMessage = when {
+                        created == null -> {
+                            val label = localInvoiceName
+                            "Factura $label guardada localmente (pendiente de sincronizacion)."
+                        }
+                        paymentLines.isNotEmpty() -> {
+                            val label = created.name ?: localInvoiceName
+                            "Factura $label creada. Pagos guardados localmente."
+                        }
+                        else -> {
+                            val label = created.name ?: localInvoiceName
+                            "Factura $label creada correctamente."
+                        }
+                    },
                     sourceDocument = null,
                     isSourceDocumentApplied = false
                 )

@@ -1,8 +1,8 @@
 {
   "formatVersion": 1,
   "database": {
-    "version": 15,
-    "identityHash": "cfb98d449a6805c68942e2f00dacb8cc",
+    "version": 17,
+    "identityHash": "c41a63745bb46f23b5d75c701929ab7e",
     "entities": [
       {
         "tableName": "tabUser",
@@ -288,6 +288,110 @@
           "autoGenerate": false,
           "columnNames": [
             "name"
+          ]
+        }
+      },
+      {
+        "tableName": "tabPaymentTerm",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`payment_term_name` TEXT NOT NULL, `invoice_portion` REAL, `mode_of_payment` TEXT, `due_date_based_on` TEXT, `credit_days` INTEGER, `credit_months` INTEGER, `discount_type` TEXT, `discount` REAL, `description` TEXT, `discount_validity` INTEGER, `discount_validity_based_on` TEXT, `last_synced_at` INTEGER NOT NULL, PRIMARY KEY(`payment_term_name`))",
+        "fields": [
+          {
+            "fieldPath": "name",
+            "columnName": "payment_term_name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "invoicePortion",
+            "columnName": "invoice_portion",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "modeOfPayment",
+            "columnName": "mode_of_payment",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "dueDateBasedOn",
+            "columnName": "due_date_based_on",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "creditDays",
+            "columnName": "credit_days",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "creditMonths",
+            "columnName": "credit_months",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "discountType",
+            "columnName": "discount_type",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "discount",
+            "columnName": "discount",
+            "affinity": "REAL"
+          },
+          {
+            "fieldPath": "description",
+            "columnName": "description",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "discountValidity",
+            "columnName": "discount_validity",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "discountValidityBasedOn",
+            "columnName": "discount_validity_based_on",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "lastSyncedAt",
+            "columnName": "last_synced_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "payment_term_name"
+          ]
+        }
+      },
+      {
+        "tableName": "tabDeliveryCharge",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`label` TEXT NOT NULL, `default_rate` REAL NOT NULL, `last_synced_at` INTEGER NOT NULL, PRIMARY KEY(`label`))",
+        "fields": [
+          {
+            "fieldPath": "label",
+            "columnName": "label",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "defaultRate",
+            "columnName": "default_rate",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lastSyncedAt",
+            "columnName": "last_synced_at",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "label"
           ]
         }
       },
@@ -5221,7 +5325,7 @@
     ],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
-      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'cfb98d449a6805c68942e2f00dacb8cc')"
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'c41a63745bb46f23b5d75c701929ab7e')"
     ]
   }
 }

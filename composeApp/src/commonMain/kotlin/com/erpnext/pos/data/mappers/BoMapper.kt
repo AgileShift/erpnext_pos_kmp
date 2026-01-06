@@ -4,7 +4,9 @@ import androidx.paging.PagingData
 import androidx.paging.map
 import com.erpnext.pos.domain.models.CategoryBO
 import com.erpnext.pos.domain.models.CustomerBO
+import com.erpnext.pos.domain.models.DeliveryChargeBO
 import com.erpnext.pos.domain.models.ItemBO
+import com.erpnext.pos.domain.models.PaymentTermBO
 import com.erpnext.pos.domain.models.POSProfileBO
 import com.erpnext.pos.domain.models.POSProfileSimpleBO
 import com.erpnext.pos.domain.models.PaymentModesBO
@@ -19,6 +21,9 @@ import com.erpnext.pos.localSource.entities.POSInvoicePaymentEntity
 import com.erpnext.pos.localSource.entities.SalesInvoiceEntity
 import com.erpnext.pos.localSource.entities.SalesInvoiceItemEntity
 import com.erpnext.pos.localSource.entities.SalesInvoiceWithItemsAndPayments
+import com.erpnext.pos.localSource.entities.UserEntity
+import com.erpnext.pos.localSource.entities.PaymentTermEntity
+import com.erpnext.pos.localSource.entities.DeliveryChargeEntity
 import com.erpnext.pos.remoteSource.dto.CategoryDto
 import com.erpnext.pos.remoteSource.dto.CustomerCreditLimitDto
 import com.erpnext.pos.remoteSource.dto.CustomerDto
@@ -111,6 +116,41 @@ fun UserDto.toBO(): UserBO {
         email = this.email,
         language = this.language,
         enabled = this.enabled,
+    )
+}
+
+fun UserEntity.toBO(): UserBO {
+    return UserBO(
+        name = this.name,
+        username = this.username.orEmpty(),
+        firstName = this.firstName,
+        lastName = this.lastName,
+        email = this.email,
+        language = this.language.orEmpty(),
+        enabled = this.enabled,
+    )
+}
+
+fun DeliveryChargeEntity.toBO(): DeliveryChargeBO {
+    return DeliveryChargeBO(
+        label = this.label,
+        defaultRate = this.defaultRate
+    )
+}
+
+fun PaymentTermEntity.toBO(): PaymentTermBO {
+    return PaymentTermBO(
+        name = this.name,
+        invoicePortion = this.invoicePortion,
+        modeOfPayment = this.modeOfPayment,
+        dueDateBasedOn = this.dueDateBasedOn,
+        creditDays = this.creditDays,
+        creditMonths = this.creditMonths,
+        discountType = this.discountType,
+        discount = this.discount,
+        description = this.description,
+        discountValidity = this.discountValidity,
+        discountValidityBasedOn = this.discountValidityBasedOn,
     )
 }
 
