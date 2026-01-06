@@ -576,6 +576,7 @@ fun CustomerItem(
     val isOverLimit = (customer.availableCredit ?: 0.0) < 0 || (customer.currentBalance ?: 0.0) > 0
     val pendingInvoices = customer.pendingInvoices ?: 0
     val availableCredit = customer.availableCredit ?: 0.0
+    val creditLimit = customer.creditLimit ?: 0.0
     val currencySymbol = customer.currency.toCurrencySymbol()
     var isMenuExpanded by remember { mutableStateOf(false) }
     val quickActions = remember { customerQuickActions() }
@@ -593,6 +594,16 @@ fun CustomerItem(
     }
     val emphasis = pendingInvoices > 0 || isOverLimit
     val cardElevation = if (emphasis) 3.dp else 1.dp
+    val availableLabel = if (creditLimit > 0.0) {
+        "${strings.customer.availableLabel}/${strings.customer.limitLabel}"
+    } else {
+        strings.customer.availableLabel
+    }
+    val availableValue = if (creditLimit > 0.0) {
+        "$currencySymbol ${formatAmount(availableCredit)} / ${formatAmount(creditLimit)}"
+    } else {
+        "$currencySymbol ${formatAmount(availableCredit)}"
+    }
 
     val cardShape = RoundedCornerShape(20.dp)
     Card(
@@ -738,8 +749,8 @@ fun CustomerItem(
                         isCritical = pendingInvoices > 0
                     )
                     MetricBlock(
-                        label = strings.customer.availableLabel,
-                        value = "$currencySymbol ${formatAmount(availableCredit)}",
+                        label = availableLabel,
+                        value = availableValue,
                         isCritical = availableCredit < 0
                     )
                 }

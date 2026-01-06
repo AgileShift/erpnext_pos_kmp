@@ -1,9 +1,9 @@
-import org.jetbrains.compose.desktop.application.dsl.TargetFormat
 import org.jetbrains.kotlin.gradle.ExperimentalKotlinGradlePluginApi
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import com.codingfeline.buildkonfig.compiler.FieldSpec.Type.STRING
 import java.io.FileInputStream
 import java.util.Properties
+import org.jetbrains.compose.desktop.application.dsl.TargetFormat
 
 val properties = Properties()
 try {
@@ -12,6 +12,13 @@ try {
     e.printStackTrace()
 }
 
+compose.desktop {
+    application {
+        nativeDistributions {
+            targetFormats(TargetFormat.Exe, TargetFormat.Msi, TargetFormat.Dmg)
+        }
+    }
+}
 plugins {
     alias(libs.plugins.kotlinMultiplatform)
     alias(libs.plugins.androidApplication)

@@ -7,6 +7,7 @@ import com.erpnext.pos.domain.models.UserBO
 import com.erpnext.pos.domain.usecases.FetchPosProfileInfoUseCase
 import com.erpnext.pos.domain.usecases.FetchPosProfileUseCase
 import com.erpnext.pos.domain.usecases.FetchUserInfoUseCase
+import com.erpnext.pos.domain.usecases.HomeMetricInput
 import com.erpnext.pos.domain.usecases.LoadHomeMetricsUseCase
 import com.erpnext.pos.domain.usecases.LogoutUseCase
 import com.erpnext.pos.navigation.NavRoute
@@ -23,7 +24,10 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlin.time.Clock
+import kotlin.time.ExperimentalTime
 
+@OptIn(ExperimentalTime::class)
 class HomeViewModel(
     private val fetchUserInfoUseCase: FetchUserInfoUseCase,
     private val fetchPosProfileUseCase: FetchPosProfileUseCase,
@@ -90,7 +94,8 @@ class HomeViewModel(
         executeUseCase(action = {
             userInfo = fetchUserInfoUseCase.invoke(null)
             posProfiles = fetchPosProfileUseCase.invoke(userInfo.email)
-            _homeMetrics.value = loadHomeMetricsUseCase()
+            _homeMetrics.value =
+                loadHomeMetricsUseCase(HomeMetricInput(7, Clock.System.now().toEpochMilliseconds()))
             _stateFlow.update { HomeState.POSProfiles(posProfiles, userInfo) }
         }, exceptionHandler = { e ->
             _stateFlow.update { HomeState.Error(e.message ?: "Error") }
@@ -99,7 +104,14 @@ class HomeViewModel(
 
     fun refreshMetrics() {
         executeUseCase(
-            action = { _homeMetrics.value = loadHomeMetricsUseCase() },
+            action = {
+                _homeMetrics.value = loadHomeMetricsUseCase(
+                    HomeMetricInput(
+                        7,
+                        Clock.System.now().toEpochMilliseconds()
+                    )
+                )
+            },
             exceptionHandler = { it.printStackTrace() }
         )
     }

@@ -1,3 +1,5 @@
+@file:OptIn(ExperimentalTime::class)
+
 package com.erpnext.pos.domain.usecases
 
 import com.erpnext.pos.localSource.dao.SalesInvoiceDao
@@ -15,14 +17,18 @@ import kotlinx.datetime.toLocalDateTime
 import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
 
+data class HomeMetricInput(
+    val days: Int = 7,
+    val nowMillis: Long = Clock.System.now().toEpochMilliseconds()
+)
 class LoadHomeMetricsUseCase(
     private val salesInvoiceDao: SalesInvoiceDao
-) {
-    @OptIn(ExperimentalTime::class)
-    suspend operator fun invoke(days: Int = 7, nowMillis: Long = Clock.System.now().toEpochMilliseconds()): HomeMetrics {
+): UseCase<HomeMetricInput, HomeMetrics>() {
+
+    override suspend fun useCaseFunction(input: HomeMetricInput): HomeMetrics {
         val tz = TimeZone.currentSystemDefault()
-        val today = Instant.fromEpochMilliseconds(nowMillis).toLocalDateTime(tz).date
-        val startDate = today.minus(DatePeriod(days = days - 1))
+        val today = Instant.fromEpochMilliseconds(input.nowMillis).toLocalDateTime(tz).date
+        val startDate = today.minus(DatePeriod(days = input.days - 1))
         val startDate14 = today.minus(DatePeriod(days = 13))
         val dateStrings = generateDateRange(startDate, today)
 

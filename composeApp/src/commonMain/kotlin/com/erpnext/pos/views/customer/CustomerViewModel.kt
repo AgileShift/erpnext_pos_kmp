@@ -97,7 +97,7 @@ class CustomerViewModel(
         executeUseCase(
             action = {
                 // dejamos respirar a Compose una recomposición
-                kotlinx.coroutines.delay(120)
+                kotlinx.coroutines.delay(200)
 
                 fetchCustomersUseCase.invoke(CustomerQueryInput(query, state))
                     .collectLatest { customers ->

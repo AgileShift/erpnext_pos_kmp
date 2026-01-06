@@ -31,6 +31,7 @@ interface IInvoiceLocalSource {
         invoice: SalesInvoiceEntity,
         payments: List<POSInvoicePaymentEntity>
     )
+    suspend fun refreshCustomerSummary(customerId: String)
 
     suspend fun getOutstandingInvoicesForCustomer(
         customerName: String
@@ -94,6 +95,10 @@ class InvoiceLocalSource(
         payments: List<POSInvoicePaymentEntity>
     ) {
         salesInvoiceDao.applyPayments(invoice, payments)
+    }
+
+    override suspend fun refreshCustomerSummary(customerId: String) {
+        salesInvoiceDao.refreshCustomerSummary(customerId)
     }
 
     override suspend fun getOutstandingInvoicesForCustomer(

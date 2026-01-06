@@ -215,7 +215,7 @@ interface SalesInvoiceDao {
     ): PagingSource<Int, SalesInvoiceWithItemsAndPayments>
 
     @Transaction
-    @Query("SELECT * FROM tabSalesInvoice WHERE due_date < :today AND outstanding_amount > 0 AND status IN ('Overdue', 'Unpaid') ORDER BY due_date ASC")
+    @Query("SELECT * FROM tabSalesInvoice WHERE due_date < :today AND outstanding_amount > 0 AND status IN ('Overdue', 'Unpaid', 'Partly Paid') ORDER BY due_date ASC")
     fun getOverdueInvoices(today: String): PagingSource<Int, SalesInvoiceWithItemsAndPayments>
 
     @Transaction
@@ -230,7 +230,7 @@ interface SalesInvoiceDao {
         SELECT * FROM tabSalesInvoice 
         WHERE (:query IS NULL OR customer_name LIKE '%' || :query || '%' OR invoice_name LIKE '%' || :query || '%')
         AND ((:date IS NULL OR posting_date == :date)) 
-        AND status IN ('Unpaid', 'Overdue')
+        AND status IN ('Unpaid', 'Overdue', 'Partly Paid')
         AND outstanding_amount > 0
         ORDER BY posting_date DESC 
     """
@@ -256,6 +256,55 @@ interface SalesInvoiceDao {
         updateInvoice(invoice)
         insertPayments(payments)
     }
+
+    @Query(
+        """
+        UPDATE customers
+        SET totalPendingAmount = COALESCE(
+                (SELECT SUM(outstanding_amount)
+                 FROM tabSalesInvoice
+                 WHERE customer = :customerId
+                   AND outstanding_amount > 0
+                   AND docstatus = 1), 0
+            ),
+            pendingInvoicesCount = COALESCE(
+                (SELECT COUNT(*)
+                 FROM tabSalesInvoice
+                 WHERE customer = :customerId
+                   AND outstanding_amount > 0
+                   AND docstatus = 1), 0
+            ),
+            currentBalance = COALESCE(
+                (SELECT SUM(outstanding_amount)
+                 FROM tabSalesInvoice
+                 WHERE customer = :customerId
+                   AND outstanding_amount > 0
+                   AND docstatus = 1), 0
+            ),
+            availableCredit = CASE
+                WHEN creditLimit IS NULL THEN availableCredit
+                ELSE creditLimit - COALESCE(
+                    (SELECT SUM(outstanding_amount)
+                     FROM tabSalesInvoice
+                     WHERE customer = :customerId
+                       AND outstanding_amount > 0
+                       AND docstatus = 1), 0
+                )
+            END,
+            state = CASE
+                WHEN COALESCE(
+                    (SELECT SUM(outstanding_amount)
+                     FROM tabSalesInvoice
+                     WHERE customer = :customerId
+                       AND outstanding_amount > 0
+                       AND docstatus = 1), 0
+                ) > 0 THEN 'Pendientes'
+                ELSE 'Sin Pendientes'
+            END
+        WHERE id = :customerId
+        """
+    )
+    suspend fun refreshCustomerSummary(customerId: String)
 
     @Query("SELECT COUNT(*) FROM tabSalesInvoice")
     suspend fun countAll(): Int

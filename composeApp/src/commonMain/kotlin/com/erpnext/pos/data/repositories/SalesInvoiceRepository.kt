@@ -19,6 +19,8 @@ import com.erpnext.pos.sync.SyncTTL
 import com.erpnext.pos.views.CashBoxManager
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
+import kotlin.time.Clock
+import kotlin.time.ExperimentalTime
 
 class SalesInvoiceRepository(
     private val remoteSource: SalesInvoiceRemoteSource,
@@ -54,28 +56,37 @@ class SalesInvoiceRepository(
         payments: List<POSInvoicePaymentEntity>
     ) {
         localSource.saveInvoiceLocally(invoice, items, payments)
+        localSource.refreshCustomerSummary(invoice.customer)
     }
 
     //TODO:
+    @OptIn(ExperimentalTime::class)
     override suspend fun applyLocalPayment(
         invoice: SalesInvoiceEntity,
         payments: List<POSInvoicePaymentEntity>
     ) {
-        val totalPayed = payments.sumOf { it.amount }
-        val invoiceId = invoice.invoiceName!!
-        val outstandingAmount = invoice.outstandingAmount
-        invoice.outstandingAmount = totalPayed - invoice.outstandingAmount
-        invoice.paidAmount = totalPayed
+        val invoiceId = requireNotNull(invoice.invoiceName) {
+            "Invoice name is required to apply payments."
+        }
+        val existingPayments = localSource.getInvoiceByName(invoiceId)?.payments ?: emptyList()
+        val totalPaid = existingPayments.sumOf { it.amount } + payments.sumOf { it.amount }
+        val grandTotal = invoice.grandTotal
+        val newOutstanding = (grandTotal - totalPaid).coerceAtLeast(0.0)
+        val epsilon = 0.0001
 
-        if (totalPayed < outstandingAmount)
-            invoice.status = "Partly Paid"
-        if (totalPayed >= outstandingAmount)
-            invoice.status = "Paid"
-        if (totalPayed == 0.0)
-            invoice.status = "Unpaid"
+        invoice.outstandingAmount = newOutstanding
+        invoice.paidAmount = totalPaid.coerceAtMost(grandTotal)
+        invoice.status = when {
+            newOutstanding <= epsilon -> "Paid"
+            newOutstanding >= grandTotal - epsilon -> "Unpaid"
+            else -> "Partly Paid"
+        }
+        invoice.syncStatus = "Pending"
+        invoice.modifiedAt = Clock.System.now().toEpochMilliseconds()
+        payments.lastOrNull()?.modeOfPayment?.let { invoice.modeOfPayment = it }
 
-        // Ok
         localSource.applyPayments(invoice, payments)
+        localSource.refreshCustomerSummary(invoice.customer)
     }
 
     override suspend fun markAsSynced(invoiceName: String) {
