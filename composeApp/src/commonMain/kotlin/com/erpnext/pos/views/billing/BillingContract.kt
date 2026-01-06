@@ -10,6 +10,14 @@ import com.erpnext.pos.domain.models.PaymentTermBO
 import com.erpnext.pos.domain.models.SourceDocumentOption
 import com.erpnext.pos.views.salesflow.SalesFlowContext
 import com.erpnext.pos.views.salesflow.SalesFlowSource
+import kotlin.math.ceil
+import kotlin.math.pow
+
+fun roundUpToCurrency(value: Double, scale: Int = 2): Double {
+    if (!value.isFinite()) return value
+    val factor = 10.0.pow(scale)
+    return ceil((value * factor) - 1e-9) / factor
+}
 
 data class PaymentLine(
     val modeOfPayment: String,
@@ -75,17 +83,17 @@ sealed interface BillingState {
         fun recalculateCartTotals(): Success {
             val totals = BillingCalculationHelper.calculateTotals(this)
             return copy(
-                subtotal = totals.subtotal,
-                taxes = totals.taxes,
-                discount = totals.discount,
-                total = totals.total
+                subtotal = roundUpToCurrency(totals.subtotal),
+                taxes = roundUpToCurrency(totals.taxes),
+                discount = roundUpToCurrency(totals.discount),
+                total = roundUpToCurrency(totals.total)
             ).recalculatePaymentTotals()
         }
 
         fun recalculatePaymentTotals(): Success {
-            val newPaidAmountBase = paymentLines.sumOf { it.baseAmount }
-            val newBalanceDueBase = (total - newPaidAmountBase).coerceAtLeast(0.0)
-            val newChangeDueBase = (newPaidAmountBase - total).coerceAtLeast(0.0)
+            val newPaidAmountBase = roundUpToCurrency(paymentLines.sumOf { it.baseAmount })
+            val newBalanceDueBase = roundUpToCurrency((total - newPaidAmountBase).coerceAtLeast(0.0))
+            val newChangeDueBase = roundUpToCurrency((newPaidAmountBase - total).coerceAtLeast(0.0))
             return copy(
                 paidAmountBase = newPaidAmountBase,
                 balanceDueBase = newBalanceDueBase,

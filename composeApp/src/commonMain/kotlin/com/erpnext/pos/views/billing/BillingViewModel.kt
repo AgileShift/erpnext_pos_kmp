@@ -54,12 +54,14 @@ import com.erpnext.pos.views.salesflow.SalesFlowContext
 import com.erpnext.pos.views.salesflow.SalesFlowContextStore
 import com.erpnext.pos.views.salesflow.SalesFlowSource
 import androidx.lifecycle.viewModelScope
+import com.erpnext.pos.utils.toErpDateTime
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.update
 import kotlin.math.pow
+import kotlin.time.Clock
 
 class BillingViewModel(
     private val customersUseCase: FetchCustomersUseCase,
@@ -764,7 +766,14 @@ class BillingViewModel(
         val context = contextProvider.getContext() ?: error("El contexto POS no está inicializado.")
 
         executeUseCase(action = {
-            val totals = BillingCalculationHelper.calculateTotals(current)
+            val rawTotals = BillingCalculationHelper.calculateTotals(current)
+            val totals = rawTotals.copy(
+                subtotal = roundUpToCurrency(rawTotals.subtotal),
+                taxes = roundUpToCurrency(rawTotals.taxes),
+                discount = roundUpToCurrency(rawTotals.discount),
+                shipping = roundUpToCurrency(rawTotals.shipping),
+                total = roundUpToCurrency(rawTotals.total)
+            )
             val discountInfo = resolveDiscountInfo(current, totals.subtotal)
             val discountPercent = discountInfo.percent?.takeIf { it > 0.0 }
 
@@ -842,7 +851,8 @@ class BillingViewModel(
                     }
 
                     val allocated = paymentEntry.references.firstOrNull()?.allocatedAmount ?: 0.0
-                    remainingOutstandingRc = bd((remainingOutstandingRc - allocated).coerceAtLeast(0.0)).toDouble(2)
+                    remainingOutstandingRc =
+                        bd((remainingOutstandingRc - allocated).coerceAtLeast(0.0)).toDouble(2)
                 }
 
                 val localPayments = buildLocalPayments(invoiceId, postingDate, paymentLines)
@@ -1324,6 +1334,9 @@ class BillingViewModel(
                 sourceExchangeRate = null,
                 targetExchangeRate = null,
                 referenceNo = line.referenceNumber?.takeIf { it.isNotBlank() },
+                referenceDate = if (!line.referenceNumber.isNullOrEmpty())
+                    Clock.System.now().toEpochMilliseconds().toErpDateTime()
+                else null,
                 references = listOf(
                     PaymentEntryReferenceCreateDto(
                         referenceDoctype = "Sales Invoice",
@@ -1370,6 +1383,9 @@ class BillingViewModel(
             sourceExchangeRate = 1.0,
             targetExchangeRate = rate.toDouble(6),
             referenceNo = line.referenceNumber?.takeIf { it.isNotBlank() },
+            referenceDate = if (!line.referenceNumber.isNullOrEmpty())
+                Clock.System.now().toEpochMilliseconds().toErpDateTime()
+            else null,
             references = listOf(
                 PaymentEntryReferenceCreateDto(
                     referenceDoctype = "Sales Invoice",
@@ -1418,10 +1434,13 @@ class BillingViewModel(
         total: Double,
         paymentLines: List<PaymentLine>
     ): PaymentStatus {
-        val paidAmount = paymentLines.sumOf { it.baseAmount }
-        val outstandingAmount = (total - paidAmount).coerceAtLeast(0.0)
+        val paidAmount = roundUpToCurrency(paymentLines.sumOf { it.baseAmount })
+        val roundedTotal = roundUpToCurrency(total)
+        val outstandingAmount = roundUpToCurrency((roundedTotal - paidAmount).coerceAtLeast(0.0))
         val status =
-            if (outstandingAmount == total) "Unpaid" else if ((total - outstandingAmount) > 0.0) "Partly Paid" else "Paid"
+            if (outstandingAmount == roundedTotal) "Unpaid"
+            else if ((roundedTotal - outstandingAmount) > 0.0) "Partly Paid"
+            else "Paid"
         return PaymentStatus(paidAmount, outstandingAmount, status)
     }
 
@@ -1482,11 +1501,14 @@ class BillingViewModel(
             return "Selecciona un término de pago para finalizar una venta a crédito."
 
         // No crédito: debe pagar todo
-        if (!current.isCreditSale && current.paidAmountBase + 0.0001 < current.total)
+        val total = roundUpToCurrency(current.total)
+        val paid = roundUpToCurrency(current.paidAmountBase)
+
+        if (!current.isCreditSale && paid + 0.0001 < total)
             return "El monto pagado debe cubrir el total antes de finalizar la venta."
 
         // Crédito: puede pagar parcial, pero no exceder total
-        if (current.isCreditSale && current.paidAmountBase > current.total + 0.0001)
+        if (current.isCreditSale && paid > total + 0.0001)
             return "El pago no puede exceder el total en una venta a crédito."
 
         /*if (current.isCreditSale && current.paymentLines.isNotEmpty()) {
@@ -1501,5 +1523,5 @@ class BillingViewModel(
 }
 
 private fun PaymentLine.toBaseAmount(): PaymentLine {
-    return copy(baseAmount = enteredAmount * exchangeRate)
+    return copy(baseAmount = roundUpToCurrency(enteredAmount * exchangeRate))
 }

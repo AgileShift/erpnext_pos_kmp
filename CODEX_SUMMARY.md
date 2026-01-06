@@ -99,3 +99,4 @@
 - [x] Paginacion automatica de todos los llamados al API para enviar "Request Failed - URI Too large"
 - [x] Paginar resultados en la vistas con PagingData e investigar la forma de hacerlo dentro de los Dropdown
 - [ ] En las ordenes de venta poner opcion para reservar inventario por la cantidad de tiempo que la misma orden
+- [ ] Aplicar tema oscuro a movil y desktop, por defecto del sistema o desde Configuracion

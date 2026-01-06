@@ -33,6 +33,8 @@ data class PaymentEntryCreateDto(
     val targetExchangeRate: Double? = null,
     @SerialName("reference_no")
     val referenceNo: String? = null,
+    @SerialName("reference_date")
+    val referenceDate: String? = null,
     @SerialName("references")
     val references: List<PaymentEntryReferenceCreateDto> = emptyList(),
     @SerialName("docstatus")
