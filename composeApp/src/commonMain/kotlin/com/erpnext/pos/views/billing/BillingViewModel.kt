@@ -768,11 +768,11 @@ class BillingViewModel(
         executeUseCase(action = {
             val rawTotals = BillingCalculationHelper.calculateTotals(current)
             val totals = rawTotals.copy(
-                subtotal = roundUpToCurrency(rawTotals.subtotal),
-                taxes = roundUpToCurrency(rawTotals.taxes),
-                discount = roundUpToCurrency(rawTotals.discount),
-                shipping = roundUpToCurrency(rawTotals.shipping),
-                total = roundUpToCurrency(rawTotals.total)
+                subtotal = roundToCurrency(rawTotals.subtotal),
+                taxes = roundToCurrency(rawTotals.taxes),
+                discount = roundToCurrency(rawTotals.discount),
+                shipping = roundToCurrency(rawTotals.shipping),
+                total = roundToCurrency(rawTotals.total)
             )
             val discountInfo = resolveDiscountInfo(current, totals.subtotal)
             val discountPercent = discountInfo.percent?.takeIf { it > 0.0 }
@@ -1434,9 +1434,9 @@ class BillingViewModel(
         total: Double,
         paymentLines: List<PaymentLine>
     ): PaymentStatus {
-        val paidAmount = roundUpToCurrency(paymentLines.sumOf { it.baseAmount })
-        val roundedTotal = roundUpToCurrency(total)
-        val outstandingAmount = roundUpToCurrency((roundedTotal - paidAmount).coerceAtLeast(0.0))
+        val paidAmount = roundToCurrency(paymentLines.sumOf { it.baseAmount })
+        val roundedTotal = roundToCurrency(total)
+        val outstandingAmount = roundToCurrency((roundedTotal - paidAmount).coerceAtLeast(0.0))
         val status =
             if (outstandingAmount == roundedTotal) "Unpaid"
             else if ((roundedTotal - outstandingAmount) > 0.0) "Partly Paid"
@@ -1501,8 +1501,8 @@ class BillingViewModel(
             return "Selecciona un término de pago para finalizar una venta a crédito."
 
         // No crédito: debe pagar todo
-        val total = roundUpToCurrency(current.total)
-        val paid = roundUpToCurrency(current.paidAmountBase)
+        val total = roundToCurrency(current.total)
+        val paid = roundToCurrency(current.paidAmountBase)
 
         if (!current.isCreditSale && paid + 0.0001 < total)
             return "El monto pagado debe cubrir el total antes de finalizar la venta."
@@ -1523,5 +1523,5 @@ class BillingViewModel(
 }
 
 private fun PaymentLine.toBaseAmount(): PaymentLine {
-    return copy(baseAmount = roundUpToCurrency(enteredAmount * exchangeRate))
+    return copy(baseAmount = roundToCurrency(enteredAmount * exchangeRate))
 }

@@ -10,13 +10,13 @@ import com.erpnext.pos.domain.models.PaymentTermBO
 import com.erpnext.pos.domain.models.SourceDocumentOption
 import com.erpnext.pos.views.salesflow.SalesFlowContext
 import com.erpnext.pos.views.salesflow.SalesFlowSource
-import kotlin.math.ceil
-import kotlin.math.pow
+import com.erpnext.pos.utils.oauth.bd
+import com.erpnext.pos.utils.oauth.moneyScale
+import com.erpnext.pos.utils.oauth.toDouble
 
-fun roundUpToCurrency(value: Double, scale: Int = 2): Double {
+fun roundToCurrency(value: Double, scale: Int = 2): Double {
     if (!value.isFinite()) return value
-    val factor = 10.0.pow(scale)
-    return ceil((value * factor) - 1e-9) / factor
+    return bd(value).moneyScale(scale).toDouble(scale)
 }
 
 data class PaymentLine(
@@ -83,17 +83,17 @@ sealed interface BillingState {
         fun recalculateCartTotals(): Success {
             val totals = BillingCalculationHelper.calculateTotals(this)
             return copy(
-                subtotal = roundUpToCurrency(totals.subtotal),
-                taxes = roundUpToCurrency(totals.taxes),
-                discount = roundUpToCurrency(totals.discount),
-                total = roundUpToCurrency(totals.total)
+                subtotal = roundToCurrency(totals.subtotal),
+                taxes = roundToCurrency(totals.taxes),
+                discount = roundToCurrency(totals.discount),
+                total = roundToCurrency(totals.total)
             ).recalculatePaymentTotals()
         }
 
         fun recalculatePaymentTotals(): Success {
-            val newPaidAmountBase = roundUpToCurrency(paymentLines.sumOf { it.baseAmount })
-            val newBalanceDueBase = roundUpToCurrency((total - newPaidAmountBase).coerceAtLeast(0.0))
-            val newChangeDueBase = roundUpToCurrency((newPaidAmountBase - total).coerceAtLeast(0.0))
+            val newPaidAmountBase = roundToCurrency(paymentLines.sumOf { it.baseAmount })
+            val newBalanceDueBase = roundToCurrency((total - newPaidAmountBase).coerceAtLeast(0.0))
+            val newChangeDueBase = roundToCurrency((newPaidAmountBase - total).coerceAtLeast(0.0))
             return copy(
                 paidAmountBase = newPaidAmountBase,
                 balanceDueBase = newBalanceDueBase,
