@@ -1,4 +1,3 @@
-import com.android.build.api.dsl.androidLibrary
 import org.jetbrains.kotlin.gradle.ExperimentalKotlinGradlePluginApi
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import com.codingfeline.buildkonfig.compiler.FieldSpec.Type.STRING
@@ -22,7 +21,7 @@ compose.desktop {
 }
 plugins {
     alias(libs.plugins.kotlinMultiplatform)
-    alias(libs.plugins.androidApplication)
+    alias(libs.plugins.kmpLibrary)
     alias(libs.plugins.composeMultiplatform)
     alias(libs.plugins.composeCompiler)
     alias(libs.plugins.composeHotReload)
@@ -31,11 +30,18 @@ plugins {
     alias(libs.plugins.androidx.room)
     alias(libs.plugins.build.konfig)
     alias(libs.plugins.sqlDelight)
-    alias(libs.plugins.google.services)
 }
 
 kotlin {
-    androidTarget {
+    compilerOptions {
+        freeCompilerArgs.add("-Xexpect-actual-classes")
+    }
+
+    androidLibrary {
+        namespace = "com.erpnext.pos.shared"
+        compileSdk = libs.versions.android.compileSdk.get().toInt()
+        minSdk = libs.versions.android.minSdk.get().toInt()
+
         @OptIn(ExperimentalKotlinGradlePluginApi::class)
         compilerOptions {
             jvmTarget.set(JvmTarget.JVM_11)
@@ -48,14 +54,6 @@ kotlin {
         iosTarget.binaries.framework {
             baseName = "ComposeApp"
             isStatic = true
-        }
-    }
-
-    sqldelight {
-        databases {
-            create("ERPNextPos") {
-                packageName = "com.erpnext.pos"
-            }
         }
     }
 
@@ -113,10 +111,6 @@ kotlin {
             implementation(libs.kotlin.test)
         }
         androidMain.dependencies {
-            // Firebase
-            implementation(libs.firebase.analytics)
-            implementation(project.dependencies.platform(libs.firebase.bom))
-
             implementation(libs.sqldelight.android)
             implementation(compose.preview)
             implementation(libs.androidx.activity.compose)
@@ -153,6 +147,19 @@ kotlin {
     sourceSets.commonMain {
         kotlin.srcDir("build/generated/ksp/metadata")
     }
+}
+
+sqldelight {
+    databases {
+        create("ERPNextPos") {
+            packageName = "com.erpnext.pos"
+        }
+    }
+}
+
+dependencies {
+    add("kspAndroid", libs.androidx.room.compiler)
+    add("kspDesktop", libs.androidx.room.compiler)
 }
 
 buildkonfig {
@@ -198,33 +205,6 @@ buildkonfig {
     }
 }
 
-android {
-    namespace = "com.erpnext.pos"
-    compileSdk = libs.versions.android.compileSdk.get().toInt()
-
-    defaultConfig {
-        applicationId = "com.erpnext.pos"
-        minSdk = libs.versions.android.minSdk.get().toInt()
-        targetSdk = libs.versions.android.targetSdk.get().toInt()
-        versionCode = 1
-        versionName = "1.0"
-    }
-    packaging {
-        resources {
-            excludes += "/META-INF/{AL2.0,LGPL2.1}"
-        }
-    }
-    buildTypes {
-        getByName("release") {
-            isMinifyEnabled = false
-        }
-    }
-    compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_11
-        targetCompatibility = JavaVersion.VERSION_11
-    }
-}
-
 room {
     schemaDirectory("$projectDir/schemas")
 }
@@ -238,10 +218,13 @@ compose.desktop {
             packageName = "com.erpnext.pos"
             packageVersion = "1.0.0"
         }
-    }
-    dependencies {
-        debugImplementation(compose.uiTooling)
 
-        ksp(libs.androidx.room.compiler)
+        buildTypes {
+            release {
+                proguard {
+                    configurationFiles.from(file("proguard-desktop.pro"))
+                }
+            }
+        }
     }
 }
