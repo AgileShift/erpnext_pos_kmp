@@ -47,6 +47,8 @@ sqldelight = "2.2.1"
 coil3 = "3.3.0"
 workRuntimeKtx = "2.11.0"
 
+androidGradlePlugin = "8.13.2"
+
 [libraries]
 bignum = { module = "com.ionspin.kotlin:bignum", version.ref = "bignum" }
 firebase-bom = { group = "com.google.firebase", name = "firebase-bom", version.ref = "firebase-bom" }
@@ -129,6 +131,7 @@ androidx-work-runtime-ktx = { group = "androidx.work", name = "work-runtime-ktx"
 [plugins]
 google-services = { id = "com.google.gms.google-services", version.ref = "google-services" }
 sqlDelight = { id = "app.cash.sqldelight", version.ref = "sqldelight" }
+kmpApplication = { id = "com.android.kotlin.multiplatform.library", version.ref = "androidGradlePlugin" }
 kotlinMultiplatform = { id = "org.jetbrains.kotlin.multiplatform", version.ref = "kotlin" }
 ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }
 kotlinSerialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
