@@ -15,6 +15,7 @@ import com.erpnext.pos.remoteSource.sdk.Filter
 import com.erpnext.pos.remoteSource.sdk.Operator
 import com.erpnext.pos.remoteSource.sdk.v2.ERPDocType
 import com.erpnext.pos.views.salesflow.SalesFlowSource
+import com.erpnext.pos.utils.RepoTrace
 
 //TODO: Esto deberia de seguir el patron actual de la app, LocalSource y RemoteSource, ellos consumen la API y el repositorio a los source
 class SourceDocumentRepository(
@@ -24,6 +25,7 @@ class SourceDocumentRepository(
         customerId: String,
         sourceType: SalesFlowSource
     ): List<SourceDocumentOption> {
+        RepoTrace.breadcrumb("SourceDocumentRepositoryV2", "fetchDocumentsForCustomer", "$sourceType:$customerId")
         return when (sourceType) {
             SalesFlowSource.Quotation -> {
                 val rows = api.list<QuotationListDto>(
@@ -212,16 +214,19 @@ class SourceDocumentRepository(
     }
 
     private suspend fun fetchQuotationDetails(ids: List<String>): List<QuotationDetailDto> {
+        RepoTrace.breadcrumb("SourceDocumentRepositoryV2", "fetchQuotationDetails", "count=${ids.size}")
         if (ids.isEmpty()) return emptyList()
         return api.getDocsInBatches(ERPDocType.Quotation, ids)
     }
 
     private suspend fun fetchSalesOrderDetails(ids: List<String>): List<SalesOrderDetailDto> {
+        RepoTrace.breadcrumb("SourceDocumentRepositoryV2", "fetchSalesOrderDetails", "count=${ids.size}")
         if (ids.isEmpty()) return emptyList()
         return api.getDocsInBatches(ERPDocType.SalesOrder, ids)
     }
 
     private suspend fun fetchDeliveryNoteDetails(ids: List<String>): List<DeliveryNoteDetailDto> {
+        RepoTrace.breadcrumb("SourceDocumentRepositoryV2", "fetchDeliveryNoteDetails", "count=${ids.size}")
         if (ids.isEmpty()) return emptyList()
         return api.getDocsInBatches(ERPDocType.DeliveryNote, ids)
     }

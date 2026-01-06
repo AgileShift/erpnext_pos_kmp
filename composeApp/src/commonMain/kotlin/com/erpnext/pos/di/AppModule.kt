@@ -58,6 +58,7 @@ import com.erpnext.pos.remoteSource.datasources.POSProfileRemoteSource
 import com.erpnext.pos.remoteSource.datasources.SalesInvoiceRemoteSource
 import com.erpnext.pos.remoteSource.datasources.UserRemoteSource
 import com.erpnext.pos.sync.SyncManager
+import com.erpnext.pos.utils.prefsPath
 import com.erpnext.pos.utils.view.SnackbarController
 import com.erpnext.pos.views.CashBoxManager
 import com.erpnext.pos.views.billing.BillingViewModel
@@ -130,7 +131,7 @@ val appModule = module {
     single { NavigationManager(get()) }
     single {
         PreferenceDataStoreFactory.createWithPath {
-            "./prefs.preferences_pb".toPath()
+            prefsPath().toPath()
         }
     }
     single { ExchangeRatePreferences(get()) }

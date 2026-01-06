@@ -86,7 +86,7 @@
 - [ ] Terminar las vistas con los flujos e informacion real para Quotation, Delivery Note, Sales Order 
 - [ ] Unir las ventas y pagos para enviar el POS Closing Entry
 - [ ] Crear la pantalla de conciliacion
-- [ ] Validar los pagos en efectivo, fallo, guarda la factura pero no envia los Payment Entry
+- [x] Validar los pagos en efectivo, fallo, guarda la factura pero no envia los Payment Entry
 - [ ] Tenemos que guardar el debit_to de las facturas, para cuando apliquemos un pago no tengamos que ir a remoto a buscarlo
 - [ ] La barra superior del Home me gustaria que fuera fija para cualquier pantalla en la que estemos
 - [ ] Dejo de aparecer el credito disponible de los clientes

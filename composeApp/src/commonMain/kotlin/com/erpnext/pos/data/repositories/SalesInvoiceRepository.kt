@@ -16,6 +16,7 @@ import com.erpnext.pos.remoteSource.dto.SalesInvoiceDto
 import com.erpnext.pos.remoteSource.mapper.toDto
 import com.erpnext.pos.remoteSource.mapper.toEntities
 import com.erpnext.pos.sync.SyncTTL
+import com.erpnext.pos.utils.RepoTrace
 import com.erpnext.pos.views.CashBoxManager
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
@@ -28,6 +29,7 @@ class SalesInvoiceRepository(
     private val context: CashBoxManager
 ) : ISaleInvoiceRepository {
     override suspend fun getPendingInvoices(info: PendingInvoiceInput): Flow<PagingData<SalesInvoiceBO>> {
+        RepoTrace.breadcrumb("SalesInvoiceRepository", "getPendingInvoices")
         val pos = context.requireContext().profileName
         return remoteSource.getAllInvoices(pos, info.query, info.date).toPagingBO()
     }
@@ -55,6 +57,7 @@ class SalesInvoiceRepository(
         items: List<SalesInvoiceItemEntity>,
         payments: List<POSInvoicePaymentEntity>
     ) {
+        RepoTrace.breadcrumb("SalesInvoiceRepository", "saveInvoiceLocally", invoice.invoiceName)
         localSource.saveInvoiceLocally(invoice, items, payments)
         localSource.refreshCustomerSummary(invoice.customer)
     }
@@ -65,6 +68,7 @@ class SalesInvoiceRepository(
         invoice: SalesInvoiceEntity,
         payments: List<POSInvoicePaymentEntity>
     ) {
+        RepoTrace.breadcrumb("SalesInvoiceRepository", "applyLocalPayment", invoice.invoiceName)
         val invoiceId = requireNotNull(invoice.invoiceName) {
             "Invoice name is required to apply payments."
         }
@@ -129,19 +133,22 @@ class SalesInvoiceRepository(
     }
 
     override suspend fun syncPendingInvoices() {
+        RepoTrace.breadcrumb("SalesInvoiceRepository", "syncPendingInvoices")
         val pending = getPendingSyncInvoices()
         pending.forEach { invoice ->
             try {
                 val dto = invoice.toDto()
                 createRemoteInvoice(dto)
                 markAsSynced(invoice.invoice.invoiceName ?: "")
-            } catch (_: Exception) {
+            } catch (e: Exception) {
+                RepoTrace.capture("SalesInvoiceRepository", "syncPendingInvoices", e)
                 markAsFailed(invoice.invoice.invoiceName ?: "")
             }
         }
     }
 
     override suspend fun sync(): Flow<Resource<List<SalesInvoiceBO>>> {
+        RepoTrace.breadcrumb("SalesInvoiceRepository", "sync")
         return networkBoundResource(
             query = { flowOf(localSource.getAllLocalInvoices().toBO()) },
             fetch = { remoteSource.fetchInvoices(context.requireContext().profileName) },
@@ -154,7 +161,10 @@ class SalesInvoiceRepository(
                     localSource.saveInvoiceLocally(it.invoice, it.items, it.payments)
                 }
             },
-            onFetchFailed = { e -> e.printStackTrace() }
+            onFetchFailed = { e ->
+                RepoTrace.capture("SalesInvoiceRepository", "sync", e)
+                e.printStackTrace()
+            }
         )
     }
 

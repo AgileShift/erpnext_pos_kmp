@@ -7,6 +7,7 @@ import com.erpnext.pos.localSource.dao.v2.SyncStatusDao
 import com.erpnext.pos.localSource.entities.v2.SyncStateEntity
 import com.erpnext.pos.remoteSource.dto.v2.SyncDocTypeStateSnapshot
 import com.erpnext.pos.remoteSource.dto.v2.SyncStatusSnapshot
+import com.erpnext.pos.utils.RepoTrace
 import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
 
@@ -20,6 +21,7 @@ class SyncRepository(
         instanceId: String,
         companyId: String
     ): SyncStatusSnapshot {
+        RepoTrace.breadcrumb("SyncRepositoryV2", "getOrCreate")
 
         val states = syncDao.getAll(instanceId, companyId).ifEmpty {
             ensureDocTypeState(instanceId, companyId, SyncDocType.SALES_INVOICE.value)
@@ -41,6 +43,7 @@ class SyncRepository(
         docType: String,
         inProgress: Boolean
     ) {
+        RepoTrace.breadcrumb("SyncRepositoryV2", "setInProgress", "$docType=$inProgress")
         ensureDocTypeState(instanceId, companyId, docType)
         syncDao.setInProgress(instanceId, companyId, docType, inProgress)
     }
@@ -52,6 +55,7 @@ class SyncRepository(
         docType: String,
         lastFullSyncAt: Long? = null
     ) {
+        RepoTrace.breadcrumb("SyncRepositoryV2", "refreshCounters", docType)
         ensureDocTypeState(instanceId, companyId, docType)
         val (pending, failed) = if (docType == SyncDocType.SALES_INVOICE.value) {
             invoiceDao.countPendingInvoices(instanceId, companyId) to
@@ -71,6 +75,7 @@ class SyncRepository(
 
     @OptIn(ExperimentalTime::class)
     suspend fun markPullSuccess(instanceId: String, companyId: String, docType: String) {
+        RepoTrace.breadcrumb("SyncRepositoryV2", "markPullSuccess", docType)
         ensureDocTypeState(instanceId, companyId, docType)
         syncDao.updatePullState(
             instanceId,
@@ -89,6 +94,7 @@ class SyncRepository(
 
     @OptIn(ExperimentalTime::class)
     suspend fun markPushSuccess(instanceId: String, companyId: String, docType: String) {
+        RepoTrace.breadcrumb("SyncRepositoryV2", "markPushSuccess", docType)
         ensureDocTypeState(instanceId, companyId, docType)
         syncDao.updatePushState(
             instanceId,
@@ -105,6 +111,7 @@ class SyncRepository(
         docType: String,
         error: Throwable
     ) {
+        RepoTrace.capture("SyncRepositoryV2", "markFailure:$docType", error)
         ensureDocTypeState(instanceId, companyId, docType)
         syncDao.updatePushState(
             instanceId,

@@ -16,6 +16,7 @@ import com.erpnext.pos.localSource.entities.ItemEntity
 import com.erpnext.pos.remoteSource.datasources.InventoryRemoteSource
 import com.erpnext.pos.remoteSource.mapper.toEntity
 import com.erpnext.pos.sync.SyncTTL
+import com.erpnext.pos.utils.RepoTrace
 import com.erpnext.pos.views.CashBoxManager
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
@@ -56,6 +57,7 @@ class InventoryRepository(
     }
 
     suspend fun getItems(query: String?): Flow<List<ItemBO>> {
+        RepoTrace.breadcrumb("InventoryRepository", "getItems", "query=$query")
         val context = context.requireContext()
         return networkBoundResource(
             query = {
@@ -71,7 +73,7 @@ class InventoryRepository(
                 )
             },
             saveFetchResult = { localSource.insertAll(it.toEntity()) },
-            onFetchFailed = { },
+            onFetchFailed = { RepoTrace.capture("InventoryRepository", "getItems", it) },
             shouldFetch = { localData ->
                 localData.isEmpty() ||
                         SyncTTL.isExpired(localData.maxOf { it.lastSyncedAt?.toDouble() ?: 0.0 }
@@ -83,6 +85,7 @@ class InventoryRepository(
     }
 
     override suspend fun getItemsPaged(query: String?): Flow<PagingData<ItemBO>> {
+        RepoTrace.breadcrumb("InventoryRepository", "getItemsPaged", "query=$query")
         val context = context.requireContext()
         val items: Flow<PagingData<ItemBO>> = networkBoundResourcePaged(
             query = {
@@ -122,11 +125,13 @@ class InventoryRepository(
         },
         shouldFetch = { cached -> cached.isEmpty() },
         onFetchFailed = { e ->
+            RepoTrace.capture("InventoryRepository", "getCategories", e)
             print("Fallo la sincronizacion de categorias -> ${e.message}")
         }
     )
 
     override suspend fun sync(): Flow<Resource<List<ItemBO>>> {
+        RepoTrace.breadcrumb("InventoryRepository", "sync")
         val context = context.requireContext()
         return networkBoundResource(
             query = { flowOf(localSource.getAll().toBO()) },
@@ -142,6 +147,7 @@ class InventoryRepository(
                 /*val first = localSource.getOldestItem()
                 first == null || SyncTTL.isExpired(first.lastSyncedAt)*/
             },
+            onFetchFailed = { RepoTrace.capture("InventoryRepository", "sync", it) }
         )
     }
 }

@@ -17,6 +17,7 @@ import com.erpnext.pos.remoteSource.dto.v2.QuotationTaxCreateDto
 import com.erpnext.pos.remoteSource.mapper.v2.toEntity
 import com.erpnext.pos.remoteSource.sdk.v2.ERPDocType
 import com.erpnext.pos.remoteSource.sdk.v2.IncrementalSyncFilters
+import com.erpnext.pos.utils.RepoTrace
 import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
 
@@ -32,6 +33,7 @@ class QuotationRepository(
     }
 
     suspend fun pull(ctx: SyncContext): Boolean {
+        RepoTrace.breadcrumb("QuotationRepositoryV2", "pull")
         val quotations = api.list<QuotationSnapshot>(
             doctype = ERPDocType.Quotation,
             filters = IncrementalSyncFilters.quotation(ctx)
@@ -89,6 +91,7 @@ class QuotationRepository(
     }
 
     suspend fun pushPending(ctx: SyncContext): List<PendingSync<QuotationCreateDto>> {
+        RepoTrace.breadcrumb("QuotationRepositoryV2", "pushPending")
         return buildPendingCreatePayloads(ctx.instanceId, ctx.companyId)
     }
 
@@ -98,6 +101,7 @@ class QuotationRepository(
         taxes: List<QuotationTaxEntity>,
         customerLinks: List<QuotationCustomerLinkEntity>
     ) {
+        RepoTrace.breadcrumb("QuotationRepositoryV2", "insertQuotationWithDetails")
         quotationDao.insertQuotationWithDetails(quotation, items, taxes, customerLinks)
     }
 

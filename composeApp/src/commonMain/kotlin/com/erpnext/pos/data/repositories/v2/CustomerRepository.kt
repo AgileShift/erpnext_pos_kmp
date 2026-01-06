@@ -21,6 +21,7 @@ import com.erpnext.pos.remoteSource.mapper.v2.CustomerMappedEntities
 import com.erpnext.pos.remoteSource.mapper.v2.toEntities
 import com.erpnext.pos.remoteSource.sdk.v2.ERPDocType
 import com.erpnext.pos.remoteSource.sdk.v2.IncrementalSyncFilters
+import com.erpnext.pos.utils.RepoTrace
 
 class CustomerRepository(
     private val customerDao: CustomerDao,
@@ -33,6 +34,7 @@ class CustomerRepository(
 ) : ICustomerRepository {
 
     suspend fun pull(ctx: SyncContext): Boolean {
+        RepoTrace.breadcrumb("CustomerRepositoryV2", "pull")
         val customers = api.list<CustomerDto>(
             doctype = ERPDocType.Customer,
             filters = IncrementalSyncFilters.customer(ctx)
@@ -56,6 +58,7 @@ class CustomerRepository(
 
     @OptIn(ExperimentalTime::class)
     suspend fun pushPending(ctx: SyncContext): List<PendingSync<CustomerCreateDto>> {
+        RepoTrace.breadcrumb("CustomerRepositoryV2", "pushPending")
         resolvePendingDuplicates(ctx.instanceId, ctx.companyId)
         return buildPendingCreatePayloads(ctx.instanceId, ctx.companyId)
     }
@@ -85,6 +88,7 @@ class CustomerRepository(
         contacts: List<CustomerContactEntity>,
         addresses: List<CustomerAddressEntity>
     ) {
+        RepoTrace.breadcrumb("CustomerRepositoryV2", "insertCustomerWithDetails")
         customerDao.insertCustomerWithDetails(customer, contacts, addresses)
     }
 

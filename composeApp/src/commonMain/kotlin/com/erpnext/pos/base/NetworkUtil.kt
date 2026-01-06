@@ -8,6 +8,7 @@ import androidx.paging.PagingData
 import androidx.paging.PagingSource
 import androidx.paging.PagingState
 import androidx.paging.RemoteMediator
+import com.erpnext.pos.utils.AppSentry
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.emitAll
@@ -47,6 +48,7 @@ inline fun <ResultType, RequestType> networkBoundResource(
             query().map { Resource.Success(it) }
         } catch (throwable: Throwable) {
             onFetchFailed(throwable)
+            AppSentry.capture(throwable, "networkBoundResource fetch failed")
             localFlow.map { Resource.Error(throwable.message ?: "Error de red", it) }
         }
     }
@@ -98,6 +100,7 @@ fun <T : Any, V : Any> networkBoundResourcePaged(
         }
     }.catch { e ->
         print("Error en flujo de Paging: ${e.message}")
+        AppSentry.capture(e, "networkBoundResourcePaged flow failed")
     }
 }
 
@@ -117,6 +120,7 @@ suspend fun <V : Any> refreshNetworkBoundPaged(
         if (remoteData.isNotEmpty()) saveFetchResult(remoteData)
     } catch (e: Exception) {
         print("Error en refresh manual de NetworkBoundResourcePaged: ${e.message}")
+        AppSentry.capture(e, "refreshNetworkBoundPaged failed")
         throw e
     }
 }

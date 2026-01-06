@@ -12,6 +12,7 @@ import com.erpnext.pos.remoteSource.dto.v2.PaymentEntrySnapshot
 import com.erpnext.pos.remoteSource.mapper.v2.toEntity
 import com.erpnext.pos.remoteSource.sdk.v2.ERPDocType
 import com.erpnext.pos.remoteSource.sdk.v2.IncrementalSyncFilters
+import com.erpnext.pos.utils.RepoTrace
 import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
 
@@ -22,23 +23,30 @@ class PaymentEntryRepository(
 ) {
 
     suspend fun pull(ctx: SyncContext): Boolean {
-        val entries = api.list<PaymentEntrySnapshot>(
-            doctype = ERPDocType.PaymentEntry,
-            filters = IncrementalSyncFilters.paymentEntry(ctx)
-        )
-        if (entries.isEmpty()) return false
-        val entities = entries.map { it.toEntity(ctx.instanceId, ctx.companyId) }
-        val referenceEntities = entries.flatMap { snapshot ->
-            snapshot.references.map { it.toEntity(ctx.instanceId, ctx.companyId) }
+        RepoTrace.breadcrumb("PaymentEntryRepositoryV2", "pull")
+        try {
+            val entries = api.list<PaymentEntrySnapshot>(
+                doctype = ERPDocType.PaymentEntry,
+                filters = IncrementalSyncFilters.paymentEntry(ctx)
+            )
+            if (entries.isEmpty()) return false
+            val entities = entries.map { it.toEntity(ctx.instanceId, ctx.companyId) }
+            val referenceEntities = entries.flatMap { snapshot ->
+                snapshot.references.map { it.toEntity(ctx.instanceId, ctx.companyId) }
+            }
+            paymentEntryDao.upsertPaymentEntries(entities)
+            if (referenceEntities.isNotEmpty()) {
+                paymentEntryDao.upsertReferences(referenceEntities)
+            }
+            return true
+        } catch (e: Exception) {
+            RepoTrace.capture("PaymentEntryRepositoryV2", "pull", e)
+            throw e
         }
-        paymentEntryDao.upsertPaymentEntries(entities)
-        if (referenceEntities.isNotEmpty()) {
-            paymentEntryDao.upsertReferences(referenceEntities)
-        }
-        return true
     }
 
     suspend fun pushPending(ctx: SyncContext): List<PendingSync<PaymentEntryCreateDto>> {
+        RepoTrace.breadcrumb("PaymentEntryRepositoryV2", "pushPending")
         return buildPendingCreatePayloads(ctx.instanceId, ctx.companyId)
     }
 
@@ -46,13 +54,16 @@ class PaymentEntryRepository(
         entry: PaymentEntryEntity,
         references: List<PaymentEntryReferenceEntity>
     ) {
+        RepoTrace.breadcrumb("PaymentEntryRepositoryV2", "insertPaymentEntryWithReferences")
         paymentEntryDao.insertPaymentEntryWithReferences(entry, references)
     }
 
     suspend fun getPendingPaymentEntriesWithReferences(
         instanceId: String,
         companyId: String
-    ) = paymentEntryDao.getPendingPaymentEntriesWithReferences(instanceId, companyId)
+    ) = paymentEntryDao.getPendingPaymentEntriesWithReferences(instanceId, companyId).also {
+        RepoTrace.breadcrumb("PaymentEntryRepositoryV2", "getPendingPaymentEntriesWithReferences")
+    }
 
     @OptIn(ExperimentalTime::class)
     suspend fun markSynced(
@@ -62,6 +73,7 @@ class PaymentEntryRepository(
         remoteName: String?,
         remoteModified: String?
     ) {
+        RepoTrace.breadcrumb("PaymentEntryRepositoryV2", "markSynced", paymentEntryId)
         val now = Clock.System.now().epochSeconds
         paymentEntryDao.updateSyncStatus(
             instanceId,
@@ -79,6 +91,7 @@ class PaymentEntryRepository(
         companyId: String,
         paymentEntryId: String
     ) {
+        RepoTrace.breadcrumb("PaymentEntryRepositoryV2", "markFailed", paymentEntryId)
         val now = Clock.System.now().epochSeconds
         paymentEntryDao.updateSyncStatus(
             instanceId,
@@ -94,6 +107,7 @@ class PaymentEntryRepository(
         instanceId: String,
         companyId: String
     ): List<PendingSync<PaymentEntryCreateDto>> {
+        RepoTrace.breadcrumb("PaymentEntryRepositoryV2", "buildPendingCreatePayloads")
         return paymentEntryDao.getPendingPaymentEntriesWithReferences(instanceId, companyId).map { snapshot ->
             val partyId = if (snapshot.paymentEntry.partyType == "Customer") {
                 customerRepository.resolveRemoteCustomerId(

@@ -11,10 +11,25 @@ try {
 } catch (e: Exception) {
     e.printStackTrace()
 }
+val sentryDsn = properties["SENTRY_DSN"]?.toString()?.replace("\"", "") ?: ""
+val sentryEnv = properties["buildkonfig.flavor"]?.toString() ?: "staging"
 
 compose.desktop {
     application {
         nativeDistributions {
+            packageName = "ERP POS"
+            packageVersion = "1.0.0"
+
+            windows {
+                iconFile.set(project.file("src/desktopMain/resources/icon.ico"))
+            }
+            macOS {
+                iconFile.set(project.file("src/desktopMain/resources/icon.icns"))
+            }
+            linux {
+                iconFile.set(project.file("src/desktopMain/resources/icon.png"))
+            }
+
             targetFormats(TargetFormat.Exe, TargetFormat.Msi, TargetFormat.Dmg)
         }
     }
@@ -30,6 +45,18 @@ plugins {
     alias(libs.plugins.androidx.room)
     alias(libs.plugins.build.konfig)
     alias(libs.plugins.sqlDelight)
+    alias(libs.plugins.sentry)
+}
+
+sentry {
+    // Generates a JVM (Java, Kotlin, etc.) source bundle and uploads your source code to Sentry.
+    // This enables source context, allowing you to see your source
+    // code as part of your stack traces in Sentry.
+    includeSourceContext = true
+
+    org = "herrold-real"
+    projectName = "kotlin"
+    authToken = System.getenv("SENTRY_AUTH_TOKEN") ?: properties["SENTRY_AUTH_TOKEN"]?.toString()
 }
 
 kotlin {
@@ -121,6 +148,7 @@ kotlin {
             implementation(libs.koin.android)
             implementation(libs.ktor.client.okhttp)
             implementation(libs.kotlinx.coroutines.android)
+            implementation(libs.sentry.android)
 
             implementation(libs.security.crypto)
             implementation(libs.android.tink)
@@ -133,6 +161,7 @@ kotlin {
             implementation(libs.ktor.client.cio)
             implementation(libs.kotlinx.coroutines.swing)
             implementation(libs.sqldelight.jvm)
+            implementation(libs.sentry.jvm)
 
             implementation(libs.java.keyring)
             implementation(libs.logback.classic)
@@ -190,6 +219,8 @@ buildkonfig {
             "DESKTOP_CLIENT_SECRET",
             properties["DESKTOP_CLIENT_SECRET"].toString().replace("\"", "")
         )
+        buildConfigField(STRING, "SENTRY_DSN", sentryDsn)
+        buildConfigField(STRING, "SENTRY_ENV", sentryEnv)
 
     }
 
@@ -202,6 +233,8 @@ buildkonfig {
         buildConfigField(
             STRING, "REDIRECT_URI", properties["REDIRECT_URL"].toString().replace("\"", "")
         )
+        buildConfigField(STRING, "SENTRY_DSN", sentryDsn)
+        buildConfigField(STRING, "SENTRY_ENV", sentryEnv)
     }
 }
 
@@ -217,12 +250,15 @@ compose.desktop {
             targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb)
             packageName = "com.erpnext.pos"
             packageVersion = "1.0.0"
+            modules("jdk.httpserver")
         }
 
         buildTypes {
             release {
                 proguard {
                     configurationFiles.from(file("proguard-desktop.pro"))
+                    obfuscate.set(false)
+                    optimize.set(false)
                 }
             }
         }

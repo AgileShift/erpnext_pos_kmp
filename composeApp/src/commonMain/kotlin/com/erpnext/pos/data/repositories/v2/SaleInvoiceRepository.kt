@@ -14,6 +14,7 @@ import com.erpnext.pos.remoteSource.mapper.v2.toEntity
 import com.erpnext.pos.remoteSource.sdk.v2.ERPDocType
 import com.erpnext.pos.remoteSource.sdk.v2.IncrementalSyncFilters
 import com.erpnext.pos.remoteSource.sdk.v2.getFields
+import com.erpnext.pos.utils.RepoTrace
 import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
 
@@ -26,6 +27,7 @@ class SalesInvoiceRepository(
 
     @OptIn(ExperimentalTime::class)
     suspend fun syncOutbox(ctx: SyncContext): Boolean {
+        RepoTrace.breadcrumb("SalesInvoiceRepositoryV2", "syncOutbox")
         val pending = local.getPendingOutbox(ctx.instanceId, ctx.companyId)
         if (pending.isEmpty()) return false
 
@@ -67,6 +69,7 @@ class SalesInvoiceRepository(
     }
 
     suspend fun pullInvoices(ctx: SyncContext): Boolean {
+        RepoTrace.breadcrumb("SalesInvoiceRepositoryV2", "pullInvoices")
         val invoices = api.list<SalesInvoiceSnapshot>(
             doctype = ERPDocType.SalesInvoice,
             fields = ERPDocType.SalesInvoice.getFields() + "modified",
@@ -82,6 +85,7 @@ class SalesInvoiceRepository(
         items: List<SalesInvoiceItemEntity>,
         payments: List<SalesInvoicePaymentEntity>
     ) {
+        RepoTrace.breadcrumb("SalesInvoiceRepositoryV2", "insertInvoiceWithItemsAndPayments")
         dao.insertInvoiceWithItemsAndPayments(invoice, items, payments)
     }
 
@@ -89,6 +93,7 @@ class SalesInvoiceRepository(
         instanceId: String,
         companyId: String
     ): List<SalesInvoiceWithItemsAndPayments> {
+        RepoTrace.breadcrumb("SalesInvoiceRepositoryV2", "getPendingInvoices")
         return dao.getPendingInvoicesWithDetails(instanceId, companyId)
     }
 

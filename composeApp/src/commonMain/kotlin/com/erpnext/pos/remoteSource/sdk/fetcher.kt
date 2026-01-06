@@ -5,6 +5,8 @@ import io.ktor.client.request.*
 import io.ktor.client.statement.*
 import io.ktor.http.*
 import kotlinx.serialization.json.*
+import com.erpnext.pos.utils.AppLogger
+import com.erpnext.pos.utils.AppSentry
 
 // -----------------------------
 // Configuración JSON global
@@ -12,6 +14,11 @@ import kotlinx.serialization.json.*
 val json = Json {
     ignoreUnknownKeys = true
     encodeDefaults = true
+}
+
+fun captureFetchError(context: String, throwable: Throwable) {
+    AppSentry.capture(throwable, context)
+    AppLogger.warn(context, throwable)
 }
 
 // -----------------------------
@@ -32,61 +39,66 @@ suspend inline fun <reified T> HttpClient.getERPList(
 
     val endpoint = baseUrl.trimEnd('/') + "/api/resource/${encodeURIComponent(doctype)}"
 
-    val response: HttpResponse = this.get {
-        url {
-            takeFrom(endpoint)
-            limit?.let { parameters.append("limit_page_length", it.toString()) }
-            offset?.let { parameters.append("limit_start", it.toString()) }
-
-            if (fields.isNotEmpty()) {
-                // JSON array como string: ["item_code","item_name"]
-                parameters.append("fields", json.encodeToString(fields))
-            }
-
-            if (filters.isNotEmpty()) {
-                parameters.append("filters", buildFiltersJson(filters))
-            }
-
-            orderBy?.let {
-                parameters.append("order_by", it)
-                parameters.append("order_type", orderType)
-            }
-        }
-
-        // Headers opcionales (Authorization, token, etc.)
-        if (additionalHeaders.isNotEmpty()) {
-            headers {
-                additionalHeaders.forEach { (k, v) -> append(k, v) }
-            }
-        }
-
-        // Prefer JSON
-        accept(ContentType.Application.Json)
-    }
-
-    val responseBodyText = response.bodyAsText()
-    if (!response.status.isSuccess()) {
-        // Intentar parsear error de Frappe
-        try {
-            val err = json.decodeFromString<FrappeErrorResponse>(responseBodyText)
-            throw FrappeException(err.exception ?: "Error: ${response.status}", err)
-        } catch (e: Exception) {
-            throw Exception("Error en petición: ${response.status} - $responseBodyText", e)
-        }
-    }
-
-    // Parsear "data" y convertir a List<T>
     try {
-        val parsed = json.parseToJsonElement(responseBodyText).jsonObject
-        val dataElement = parsed["data"]
-            ?: throw FrappeException("La respuesta no contiene 'data'. Respuesta: $responseBodyText")
-        // reified decodeFromJsonElement
-        return json.decodeFromJsonElement(dataElement)
+        val response: HttpResponse = this.get {
+            url {
+                takeFrom(endpoint)
+                limit?.let { parameters.append("limit_page_length", it.toString()) }
+                offset?.let { parameters.append("limit_start", it.toString()) }
+
+                if (fields.isNotEmpty()) {
+                    // JSON array como string: ["item_code","item_name"]
+                    parameters.append("fields", json.encodeToString(fields))
+                }
+
+                if (filters.isNotEmpty()) {
+                    parameters.append("filters", buildFiltersJson(filters))
+                }
+
+                orderBy?.let {
+                    parameters.append("order_by", it)
+                    parameters.append("order_type", orderType)
+                }
+            }
+
+            // Headers opcionales (Authorization, token, etc.)
+            if (additionalHeaders.isNotEmpty()) {
+                headers {
+                    additionalHeaders.forEach { (k, v) -> append(k, v) }
+                }
+            }
+
+            // Prefer JSON
+            accept(ContentType.Application.Json)
+        }
+
+        val responseBodyText = response.bodyAsText()
+        if (!response.status.isSuccess()) {
+            // Intentar parsear error de Frappe
+            try {
+                val err = json.decodeFromString<FrappeErrorResponse>(responseBodyText)
+                throw FrappeException(err.exception ?: "Error: ${response.status}", err)
+            } catch (e: Exception) {
+                throw Exception("Error en petición: ${response.status} - $responseBodyText", e)
+            }
+        }
+
+        // Parsear "data" y convertir a List<T>
+        try {
+            val parsed = json.parseToJsonElement(responseBodyText).jsonObject
+            val dataElement = parsed["data"]
+                ?: throw FrappeException("La respuesta no contiene 'data'. Respuesta: $responseBodyText")
+            // reified decodeFromJsonElement
+            return json.decodeFromJsonElement(dataElement)
+        } catch (e: Exception) {
+            throw Exception(
+                "Error parseando respuesta ERPNext: ${e.message}. Body: $responseBodyText",
+                e
+            )
+        }
     } catch (e: Exception) {
-        throw Exception(
-            "Error parseando respuesta ERPNext: ${e.message}. Body: $responseBodyText",
-            e
-        )
+        captureFetchError("getERPList($doctype)", e)
+        throw e
     }
 }
 
@@ -129,38 +141,43 @@ suspend inline fun <reified T> HttpClient.getERPSingle(
 
     val endpoint = baseUrl.trimEnd('/') + "/api/resource/${encodeURIComponent(doctype)}/$name"
 
-    val response: HttpResponse = this.get {
-        url {
-            takeFrom(endpoint)
-            // Agregar campos específicos si se solicitan
-            if (fields.isNotEmpty()) {
-                parameters.append("fields", json.encodeToString(fields))
+    try {
+        val response: HttpResponse = this.get {
+            url {
+                takeFrom(endpoint)
+                // Agregar campos específicos si se solicitan
+                if (fields.isNotEmpty()) {
+                    parameters.append("fields", json.encodeToString(fields))
+                }
+            }
+
+            // Headers opcionales (Auth, Token, etc.)
+            if (additionalHeaders.isNotEmpty()) headers {
+                additionalHeaders.forEach { (k, v) -> append(k, v) }
+            }
+
+            accept(ContentType.Application.Json)
+        }
+
+        val bodyText = response.bodyAsText()
+        if (!response.status.isSuccess()) {
+            try {
+                val err = json.decodeFromString<FrappeErrorResponse>(bodyText)
+                throw FrappeException(err.exception ?: "Error: ${response.status}", err)
+            } catch (e: Exception) {
+                throw Exception("Error en petición: ${response.status} - $bodyText", e)
             }
         }
 
-        // Headers opcionales (Auth, Token, etc.)
-        if (additionalHeaders.isNotEmpty()) headers {
-            additionalHeaders.forEach { (k, v) -> append(k, v) }
-        }
+        val parsed = json.parseToJsonElement(bodyText).jsonObject
+        val dataElement = parsed["data"]
+            ?: throw FrappeException("La respuesta no contiene 'data'. Respuesta: $bodyText")
 
-        accept(ContentType.Application.Json)
+        return json.decodeFromJsonElement<T>(dataElement)
+    } catch (e: Exception) {
+        captureFetchError("getERPSingle($doctype)", e)
+        throw e
     }
-
-    val bodyText = response.bodyAsText()
-    if (!response.status.isSuccess()) {
-        try {
-            val err = json.decodeFromString<FrappeErrorResponse>(bodyText)
-            throw FrappeException(err.exception ?: "Error: ${response.status}", err)
-        } catch (e: Exception) {
-            throw Exception("Error en petición: ${response.status} - $bodyText", e)
-        }
-    }
-
-    val parsed = json.parseToJsonElement(bodyText).jsonObject
-    val dataElement = parsed["data"]
-        ?: throw FrappeException("La respuesta no contiene 'data'. Respuesta: $bodyText")
-
-    return json.decodeFromJsonElement<T>(dataElement)
 }
 
 
@@ -173,24 +190,29 @@ suspend inline fun <reified T, reified R> HttpClient.postERP(
     require(baseUrl != null && baseUrl.isNotBlank()) { "baseUrl no puede ser nulo o vacío" }
 
     val endpoint = baseUrl.trimEnd('/') + "/api/resource/${encodeURIComponent(doctype)}"
-    val bodyText = this.post {
-        url { takeFrom(endpoint) }
-        contentType(ContentType.Application.Json)
-        setBody(json.encodeToString(payload))
-        if (additionalHeaders.isNotEmpty()) headers {
-            additionalHeaders.forEach { (k, v) ->
-                append(
-                    k,
-                    v
-                )
+    try {
+        val bodyText = this.post {
+            url { takeFrom(endpoint) }
+            contentType(ContentType.Application.Json)
+            setBody(json.encodeToString(payload))
+            if (additionalHeaders.isNotEmpty()) headers {
+                additionalHeaders.forEach { (k, v) ->
+                    append(
+                        k,
+                        v
+                    )
+                }
             }
-        }
-    }.bodyAsText()
+        }.bodyAsText()
 
-    val parsed = json.parseToJsonElement(bodyText).jsonObject
-    val dataElement = parsed["data"]
-        ?: throw FrappeException("La respuesta no contiene 'data'. Respuesta: $bodyText")
-    return json.decodeFromJsonElement(dataElement)
+        val parsed = json.parseToJsonElement(bodyText).jsonObject
+        val dataElement = parsed["data"]
+            ?: throw FrappeException("La respuesta no contiene 'data'. Respuesta: $bodyText")
+        return json.decodeFromJsonElement(dataElement)
+    } catch (e: Exception) {
+        captureFetchError("postERP($doctype)", e)
+        throw e
+    }
 }
 
 suspend inline fun <reified T, reified R> HttpClient.putERP(
@@ -205,24 +227,29 @@ suspend inline fun <reified T, reified R> HttpClient.putERP(
     val endpoint = baseUrl.trimEnd('/') + "/api/resource/${encodeURIComponent(doctype)}/${
         encodeURIComponent(name)
     }"
-    val bodyText = this.put {
-        url { takeFrom(endpoint) }
-        contentType(ContentType.Application.Json)
-        setBody(json.encodeToString(payload))
-        if (additionalHeaders.isNotEmpty()) headers {
-            additionalHeaders.forEach { (k, v) ->
-                append(
-                    k,
-                    v
-                )
+    try {
+        val bodyText = this.put {
+            url { takeFrom(endpoint) }
+            contentType(ContentType.Application.Json)
+            setBody(json.encodeToString(payload))
+            if (additionalHeaders.isNotEmpty()) headers {
+                additionalHeaders.forEach { (k, v) ->
+                    append(
+                        k,
+                        v
+                    )
+                }
             }
-        }
-    }.bodyAsText()
+        }.bodyAsText()
 
-    val parsed = json.parseToJsonElement(bodyText).jsonObject
-    val dataElement = parsed["data"]
-        ?: throw FrappeException("La respuesta no contiene 'data'. Respuesta: $bodyText")
-    return json.decodeFromJsonElement(dataElement)
+        val parsed = json.parseToJsonElement(bodyText).jsonObject
+        val dataElement = parsed["data"]
+            ?: throw FrappeException("La respuesta no contiene 'data'. Respuesta: $bodyText")
+        return json.decodeFromJsonElement(dataElement)
+    } catch (e: Exception) {
+        captureFetchError("putERP($doctype)", e)
+        throw e
+    }
 }
 
 suspend fun HttpClient.deleteERP(
@@ -236,26 +263,31 @@ suspend fun HttpClient.deleteERP(
     val endpoint = baseUrl.trimEnd('/') + "/api/resource/${encodeURIComponent(doctype)}/${
         encodeURIComponent(name)
     }"
-    val response = this.delete {
-        url { takeFrom(endpoint) }
-        if (additionalHeaders.isNotEmpty()) headers {
-            additionalHeaders.forEach { (k, v) ->
-                append(
-                    k,
-                    v
-                )
+    try {
+        val response = this.delete {
+            url { takeFrom(endpoint) }
+            if (additionalHeaders.isNotEmpty()) headers {
+                additionalHeaders.forEach { (k, v) ->
+                    append(
+                        k,
+                        v
+                    )
+                }
             }
         }
-    }
 
-    if (!response.status.isSuccess()) {
-        val body = response.bodyAsText()
-        try {
-            val err = json.decodeFromString<FrappeErrorResponse>(body)
-            throw FrappeException(err.exception ?: "Error: ${response.status}", err)
-        } catch (e: Exception) {
-            throw Exception("Error en deleteERP: ${response.status} - $body", e)
+        if (!response.status.isSuccess()) {
+            val body = response.bodyAsText()
+            try {
+                val err = json.decodeFromString<FrappeErrorResponse>(body)
+                throw FrappeException(err.exception ?: "Error: ${response.status}", err)
+            } catch (e: Exception) {
+                throw Exception("Error en deleteERP: ${response.status} - $body", e)
+            }
         }
+    } catch (e: Exception) {
+        captureFetchError("deleteERP($doctype)", e)
+        throw e
     }
 }
 

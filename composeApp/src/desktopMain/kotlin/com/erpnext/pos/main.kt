@@ -8,6 +8,9 @@ import org.koin.compose.KoinApplication
 import org.koin.core.logger.Level
 
 fun main() = application {
+    DesktopLogger.init()
+    DesktopLogger.info("Desktop app started")
+    com.erpnext.pos.utils.AppSentry.init()
 
     // Default Desktop Size
     val state = rememberWindowState(

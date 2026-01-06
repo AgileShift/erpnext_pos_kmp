@@ -14,6 +14,7 @@ import com.erpnext.pos.remoteSource.dto.v2.UserDto
 import com.erpnext.pos.remoteSource.mapper.v2.toEntity
 import com.erpnext.pos.remoteSource.sdk.filters
 import com.erpnext.pos.remoteSource.sdk.v2.ERPDocType
+import com.erpnext.pos.utils.RepoTrace
 
 class ContextRepository(
     private val posContextDao: POSContextDao,
@@ -47,6 +48,7 @@ class ContextRepository(
         userId: String,
         posProfileId: String
     ): POSContextSnapshot? {
+        RepoTrace.breadcrumb("ContextRepositoryV2", "getContextSnapshot")
         val company = getCompany(instanceId, companyId) ?: return null
         val user = getUser(instanceId, companyId, userId) ?: return null
         val employee = getEmployee(instanceId, companyId, userId) ?: return null
@@ -65,6 +67,7 @@ class ContextRepository(
     }
 
     override suspend fun pullContext(input: ContextPullInput): Boolean {
+        RepoTrace.breadcrumb("ContextRepositoryV2", "pullContext")
         val company = api.list<CompanyDto>(
             doctype = ERPDocType.Company,
             filters = filters { "name" eq input.companyId }

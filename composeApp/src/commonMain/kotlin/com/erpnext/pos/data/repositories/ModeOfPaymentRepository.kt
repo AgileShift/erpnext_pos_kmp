@@ -6,6 +6,7 @@ import com.erpnext.pos.localSource.datasources.ModeOfPaymentLocalSource
 import com.erpnext.pos.localSource.entities.ModeOfPaymentEntity
 import com.erpnext.pos.remoteSource.datasources.ModeOfPaymentRemoteSource
 import com.erpnext.pos.sync.SyncTTL
+import com.erpnext.pos.utils.RepoTrace
 import com.erpnext.pos.views.CashBoxManager
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
@@ -26,10 +27,12 @@ class ModeOfPaymentRepository(
     override suspend fun sync(
         ttlHours: Int
     ): Flow<Resource<List<ModeOfPaymentEntity>>> {
+        RepoTrace.breadcrumb("ModeOfPaymentRepository", "sync", "ttl=$ttlHours")
         val company = context.requireContext().company
         return networkBoundResource(
             query = { flowOf(localSource.getAllModes(company)) },
             fetch = {
+                RepoTrace.breadcrumb("ModeOfPaymentRepository", "fetch")
                 val now = Clock.System.now().toEpochMilliseconds()
                 val activeModes = remoteSource.getActiveModes()
                 val results = mutableListOf<ModeOfPaymentEntity>()
@@ -59,7 +62,7 @@ class ModeOfPaymentRepository(
                 cached.isEmpty() ||
                     SyncTTL.isExpired(localSource.getLastSyncedAt(company), ttlHours)
             },
-            onFetchFailed = { }
+            onFetchFailed = { RepoTrace.capture("ModeOfPaymentRepository", "sync", it) }
         )
     }
 }

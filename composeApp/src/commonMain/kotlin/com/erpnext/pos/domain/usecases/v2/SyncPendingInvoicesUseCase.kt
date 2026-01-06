@@ -7,6 +7,8 @@ import com.erpnext.pos.domain.policy.CatalogInvalidationPolicy
 import com.erpnext.pos.domain.usecases.UseCase
 import com.erpnext.pos.domain.sync.SyncDocType
 import com.erpnext.pos.localSource.dao.v2.SalesInvoiceDao
+import com.erpnext.pos.utils.AppLogger
+import com.erpnext.pos.utils.AppSentry
 import kotlinx.coroutines.delay
 import kotlin.random.Random
 import kotlin.time.Clock
@@ -29,6 +31,8 @@ class SyncPendingInvoicesUseCase(
 
     override suspend fun useCaseFunction(input: SyncPendingInvoicesInput) {
         val docType = SyncDocType.SALES_INVOICE.value
+        AppSentry.breadcrumb("SyncPendingInvoicesUseCase start")
+        AppLogger.info("SyncPendingInvoicesUseCase start")
         syncRepository.setInProgress(input.instanceId, input.companyId, docType, true)
 
         try {
@@ -62,6 +66,14 @@ class SyncPendingInvoicesUseCase(
                         )
                     }
                 } else {
+                    val error = res.exceptionOrNull()
+                    if (error != null) {
+                        AppSentry.capture(error, "SyncPendingInvoicesUseCase submit failed")
+                        AppLogger.warn("SyncPendingInvoicesUseCase submit failed", error)
+                    } else {
+                        AppSentry.capture(Exception("Unknown submit failure"), "SyncPendingInvoicesUseCase submit failed")
+                        AppLogger.warn("SyncPendingInvoicesUseCase submit failed (unknown)")
+                    }
                     //TODO: Validar si es correcto el delay aca
                     val delayMs = backoff.nextDelayMs(attempt, Random.nextDouble())
                     delay(delayMs)
@@ -107,6 +119,8 @@ class SyncPendingInvoicesUseCase(
                 input.companyId,
                 docType
             ) // asegura contadores coherentes
+            AppSentry.breadcrumb("SyncPendingInvoicesUseCase finished")
+            AppLogger.info("SyncPendingInvoicesUseCase finished")
         }
     }
 }

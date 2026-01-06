@@ -67,6 +67,8 @@ import io.ktor.http.isSuccess
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.decodeFromJsonElement
 import kotlinx.serialization.json.jsonObject
+import com.erpnext.pos.utils.AppLogger
+import com.erpnext.pos.utils.AppSentry
 
 class APIService(
     private val client: HttpClient,
@@ -173,6 +175,8 @@ class APIService(
             return res
         } catch (e: Throwable) {
             e.printStackTrace()
+            AppSentry.capture(e, "exchangeCode failed")
+            AppLogger.warn("exchangeCode failed", e)
             return null
         }
     }
@@ -223,6 +227,9 @@ class APIService(
                 date?.let { parameter("date", it) }
             }
             response.body<ExchangeRateResponse>().message
+        }.onFailure { e ->
+            AppSentry.capture(e, "getExchangeRate failed")
+            AppLogger.warn("getExchangeRate failed", e)
         }.getOrNull()
     }
 
@@ -333,6 +340,8 @@ class APIService(
                 })
         } catch (e: Exception) {
             e.printStackTrace()
+            AppSentry.capture(e, "getPOSProfiles failed")
+            AppLogger.warn("getPOSProfiles failed", e)
             emptyList()
         }
     }
@@ -392,29 +401,37 @@ class APIService(
         val itemCodes = bins.map { it.itemCode }.distinct()
         if (itemCodes.isEmpty()) return emptyList()
 
-        // Fetch Items batch con fields extras
-        val items = clientOAuth.getERPList<ItemDto>(
-            doctype = ERPDocType.Item.path,
-            fields = ERPDocType.Item.getFields(),
-            limit = itemCodes.size,
-            baseUrl = url
-        ) {
-            "name" `in` itemCodes
-        }
+        // Fetch Items batch con fields extras (chunked to avoid URL length limits)
+        val items = itemCodes
+            .chunked(50)
+            .flatMap { codes ->
+                clientOAuth.getERPList<ItemDto>(
+                    doctype = ERPDocType.Item.path,
+                    fields = ERPDocType.Item.getFields(),
+                    limit = codes.size,
+                    baseUrl = url
+                ) {
+                    "name" `in` codes
+                }
+            }
 
         val itemMap = items.associateBy { it.itemCode }
 
-        // Fetch precios batch
-        val prices = clientOAuth.getERPList<ItemPriceDto>(
-            doctype = ERPDocType.ItemPrice.path,
-            fields = ERPDocType.ItemPrice.getFields(),
-            limit = itemCodes.size,
-            baseUrl = url
-        ) {
-            "item_code" `in` itemCodes
-            if (!priceList.isNullOrEmpty())
-                "price_list" eq priceList
-        }
+        // Fetch precios batch (chunked to avoid URL length limits)
+        val prices = itemCodes
+            .chunked(50)
+            .flatMap { codes ->
+                clientOAuth.getERPList<ItemPriceDto>(
+                    doctype = ERPDocType.ItemPrice.path,
+                    fields = ERPDocType.ItemPrice.getFields(),
+                    limit = codes.size,
+                    baseUrl = url
+                ) {
+                    "item_code" `in` codes
+                    if (!priceList.isNullOrEmpty())
+                        "price_list" eq priceList
+                }
+            }
 
         val priceMap = prices.associate { it.itemCode to it.priceListRate }
         val priceCurrency = prices.associate { it.itemCode to it.currency }
@@ -627,6 +644,8 @@ class APIService(
                 })
         } catch (e: Exception) {
             e.printStackTrace()
+            AppSentry.capture(e, "fetchAllInvoices failed")
+            AppLogger.warn("fetchAllInvoices failed", e)
             emptyList()
         }
     }

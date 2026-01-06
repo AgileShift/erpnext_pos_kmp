@@ -14,6 +14,7 @@ import com.erpnext.pos.remoteSource.dto.v2.SalesOrderSnapshot
 import com.erpnext.pos.remoteSource.mapper.v2.toEntity
 import com.erpnext.pos.remoteSource.sdk.v2.ERPDocType
 import com.erpnext.pos.remoteSource.sdk.v2.IncrementalSyncFilters
+import com.erpnext.pos.utils.RepoTrace
 import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
 
@@ -30,6 +31,7 @@ class SalesOrderRepository(
     }
 
     suspend fun pull(ctx: SyncContext): Boolean {
+        RepoTrace.breadcrumb("SalesOrderRepositoryV2", "pull")
         val orders = api.list<SalesOrderSnapshot>(
             doctype = ERPDocType.SalesOrder,
             filters = IncrementalSyncFilters.salesOrder(ctx)
@@ -80,6 +82,7 @@ class SalesOrderRepository(
     }
 
     suspend fun pushPending(ctx: SyncContext): List<PendingSync<SalesOrderCreateDto>> {
+        RepoTrace.breadcrumb("SalesOrderRepositoryV2", "pushPending")
         return buildPendingCreatePayloads(ctx.instanceId, ctx.companyId)
     }
 
@@ -87,6 +90,7 @@ class SalesOrderRepository(
         order: SalesOrderEntity,
         items: List<SalesOrderItemEntity>
     ) {
+        RepoTrace.breadcrumb("SalesOrderRepositoryV2", "insertSalesOrderWithItems")
         salesOrderDao.insertSalesOrderWithItems(order, items)
     }
 
@@ -135,6 +139,7 @@ class SalesOrderRepository(
         instanceId: String,
         companyId: String
     ): List<PendingSync<SalesOrderCreateDto>> {
+        RepoTrace.breadcrumb("SalesOrderRepositoryV2", "buildPendingCreatePayloads")
         return salesOrderDao.getPendingSalesOrdersWithItems(instanceId, companyId)
             .map { snapshot ->
                 val customerId = customerRepository.resolveRemoteCustomerId(

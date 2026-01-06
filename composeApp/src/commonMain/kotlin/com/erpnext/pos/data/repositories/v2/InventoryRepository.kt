@@ -2,6 +2,7 @@ package com.erpnext.pos.data.repositories.v2
 
 import com.erpnext.pos.domain.repositories.v2.IInventoryRepository
 import com.erpnext.pos.localSource.dao.v2.InventoryDao
+import com.erpnext.pos.utils.RepoTrace
 import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
 
@@ -14,6 +15,7 @@ class InventoryRepository(
         companyId: String,
         warehouseId: String
     ): Map<String, Float> {
+        RepoTrace.breadcrumb("InventoryRepositoryV2", "getStockByWarehouse")
         return inventoryDao
             .getStockForWarehouse(instanceId, companyId, warehouseId)
             .associate { it.itemCode to it.actualQty }
@@ -26,6 +28,7 @@ class InventoryRepository(
         itemId: String,
         deltaQty: Double
     ) {
+        RepoTrace.breadcrumb("InventoryRepositoryV2", "adjustStockLocal")
         inventoryDao.updateStock(
             instanceId = instanceId,
             companyId = companyId,

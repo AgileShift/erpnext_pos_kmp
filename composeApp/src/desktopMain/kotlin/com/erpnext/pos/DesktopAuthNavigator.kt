@@ -8,20 +8,38 @@ class DesktopAuthNavigator : AuthNavigator {
     override fun openAuthPage(authUrl: String) {
         val uri = URI(authUrl)
 
-        // JVM Desktop API
+        DesktopLogger.info("Opening auth URL: $authUrl")
+        System.err.println("DesktopAuthNavigator.openAuthPage -> $authUrl")
+
+        // Prefer OS command (more reliable in packaged apps)
+        runCatching { openWithSystemCommand(uri) }
+            .onSuccess {
+                DesktopLogger.info("Opened auth URL using system command.")
+                return
+            }
+            .onFailure {
+                DesktopLogger.warn("System command failed for auth URL.", it)
+            }
+
+        // JVM Desktop API fallback
         if (Desktop.isDesktopSupported()) {
             val desktop = Desktop.getDesktop()
             if (desktop.isSupported(Desktop.Action.BROWSE)) {
-                desktop.browse(uri)
-                return
+                runCatching {
+                    desktop.browse(uri)
+                }.onFailure {
+                    DesktopLogger.warn("Desktop.browse failed for auth URL.", it)
+                }.onSuccess {
+                    DesktopLogger.info("Opened auth URL using Desktop.browse.")
+                    return
+                }
             }
         }
 
-        // Fallback por si estás en headless / WSL / entornos raros
-        fallbackOpen(uri)
+        throw IllegalStateException("No se pudo abrir el navegador para: $authUrl")
     }
 
-    private fun fallbackOpen(uri: URI) {
+    private fun openWithSystemCommand(uri: URI) {
         val url = uri.toString()
         val os = System.getProperty("os.name").lowercase()
 
@@ -31,12 +49,6 @@ class DesktopAuthNavigator : AuthNavigator {
             else -> listOf("xdg-open", url) // Linux
         }
 
-        runCatching { ProcessBuilder(cmd).start() }
-            .getOrElse {
-                throw IllegalStateException(
-                    "No se pudo abrir el navegador para: $url",
-                    it
-                )
-            }
+        ProcessBuilder(cmd).start()
     }
 }

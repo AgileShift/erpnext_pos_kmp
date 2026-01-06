@@ -10,6 +10,7 @@ import com.erpnext.pos.remoteSource.dto.v2.ItemPriceDto
 import com.erpnext.pos.remoteSource.mapper.v2.toEntity
 import com.erpnext.pos.remoteSource.sdk.v2.ERPDocType
 import com.erpnext.pos.remoteSource.sdk.v2.IncrementalSyncFilters
+import com.erpnext.pos.utils.RepoTrace
 
 class CatalogSyncRepository(
     private val catalogDao: CatalogDao,
@@ -17,6 +18,7 @@ class CatalogSyncRepository(
 ) {
 
     suspend fun syncItemGroups(ctx: SyncContext, modifiedSince: String?): Int {
+        RepoTrace.breadcrumb("CatalogSyncRepositoryV2", "syncItemGroups")
         val groups = api.list<ItemGroupDto>(
             doctype = ERPDocType.Category,
             filters = IncrementalSyncFilters.category(modifiedSince)
@@ -30,6 +32,7 @@ class CatalogSyncRepository(
     }
 
     suspend fun syncItems(ctx: SyncContext, modifiedSince: String?): Int {
+        RepoTrace.breadcrumb("CatalogSyncRepositoryV2", "syncItems")
         val items = api.list<ItemDto>(
             doctype = ERPDocType.Item,
             filters = IncrementalSyncFilters.item(modifiedSince)
@@ -43,6 +46,7 @@ class CatalogSyncRepository(
     }
 
     suspend fun syncItemPrices(ctx: SyncContext, modifiedSince: String?): Int {
+        RepoTrace.breadcrumb("CatalogSyncRepositoryV2", "syncItemPrices")
         val prices = api.list<ItemPriceDto>(
             doctype = ERPDocType.ItemPrice,
             filters = IncrementalSyncFilters.itemPrice(ctx, modifiedSince)
@@ -56,6 +60,7 @@ class CatalogSyncRepository(
     }
 
     suspend fun syncBins(ctx: SyncContext, modifiedSince: String?): Int {
+        RepoTrace.breadcrumb("CatalogSyncRepositoryV2", "syncBins")
         val bins = api.list<BinDto>(
             doctype = ERPDocType.Bin,
             filters = IncrementalSyncFilters.bin(ctx, modifiedSince)

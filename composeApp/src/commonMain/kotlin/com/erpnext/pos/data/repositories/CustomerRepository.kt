@@ -13,6 +13,7 @@ import com.erpnext.pos.remoteSource.mapper.toBO
 import com.erpnext.pos.remoteSource.mapper.toEntities
 import com.erpnext.pos.remoteSource.mapper.toEntity
 import com.erpnext.pos.sync.SyncTTL
+import com.erpnext.pos.utils.RepoTrace
 import com.erpnext.pos.views.CashBoxManager
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -31,6 +32,7 @@ class CustomerRepository(
     override suspend fun getCustomers(
         search: String?, state: String?
     ): Flow<List<CustomerBO>> {
+        RepoTrace.breadcrumb("CustomerRepository", "getCustomers", "search=$search state=$state")
         val territory: String? = context.requireContext().route
         return networkBoundResource(query = {
             // 🔹 Consultamos localmente según filtros dinámicos
@@ -88,6 +90,7 @@ class CustomerRepository(
                 it.lastSyncedAt?.toDouble() ?: 0.0
             }.toLong())
         }, onFetchFailed = { e ->
+            RepoTrace.capture("CustomerRepository", "getCustomers", e)
             println("⚠️ Error al sincronizar clientes: ${e.message}")
         }).map { resource -> resource.data ?: emptyList() }
     }
@@ -98,6 +101,7 @@ class CustomerRepository(
 
     override suspend fun sync(): Flow<Resource<List<CustomerBO>>> {
         val territory: String? = context.requireContext().route
+        RepoTrace.breadcrumb("CustomerRepository", "sync")
         return networkBoundResource(query = { flowOf(emptyList<CustomerDto>().toBO()) }, fetch = {
             remoteSource.fetchCustomers(territory)
         }, shouldFetch = { localData ->
@@ -140,6 +144,9 @@ class CustomerRepository(
                 }.awaitAll()
                 localSource.insertAll(entities)
             }
-        }, onFetchFailed = { it.printStackTrace() })
+        }, onFetchFailed = {
+            RepoTrace.capture("CustomerRepository", "sync", it)
+            it.printStackTrace()
+        })
     }
 }

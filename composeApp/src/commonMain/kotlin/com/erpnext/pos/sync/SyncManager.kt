@@ -7,6 +7,8 @@ import com.erpnext.pos.data.repositories.ModeOfPaymentRepository
 import com.erpnext.pos.data.repositories.SalesInvoiceRepository
 import com.erpnext.pos.localSource.preferences.SyncPreferences
 import com.erpnext.pos.utils.NetworkMonitor
+import com.erpnext.pos.utils.AppLogger
+import com.erpnext.pos.utils.AppSentry
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -47,9 +49,13 @@ class SyncManager(
         if (_state.value is SyncState.SYNCING) return
 
         scope.launch {
+            AppSentry.breadcrumb("SyncManager.fullSync start (ttl=$ttlHours)")
+            AppLogger.info("SyncManager.fullSync start (ttl=$ttlHours)")
             val isOnline = networkMonitor.isConnected.first()
             if (!isOnline) {
                 _state.value = SyncState.ERROR("No hay conexión a internet.")
+                AppSentry.breadcrumb("SyncManager.fullSync aborted: offline")
+                AppLogger.warn("SyncManager.fullSync aborted: offline")
                 return@launch
             }
 
@@ -58,44 +64,83 @@ class SyncManager(
                     val jobs = listOf(
                         async {
                             _state.value = SyncState.SYNCING("Metodos de pago...")
-                            modeOfPaymentRepo.sync(ttlHours)
+                            AppSentry.breadcrumb("Sync: mode of payment")
+                            val result = modeOfPaymentRepo.sync(ttlHours)
                                 .filter { it !is Resource.Loading }
                                 .first()
+                            if (result is Resource.Error) {
+                                val error = Exception(result.message ?: "Error al sincronizar métodos de pago")
+                                AppSentry.capture(error, "Sync: mode of payment failed")
+                                AppLogger.warn("Sync: mode of payment failed", error)
+                                throw error
+                            }
                         },
                         async {
                             _state.value = SyncState.SYNCING("Clientes...")
 
-                            customerRepo.sync()
+                            AppSentry.breadcrumb("Sync: customers")
+                            val result = customerRepo.sync()
                                 .filter { it !is Resource.Loading }
                                 .first()
+                            if (result is Resource.Error) {
+                                val error = Exception(result.message ?: "Error al sincronizar clientes")
+                                AppSentry.capture(error, "Sync: customers failed")
+                                AppLogger.warn("Sync: customers failed", error)
+                                throw error
+                            }
                         },
                         async {
                             _state.value =
                                 SyncState.SYNCING("Categorias de Productos...")
 
-                            inventoryRepo.getCategories()
+                            AppSentry.breadcrumb("Sync: categories")
+                            val result = inventoryRepo.getCategories()
                                 .filter { it !is Resource.Loading }
                                 .first()
+                            if (result is Resource.Error) {
+                                val error = Exception(result.message ?: "Error al sincronizar categorías")
+                                AppSentry.capture(error, "Sync: categories failed")
+                                AppLogger.warn("Sync: categories failed", error)
+                                throw error
+                            }
                         },
                         async {
                             _state.value = SyncState.SYNCING("Inventario...")
-                            inventoryRepo.sync()
+                            AppSentry.breadcrumb("Sync: inventory")
+                            val result = inventoryRepo.sync()
                                 .filter { it !is Resource.Loading }
                                 .first()
+                            if (result is Resource.Error) {
+                                val error = Exception(result.message ?: "Error al sincronizar inventario")
+                                AppSentry.capture(error, "Sync: inventory failed")
+                                AppLogger.warn("Sync: inventory failed", error)
+                                throw error
+                            }
                         },
                         async {
                             _state.value = SyncState.SYNCING("Facturas...")
-                            invoiceRepo.sync()
+                            AppSentry.breadcrumb("Sync: invoices")
+                            val result = invoiceRepo.sync()
                                 .filter { it !is Resource.Loading }
                                 .first()
+                            if (result is Resource.Error) {
+                                val error = Exception(result.message ?: "Error al sincronizar facturas")
+                                AppSentry.capture(error, "Sync: invoices failed")
+                                AppLogger.warn("Sync: invoices failed", error)
+                                throw error
+                            }
                         }
                     )
                     jobs.awaitAll()
                 }
                 _state.value = SyncState.SUCCESS
+                AppSentry.breadcrumb("SyncManager.fullSync success")
+                AppLogger.info("SyncManager.fullSync success")
                 syncPreferences.setLastSyncAt(Clock.System.now().toEpochMilliseconds())
             } catch (e: Exception) {
                 e.printStackTrace()
+                AppSentry.capture(e, "SyncManager.fullSync failed")
+                AppLogger.warn("SyncManager.fullSync failed", e)
                 _state.value = SyncState.ERROR("Error durante la sincronización: ${e.message}")
             } finally {
                 delay(5000)

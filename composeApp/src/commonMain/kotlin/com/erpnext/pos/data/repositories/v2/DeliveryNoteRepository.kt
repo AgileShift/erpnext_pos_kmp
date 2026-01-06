@@ -14,6 +14,7 @@ import com.erpnext.pos.remoteSource.dto.v2.DeliveryNoteSnapshot
 import com.erpnext.pos.remoteSource.mapper.v2.toEntity
 import com.erpnext.pos.remoteSource.sdk.v2.ERPDocType
 import com.erpnext.pos.remoteSource.sdk.v2.IncrementalSyncFilters
+import com.erpnext.pos.utils.RepoTrace
 import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
 
@@ -28,6 +29,7 @@ class DeliveryNoteRepository(
     }
 
     suspend fun pull(ctx: SyncContext): Boolean {
+        RepoTrace.breadcrumb("DeliveryNoteRepositoryV2", "pull")
         val notes = api.list<DeliveryNoteSnapshot>(
             doctype = ERPDocType.DeliveryNote,
             filters = IncrementalSyncFilters.deliveryNote(ctx)
@@ -80,6 +82,7 @@ class DeliveryNoteRepository(
     }
 
     suspend fun pushPending(ctx: SyncContext): List<PendingSync<DeliveryNoteCreateDto>> {
+        RepoTrace.breadcrumb("DeliveryNoteRepositoryV2", "pushPending")
         return buildPendingCreatePayloads(ctx.instanceId, ctx.companyId)
     }
 
@@ -88,6 +91,7 @@ class DeliveryNoteRepository(
         items: List<DeliveryNoteItemEntity>,
         links: List<DeliveryNoteLinkEntity>
     ) {
+        RepoTrace.breadcrumb("DeliveryNoteRepositoryV2", "insertDeliveryNoteWithDetails")
         deliveryNoteDao.insertDeliveryNoteWithDetails(note, items, links)
     }
 
@@ -136,6 +140,7 @@ class DeliveryNoteRepository(
         instanceId: String,
         companyId: String
     ): List<PendingSync<DeliveryNoteCreateDto>> {
+        RepoTrace.breadcrumb("DeliveryNoteRepositoryV2", "buildPendingCreatePayloads")
         return deliveryNoteDao.getPendingDeliveryNotesWithDetails(instanceId, companyId).map { snapshot ->
             val link = snapshot.links.firstOrNull()
             val customerId = customerRepository.resolveRemoteCustomerId(
