@@ -10,6 +10,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.material.ripple.rememberRipple
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import com.erpnext.pos.domain.models.CustomerBO
@@ -43,6 +45,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.input.OffsetMapping
@@ -50,6 +54,7 @@ import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.input.TransformedText
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.window.PopupProperties
 import coil3.compose.AsyncImage
 import coil3.compose.LocalPlatformContext
 import coil3.compose.SubcomposeAsyncImage
@@ -518,6 +523,9 @@ private fun CustomerSelector(
     onCustomerSelected: (CustomerBO) -> Unit
 ) {
     var expanded by remember { mutableStateOf(false) }
+    var displayLimit by remember { mutableStateOf(50) }
+    var anchorWidthPx by remember { mutableStateOf(0) }
+    val density = LocalDensity.current
     val hasCustomers = customers.isNotEmpty()
 
     //Text("Cliente", style = MaterialTheme.typography.titleMedium)
@@ -529,8 +537,10 @@ private fun CustomerSelector(
                 onQueryChange(it)
                 expanded = true
             },
-            modifier = Modifier//.fillMaxWidth()
-                .menuAnchor(MenuAnchorType.PrimaryEditable),
+            modifier = Modifier
+                .fillMaxWidth()
+                .menuAnchor(MenuAnchorType.PrimaryEditable)
+                .onGloballyPositioned { anchorWidthPx = it.size.width },
             /*.onFocusChanged { focusState ->
                 expanded = focusState.isFocused
             }*/
@@ -539,15 +549,35 @@ private fun CustomerSelector(
             leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
         )
-        ExposedDropdownMenu(
-            expanded = expanded && hasCustomers, onDismissRequest = { expanded = false }) {
-            customers.forEach { customer ->
-                DropdownMenuItem(
-                    text = { Text("${customer.name} - ${customer.customerName}") },
-                    onClick = {
-                        onCustomerSelected(customer)
-                        expanded = false
-                    })
+        DropdownMenu(
+            expanded = expanded && hasCustomers,
+            onDismissRequest = { expanded = false },
+            properties = PopupProperties(focusable = false)
+        ) {
+            val menuWidth = remember(anchorWidthPx) {
+                if (anchorWidthPx > 0) with(density) { anchorWidthPx.toDp() } else 360.dp
+            }
+            Column(
+                modifier = Modifier
+                    .width(menuWidth.coerceIn(280.dp, 520.dp))
+                    .heightIn(max = 320.dp)
+                    .verticalScroll(rememberScrollState())
+            ) {
+                customers.take(displayLimit).forEach { customer ->
+                    DropdownMenuItem(
+                        text = { Text("${customer.name} - ${customer.customerName}") },
+                        onClick = {
+                            onCustomerSelected(customer)
+                            expanded = false
+                        }
+                    )
+                }
+                if (customers.size > displayLimit) {
+                    DropdownMenuItem(
+                        text = { Text("Mostrar más...") },
+                        onClick = { displayLimit += 50 }
+                    )
+                }
             }
         }
     }
@@ -561,6 +591,9 @@ private fun ProductSelector(
     onProductAdded: (ItemBO) -> Unit
 ) {
     var expanded by remember { mutableStateOf(false) }
+    var displayLimit by remember { mutableStateOf(50) }
+    var anchorWidthPx by remember { mutableStateOf(0) }
+    val density = LocalDensity.current
     val hasResults = results.isNotEmpty()
     val context = LocalPlatformContext.current
 
@@ -575,8 +608,9 @@ private fun ProductSelector(
                     expanded = true
                 },
                 modifier = Modifier
-                    //.fillMaxWidth()
-                    .menuAnchor(MenuAnchorType.PrimaryEditable)/*.onFocusChanged { focusState ->
+                    .fillMaxWidth()
+                    .menuAnchor(MenuAnchorType.PrimaryEditable)
+                    .onGloballyPositioned { anchorWidthPx = it.size.width }/*.onFocusChanged { focusState ->
                     expanded = focusState.isFocused
                 }*/,
                 label = "Buscar por nombre o código",
@@ -584,65 +618,71 @@ private fun ProductSelector(
                 leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
                 trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) })
 
-            ExposedDropdownMenu(
-                expanded = expanded && hasResults, onDismissRequest = { expanded = false }) {
-                results.forEach { item ->
-                    DropdownMenuItem(text = {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(12.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            SubcomposeAsyncImage(
-                                model = remember(item.image) {
-                                    ImageRequest.Builder(context)
-                                        .data(item.image?.ifBlank { "https://placehold.co/64x64" })
-                                        .crossfade(true).build()
-                                },
-                                contentDescription = item.name,
-                                modifier = Modifier.size(40.dp).clip(MaterialTheme.shapes.small),
-                                contentScale = ContentScale.Crop,
-                                loading = {
-                                    CircularProgressIndicator(
-                                        modifier = Modifier.size(
-                                            16.dp
-                                        )
+            DropdownMenu(
+                expanded = expanded && hasResults,
+                onDismissRequest = { expanded = false },
+                properties = PopupProperties(focusable = false)
+            ) {
+                val menuWidth = remember(anchorWidthPx) {
+                    if (anchorWidthPx > 0) with(density) { anchorWidthPx.toDp() } else 420.dp
+                }
+                Column(
+                    modifier = Modifier
+                        .width(menuWidth.coerceIn(320.dp, 640.dp))
+                        .heightIn(max = 360.dp)
+                        .verticalScroll(rememberScrollState())
+                ) {
+                    results.take(displayLimit).forEach { item ->
+                        DropdownMenuItem(text = {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                AsyncImage(
+                                    model = remember(item.image) {
+                                        ImageRequest.Builder(context)
+                                            .data(item.image?.ifBlank { "https://placehold.co/64x64" })
+                                            .crossfade(true).build()
+                                    },
+                                    contentDescription = item.name,
+                                    modifier = Modifier.size(40.dp).clip(MaterialTheme.shapes.small),
+                                    contentScale = ContentScale.Crop
+                                )
+                                Column {
+                                    Text(item.name)
+                                    Text(
+                                        text = "Código: ${item.itemCode}",
+                                        style = MaterialTheme.typography.bodySmall
                                     )
-                                },
-                                error = {
-                                    AsyncImage(
-                                        model = "https://placehold.co/64x64",
-                                        contentDescription = "placeholder",
-                                        modifier = Modifier.size(40.dp)
+                                    Text(
+                                        "Precio: ${
+                                            formatAmount(
+                                                item.currency?.toCurrencySymbol() ?: "", item.price
+                                            )
+                                        }",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.primary
                                     )
-                                })
-                            Column {
-                                Text(item.name)
-                                Text(
-                                    text = "Código: ${item.itemCode}",
-                                    style = MaterialTheme.typography.bodySmall
-                                )
-                                Text(
-                                    "Precio: ${
-                                        formatAmount(
-                                            item.currency?.toCurrencySymbol() ?: "", item.price
-                                        )
-                                    }",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.primary
-                                )
-                                Text(
-                                    "Disponible: ${item.actualQty.formatQty()}",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
+                                    Text(
+                                        "Disponible: ${item.actualQty.formatQty()}",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
                             }
-                        }
-                    }, onClick = {
-                        onProductAdded(item)
-                        onQueryChange("")
-                        expanded = false
-                    })
+                        }, onClick = {
+                            onProductAdded(item)
+                            onQueryChange("")
+                            expanded = false
+                        })
+                    }
+                    if (results.size > displayLimit) {
+                        DropdownMenuItem(
+                            text = { Text("Mostrar más...") },
+                            onClick = { displayLimit += 50 }
+                        )
+                    }
                 }
             }
         }

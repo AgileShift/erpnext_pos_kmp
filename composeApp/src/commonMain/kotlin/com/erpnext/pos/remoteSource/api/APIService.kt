@@ -383,88 +383,112 @@ class APIService(
         val url = authStore.getCurrentSite() ?: throw Exception("URL Invalida")
         require(!warehouse.isNullOrEmpty()) { "Bodega es requerida para la carga de productos" }
 
-        // Fetch Bins
-        val bins = clientOAuth.getERPList<BinDto>(
-            doctype = ERPDocType.Bin.path,
-            fields = ERPDocType.Bin.getFields(),
-            limit = Int.MAX_VALUE, //limit,
-            offset = offset,
-            orderBy = "item_code",
-            baseUrl = url
-        ) {
-            if (warehouse.isNotEmpty())
-                "warehouse" eq warehouse
-            "actual_qty" gt 0.0
-            "valuation_rate" gt 0.0
+        val chunkSize = 50
+        val pageSize = limit ?: 50
+        val startOffset = offset ?: 0
+
+        suspend fun fetchBins(batchOffset: Int, batchLimit: Int): List<BinDto> {
+            return clientOAuth.getERPList<BinDto>(
+                doctype = ERPDocType.Bin.path,
+                fields = ERPDocType.Bin.getFields(),
+                limit = batchLimit,
+                offset = batchOffset,
+                orderBy = "item_code",
+                baseUrl = url
+            ) {
+                if (warehouse.isNotEmpty())
+                    "warehouse" eq warehouse
+                "actual_qty" gt 0.0
+                "valuation_rate" gt 0.0
+            }
         }
 
-        val itemCodes = bins.map { it.itemCode }.distinct()
-        if (itemCodes.isEmpty()) return emptyList()
+        suspend fun mapBinsToInventory(bins: List<BinDto>): List<WarehouseItemDto> {
+            val itemCodes = bins.map { it.itemCode }.distinct()
+            if (itemCodes.isEmpty()) return emptyList()
 
-        // Fetch Items batch con fields extras (chunked to avoid URL length limits)
-        val items = itemCodes
-            .chunked(50)
-            .flatMap { codes ->
-                clientOAuth.getERPList<ItemDto>(
-                    doctype = ERPDocType.Item.path,
-                    fields = ERPDocType.Item.getFields(),
-                    limit = codes.size,
-                    baseUrl = url
-                ) {
-                    "name" `in` codes
+            // Fetch Items batch con fields extras (chunked to avoid URL length limits)
+            val items = itemCodes
+                .chunked(chunkSize)
+                .flatMap { codes ->
+                    clientOAuth.getERPList<ItemDto>(
+                        doctype = ERPDocType.Item.path,
+                        fields = ERPDocType.Item.getFields(),
+                        limit = codes.size,
+                        baseUrl = url
+                    ) {
+                        "name" `in` codes
+                    }
                 }
-            }
 
-        val itemMap = items.associateBy { it.itemCode }
+            val itemMap = items.associateBy { it.itemCode }
 
-        // Fetch precios batch (chunked to avoid URL length limits)
-        val prices = itemCodes
-            .chunked(50)
-            .flatMap { codes ->
-                clientOAuth.getERPList<ItemPriceDto>(
-                    doctype = ERPDocType.ItemPrice.path,
-                    fields = ERPDocType.ItemPrice.getFields(),
-                    limit = codes.size,
-                    baseUrl = url
-                ) {
-                    "item_code" `in` codes
-                    if (!priceList.isNullOrEmpty())
-                        "price_list" eq priceList
+            // Fetch precios batch (chunked to avoid URL length limits)
+            val prices = itemCodes
+                .chunked(chunkSize)
+                .flatMap { codes ->
+                    clientOAuth.getERPList<ItemPriceDto>(
+                        doctype = ERPDocType.ItemPrice.path,
+                        fields = ERPDocType.ItemPrice.getFields(),
+                        limit = codes.size,
+                        baseUrl = url
+                    ) {
+                        "item_code" `in` codes
+                        if (!priceList.isNullOrEmpty())
+                            "price_list" eq priceList
+                    }
                 }
+
+            val priceMap = prices.associate { it.itemCode to it.priceListRate }
+            val priceCurrency = prices.associate { it.itemCode to it.currency }
+
+            // Combina todo en WarehouseItemDto
+            return bins.map { bin ->
+                val item = itemMap[bin.itemCode]
+                    ?: throw FrappeException("Item no encontrado: ${bin.itemCode}")
+                val price = priceMap[bin.itemCode] ?: item.standardRate
+                val currency = priceCurrency[bin.itemCode] ?: ""
+                val barcode = ""  // No en JSON; "" default
+                val isStocked = item.isStockItem
+                val isService =
+                    !isStocked || (item.itemGroup == "COMPLEMENTARIOS")  // Infer de group en JSON
+
+                WarehouseItemDto(
+                    itemCode = bin.itemCode,
+                    actualQty = bin.actualQty,
+                    price = price,
+                    valuationRate = bin.valuationRate,
+                    name = item.itemName,
+                    itemGroup = item.itemGroup,
+                    description = item.description,
+                    barcode = barcode,
+                    image = item.image ?: "",
+                    discount = 0.0,  // No field; default 0
+                    isService = isService,
+                    isStocked = isStocked,
+                    stockUom = item.stockUom,
+                    brand = item.brand ?: "",
+                    currency = currency
+                )
             }
-
-        val priceMap = prices.associate { it.itemCode to it.priceListRate }
-        val priceCurrency = prices.associate { it.itemCode to it.currency }
-
-        // Combina todo en WarehouseItemDto
-        return bins.map { bin ->
-            val item = itemMap[bin.itemCode]
-                ?: throw FrappeException("Item no encontrado: ${bin.itemCode}")
-            val price = priceMap[bin.itemCode] ?: item.standardRate
-            val currency = priceCurrency[bin.itemCode] ?: ""
-            val barcode = ""  // No en JSON; "" default
-            val isStocked = item.isStockItem
-            val isService =
-                !isStocked || (item.itemGroup == "COMPLEMENTARIOS")  // Infer de group en JSON
-
-            WarehouseItemDto(
-                itemCode = bin.itemCode,
-                actualQty = bin.actualQty,
-                price = price,
-                valuationRate = bin.valuationRate,
-                name = item.itemName,
-                itemGroup = item.itemGroup,
-                description = item.description,
-                barcode = barcode,
-                image = item.image ?: "",
-                discount = 0.0,  // No field; default 0
-                isService = isService,
-                isStocked = isStocked,
-                stockUom = item.stockUom,
-                brand = item.brand ?: "",
-                currency = currency
-            )
         }
+
+        // Paged mode
+        if (limit != null) {
+            val bins = fetchBins(startOffset, pageSize)
+            return mapBinsToInventory(bins)
+        }
+
+        // Full sync mode: page through bins
+        val results = mutableListOf<WarehouseItemDto>()
+        var currentOffset = startOffset
+        while (true) {
+            val bins = fetchBins(currentOffset, pageSize)
+            if (bins.isEmpty()) break
+            results += mapBinsToInventory(bins)
+            currentOffset += pageSize
+        }
+        return results
     }
 
     val json = Json {
