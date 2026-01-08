@@ -31,7 +31,6 @@ actual object AppSentry {
             options.isEnableAutoSessionTracking = true
             options.release = "erpnext-pos@${BuildKonfig.SENTRY_ENV}"
             options.isDebug = debug
-            options.diagnosticLevel = if (debug) SentryLevel.DEBUG else SentryLevel.ERROR
             options.isEnableUncaughtExceptionHandler = true
         }
         android.util.Log.i("AppSentry", "Sentry initialized (env=${BuildKonfig.SENTRY_ENV})")

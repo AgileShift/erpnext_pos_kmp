@@ -1,5 +1,6 @@
 package com.erpnext.pos.data.repositories.v2
 
+import com.erpnext.pos.data.adapters.local.SalesInvoiceLocalAdapter
 import com.erpnext.pos.domain.ports.local.SalesInvoiceLocalPort
 import com.erpnext.pos.domain.repositories.v2.ISalesInvoiceRepository
 import com.erpnext.pos.domain.sync.SyncContext
@@ -20,7 +21,7 @@ import kotlin.time.ExperimentalTime
 
 class SalesInvoiceRepository(
     private val dao: SalesInvoiceDao,
-    private val local: SalesInvoiceLocalPort,
+    private val local: SalesInvoiceLocalAdapter,
     private val remote: SalesInvoiceRemoteRepository,
     private val api: APIServiceV2
 ) : ISalesInvoiceRepository {

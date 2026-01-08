@@ -197,7 +197,7 @@ fun HomeScreen(
                         onClick = {},
                         enabled = false,
                         tint = if (isOnline) Color(0xFF2E7D32)
-                        else MaterialTheme.colorScheme.onSurfaceVariant,
+                        else MaterialTheme.colorScheme.error,
                     ) {
                         Icon(
                             if (isOnline) Icons.Filled.Wifi else Icons.Filled.WifiOff,

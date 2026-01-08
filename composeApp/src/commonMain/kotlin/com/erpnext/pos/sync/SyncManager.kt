@@ -2,10 +2,17 @@ package com.erpnext.pos.sync
 
 import com.erpnext.pos.base.Resource
 import com.erpnext.pos.data.repositories.CustomerRepository
+import com.erpnext.pos.data.repositories.DeliveryChargesRepository
+import com.erpnext.pos.data.repositories.ExchangeRateRepository
 import com.erpnext.pos.data.repositories.InventoryRepository
 import com.erpnext.pos.data.repositories.ModeOfPaymentRepository
+import com.erpnext.pos.data.repositories.PaymentTermsRepository
 import com.erpnext.pos.data.repositories.SalesInvoiceRepository
+import com.erpnext.pos.sync.PushSyncManager
+import com.erpnext.pos.sync.SyncContextProvider
+import com.erpnext.pos.views.CashBoxManager
 import com.erpnext.pos.localSource.preferences.SyncPreferences
+import com.erpnext.pos.localSource.preferences.SyncSettings
 import com.erpnext.pos.utils.NetworkMonitor
 import com.erpnext.pos.utils.AppLogger
 import com.erpnext.pos.utils.AppSentry
@@ -19,6 +26,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -34,15 +42,28 @@ class SyncManager(
     private val invoiceRepo: SalesInvoiceRepository,
     private val customerRepo: CustomerRepository,
     private val inventoryRepo: InventoryRepository,
-    private val networkMonitor: NetworkMonitor,
     private val modeOfPaymentRepo: ModeOfPaymentRepository,
-    private val syncPreferences: SyncPreferences
+    private val paymentTermsRepo: PaymentTermsRepository,
+    private val deliveryChargesRepo: DeliveryChargesRepository,
+    private val exchangeRateRepo: ExchangeRateRepository,
+    private val syncPreferences: SyncPreferences,
+    private val cashBoxManager: CashBoxManager,
+    private val networkMonitor: NetworkMonitor,
+    private val syncContextProvider: SyncContextProvider,
+    private val pushSyncManager: PushSyncManager
 ) : ISyncManager {
 
     private val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
+    private var syncSettingsCache =
+        SyncSettings(autoSync = true, syncOnStartup = true, wifiOnly = false, lastSyncAt = null)
 
     private val _state = MutableStateFlow<SyncState>(SyncState.IDLE)
     override val state: StateFlow<SyncState> = _state.asStateFlow()
+
+    init {
+        observeSyncSettings()
+        observeConnectivity()
+    }
 
     @OptIn(ExperimentalTime::class)
     override fun fullSync(ttlHours: Int) {
@@ -129,15 +150,73 @@ class SyncManager(
                                 AppLogger.warn("Sync: invoices failed", error)
                                 throw error
                             }
+                        },
+                        async {
+                            _state.value = SyncState.SYNCING("Términos de pago...")
+                            AppSentry.breadcrumb("Sync: payment terms")
+                            runCatching { paymentTermsRepo.fetchPaymentTerms() }
+                                .getOrElse { error ->
+                                    val exception = Exception(
+                                        error.message ?: "Error al sincronizar términos de pago"
+                                    )
+                                    AppSentry.capture(exception, "Sync: payment terms failed")
+                                    AppLogger.warn("Sync: payment terms failed", exception)
+                                    throw exception
+                                }
+                        },
+                        async {
+                            _state.value = SyncState.SYNCING("Cargos de envío...")
+                            AppSentry.breadcrumb("Sync: delivery charges")
+                            runCatching { deliveryChargesRepo.fetchDeliveryCharges() }
+                                .getOrElse { error ->
+                                    val exception = Exception(
+                                        error.message ?: "Error al sincronizar cargos de envío"
+                                    )
+                                    AppSentry.capture(exception, "Sync: delivery charges failed")
+                                    AppLogger.warn(
+                                        "Sync: delivery charges failed",
+                                        exception
+                                    )
+                                    throw exception
+                                }
+                        },
+                        async {
+                            _state.value = SyncState.SYNCING("Tasas de cambio...")
+                            AppSentry.breadcrumb("Sync: exchange rates")
+                            val context = cashBoxManager.getContext()
+                            val currencies = mutableSetOf<String>()
+                            context?.let {
+                                currencies.add(it.currency)
+                                it.allowedCurrencies.mapTo(currencies) { option -> option.code }
+                            }
+                            currencies
+                                .filter { it.isNotBlank() }
+                                .map { it.uppercase() }
+                                .distinct()
+                                .forEach { currency ->
+                                    runCatching {
+                                        exchangeRateRepo.getRate("USD", currency)
+                                    }.getOrElse { error ->
+                                        AppSentry.capture(
+                                            error,
+                                            "Sync: exchange rate failed for $currency"
+                                        )
+                                        AppLogger.warn(
+                                            "Sync: exchange rate failed for $currency",
+                                            error
+                                        )
+                                    }
+                                }
                         }
                     )
-                    jobs.awaitAll()
-                }
-                _state.value = SyncState.SUCCESS
-                AppSentry.breadcrumb("SyncManager.fullSync success")
-                AppLogger.info("SyncManager.fullSync success")
-                syncPreferences.setLastSyncAt(Clock.System.now().toEpochMilliseconds())
-            } catch (e: Exception) {
+                jobs.awaitAll()
+                runPushQueue()
+            }
+            _state.value = SyncState.SUCCESS
+            AppSentry.breadcrumb("SyncManager.fullSync success")
+            AppLogger.info("SyncManager.fullSync success")
+            syncPreferences.setLastSyncAt(Clock.System.now().toEpochMilliseconds())
+        } catch (e: Exception) {
                 e.printStackTrace()
                 AppSentry.capture(e, "SyncManager.fullSync failed")
                 AppLogger.warn("SyncManager.fullSync failed", e)
@@ -147,5 +226,49 @@ class SyncManager(
                 _state.value = SyncState.IDLE
             }
         }
+    }
+
+    private suspend fun runPushQueue() {
+        val ctx = syncContextProvider.buildContext()
+        if (ctx == null) {
+            AppLogger.warn("SyncManager: push queue skipped because context is not ready")
+            return
+        }
+        _state.value = SyncState.SYNCING("Sincronizando push...")
+        try {
+            pushSyncManager.runPushQueue(ctx) { docType ->
+                _state.value = SyncState.SYNCING("Push: $docType")
+            }
+        } catch (e: Throwable) {
+            AppSentry.capture(e, "SyncManager.pushQueue failed")
+            AppLogger.warn("SyncManager.pushQueue failed", e)
+            throw e
+        }
+    }
+
+    private fun observeSyncSettings() {
+        scope.launch {
+            syncPreferences.settings.collect { settings ->
+                syncSettingsCache = settings
+            }
+        }
+    }
+
+    private fun observeConnectivity() {
+        scope.launch {
+            var wasConnected = false
+            networkMonitor.isConnected.collect { connected ->
+                if (connected && !wasConnected && shouldAutoSyncOnConnection()) {
+                    fullSync()
+                }
+                wasConnected = connected
+            }
+        }
+    }
+
+    private fun shouldAutoSyncOnConnection(): Boolean {
+        if (!syncSettingsCache.autoSync) return false
+        if (syncSettingsCache.wifiOnly) return false
+        return _state.value !is SyncState.SYNCING
     }
 }

@@ -157,22 +157,4 @@ class HomeViewModel(
             contextManager.closeCashBox()
         }
     }
-
-    fun setAutoSync(enabled: Boolean) {
-        viewModelScope.launch {
-            syncPreferences.setAutoSync(enabled)
-        }
-    }
-
-    fun setSyncOnStartup(enabled: Boolean) {
-        viewModelScope.launch {
-            syncPreferences.setSyncOnStartup(enabled)
-        }
-    }
-
-    fun setWifiOnly(enabled: Boolean) {
-        viewModelScope.launch {
-            syncPreferences.setWifiOnly(enabled)
-        }
-    }
 }

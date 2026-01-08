@@ -161,6 +161,7 @@ fun BillingScreen(
 
                 is BillingState.Error -> {
                     LaunchedEffect(state.message) {
+                        snackbar.dismiss()
                         snackbar.show(state.message, SnackbarType.Error, SnackbarPosition.Top)
                     }
                     val previous = state.previous
@@ -213,6 +214,17 @@ private fun BillingContent(
         state.successMessage?.let {
             snackbar.show(it, SnackbarType.Success, SnackbarPosition.Top)
             action.onClearSuccessMessage()
+        }
+    }
+    LaunchedEffect(state.isFinalizingSale) {
+        if (state.isFinalizingSale) {
+            snackbar.show(
+                "Guardando la factura localmente. Se sincronizará automáticamente cuando haya conexión.",
+                SnackbarType.Loading,
+                SnackbarPosition.Top
+            )
+        } else if (state.successMessage == null) {
+            snackbar.dismiss()
         }
     }
     Column(

@@ -35,6 +35,9 @@ import com.erpnext.pos.domain.usecases.v2.sync.SalesInvoiceSyncUnit
 import com.erpnext.pos.domain.usecases.v2.sync.SalesOrderSyncUnit
 import com.erpnext.pos.remoteSource.api.v2.APIServiceV2
 import com.erpnext.pos.domain.utils.UUIDGenerator
+import com.erpnext.pos.sync.PushSyncManager
+import com.erpnext.pos.sync.SyncContextProvider
+import com.erpnext.pos.sync.SyncManager
 import org.koin.core.qualifier.Qualifier
 import org.koin.core.qualifier.named
 import org.koin.dsl.module
@@ -67,7 +70,6 @@ val appModulev2 = module {
     single { DeliveryChargesRepository(get(named("apiServiceV2"))) }
     single { PaymentEntryRepository(get(), get(), get()) }
     single { SyncRepository(get(), get()) }
-    single(named("apiServiceV2")) { APIServiceV2(get(), get(), get()) }
 
     factory { UUIDGenerator() }
 

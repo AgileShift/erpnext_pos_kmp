@@ -772,6 +772,7 @@ class BillingViewModel(
             _state.update { BillingState.Error(validationError, current) }
             return
         }
+        setFinalizingSale(true)
 
         val customer = current.selectedCustomer ?: error("Debes seleccionar un cliente.")
         val context = contextProvider.getContext() ?: error("El contexto POS no está inicializado.")
@@ -996,7 +997,17 @@ class BillingViewModel(
                 val previous = currentState as? BillingState.Success
                 BillingState.Error(errorMessage, previous)
             }
+        }, finallyHandler = {
+            setFinalizingSale(false)
         })
+    }
+
+    private fun setFinalizingSale(active: Boolean) {
+        _state.update { current ->
+            val success = current as? BillingState.Success ?: return@update current
+            if (success.isFinalizingSale == active) return@update current
+            success.copy(isFinalizingSale = active)
+        }
     }
 
     fun onBack() {

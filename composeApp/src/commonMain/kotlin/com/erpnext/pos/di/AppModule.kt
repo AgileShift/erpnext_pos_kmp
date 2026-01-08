@@ -3,6 +3,7 @@ package com.erpnext.pos.di
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import com.erpnext.pos.data.AppDatabase
 import com.erpnext.pos.data.DatabaseBuilder
+import com.erpnext.pos.data.adapters.local.SalesInvoiceLocalAdapter
 import com.erpnext.pos.data.repositories.CheckoutRepository
 import com.erpnext.pos.data.repositories.CustomerRepository
 import com.erpnext.pos.data.repositories.DeliveryChargesRepository
@@ -14,8 +15,18 @@ import com.erpnext.pos.data.repositories.PaymentEntryRepository
 import com.erpnext.pos.data.repositories.SalesInvoiceRepository
 import com.erpnext.pos.data.repositories.UserRepository
 import com.erpnext.pos.data.repositories.ExchangeRateRepository
+import com.erpnext.pos.data.repositories.v2.CatalogRepository
+import com.erpnext.pos.data.repositories.v2.CatalogSyncRepository
+import com.erpnext.pos.data.repositories.v2.ContextRepository
+import com.erpnext.pos.data.repositories.v2.CustomerRepository as V2CustomerRepository
+import com.erpnext.pos.data.repositories.v2.DeliveryNoteRepository
+import com.erpnext.pos.data.repositories.v2.PaymentEntryRepository as V2PaymentEntryRepository
+import com.erpnext.pos.data.repositories.v2.QuotationRepository
+import com.erpnext.pos.data.repositories.v2.SalesInvoiceRepository as V2SalesInvoiceRepository
+import com.erpnext.pos.data.repositories.v2.SalesInvoiceRemoteRepository
+import com.erpnext.pos.data.repositories.v2.SalesOrderRepository
 import com.erpnext.pos.data.repositories.v2.SourceDocumentRepository
-import com.erpnext.pos.di.v2.appModulev2
+import com.erpnext.pos.data.repositories.v2.SyncRepository
 import com.erpnext.pos.domain.repositories.IPOSRepository
 import com.erpnext.pos.domain.repositories.IUserRepository
 import com.erpnext.pos.domain.usecases.AdjustLocalInventoryUseCase
@@ -46,6 +57,9 @@ import com.erpnext.pos.domain.usecases.MarkSalesInvoiceSyncedUseCase
 import com.erpnext.pos.domain.usecases.LogoutUseCase
 import com.erpnext.pos.domain.usecases.RegisterInvoicePaymentUseCase
 import com.erpnext.pos.domain.usecases.SaveInvoicePaymentsUseCase
+import com.erpnext.pos.domain.policy.DatePolicy
+import com.erpnext.pos.domain.policy.DefaultPolicy
+import com.erpnext.pos.domain.policy.PolicyInput
 import com.erpnext.pos.domain.usecases.v2.LoadSourceDocumentsUseCase
 import com.erpnext.pos.domain.usecases.UpdateLocalInvoiceFromRemoteUseCase
 import com.erpnext.pos.localSource.datasources.CustomerLocalSource
@@ -69,6 +83,8 @@ import com.erpnext.pos.remoteSource.datasources.ModeOfPaymentRemoteSource
 import com.erpnext.pos.remoteSource.datasources.POSProfileRemoteSource
 import com.erpnext.pos.remoteSource.datasources.SalesInvoiceRemoteSource
 import com.erpnext.pos.remoteSource.datasources.UserRemoteSource
+import com.erpnext.pos.sync.PushSyncManager
+import com.erpnext.pos.sync.SyncContextProvider
 import com.erpnext.pos.sync.SyncManager
 import com.erpnext.pos.utils.prefsPath
 import com.erpnext.pos.utils.view.SnackbarController
@@ -149,6 +165,7 @@ val appModule = module {
     single { ExchangeRatePreferences(get()) }
     single { LanguagePreferences(get()) }
     single { SyncPreferences(get()) }
+    single<DatePolicy> { DefaultPolicy(PolicyInput()) }
     single<CashBoxManager> {
         CashBoxManager(
             get(named("apiService")),
@@ -162,7 +179,36 @@ val appModule = module {
             get()
         )
     }
-    single<SyncManager> { SyncManager(get(), get(), get(), get(), get(), get()) }
+    single(named("apiServiceV2")) { APIServiceV2(get(), get(), get()) }
+
+    single {
+        PushSyncManager(
+            get(),
+            get(),
+            get(),
+            get(),
+            get(),
+            get(),
+            get(named("apiServiceV2"))
+        )
+    }
+    single { SyncContextProvider(get(), get()) }
+    single<SyncManager> {
+        SyncManager(
+            get(),
+            get(),
+            get(),
+            get(),
+            get(),
+            get(),
+            get(),
+            get(),
+            get(),
+            get(),
+            get(),
+            get()
+        )
+    }
     //endregion
 
     //region Login DI
@@ -254,6 +300,21 @@ val appModule = module {
     single { PaymentEntryViewModel(get(), get()) }
     //endregion
 
+    //region v2 Sync DAO/Repositories
+    single { CatalogRepository(get()) }
+    single { CatalogSyncRepository(get(), get(named("apiServiceV2"))) }
+    single { ContextRepository(get(), get(named("apiServiceV2"))) }
+    single { V2CustomerRepository(get(), get(), get(), get(), get(), get(), get(named("apiServiceV2"))) }
+    single { SalesInvoiceLocalAdapter(get()) }
+    single { SalesInvoiceRemoteRepository(get(named("apiServiceV2")), get()) }
+    single { V2SalesInvoiceRepository(get(), get(), get(), get(named("apiServiceV2"))) }
+    single { QuotationRepository(get(), get(), get(), get(named("apiServiceV2"))) }
+    single { SalesOrderRepository(get(), get(), get(), get(named("apiServiceV2"))) }
+    single { DeliveryNoteRepository(get(), get(), get(named("apiServiceV2"))) }
+    single { V2PaymentEntryRepository(get(), get(), get(named("apiServiceV2"))) }
+    single { SyncRepository(get(), get()) }
+    //endregion
+
     //region Checkout
     single(named("apiServiceV2")) { APIServiceV2(get(), get(), get()) }
     single { SourceDocumentRepository(get(named("apiServiceV2"))) }
@@ -327,7 +388,7 @@ fun initKoin(
 ) {
     startKoin {
         config?.invoke(this)
-        modules(appModule + appModulev2 + modules)
+        modules(appModule + modules)
         koin.get<AppDatabase> { parametersOf(builder) }
     }
 }
