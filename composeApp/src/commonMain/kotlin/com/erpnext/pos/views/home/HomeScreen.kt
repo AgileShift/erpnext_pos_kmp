@@ -26,6 +26,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
@@ -172,7 +174,8 @@ fun HomeScreen(
                         )
                         ShiftOpenChip(
                             isOpen = isCashboxOpen,
-                            duration = formatShiftDuration(shiftStart, tick)
+                            duration = formatShiftDuration(shiftStart, tick),
+                            closeAction = actions.closeCashbox
                         )
                     }
                 },
@@ -509,7 +512,7 @@ fun HomeScreen(
 }
 
 @Composable
-private fun ShiftOpenChip(isOpen: Boolean, duration: String) {
+private fun ShiftOpenChip(isOpen: Boolean, duration: String, closeAction: () -> Unit = {}) {
     val openBg = Color(0xFFE8F5E9)
     val openText = Color(0xFF2E7D32)
     val closedBg = Color(0xFFFFEBEE)
@@ -532,6 +535,13 @@ private fun ShiftOpenChip(isOpen: Boolean, duration: String) {
             )
             Text(
                 text = "Shift Open: ${if (isOpen) duration else "--"}",
+                Modifier.clickable(
+                    enabled = isOpen,
+                    onClickLabel = "Close Shift",
+                    interactionSource = MutableInteractionSource()
+                ) {
+                    closeAction()
+                },
                 style = MaterialTheme.typography.labelMedium,
                 color = if (isOpen) openText else closedText
             )
