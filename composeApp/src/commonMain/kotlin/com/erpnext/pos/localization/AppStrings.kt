@@ -124,6 +124,8 @@ data class BillingStrings(
 
 data class CustomerStrings(
     val title: String,
+    val selectePaymentMode: String,
+    val emptyOsInvoices: String,
     val refreshCustomers: String,
     val emptyCustomers: String,
     val emptySearchCustomers: String,
@@ -351,7 +353,9 @@ object AppStringsFactory {
             activeLabel = "Activo",
             outOfStock = "Fuera de Stock",
             inStock = "En Stock",
-            baseCurrency = "Moneda principal"
+            baseCurrency = "Moneda principal",
+            emptyOsInvoices = "No hay facturas pendientes.",
+            selectePaymentMode = "Selecciona un metodo de pago."
         ),
         inventory = InventoryStrings(
             loadInventoryError = "Error al cargar inventario",
@@ -544,7 +548,9 @@ object AppStringsFactory {
             activeLabel = "Active",
             outOfStock = "Out of stock",
             inStock = "In Stock",
-            baseCurrency = "Base currency"
+            baseCurrency = "Base currency",
+            emptyOsInvoices = "No outstanding invoices for this customer.",
+            selectePaymentMode = "Select payment mode"
         ),
         inventory = InventoryStrings(
             loadInventoryError = "Unable to load inventory",

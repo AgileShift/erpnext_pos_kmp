@@ -1124,7 +1124,7 @@ private fun CustomerOutstandingInvoicesSheet(
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             Text(
-                text = "Outstanding invoices - ${customer.customerName}",
+                text = "${strings.customer.outstandingInvoicesTitle} - ${customer.customerName}",
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.SemiBold
             )
@@ -1157,7 +1157,7 @@ private fun CustomerOutstandingInvoicesSheet(
                 is CustomerInvoicesState.Success -> {
                     if (invoicesState.invoices.isEmpty()) {
                         Text(
-                            text = "No outstanding invoices for this customer.",
+                            text = strings.customer.emptyOsInvoices,
                             style = MaterialTheme.typography.bodyMedium
                         )
                     } else {
@@ -1370,8 +1370,8 @@ private fun CustomerOutstandingInvoicesSheet(
                 AppTextField(
                     value = paymentMode,
                     onValueChange = {},
-                    label = "Select payment mode",
-                    placeholder = "Select payment mode",
+                    label = strings.customer.selectePaymentMode,
+                    placeholder = strings.customer.selectePaymentMode,
                     modifier = Modifier.menuAnchor(MenuAnchorType.PrimaryNotEditable),
                     leadingIcon = { Icon(Icons.Default.Money, contentDescription = null) },
                     trailingIcon = {
@@ -1641,4 +1641,4 @@ fun Modifier.shimmerBackground(
     )
 }
 
-private fun formatAmount(value: Double): String = formatDoubleToString(value, 2)
+private fun formatAmount(value: Double): String = formatDoubleToString(bd(value).toDouble(0), 2)
