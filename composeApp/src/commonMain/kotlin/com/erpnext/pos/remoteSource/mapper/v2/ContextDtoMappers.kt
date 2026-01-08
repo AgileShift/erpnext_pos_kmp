@@ -15,22 +15,13 @@ import com.erpnext.pos.remoteSource.dto.v2.SalesPersonDto
 import com.erpnext.pos.remoteSource.dto.v2.TerritoryDto
 import com.erpnext.pos.remoteSource.dto.v2.UserDto
 
-fun CompanyDto.toEntity(companyId: String, instanceId: String) =
-    CompanyEntity(
-        companyName = companyName,
-        abbr = abbr,
+fun CompanyDto.toEntity() =
+    com.erpnext.pos.localSource.entities.CompanyEntity(
+        companyName = company,
         defaultCurrency = defaultCurrency,
         country = country,
-        domain = domain,
         taxId = taxId,
-        isGroup = isGroup,
-        parentCompanyId = parentCompanyId,
-        companyLogo = companyLogo,
-        letterHead = letterHead
-    ).apply {
-        this.companyId = companyId
-        this.instanceId = instanceId
-    }
+    )
 
 fun UserDto.toEntity(instanceId: String, companyId: String) =
     UserEntity(

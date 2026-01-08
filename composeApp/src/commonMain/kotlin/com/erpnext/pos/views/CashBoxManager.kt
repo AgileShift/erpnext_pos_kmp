@@ -19,6 +19,7 @@ import com.erpnext.pos.remoteSource.dto.POSOpeningEntryDto
 import com.erpnext.pos.remoteSource.mapper.toDto
 import com.erpnext.pos.remoteSource.mapper.toEntity
 import com.erpnext.pos.data.repositories.ExchangeRateRepository
+import com.erpnext.pos.localSource.dao.CompanyDao
 import com.erpnext.pos.utils.toErpDateTime
 import io.ktor.util.date.getTimeMillis
 import kotlinx.coroutines.Dispatchers
@@ -51,6 +52,7 @@ data class POSContext(
     val expenseAccount: String?,
     val branch: String?,
     val currency: String,
+    val partyAccountCurrency: String,
     val exchangeRate: Double,
     val allowedCurrencies: List<POSCurrencyOption>,
     val paymentModes: List<POSPaymentModeOption>
@@ -61,6 +63,7 @@ class CashBoxManager(
     private val profileDao: POSProfileDao,
     private val openingDao: POSOpeningEntryDao,
     private val closingDao: POSClosingEntryDao,
+    private val companyDao: CompanyDao,
     private val cashboxDao: CashboxDao,
     private val userDao: UserDao,
     private val exchangeRatePreferences: ExchangeRatePreferences,
@@ -77,6 +80,7 @@ class CashBoxManager(
     suspend fun initializeContext(): POSContext? = withContext(Dispatchers.IO) {
         val user = userDao.getUserInfo() ?: return@withContext null
         val profile = profileDao.getActiveProfile() ?: return@withContext null
+        val company = companyDao.getCompanyInfo()
         val activeCashbox = cashboxDao.getActiveEntry(user.email, profile.profileName)
             .firstOrNull()
         val exchangeRate = resolveExchangeRate(profile.currency)
@@ -88,7 +92,8 @@ class CashBoxManager(
         currentContext = POSContext(
             username = user.username ?: "",
             profileName = profile.profileName,
-            company = profile.company,
+            company = company?.companyName ?: profile.company,
+            partyAccountCurrency = company?.defaultCurrency ?: profile.currency,
             warehouse = profile.warehouse,
             route = profile.route,
             territory = profile.route,
@@ -145,7 +150,7 @@ class CashBoxManager(
         })
 
         profileDao.updateProfileState(user.username, newEntry.posProfile, true)
-
+        val company = companyDao.getCompanyInfo()
         val profile = profileDao.getActiveProfile() ?: error("Profile not found")
 
         openingDao.insert(newEntry.toEntity(poeId.name))
@@ -158,7 +163,7 @@ class CashBoxManager(
         currentContext = POSContext(
             username = user.username ?: user.name,
             profileName = newEntry.posProfile,
-            company = entry.company,
+            company = company?.companyName ?: profile.company,
             warehouse = profile.warehouse,
             route = profile.route,
             territory = profile.route,
@@ -171,7 +176,8 @@ class CashBoxManager(
             currency = profile.currency,
             exchangeRate = exchangeRate,
             allowedCurrencies = allowedCurrencies,
-            paymentModes = paymentModes
+            paymentModes = paymentModes,
+            partyAccountCurrency = company?.defaultCurrency ?: profile.currency,
         )
         currentContext!!
     }

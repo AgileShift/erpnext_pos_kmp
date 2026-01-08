@@ -2,6 +2,8 @@ package com.erpnext.pos.remoteSource.api
 
 import com.erpnext.pos.BuildKonfig
 import com.erpnext.pos.base.getPlatformName
+import com.erpnext.pos.base64UrlNoPad
+import com.erpnext.pos.domain.models.CompanyBO
 import com.erpnext.pos.remoteSource.dto.BinDto
 import com.erpnext.pos.remoteSource.dto.CategoryDto
 import com.erpnext.pos.remoteSource.dto.CurrencyDto
@@ -29,6 +31,7 @@ import com.erpnext.pos.remoteSource.dto.SalesInvoiceDto
 import com.erpnext.pos.remoteSource.dto.TokenResponse
 import com.erpnext.pos.remoteSource.dto.UserDto
 import com.erpnext.pos.remoteSource.dto.WarehouseItemDto
+import com.erpnext.pos.remoteSource.dto.v2.CompanyDto
 import com.erpnext.pos.remoteSource.dto.v2.CustomerAddressDto
 import com.erpnext.pos.remoteSource.dto.v2.PaymentEntryCreateDto
 import com.erpnext.pos.remoteSource.oauth.AuthInfoStore
@@ -100,6 +103,16 @@ class APIService(
                 }
             }
         }
+    }
+
+    suspend fun getCompanyInfo(): List<CompanyDto> {
+        val url = authStore.getCurrentSite()
+        return clientOAuth.getERPSingle(
+            doctype = ERPDocType.Company.path,
+            fields = ERPDocType.Company.getFields(),
+            name = "",
+            baseUrl = url,
+        )
     }
 
     suspend fun createPaymentEntry(entry: PaymentEntryCreateDto) {

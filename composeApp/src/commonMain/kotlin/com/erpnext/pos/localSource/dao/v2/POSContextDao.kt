@@ -5,7 +5,7 @@ import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Transaction
-import com.erpnext.pos.localSource.entities.v2.CompanyEntity
+import com.erpnext.pos.localSource.entities.CompanyEntity
 import com.erpnext.pos.localSource.entities.v2.EmployeeEntity
 import com.erpnext.pos.localSource.entities.v2.POSPaymentMethodEntity
 import com.erpnext.pos.localSource.entities.v2.POSProfileEntity
@@ -21,11 +21,11 @@ interface POSContextDao {
         """
         SELECT * 
         FROM companies
-        WHERE instanceId = :instanceId AND companyId = :companyId
+        /*WHERE instanceId = :instanceId AND companyId = :companyId*/
         LIMIT 1
     """
     )
-    suspend fun getCompany(instanceId: String, companyId: String): CompanyEntity?
+    suspend fun getCompany(/*instanceId: String, companyId: String*/): CompanyEntity?
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertCompany(company: CompanyEntity)

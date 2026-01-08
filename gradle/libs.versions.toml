@@ -49,6 +49,7 @@ coil3 = "3.3.0"
 workRuntimeKtx = "2.11.0"
 
 androidGradlePlugin = "8.13.2"
+material3 = "1.4.0"
 
 [libraries]
 bignum = { module = "com.ionspin.kotlin:bignum", version.ref = "bignum" }
@@ -129,6 +130,7 @@ androidx-room-compiler = { module = "androidx.room:room-compiler", version.ref =
 security-crypto = { module = "androidx.security:security-crypto", version.ref = "securityCryptoVersion" }
 android-tink = { module = "com.google.crypto.tink:tink-android", version = "1.20.0" }
 androidx-work-runtime-ktx = { group = "androidx.work", name = "work-runtime-ktx", version.ref = "workRuntimeKtx" }
+androidx-material3 = { group = "androidx.compose.material3", name = "material3", version.ref = "material3" }
 
 
 [plugins]

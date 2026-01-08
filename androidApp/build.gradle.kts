@@ -54,11 +54,13 @@ kotlin {
 
 dependencies {
     implementation(projects.composeApp)
-
+    implementation("androidx.compose.ui:ui-tooling")
+    implementation("androidx.compose.ui:ui-tooling-preview")
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.core.ktx)
     implementation(libs.koin.android)
 
     implementation(platform(libs.firebase.bom))
     implementation(libs.firebase.analytics)
+    implementation(libs.androidx.material3)
 }

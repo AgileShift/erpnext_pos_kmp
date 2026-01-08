@@ -61,6 +61,9 @@ import com.erpnext.pos.domain.models.SalesInvoiceBO
 import com.erpnext.pos.localization.LocalAppStrings
 import com.erpnext.pos.utils.QuickActions.customerQuickActions
 import com.erpnext.pos.utils.formatDoubleToString
+import com.erpnext.pos.utils.formatPendingDual
+import com.erpnext.pos.utils.normalizeCurrency
+import com.erpnext.pos.utils.resolveRateBetweenFromBaseRates
 import com.erpnext.pos.utils.oauth.bd
 import com.erpnext.pos.utils.oauth.moneyScale
 import com.erpnext.pos.utils.oauth.toDouble
@@ -78,7 +81,7 @@ fun CustomerListScreen(
     val topAppBarScrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(
         state = rememberTopAppBarState()
     )
-    var strings = LocalAppStrings.current
+    val strings = LocalAppStrings.current
     var searchQuery by remember { mutableStateOf("") }
     var selectedState by remember { mutableStateOf("Todos") }
     var quickActionsCustomer by remember { mutableStateOf<CustomerBO?>(null) }
@@ -193,11 +196,18 @@ fun CustomerListScreen(
                                 icon = Icons.Filled.People
                             )
                         } else {
+                            val posBaseCurrency =
+                                normalizeCurrency(paymentState.baseCurrency) ?: "USD"
+                            val baseRatesOrNull =
+                                (invoicesState as? CustomerInvoicesState.Success)?.exchangeRateByCurrency
+
                             CustomerListContent(
                                 customers = filtered,
                                 actions = actions,
                                 isWideLayout = isWideLayout,
                                 isDesktop = isDesktop,
+                                posBaseCurrency = posBaseCurrency,
+                                baseRates = baseRatesOrNull,
                                 onOpenQuickActions = { quickActionsCustomer = it },
                                 onQuickAction = { customer, actionType ->
                                     handleQuickAction(actions, customer, actionType)
@@ -473,6 +483,8 @@ private fun CustomerListContent(
     actions: CustomerAction,
     isWideLayout: Boolean,
     isDesktop: Boolean,
+    posBaseCurrency: String,
+    baseRates: Map<String, Double>?,
     onOpenQuickActions: (CustomerBO) -> Unit,
     onQuickAction: (CustomerBO, CustomerQuickActionType) -> Unit
 ) {
@@ -489,6 +501,8 @@ private fun CustomerListContent(
                 CustomerItem(
                     customer = customer,
                     isDesktop = isDesktop,
+                    posBaseCurrency = posBaseCurrency,
+                    baseRates = baseRates,
                     onClick = { actions.toDetails(customer.name) },
                     onOpenQuickActions = { onOpenQuickActions(customer) },
                     onQuickAction = { actionType -> onQuickAction(customer, actionType) }
@@ -505,6 +519,8 @@ private fun CustomerListContent(
                 CustomerItem(
                     customer = customer,
                     isDesktop = isDesktop,
+                    baseRates = baseRates,
+                    posBaseCurrency = posBaseCurrency,
                     onClick = { actions.toDetails(customer.name) },
                     onOpenQuickActions = { onOpenQuickActions(customer) },
                     onQuickAction = { actionType -> onQuickAction(customer, actionType) }
@@ -518,6 +534,8 @@ private fun CustomerListContent(
 fun CustomerItem(
     customer: CustomerBO,
     isDesktop: Boolean,
+    posBaseCurrency: String,
+    baseRates: Map<String, Double>?,
     onClick: () -> Unit,
     onOpenQuickActions: () -> Unit,
     onQuickAction: (CustomerQuickActionType) -> Unit
@@ -689,9 +707,21 @@ fun CustomerItem(
                     modifier = Modifier.widthIn(min = 140.dp),
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
+                    val pendingInBase =
+                        bd(customer.totalPendingAmount ?: customer.currentBalance ?: 0.0)
+                            .moneyScale(2).toDouble(2)
+
+                    val (pendinBaseLabel, pendingCustomerLabel) = formatPendingDual(
+                        pendingInBase = pendingInBase,
+                        posBaseCurrency = posBaseCurrency,
+                        customerCurrency = customer.currency,
+                        baseRates = baseRates,
+                    )
+
                     MetricBlock(
                         label = strings.customer.pendingLabel,
-                        value = "$currencySymbol $pendingAmount",
+                        value = pendinBaseLabel, //"$currencySymbol $pendingAmount",
+                        secondaryValue = pendingCustomerLabel,
                         isCritical = emphasis
                     )
                     MetricBlock(
@@ -763,7 +793,12 @@ private fun StatusPill(label: String, isCritical: Boolean) {
 }
 
 @Composable
-private fun MetricBlock(label: String, value: String, isCritical: Boolean) {
+fun MetricBlock(
+    label: String,
+    value: String,
+    secondaryValue: String? = null,
+    isCritical: Boolean
+) {
     val background = if (isCritical) {
         MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.33f)
     } else {
@@ -785,6 +820,13 @@ private fun MetricBlock(label: String, value: String, isCritical: Boolean) {
         ) {
             Text(label, style = MaterialTheme.typography.labelSmall, color = textColor)
             Text(value, style = MaterialTheme.typography.titleSmall, color = textColor)
+            if (!secondaryValue.isNullOrBlank()) {
+                Text(
+                    secondaryValue,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
         }
     }
 }
@@ -1007,11 +1049,8 @@ private fun CustomerOutstandingInvoicesSheet(
     var selectedInvoice by remember { mutableStateOf<SalesInvoiceBO?>(null) }
     var amountRaw by remember { mutableStateOf("") }
     var amountValue by remember { mutableStateOf(0.0) }
-    val posBaseCurrency = paymentState.baseCurrency.ifBlank { "USD" }
-    val invoiceBaseCurrency = selectedInvoice?.partyAccountCurrency
-        ?.trim()
-        ?.uppercase()
-        ?.takeIf { it.isNotBlank() }
+    val posBaseCurrency = normalizeCurrency(paymentState.baseCurrency) ?: "USD"
+    val invoiceBaseCurrency = normalizeCurrency(selectedInvoice?.partyAccountCurrency)
         ?: posBaseCurrency
     val allowedCodes = remember(paymentState.allowedCurrencies, posBaseCurrency) {
         val codes = paymentState.allowedCurrencies.map { it.code }.filter { it.isNotBlank() }
@@ -1043,14 +1082,14 @@ private fun CustomerOutstandingInvoicesSheet(
 
     val exchangeRate =
         remember(selectedCurrency, invoiceBaseCurrency, invoicesState, posBaseCurrency) {
-            val normalizedBase = invoiceBaseCurrency.trim().uppercase()
-            val normalizedSelected = selectedCurrency.trim().uppercase()
+            val from = normalizeCurrency(invoiceBaseCurrency) ?: posBaseCurrency
+            val to = normalizeCurrency(selectedCurrency) ?: posBaseCurrency
             when {
-                normalizedSelected == normalizedBase -> 1.0
+                from == to -> 1.0
                 invoicesState is CustomerInvoicesState.Success -> {
-                    resolveRateBetween(
-                        fromCurrency = normalizedBase,
-                        toCurrency = normalizedSelected,
+                    resolveRateBetweenFromBaseRates(
+                        fromCurrency = from,
+                        toCurrency = to,
                         baseCurrency = posBaseCurrency,
                         baseRates = invoicesState.exchangeRateByCurrency
                     )
@@ -1130,13 +1169,10 @@ private fun CustomerOutstandingInvoicesSheet(
                         ) {
                             items(invoicesState.invoices, key = { it.invoiceId }) { invoice ->
                                 val isSelected = invoice.invoiceId == selectedInvoice?.invoiceId
-                                val invoiceBaseCurrency = invoice.partyAccountCurrency
-                                    ?.trim()
-                                    ?.uppercase()
-                                    ?.takeIf { it.isNotBlank() }
-                                    ?: posBaseCurrency
-                                val invoiceCurrency = invoice.currency?.trim()?.uppercase()
-                                    ?.takeIf { it.isNotBlank() }
+                                val invoiceBaseCurrency =
+                                    normalizeCurrency(invoice.partyAccountCurrency)
+                                        ?: posBaseCurrency
+                                val invoiceCurrency = normalizeCurrency(invoice.currency)
                                     ?: invoiceBaseCurrency
                                 val baseSymbol = invoiceBaseCurrency.toCurrencySymbol().ifBlank {
                                     invoiceBaseCurrency
@@ -1144,7 +1180,7 @@ private fun CustomerOutstandingInvoicesSheet(
                                 val invoiceSymbol = invoiceCurrency.toCurrencySymbol().ifBlank {
                                     invoiceCurrency
                                 }
-                                val rateBaseToInvoice = resolveRateBetween(
+                                val rateBaseToInvoice = resolveRateBetweenFromBaseRates(
                                     fromCurrency = invoiceBaseCurrency,
                                     toCurrency = invoiceCurrency,
                                     baseCurrency = posBaseCurrency,
@@ -1292,7 +1328,7 @@ private fun CustomerOutstandingInvoicesSheet(
                                                 ignoreCase = true
                                             )
                                         ) {
-                                            val rateBaseToPos = resolveRateBetween(
+                                            val rateBaseToPos = resolveRateBetweenFromBaseRates(
                                                 fromCurrency = invoiceBaseCurrency,
                                                 toCurrency = posBaseCurrency,
                                                 baseCurrency = posBaseCurrency,
@@ -1482,7 +1518,7 @@ private fun CustomerOutstandingSummary(customer: CustomerBO) {
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            Text("Facturas pendientes")
+            Text("Fac. pendientes")
             Text("${customer.pendingInvoices}")
         }
         Row(
@@ -1605,136 +1641,4 @@ fun Modifier.shimmerBackground(
     )
 }
 
-private fun resolveRateBetween(
-    fromCurrency: String,
-    toCurrency: String,
-    baseCurrency: String,
-    baseRates: Map<String, Double>
-): Double? {
-    val from = fromCurrency.trim().uppercase()
-    val to = toCurrency.trim().uppercase()
-    val base = baseCurrency.trim().uppercase()
-    if (from == to) return 1.0
-
-    val baseToFrom = if (from == base) 1.0 else baseRates[from]
-    val baseToTo = if (to == base) 1.0 else baseRates[to]
-    if (baseToFrom == null || baseToTo == null || baseToFrom <= 0.0 || baseToTo <= 0.0) {
-        return null
-    }
-    return baseToTo / baseToFrom
-}
-
 private fun formatAmount(value: Double): String = formatDoubleToString(value, 2)
-
-@Preview
-@Composable
-fun CustomerListScreenPreview() {
-    MaterialTheme {
-        CustomerListScreen(
-            state = CustomerState.Success(
-                customers = listOf(
-                    CustomerBO(
-                        name = "1",
-                        customerName = "Ricardo García",
-                        territory = "Managua",
-                        mobileNo = "+505 8888 0505",
-                        image = "https://images.unsplash.com/photo-1708467374959-e5588da12e8f?q=80&w=987&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA==",
-                        customerType = "Individual",
-                        currentBalance = 13450.0,
-                        pendingInvoices = 2,
-                        availableCredit = 0.0,
-                        address = "Residencial Palmanova #117",
-                    )
-                ), 10, 5
-            ),
-            invoicesState = CustomerInvoicesState.Idle,
-            paymentState = CustomerPaymentState(),
-            actions = CustomerAction()
-        )
-    }
-}
-
-@Preview
-@Composable
-fun CustomerListScreenLoadingPreview() {
-    MaterialTheme {
-        CustomerListScreen(
-            state = CustomerState.Loading,
-            invoicesState = CustomerInvoicesState.Idle,
-            paymentState = CustomerPaymentState(),
-            actions = CustomerAction()
-        )
-    }
-}
-
-@Preview
-@Composable
-fun CustomerListScreenErrorPreview() {
-    MaterialTheme {
-        CustomerListScreen(
-            state = CustomerState.Error("Error al cargar clientes"),
-            invoicesState = CustomerInvoicesState.Idle,
-            paymentState = CustomerPaymentState(),
-            actions = CustomerAction()
-        )
-    }
-}
-
-@Preview
-@Composable
-fun CustomerListScreenEmptyPreview() {
-    MaterialTheme {
-        CustomerListScreen(
-            state = CustomerState.Empty,
-            invoicesState = CustomerInvoicesState.Idle,
-            paymentState = CustomerPaymentState(),
-            actions = CustomerAction()
-        )
-    }
-}
-
-@Preview
-@Composable
-fun CustomerItemPreview() {
-    MaterialTheme {
-        CustomerItem(
-            customer = CustomerBO(
-                name = "1",
-                customerName = "Ricardo García",
-                territory = "Managua",
-                mobileNo = "+505 8888 0505",
-                customerType = "Individual",
-                currentBalance = 13450.0,
-                pendingInvoices = 2,
-                availableCredit = 0.0
-            ),
-            isDesktop = false,
-            onClick = {},
-            onOpenQuickActions = {},
-            onQuickAction = {}
-        )
-    }
-}
-
-@Preview
-@Composable
-fun CustomerItemOverLimitPreview() {
-    MaterialTheme {
-        CustomerItem(
-            customer = CustomerBO(
-                name = "2",
-                customerName = "Sofía Ramírez",
-                territory = "León",
-                mobileNo = "+505 7777 0404",
-                customerType = "Company",
-                currentBalance = 0.0,
-                pendingInvoices = 0,
-                availableCredit = -500.0  // Sobre límite para rojo
-            ),
-            isDesktop = false,
-            onClick = {},
-            onOpenQuickActions = {},
-            onQuickAction = {}
-        )
-    }
-}

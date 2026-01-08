@@ -24,6 +24,7 @@ import kotlinx.coroutines.flow.flowOf
 import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
 
+@OptIn(ExperimentalTime::class)
 class SalesInvoiceRepository(
     private val remoteSource: SalesInvoiceRemoteSource,
     private val localSource: InvoiceLocalSource,

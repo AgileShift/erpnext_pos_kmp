@@ -138,6 +138,8 @@ kotlin {
             implementation(libs.kotlin.test)
         }
         androidMain.dependencies {
+            implementation("androidx.compose.ui:ui-tooling")
+            implementation("androidx.compose.ui:ui-tooling-preview")
             implementation(libs.sqldelight.android)
             implementation(compose.preview)
             implementation(libs.androidx.activity.compose)

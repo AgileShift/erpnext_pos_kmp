@@ -22,7 +22,7 @@ class ContextRepository(
 ): IContextRepository {
 
     override suspend fun getCompany(instanceId: String, companyId: String) =
-        posContextDao.getCompany(instanceId, companyId)
+        posContextDao.getCompany(/*instanceId, companyId*/)
 
     override suspend fun getUser(instanceId: String, companyId: String, userId: String) =
         posContextDao.getUser(instanceId, companyId, userId)
@@ -107,7 +107,7 @@ class ContextRepository(
 
         var changed = false
         company?.let {
-            posContextDao.upsertCompany(it.toEntity(input.companyId,input.instanceId))
+            posContextDao.upsertCompany(it.toEntity(/*input.companyId,input.instanceId*/))
             changed = true
         }
         user?.let {

@@ -1,10 +1,13 @@
 package com.erpnext.pos.remoteSource.sdk
 
+import androidx.compose.material3.DockedSearchBar
+
 data class DocTypeFields(val doctype: ERPDocType, val fields: List<String>)
 
 enum class ERPDocType(val path: String) {
     Item("Item"),
     PaymentEntry("Payment Entry"),
+    Company("Company"),
     ModeOfPayment("Mode of Payment"),
     Account("Account"),
     Category("Item Group"),
@@ -25,6 +28,10 @@ enum class ERPDocType(val path: String) {
 }
 
 val fields: List<DocTypeFields> = listOf(
+    DocTypeFields(
+        ERPDocType.Company,
+        listOf("default_currency", "country", "tax_id", "name")
+    ),
     DocTypeFields(
         ERPDocType.ModeOfPayment,
         listOf("name", "mode_of_payment", "enabled")

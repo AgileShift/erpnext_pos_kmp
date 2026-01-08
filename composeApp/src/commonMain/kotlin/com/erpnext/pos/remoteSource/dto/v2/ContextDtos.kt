@@ -7,28 +7,13 @@ import kotlinx.serialization.Serializable
 @Serializable
 data class CompanyDto(
     @SerialName("name")
-    val companyId: String,
-    @SerialName("company_name")
-    val companyName: String,
-    @SerialName("abbr")
-    val abbr: String,
+    val company: String,
     @SerialName("default_currency")
     val defaultCurrency: String,
-    @SerialName("country")
-    val country: String,
-    @SerialName("domain")
-    val domain: String? = null,
     @SerialName("tax_id")
     val taxId: String? = null,
-    @SerialName("is_group")
-    @Serializable(with = IntAsBooleanSerializer::class)
-    val isGroup: Boolean = false,
-    @SerialName("parent_company")
-    val parentCompanyId: String? = null,
-    @SerialName("company_logo")
-    val companyLogo: String? = null,
-    @SerialName("default_letter_head")
-    val letterHead: String? = null
+    @SerialName("country")
+    val country: String? = null
 )
 
 @Serializable

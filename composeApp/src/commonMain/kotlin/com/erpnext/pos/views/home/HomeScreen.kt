@@ -571,7 +571,7 @@ private fun parseLooseLocalDateTime(input: String): LocalDateTime? {
     return LocalDateTime(
         year = year,
         month = Month(month).ordinal + 1,
-        day = DayOfWeek(day).ordinal + 1,
+        day = day,
         hour = hour,
         minute = minute,
         second = second,

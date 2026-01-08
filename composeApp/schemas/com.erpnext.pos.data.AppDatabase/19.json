@@ -1,8 +1,8 @@
 {
   "formatVersion": 1,
   "database": {
-    "version": 18,
-    "identityHash": "f5751db5bcc2a42e6e7766f2760344fe",
+    "version": 19,
+    "identityHash": "b8f8c8a154481e86c2e60cb0ce0e426c",
     "entities": [
       {
         "tableName": "tabUser",
@@ -1648,7 +1648,7 @@
       },
       {
         "tableName": "companies",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`company` TEXT NOT NULL, `default_currency` TEXT NOT NULL, `country` TEXT, `tax_id` TEXT, `id` INTEGER NOT NULL, `created_at` INTEGER NOT NULL, `updated_at` INTEGER, `is_deleted` INTEGER NOT NULL, `companyId` TEXT NOT NULL, `instanceId` TEXT NOT NULL, `lastSyncedAt` INTEGER, PRIMARY KEY(`instanceId`, `companyId`))",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`company` TEXT NOT NULL, `default_currency` TEXT NOT NULL, `country` TEXT, `tax_id` TEXT, PRIMARY KEY(`company`))",
         "fields": [
           {
             "fieldPath": "companyName",
@@ -1671,53 +1671,12 @@
             "fieldPath": "taxId",
             "columnName": "tax_id",
             "affinity": "TEXT"
-          },
-          {
-            "fieldPath": "id",
-            "columnName": "id",
-            "affinity": "INTEGER",
-            "notNull": true
-          },
-          {
-            "fieldPath": "createdAt",
-            "columnName": "created_at",
-            "affinity": "INTEGER",
-            "notNull": true
-          },
-          {
-            "fieldPath": "updatedAt",
-            "columnName": "updated_at",
-            "affinity": "INTEGER"
-          },
-          {
-            "fieldPath": "isDeleted",
-            "columnName": "is_deleted",
-            "affinity": "INTEGER",
-            "notNull": true
-          },
-          {
-            "fieldPath": "companyId",
-            "columnName": "companyId",
-            "affinity": "TEXT",
-            "notNull": true
-          },
-          {
-            "fieldPath": "instanceId",
-            "columnName": "instanceId",
-            "affinity": "TEXT",
-            "notNull": true
-          },
-          {
-            "fieldPath": "lastSyncedAt",
-            "columnName": "lastSyncedAt",
-            "affinity": "INTEGER"
           }
         ],
         "primaryKey": {
           "autoGenerate": false,
           "columnNames": [
-            "instanceId",
-            "companyId"
+            "company"
           ]
         }
       },
@@ -5334,7 +5293,7 @@
     ],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
-      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'f5751db5bcc2a42e6e7766f2760344fe')"
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'b8f8c8a154481e86c2e60cb0ce0e426c')"
     ]
   }
 }

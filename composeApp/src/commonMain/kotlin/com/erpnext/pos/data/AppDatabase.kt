@@ -7,6 +7,7 @@ import androidx.room.RoomDatabase
 import androidx.room.RoomDatabaseConstructor
 import com.erpnext.pos.localSource.dao.CashboxDao
 import com.erpnext.pos.localSource.dao.CategoryDao
+import com.erpnext.pos.localSource.dao.CompanyDao
 import com.erpnext.pos.localSource.dao.CustomerDao
 import com.erpnext.pos.localSource.dao.DeliveryChargeDao
 import com.erpnext.pos.localSource.dao.ExchangeRateDao
@@ -50,7 +51,7 @@ import com.erpnext.pos.localSource.entities.SalesInvoiceEntity
 import com.erpnext.pos.localSource.entities.SalesInvoiceItemEntity
 import com.erpnext.pos.localSource.entities.TaxDetailsEntity
 import com.erpnext.pos.localSource.entities.UserEntity
-import com.erpnext.pos.localSource.entities.v2.CompanyEntity
+import com.erpnext.pos.localSource.entities.CompanyEntity
 import com.erpnext.pos.localSource.entities.v2.CustomerAddressEntity
 import com.erpnext.pos.localSource.entities.v2.CustomerContactEntity
 import com.erpnext.pos.localSource.entities.v2.CustomerEntity as CustomerEntityV2
@@ -141,18 +142,15 @@ import com.erpnext.pos.localSource.entities.v2.UserEntity as UserEntityV2
         PaymentScheduleEntity::class,
         SyncStateEntity::class
     ],
-    version = 18,
+    version = 19,
     exportSchema = true,
-    autoMigrations = [
-        AutoMigration(
-            from = 16,
-            to = 17
-        ),
+    /*autoMigrations = [
         AutoMigration(
             from = 17,
             to = 18
-        )
-    ]
+        ),
+        AutoMigration(from = 18, to = 19)
+    ]*/
 )
 @ConstructedBy(AppDatabaseConstructor::class)
 abstract class AppDatabase : RoomDatabase() {
@@ -184,6 +182,7 @@ abstract class AppDatabase : RoomDatabase() {
 
     abstract fun paymentTermDao(): PaymentTermDao
     abstract fun deliveryChargeDao(): DeliveryChargeDao
+    abstract fun companyDao(): CompanyDao
 }
 
 @Suppress("KotlinNoActualForExpect")

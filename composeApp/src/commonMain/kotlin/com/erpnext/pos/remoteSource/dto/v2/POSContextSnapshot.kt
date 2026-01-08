@@ -1,6 +1,6 @@
 package com.erpnext.pos.remoteSource.dto.v2
 
-import com.erpnext.pos.localSource.entities.v2.CompanyEntity
+import com.erpnext.pos.localSource.entities.CompanyEntity
 import com.erpnext.pos.localSource.entities.v2.EmployeeEntity
 import com.erpnext.pos.localSource.entities.v2.SalesPersonEntity
 import com.erpnext.pos.localSource.entities.v2.TerritoryEntity

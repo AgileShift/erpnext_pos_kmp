@@ -5,6 +5,7 @@ import com.erpnext.pos.data.AppDatabase
 import com.erpnext.pos.data.DatabaseBuilder
 import com.erpnext.pos.data.adapters.local.SalesInvoiceLocalAdapter
 import com.erpnext.pos.data.repositories.CheckoutRepository
+import com.erpnext.pos.data.repositories.CompanyRepository
 import com.erpnext.pos.data.repositories.CustomerRepository
 import com.erpnext.pos.data.repositories.DeliveryChargesRepository
 import com.erpnext.pos.data.repositories.InventoryRepository
@@ -60,6 +61,7 @@ import com.erpnext.pos.domain.usecases.SaveInvoicePaymentsUseCase
 import com.erpnext.pos.domain.policy.DatePolicy
 import com.erpnext.pos.domain.policy.DefaultPolicy
 import com.erpnext.pos.domain.policy.PolicyInput
+import com.erpnext.pos.domain.usecases.GetCompanyInfoUseCase
 import com.erpnext.pos.domain.usecases.v2.LoadSourceDocumentsUseCase
 import com.erpnext.pos.domain.usecases.UpdateLocalInvoiceFromRemoteUseCase
 import com.erpnext.pos.localSource.datasources.CustomerLocalSource
@@ -176,6 +178,7 @@ val appModule = module {
             get(),
             get(),
             get(),
+            get(),
             get()
         )
     }
@@ -206,6 +209,7 @@ val appModule = module {
             get(),
             get(),
             get(),
+            get(),
             get()
         )
     }
@@ -217,6 +221,10 @@ val appModule = module {
 
     //region Splash DI
     single { SplashViewModel(get(), get(), get(), get(named("apiService"))) }
+    //endregion
+
+    //region Company
+    single { CompanyRepository(get(named("apiService")), get()) }
     //endregion
 
     //region Inventory
@@ -304,7 +312,17 @@ val appModule = module {
     single { CatalogRepository(get()) }
     single { CatalogSyncRepository(get(), get(named("apiServiceV2"))) }
     single { ContextRepository(get(), get(named("apiServiceV2"))) }
-    single { V2CustomerRepository(get(), get(), get(), get(), get(), get(), get(named("apiServiceV2"))) }
+    single {
+        V2CustomerRepository(
+            get(),
+            get(),
+            get(),
+            get(),
+            get(),
+            get(),
+            get(named("apiServiceV2"))
+        )
+    }
     single { SalesInvoiceLocalAdapter(get()) }
     single { SalesInvoiceRemoteRepository(get(named("apiServiceV2")), get()) }
     single { V2SalesInvoiceRepository(get(), get(), get(), get(named("apiServiceV2"))) }
@@ -380,6 +398,7 @@ val appModule = module {
     single { RegisterInvoicePaymentUseCase(get()) }
     single { CreatePaymentEntryUseCase(get()) }
     single { LoadHomeMetricsUseCase(get()) }
+    single { GetCompanyInfoUseCase(get()) }
     //endregion
 }
 

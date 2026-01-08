@@ -1,7 +1,7 @@
 package com.erpnext.pos.domain.repositories.v2
 
 import com.erpnext.pos.localSource.entities.v2.UserEntity
-import com.erpnext.pos.localSource.entities.v2.CompanyEntity
+import com.erpnext.pos.localSource.entities.CompanyEntity
 import com.erpnext.pos.localSource.entities.v2.EmployeeEntity
 import com.erpnext.pos.localSource.entities.v2.SalesPersonEntity
 import com.erpnext.pos.localSource.entities.v2.TerritoryEntity
