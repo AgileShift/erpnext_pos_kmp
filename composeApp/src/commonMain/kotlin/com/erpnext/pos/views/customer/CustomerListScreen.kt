@@ -55,67 +55,17 @@ import coil3.request.ImageRequest
 import coil3.request.crossfade
 import com.erpnext.pos.base.getPlatformName
 import com.erpnext.pos.domain.models.CustomerBO
+import com.erpnext.pos.domain.models.CustomerCounts
+import com.erpnext.pos.domain.models.CustomerQuickActionType
 import com.erpnext.pos.domain.models.SalesInvoiceBO
 import com.erpnext.pos.localization.LocalAppStrings
+import com.erpnext.pos.utils.QuickActions.customerQuickActions
 import com.erpnext.pos.utils.formatDoubleToString
 import com.erpnext.pos.utils.oauth.bd
 import com.erpnext.pos.utils.oauth.moneyScale
 import com.erpnext.pos.utils.oauth.toDouble
 import com.erpnext.pos.utils.toCurrencySymbol
 import org.jetbrains.compose.ui.tooling.preview.Preview
-
-enum class CustomerQuickActionType {
-    PendingInvoices,
-    CreateQuotation,
-    CreateSalesOrder,
-    CreateDeliveryNote,
-    CreateInvoice,
-    RegisterPayment
-}
-
-private data class CustomerQuickAction(
-    val type: CustomerQuickActionType,
-    val label: String,
-    val icon: ImageVector
-)
-
-private data class CustomerCounts(
-    val total: Int,
-    val pending: Int
-)
-
-private fun customerQuickActions(): List<CustomerQuickAction> = listOf(
-    CustomerQuickAction(
-        type = CustomerQuickActionType.PendingInvoices,
-        label = "Ver facturas pendientes",
-        icon = Icons.Filled.ReceiptLong
-    ),
-    CustomerQuickAction(
-        type = CustomerQuickActionType.CreateQuotation,
-        label = "Crear cotización",
-        icon = Icons.Filled.Description
-    ),
-    CustomerQuickAction(
-        type = CustomerQuickActionType.CreateSalesOrder,
-        label = "Crear orden de venta",
-        icon = Icons.Filled.PointOfSale
-    ),
-    CustomerQuickAction(
-        type = CustomerQuickActionType.CreateDeliveryNote,
-        label = "Crear nota de entrega",
-        icon = Icons.Filled.LocalShipping
-    ),
-    CustomerQuickAction(
-        type = CustomerQuickActionType.CreateInvoice,
-        label = "Crear factura",
-        icon = Icons.Filled.Receipt
-    ),
-    CustomerQuickAction(
-        type = CustomerQuickActionType.RegisterPayment,
-        label = "Registrar pago",
-        icon = Icons.Filled.Payments
-    )
-)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -581,7 +531,8 @@ fun CustomerItem(
     var isMenuExpanded by remember { mutableStateOf(false) }
     val quickActions = remember { customerQuickActions() }
     val avatarSize = if (isDesktop) 52.dp else 44.dp
-    val pendingAmount = bd(customer.totalPendingAmount ?: customer.currentBalance ?: 0.0).moneyScale(2).toDouble(2)
+    val pendingAmount =
+        bd(customer.totalPendingAmount ?: customer.currentBalance ?: 0.0).moneyScale(2).toDouble(2)
     val statusLabel = when {
         isOverLimit -> strings.customer.overdueLabel
         pendingInvoices > 0 || pendingAmount > 0.0 -> strings.customer.pendingLabel
@@ -767,7 +718,7 @@ fun CustomerItem(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
-                    if(customer.mobileNo?.isNotEmpty() == true) {
+                    if (customer.mobileNo?.isNotEmpty() == true) {
                         CustomerInfoChip(
                             icon = Icons.Filled.Phone,
                             text = customer.mobileNo ?: "Residencial Palmanova #117"
@@ -1090,22 +1041,24 @@ private fun CustomerOutstandingInvoicesSheet(
     var currencyExpanded by remember { mutableStateOf(false) }
     var modeExpanded by remember { mutableStateOf(false) }
 
-    val exchangeRate = remember(selectedCurrency, invoiceBaseCurrency, invoicesState, posBaseCurrency) {
-        val normalizedBase = invoiceBaseCurrency.trim().uppercase()
-        val normalizedSelected = selectedCurrency.trim().uppercase()
-        when {
-            normalizedSelected == normalizedBase -> 1.0
-            invoicesState is CustomerInvoicesState.Success -> {
-                resolveRateBetween(
-                    fromCurrency = normalizedBase,
-                    toCurrency = normalizedSelected,
-                    baseCurrency = posBaseCurrency,
-                    baseRates = invoicesState.exchangeRateByCurrency
-                )
+    val exchangeRate =
+        remember(selectedCurrency, invoiceBaseCurrency, invoicesState, posBaseCurrency) {
+            val normalizedBase = invoiceBaseCurrency.trim().uppercase()
+            val normalizedSelected = selectedCurrency.trim().uppercase()
+            when {
+                normalizedSelected == normalizedBase -> 1.0
+                invoicesState is CustomerInvoicesState.Success -> {
+                    resolveRateBetween(
+                        fromCurrency = normalizedBase,
+                        toCurrency = normalizedSelected,
+                        baseCurrency = posBaseCurrency,
+                        baseRates = invoicesState.exchangeRateByCurrency
+                    )
+                }
+
+                else -> null
             }
-            else -> null
         }
-    }
     val conversionError = exchangeRate == null
     val baseAmount = exchangeRate?.let { rate ->
         if (rate <= 0.0) 0.0 else amountValue / rate
@@ -1274,6 +1227,7 @@ private fun CustomerOutstandingInvoicesSheet(
                                                             label = { Text("Pendiente sync") }
                                                         )
                                                     }
+
                                                     "Failed" -> {
                                                         AssistChip(
                                                             onClick = {},
@@ -1345,7 +1299,8 @@ private fun CustomerOutstandingInvoicesSheet(
                                                 baseRates = invoicesState.exchangeRateByCurrency
                                             )
                                             val posSymbol =
-                                                posBaseCurrency.toCurrencySymbol().ifBlank { posBaseCurrency }
+                                                posBaseCurrency.toCurrencySymbol()
+                                                    .ifBlank { posBaseCurrency }
                                             val posLabel = rateBaseToPos?.let { rate ->
                                                 "$posSymbol ${formatAmount(invoice.outstandingAmount * rate)}"
                                             } ?: "$posSymbol --"
