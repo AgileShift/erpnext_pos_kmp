@@ -8,6 +8,7 @@ import com.erpnext.pos.domain.models.POSCurrencyOption
 import com.erpnext.pos.domain.models.POSPaymentModeOption
 import com.erpnext.pos.domain.models.PaymentTermBO
 import com.erpnext.pos.domain.models.SourceDocumentOption
+import com.erpnext.pos.utils.calculateTotals
 import com.erpnext.pos.views.salesflow.SalesFlowContext
 import com.erpnext.pos.views.salesflow.SalesFlowSource
 import com.erpnext.pos.utils.oauth.bd
@@ -82,7 +83,7 @@ sealed interface BillingState {
         val isFinalizingSale: Boolean = false
     ) : BillingState {
         fun recalculateCartTotals(): Success {
-            val totals = BillingCalculationHelper.calculateTotals(this)
+            val totals = calculateTotals(this)
             return copy(
                 subtotal = roundToCurrency(totals.subtotal),
                 taxes = roundToCurrency(totals.taxes),

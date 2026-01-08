@@ -3,14 +3,16 @@ package com.erpnext.pos
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.navigation.compose.rememberNavController
-import androidx.compose.runtime.getValue
 import com.erpnext.pos.NavGraph.Setup
 import com.erpnext.pos.base.getPlatformName
 import com.erpnext.pos.localization.ProvideAppStrings
@@ -21,6 +23,7 @@ import com.erpnext.pos.navigation.v2.BottomBarWithCenterFab
 import com.erpnext.pos.utils.view.SnackbarHost
 import com.erpnext.pos.utils.view.rememberSnackbarController
 import com.erpnext.pos.views.CashBoxManager
+//import com.erpnext.pos.utils.loading.LoadingIndicator
 import org.koin.compose.koinInject
 
 fun shouldShowBottomBar(currentRoute: String): Boolean {
@@ -43,6 +46,7 @@ fun AppNavigation() {
     val visibleEntries by navController.visibleEntries.collectAsState()
     val currentRoute = visibleEntries.lastOrNull()?.destination?.route ?: ""
     val isDesktop = getPlatformName() == "Desktop"
+//    val isLoading by LoadingIndicator.isLoading.collectAsState(initial = false)
 
     ProvideAppStrings {
         Scaffold(
@@ -79,6 +83,16 @@ fun AppNavigation() {
                         snackbar = snackbar,
                         onDismiss = snackbarController::dismiss
                     )
+
+                    /*if (isLoading) {
+                        LinearProgressIndicator(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .align(Alignment.TopCenter),
+                            color = MaterialTheme.colorScheme.primary,
+                            trackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.25f)
+                        )
+                    }*/
 
                     val navManager: NavigationManager = koinInject()
                     LaunchedEffect(Unit) {

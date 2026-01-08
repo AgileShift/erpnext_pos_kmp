@@ -1,0 +1,369 @@
+@file:OptIn(ExperimentalTime::class)
+
+package com.erpnext.pos.utils
+
+import com.erpnext.pos.localSource.entities.ModeOfPaymentEntity
+import com.erpnext.pos.domain.models.CustomerBO
+import com.erpnext.pos.domain.models.POSPaymentModeOption
+import com.erpnext.pos.localSource.entities.POSInvoicePaymentEntity
+import com.erpnext.pos.remoteSource.api.APIService
+import com.erpnext.pos.remoteSource.dto.SalesInvoiceDto
+import com.erpnext.pos.remoteSource.dto.v2.PaymentEntryCreateDto
+import com.erpnext.pos.remoteSource.dto.v2.PaymentEntryReferenceCreateDto
+import com.erpnext.pos.utils.oauth.CurrencySpec
+import com.erpnext.pos.utils.oauth.bd
+import com.erpnext.pos.utils.oauth.coerceAtLeastZero
+import com.erpnext.pos.utils.oauth.isZero
+import com.erpnext.pos.utils.oauth.minOfBd
+import com.erpnext.pos.utils.oauth.moneyScale
+import com.erpnext.pos.utils.oauth.roundCashIfNeeded
+import com.erpnext.pos.utils.oauth.safeDiv
+import com.erpnext.pos.utils.oauth.safeMul
+import com.erpnext.pos.utils.oauth.toDouble
+import com.erpnext.pos.utils.toErpDateTime
+import com.erpnext.pos.views.POSContext
+import com.erpnext.pos.views.billing.PaymentLine
+import kotlin.time.Clock
+import kotlin.math.pow
+import kotlin.time.ExperimentalTime
+
+
+fun normalizeCurrency(code: String?): String? {
+    val normalized = code?.trim()?.uppercase()
+    return normalized?.takeIf { it.isNotBlank() }
+}
+
+fun resolvePaymentCurrencyForMode(
+    modeOfPayment: String,
+    invoiceCurrency: String,
+    paymentModeCurrencyByMode: Map<String, String>?,
+    paymentModeDetails: Map<String, ModeOfPaymentEntity>
+): String {
+    val invoice = normalizeCurrency(invoiceCurrency) ?: "USD"
+    val modeDefinition = paymentModeDetails[modeOfPayment]
+    normalizeCurrency(modeDefinition?.currency)?.let { return it }
+    normalizeCurrency(paymentModeCurrencyByMode?.get(modeOfPayment))?.let { return it }
+    return invoice
+}
+
+fun buildPaymentModeDetailMap(definitions: List<ModeOfPaymentEntity>): Map<String, ModeOfPaymentEntity> {
+    return definitions.fold(mutableMapOf<String, ModeOfPaymentEntity>()) { acc, definition ->
+        acc[definition.modeOfPayment] = definition
+        acc[definition.name] = definition
+        acc
+    }
+}
+
+fun buildPaymentModeCurrencyMap(definitions: List<ModeOfPaymentEntity>): Map<String, String> {
+    return definitions.fold(mutableMapOf<String, String>()) { acc, definition ->
+        definition.currency?.trim()?.uppercase()?.takeIf { it.isNotBlank() }?.let { currency ->
+            acc[definition.modeOfPayment] = currency
+            acc[definition.name] = currency
+        }
+        acc
+    }
+}
+
+// -----------------------------------------------------------------------------
+// Payment helpers (reusables para Billing, Customer, etc.)
+// -----------------------------------------------------------------------------
+
+suspend fun resolveRateToInvoiceCurrency(
+    api: APIService,
+    paymentCurrency: String,
+    invoiceCurrency: String,
+    cache: Map<String, Double>,
+): Double {
+    val pay = normalizeCurrency(paymentCurrency) ?: return 1.0
+    val inv = normalizeCurrency(invoiceCurrency) ?: return 1.0
+    if (pay == inv) return 1.0
+
+    cache[pay]?.takeIf { it > 0.0 }?.let { return it }
+
+    val direct = api.getExchangeRate(fromCurrency = pay, toCurrency = inv)?.takeIf { it > 0.0 }
+    if (direct != null) return direct
+
+    val reverse = api.getExchangeRate(fromCurrency = inv, toCurrency = pay)
+        ?.takeIf { it > 0.0 }
+        ?.let { 1 / it }
+
+    return reverse ?: error("No se pudo resolver tasa $pay -> $inv")
+}
+
+/**
+ * Resuelve una tasa de cambio entre monedas.
+ * - Intenta directo: from -> to
+ * - Si falla, intenta inverso: to -> from y lo invierte
+ */
+suspend fun resolveExchangeRateBetween(
+    api: APIService,
+    fromCurrency: String?,
+    toCurrency: String?,
+): Double? {
+    val from = normalizeCurrency(fromCurrency) ?: return null
+    val to = normalizeCurrency(toCurrency) ?: return null
+    if (from == to) return 1.0
+
+    val directRate = api.getExchangeRate(fromCurrency = from, toCurrency = to)?.takeIf { it > 0.0 }
+    if (directRate != null) return directRate
+
+    val reverseRate = api.getExchangeRate(fromCurrency = to, toCurrency = from)
+        ?.takeIf { it > 0.0 }
+        ?.let { 1 / it }
+
+    return reverseRate
+}
+
+data class PaymentStatus(
+    val paidAmount: Double,
+    val outstandingAmount: Double,
+    val status: String
+)
+
+/**
+ * Lógica de estado de pago. Para no acoplarlo a Billing, recibe una función `round`.
+ */
+fun resolvePaymentStatus(
+    total: Double,
+    paymentLines: List<PaymentLine>,
+    round: (Double) -> Double
+): PaymentStatus {
+    val paidAmount = round(paymentLines.sumOf { it.baseAmount })
+    val roundedTotal = round(total)
+    val outstandingAmount = round((roundedTotal - paidAmount).coerceAtLeast(0.0))
+    val status =
+        if (outstandingAmount == roundedTotal) "Unpaid"
+        else if ((roundedTotal - outstandingAmount) > 0.0) "Partly Paid"
+        else "Paid"
+    return PaymentStatus(paidAmount, outstandingAmount, status)
+}
+
+fun requiresReference(mode: POSPaymentModeOption?): Boolean {
+    val type = mode?.type?.trim().orEmpty()
+    return type.equals("Bank", ignoreCase = true) ||
+            type.equals("Card", ignoreCase = true) ||
+            mode?.modeOfPayment?.contains("bank", ignoreCase = true) == true ||
+            mode?.modeOfPayment?.contains("card", ignoreCase = true) == true
+}
+
+fun buildCurrencySpecs(): Map<String, CurrencySpec> {
+    // Ajusta aquí si agregas más monedas/escala por país.
+    return mapOf(
+        "NIO" to CurrencySpec(code = "NIO", minorUnits = 2, cashScale = 0),
+        "USD" to CurrencySpec(code = "USD", minorUnits = 2, cashScale = 2),
+    )
+}
+
+fun buildLocalPayments(
+    invoiceId: String,
+    postingDate: String,
+    paymentLines: List<PaymentLine>
+): List<POSInvoicePaymentEntity> {
+    return paymentLines.map { line ->
+        POSInvoicePaymentEntity(
+            parentInvoice = invoiceId,
+            modeOfPayment = line.modeOfPayment,
+            amount = line.baseAmount,
+            paymentReference = line.referenceNumber?.takeIf { it.isNotBlank() },
+            paymentDate = postingDate
+        )
+    }
+}
+
+data class InvoiceReceivableAmounts(
+    val receivableCurrency: String,
+    val totalRc: Double,
+    val outstandingRc: Double
+)
+
+fun resolveInvoiceAmountsInReceivable(
+    created: SalesInvoiceDto,
+): InvoiceReceivableAmounts {
+    val invoiceCurrency = (created.currency ?: "").trim().uppercase()
+    val receivableCurrency = (created.partyAccountCurrency ?: created.currency ?: "")
+        .trim().uppercase()
+
+    if (receivableCurrency.isBlank()) {
+        error("No se pudo resolver party_account_currency de la factura creada.")
+    }
+
+    val invoiceTotalInv = created.grandTotal
+    val invoiceOutstandingInv = created.outstandingAmount ?: invoiceTotalInv
+
+    // Caso simple: invoice currency == receivable currency
+    if (invoiceCurrency.isNotBlank() && invoiceCurrency.equals(receivableCurrency, ignoreCase = true)) {
+        return InvoiceReceivableAmounts(
+            receivableCurrency = receivableCurrency,
+            totalRc = invoiceTotalInv,
+            outstandingRc = invoiceOutstandingInv
+        )
+    }
+
+    val baseTotal = created.baseGrandTotal
+        ?: error("Falta base_grand_total en SalesInvoiceDto. Es obligatorio para multi-moneda.")
+
+    if (invoiceTotalInv <= 0.0) {
+        error("grand_total inválido para inferir tasa invoice->receivable (grand_total=$invoiceTotalInv).")
+    }
+
+    // rate: (receivable per 1 invoice)
+    val rateInvToRc = baseTotal / invoiceTotalInv
+    if (rateInvToRc <= 0.0) {
+        error("Tasa invoice->receivable inválida. base_grand_total=$baseTotal, grand_total=$invoiceTotalInv")
+    }
+
+    val totalRc = invoiceTotalInv * rateInvToRc
+    val outstandingRc = invoiceOutstandingInv * rateInvToRc
+
+    return InvoiceReceivableAmounts(
+        receivableCurrency = receivableCurrency,
+        totalRc = totalRc,
+        outstandingRc = outstandingRc
+    )
+}
+
+fun isSameMoneyAmount(a: Double, b: Double, decimals: Int): Boolean {
+    val factor = decimals.toDouble().pow(10.0)
+    val ra = kotlin.math.round(a * factor) / factor
+    val rb = kotlin.math.round(b * factor) / factor
+    return ra == rb
+}
+
+suspend fun buildPaymentEntryDto(
+    api: APIService,
+    line: PaymentLine,
+    context: POSContext,
+    customer: CustomerBO,
+    postingDate: String,
+    invoiceId: String,
+    invoiceTotalRc: Double,
+    outstandingRc: Double,
+    paidFromAccount: String?,
+    partyAccountCurrency: String?,
+    exchangeRateByCurrency: Map<String, Double>,
+    currencySpecs: Map<String, CurrencySpec>,
+    paymentModeDetails: Map<String, ModeOfPaymentEntity>,
+): PaymentEntryCreateDto {
+
+    val paidFromResolved = paidFromAccount?.takeIf { it.isNotBlank() }
+        ?: error("paidFromAccount requerido")
+
+    val modeDefinition = paymentModeDetails[line.modeOfPayment]
+    val paidToResolved = modeDefinition?.account?.takeIf { it.isNotBlank() }
+        ?: error("Modo de pago ${line.modeOfPayment} sin cuenta configurada")
+
+    val receivableCurrency = (partyAccountCurrency?.takeIf { it.isNotBlank() }
+        ?: error("party_account_currency requerido"))
+        .trim().uppercase()
+
+    val paidToCurrency = (modeDefinition.currency?.takeIf { it.isNotBlank() }
+        ?: line.currency.takeIf { it.isNotBlank() }
+        ?: error("No se pudo resolver moneda de paid_to"))
+        .trim().uppercase()
+
+    val rcSpec = currencySpecs[receivableCurrency]
+        ?: CurrencySpec(code = receivableCurrency, minorUnits = 2, cashScale = 2)
+    val toSpec = currencySpecs[paidToCurrency]
+        ?: CurrencySpec(code = paidToCurrency, minorUnits = 2, cashScale = 2)
+
+    val outstanding = bd(outstandingRc)
+        .moneyScale(rcSpec.minorUnits)
+        .coerceAtLeastZero()
+
+    if (outstanding.isZero()) {
+        error("Factura $invoiceId sin saldo pendiente en $receivableCurrency")
+    }
+
+    val entered = roundCashIfNeeded(bd(line.enteredAmount), toSpec)
+
+    // Caso 1: paid_to == receivable
+    if (paidToCurrency.equals(receivableCurrency, ignoreCase = true)) {
+        val allocated = minOfBd(entered, outstanding).moneyScale(rcSpec.minorUnits)
+
+        return PaymentEntryCreateDto(
+            company = context.company,
+            postingDate = postingDate,
+            paymentType = "Receive",
+            partyType = "Customer",
+            docStatus = 1,
+            partyId = customer.name,
+            modeOfPayment = line.modeOfPayment,
+            paidAmount = allocated.toDouble(rcSpec.minorUnits),
+            receivedAmount = allocated.toDouble(rcSpec.minorUnits),
+            paidFrom = paidFromResolved,
+            paidTo = paidToResolved,
+            paidToAccountCurrency = paidToCurrency,
+            sourceExchangeRate = null,
+            targetExchangeRate = null,
+            referenceNo = line.referenceNumber?.takeIf { it.isNotBlank() },
+            referenceDate = if (!line.referenceNumber.isNullOrEmpty())
+                Clock.System.now().toEpochMilliseconds().toErpDateTime()
+            else null,
+            references = listOf(
+                PaymentEntryReferenceCreateDto(
+                    referenceDoctype = "Sales Invoice",
+                    referenceName = invoiceId,
+                    totalAmount = bd(invoiceTotalRc).moneyScale(rcSpec.minorUnits)
+                        .toDouble(rcSpec.minorUnits),
+                    outstandingAmount = outstanding.toDouble(rcSpec.minorUnits),
+                    allocatedAmount = allocated.toDouble(rcSpec.minorUnits)
+                )
+            )
+        )
+    }
+
+    // Caso 2: paid_to != receivable
+    val rateDouble = resolveExchangeRateBetween(
+        api = api,
+        fromCurrency = paidToCurrency,
+        toCurrency = receivableCurrency,
+    )?.takeIf { it > 0.0 }
+        ?: error("No se pudo resolver tasa $paidToCurrency -> $receivableCurrency")
+
+    val rate = bd(rateDouble)
+
+    val deliveredRc = entered.safeMul(rate).moneyScale(rcSpec.minorUnits)
+    val allocatedRc = minOfBd(deliveredRc, outstanding).moneyScale(rcSpec.minorUnits)
+
+    val receivedEffective = allocatedRc
+        .safeDiv(rate, scale = 8)
+        .let { roundCashIfNeeded(it, toSpec) }
+
+    return PaymentEntryCreateDto(
+        company = context.company,
+        postingDate = postingDate,
+        paymentType = "Receive",
+        partyType = "Customer",
+        docStatus = 1,
+        partyId = customer.name,
+        modeOfPayment = line.modeOfPayment,
+        paidAmount = allocatedRc.toDouble(rcSpec.minorUnits),
+        receivedAmount = receivedEffective.toDouble(toSpec.cashScale.coerceAtMost(toSpec.minorUnits)),
+        paidFrom = paidFromResolved,
+        paidTo = paidToResolved,
+        paidToAccountCurrency = paidToCurrency,
+        sourceExchangeRate = 1.0,
+        targetExchangeRate = rate.toDouble(6),
+        referenceNo = line.referenceNumber?.takeIf { it.isNotBlank() },
+        referenceDate = if (!line.referenceNumber.isNullOrEmpty())
+            Clock.System.now().toEpochMilliseconds().toErpDateTime()
+        else null,
+        references = listOf(
+            PaymentEntryReferenceCreateDto(
+                referenceDoctype = "Sales Invoice",
+                referenceName = invoiceId,
+                totalAmount = bd(invoiceTotalRc).moneyScale(rcSpec.minorUnits)
+                    .toDouble(rcSpec.minorUnits),
+                outstandingAmount = outstanding.toDouble(rcSpec.minorUnits),
+                allocatedAmount = allocatedRc.toDouble(rcSpec.minorUnits)
+            )
+        )
+    )
+}
+
+/**
+ * Convierte una PaymentLine a baseAmount sin acoplarla a Billing: recibe `round`.
+ */
+fun PaymentLine.toBaseAmount(round: (Double) -> Double): PaymentLine {
+    return copy(baseAmount = round(enteredAmount * exchangeRate))
+}

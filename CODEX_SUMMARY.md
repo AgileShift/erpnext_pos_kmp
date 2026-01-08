@@ -1,6 +1,14 @@
 # Codex Summary
 
+## Estado actual
+
+- Implementamos el administrador de sincronización (`SyncManager`) para escuchar `NetworkMonitor.isConnected`, respetar `SyncPreferences` (`autoSync` y `wifiOnly`) y disparar `fullSync()` automáticamente cuando vuelve la conexión, manteniendo el estado de sincronización actualizado.
+- Ensamblamos feedback para la creación de facturas: ahora el `BillingViewModel` marca `isFinalizingSale` durante el guardado local, el `BillingScreen` muestra un snackbar de carga amistoso y luego muestra errores o éxitos según el caso, y seguimos guardando la factura localmente antes de intentar el push remoto con la cola existente.
+- Motelamos la persistencia de DAOs v2 en los módulos de plataforma para asegurar que `SyncRepository` y `PushSyncManager` siempre encuentren sus dependencias aunque arranquemos desde Android o Desktop.
+- De cara a mañana, seguimos con la lista ordenada en esta misma sección: después de dejar este estado de offline-first sólido, continuamos con la primera tarea pendiente de la checklist para no romper el orden preestablecido.
+
 ## Checklist de siguientes tareas (pendiente por completar)
+- [ ] **Agregar una barra de carga mientras ejecuta cualquier proceso (guardado, lectura, actualizacion, eliminacion) en cualquiera de las vistas para darle contexto visual al usuario**
 - [ ] **Aplicar exactamente la misma logica de pagos en billing que en Customer para la seccion de pagos de facturas pendientes, aunque dupliquemos, o bien podemos hacer un modulo de PaymentUtils o algun otro nombre y poner ahi para que ambas vistas compartan esa logica**
 - [ ] **En la pantalla de Registro de Pago, al seleccionar la cuenta por defecto ya conocemos la Moneda de esa cuenta, esto para remover el campo de Moneda y nos saltamos ese paso mas automatico, tenemos que copiar el behavior de Billing**
 - [ ] **Dejo de aparecer el credito disponible de los clientes**
