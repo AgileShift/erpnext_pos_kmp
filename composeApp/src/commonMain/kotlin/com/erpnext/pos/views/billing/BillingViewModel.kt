@@ -1,3 +1,5 @@
+@file:OptIn(ExperimentalTime::class)
+
 package com.erpnext.pos.views.billing
 
 import CartItem
@@ -69,6 +71,7 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.update
 import kotlin.math.pow
 import kotlin.time.Clock
+import kotlin.time.ExperimentalTime
 
 class BillingViewModel(
     private val customersUseCase: FetchCustomersLocalUseCase,

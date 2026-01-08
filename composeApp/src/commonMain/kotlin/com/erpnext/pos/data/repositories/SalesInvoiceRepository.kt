@@ -141,6 +141,7 @@ class SalesInvoiceRepository(
         return entity
     }
 
+    @OptIn(ExperimentalTime::class)
     suspend fun updateLocalInvoiceFromRemote(
         localInvoiceName: String,
         remote: SalesInvoiceDto
