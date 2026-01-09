@@ -108,8 +108,6 @@ fun CustomerItemPreview() {
             isDesktop = false,
             onClick = {},
             onOpenQuickActions = {},
-            posBaseCurrency = "USD",
-            baseRates = mapOf<String, Double>("USD" to 0.23, "NIO" to 36.6243),
             onQuickAction = {}
         )
     }
@@ -133,8 +131,6 @@ fun CustomerItemOverLimitPreview() {
             isDesktop = false,
             onClick = {},
             onOpenQuickActions = {},
-            baseRates = mapOf("USD" to 0.23, "NIO" to 36.6243),
-            posBaseCurrency = "NIO",
             onQuickAction = {}
         )
     }

@@ -34,14 +34,14 @@ class CustomerCoordinator(
         modeOfPayment: String,
         enteredAmount: Double,
         enteredCurrency: String,
-        baseAmount: Double
+        referenceNumber: String,
     ) = viewModel.registerPayment(
         customerId,
         invoiceId,
         modeOfPayment,
         enteredAmount,
         enteredCurrency,
-        baseAmount
+        referenceNumber
     )
 }
 

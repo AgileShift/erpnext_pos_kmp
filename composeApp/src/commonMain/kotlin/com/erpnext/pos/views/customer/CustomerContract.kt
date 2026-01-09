@@ -58,6 +58,6 @@ data class CustomerAction(
         modeOfPayment: String,
         enteredAmount: Double,
         enteredCurrency: String,
-        baseAmount: Double
+        referenceNumber: String,
     ) -> Unit = { _, _, _, _, _, _ -> }
 )

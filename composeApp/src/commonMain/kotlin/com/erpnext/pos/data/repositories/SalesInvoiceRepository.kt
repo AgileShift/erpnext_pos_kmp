@@ -211,8 +211,9 @@ class SalesInvoiceRepository(
             query = { flowOf(localSource.getAllLocalInvoices().toBO()) },
             fetch = { remoteSource.fetchInvoices(context.requireContext().profileName) },
             shouldFetch = {
-                val first = localSource.getOldestItem()
-                first == null || SyncTTL.isExpired(first.lastSyncedAt)
+                true
+                /*val first = localSource.getOldestItem()
+                first == null || SyncTTL.isExpired(first.lastSyncedAt)*/
             },
             saveFetchResult = { it ->
                 it.toEntities().map {

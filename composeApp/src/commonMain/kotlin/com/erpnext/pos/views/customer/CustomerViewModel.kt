@@ -238,8 +238,7 @@ class CustomerViewModel(
         modeOfPayment: String,
         enteredAmount: Double,
         enteredCurrency: String,
-        // NOTE: el Screen puede enviar baseAmount estimado, pero el VM recalcula y “cappea” usando PaymentUtils.
-        baseAmount: Double
+        referenceNumber: String
     ) {
         if (modeOfPayment.isBlank()) {
             _paymentState.value = buildPaymentState(errorMessage = "Selecciona un modo de pago.")
@@ -252,10 +251,6 @@ class CustomerViewModel(
         if (enteredAmount <= 0) {
             _paymentState.value = buildPaymentState(errorMessage = "Ingresa un monto válido.")
             return
-        }
-        if (baseAmount <= 0) {
-            // Permite que el VM siga, porque el cálculo final se basa en enteredAmount + tasa.
-            // Pero si te llega baseAmount 0 porque faltó tasa, el Screen debe bloquear el submit.
         }
 
         _paymentState.value = buildPaymentState(isSubmitting = true)
@@ -294,9 +289,8 @@ class CustomerViewModel(
                     currency = normalizeCurrency(enteredCurrency)
                         ?: normalizeCurrency(context.currency) ?: "USD",
                     enteredAmount = enteredAmount,
-                    // PaymentUtils no depende de baseAmount para el cálculo final.
                     baseAmount = 0.0,
-                    referenceNumber = null,
+                    referenceNumber = referenceNumber,
                     exchangeRate = rateResolver(enteredCurrency, receivableCurrency) ?: 0.0
                 )
 

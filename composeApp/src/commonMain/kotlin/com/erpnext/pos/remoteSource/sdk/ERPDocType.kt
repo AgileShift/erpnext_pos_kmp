@@ -130,6 +130,7 @@ val fields: List<DocTypeFields> = listOf(
             "posting_date",
             "due_date",
             "status",
+            "debit_to",
             "outstanding_amount",
             "grand_total",
             "paid_amount",

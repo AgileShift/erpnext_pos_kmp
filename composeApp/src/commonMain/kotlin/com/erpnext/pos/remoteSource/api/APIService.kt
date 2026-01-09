@@ -677,7 +677,7 @@ class APIService(
                         "Unpaid and Discounted",
                         "Partly Paid and Discounted"
                     )
-                    "outstanding_amount" gt 0
+                    "outstanding_amount" gt 0.0
                 })
         } catch (e: Exception) {
             e.printStackTrace()

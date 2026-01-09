@@ -26,4 +26,6 @@ data class POSClosingEntryDto(
     val periodEndDate: String,
     @SerialName("balance_details")
     val balanceDetails: List<BalanceDetailsDto>,
+    @SerialName("docstatus")
+    val docStatus: Int? = 1
 )

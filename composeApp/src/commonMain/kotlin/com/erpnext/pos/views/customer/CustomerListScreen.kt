@@ -282,14 +282,14 @@ fun CustomerListScreen(
                 outstandingCustomer = null
                 actions.clearOutstandingInvoices()
             },
-            onRegisterPayment = { invoiceId, mode, enteredAmount, enteredCurrency, baseAmount ->
+            onRegisterPayment = { invoiceId, mode, enteredAmount, enteredCurrency, referenceNumber ->
                 actions.registerPayment(
                     customer.name,
                     invoiceId,
                     mode,
                     enteredAmount,
                     enteredCurrency,
-                    baseAmount
+                    referenceNumber
                 )
             }
         )
@@ -1016,7 +1016,7 @@ private fun CustomerOutstandingInvoicesSheet(
         modeOfPayment: String,
         enteredAmount: Double,
         enteredCurrency: String,
-        baseAmount: Double
+        referenceNumber: String
     ) -> Unit
 ) {
     val strings = LocalAppStrings.current
@@ -1510,7 +1510,7 @@ private fun CustomerOutstandingInvoicesSheet(
                         selectedMode,
                         amountValue,
                         selectedCurrency,
-                        amount
+                        referenceInput
                     )
                 },
                 enabled = isSubmitEnabled
