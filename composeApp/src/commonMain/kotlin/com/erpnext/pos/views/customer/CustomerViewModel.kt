@@ -20,8 +20,10 @@ import com.erpnext.pos.localSource.dao.ModeOfPaymentDao
 import com.erpnext.pos.localSource.entities.ModeOfPaymentEntity
 import com.erpnext.pos.remoteSource.mapper.toDto
 import com.erpnext.pos.utils.buildPaymentModeDetailMap
+import com.erpnext.pos.utils.formatDoubleToString
 import com.erpnext.pos.utils.normalizeCurrency
 import com.erpnext.pos.utils.roundToCurrency
+import com.erpnext.pos.utils.toCurrencySymbol
 import com.erpnext.pos.utils.toErpDateTime
 import com.erpnext.pos.views.CashBoxManager
 import com.erpnext.pos.views.billing.PaymentLine
@@ -157,7 +159,11 @@ class CustomerViewModel(
         )
     }
 
-    fun loadOutstandingInvoices(customerId: String) {
+    fun loadOutstandingInvoices(
+        customerId: String,
+        successMessage: String? = null,
+        errorMessage: String? = null
+    ) {
         _invoicesState.value = CustomerInvoicesState.Loading
 
         viewModelScope.launch {
@@ -181,8 +187,12 @@ class CustomerViewModel(
                 }
             }
 
-            _paymentState.value =
-                buildPaymentState(modeTypes = modeTypes, modeDetails = paymentModeCurrencyByMode)
+            _paymentState.value = buildPaymentState(
+                modeTypes = modeTypes,
+                modeDetails = paymentModeCurrencyByMode,
+                successMessage = successMessage,
+                errorMessage = errorMessage
+            )
         }
 
         executeUseCase(
@@ -318,11 +328,18 @@ class CustomerViewModel(
                     paymentModeDetails = paymentModeDetails
                 )
 
+                val outstanding = invoice.outstandingAmount.coerceAtLeast(0.0)
+                val appliedAmount = fixedLine.baseAmount.coerceAtMost(outstanding)
+                val changeBase = (fixedLine.baseAmount - appliedAmount).takeIf { it > 0.0 }
+                val changeInPaymentCurrency = changeBase?.let { change ->
+                    if (fixedLine.exchangeRate > 0.0) change / fixedLine.exchangeRate else null
+                }
+
                 registerInvoicePaymentUseCase(
                     RegisterInvoicePaymentInput(
                         invoiceId = invoiceId,
                         modeOfPayment = modeOfPayment,
-                        amount = fixedLine.baseAmount
+                        amount = appliedAmount
                     )
                 )
 
@@ -330,14 +347,22 @@ class CustomerViewModel(
                     runCatching { syncSalesInvoiceFromRemoteUseCase(invoiceId) }
                 }
 
-                _paymentState.value = buildPaymentState(
-                    successMessage = if (paymentResult.remotePaymentsSucceeded) {
-                        "Pago registrado correctamente."
-                    } else {
-                        "Pago registrado localmente. Se sincronizará cuando haya conexión."
-                    }
-                )
-                loadOutstandingInvoices(customerId)
+                val baseCurrencyForChange = normalizeCurrency(enteredCurrency)
+                    ?: normalizeCurrency(context.currency) ?: "USD"
+                val changeText = changeInPaymentCurrency?.takeIf { it > 0.0 }?.let { change ->
+                    val symbol = baseCurrencyForChange.toCurrencySymbol().ifBlank { baseCurrencyForChange }
+                    "Cambio: $symbol ${formatDoubleToString(change, 2)}"
+                }
+
+                val baseMessage = if (paymentResult.remotePaymentsSucceeded) {
+                    "Pago registrado correctamente."
+                } else {
+                    "Pago registrado localmente. Se sincronizará cuando haya conexión."
+                }
+
+                val finalMessage = listOfNotNull(baseMessage, changeText).joinToString(" ")
+
+                loadOutstandingInvoices(customerId, successMessage = finalMessage)
             },
             exceptionHandler = {
                 _paymentState.value = buildPaymentState(
