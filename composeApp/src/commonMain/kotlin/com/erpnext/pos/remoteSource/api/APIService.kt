@@ -38,6 +38,7 @@ import com.erpnext.pos.remoteSource.oauth.AuthInfoStore
 import com.erpnext.pos.remoteSource.oauth.OAuthConfig
 import com.erpnext.pos.remoteSource.oauth.Pkce
 import com.erpnext.pos.remoteSource.oauth.TokenStore
+import com.erpnext.pos.remoteSource.oauth.refreshAuthToken
 import com.erpnext.pos.remoteSource.oauth.toBearerToken
 import com.erpnext.pos.remoteSource.oauth.toOAuthConfig
 import com.erpnext.pos.remoteSource.sdk.ERPDocType
@@ -52,9 +53,6 @@ import com.erpnext.pos.remoteSource.sdk.putERP
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.engine.HttpClientEngine
-import io.ktor.client.plugins.auth.Auth
-import io.ktor.client.plugins.auth.providers.BearerTokens
-import io.ktor.client.plugins.auth.providers.bearer
 import io.ktor.client.request.get
 import io.ktor.client.request.forms.FormDataContent
 import io.ktor.client.request.post
@@ -76,38 +74,12 @@ import com.erpnext.pos.utils.AppSentry
 class APIService(
     private val client: HttpClient,
     private val store: TokenStore,
-    private val authStore: AuthInfoStore
+    private val authStore: AuthInfoStore,
+    private val tokenClient: HttpClient
 ) {
-    private val clientOAuth = client.config {
-        install(Auth) {
-            bearer {
-                loadTokens {
-                    store.load()?.toBearerToken()
-                }
-                refreshTokens {
-                    val current = store.load() ?: return@refreshTokens null
-                    val refreshed =
-                        refreshToken(current.refresh_token ?: return@refreshTokens null)
-                    val bearer = BearerTokens(
-                        refreshed.access_token, refreshed.refresh_token ?: current.refresh_token
-                    )
-                    store.save(
-                        TokenResponse(
-                            access_token = refreshed.access_token,
-                            refresh_token = refreshed.refresh_token,
-                            id_token = refreshed.id_token,
-                            expires_in = refreshed.expires_in
-                        )
-                    )
-                    bearer
-                }
-            }
-        }
-    }
-
     suspend fun getCompanyInfo(): List<CompanyDto> {
         val url = authStore.getCurrentSite()
-        return clientOAuth.getERPSingle(
+        return client.getERPSingle(
             doctype = ERPDocType.Company.path,
             fields = ERPDocType.Company.getFields(),
             name = "",
@@ -117,7 +89,7 @@ class APIService(
 
     suspend fun createPaymentEntry(entry: PaymentEntryCreateDto) {
         val url = authStore.getCurrentSite()
-        return clientOAuth.postERP(
+        return client.postERP(
             ERPDocType.PaymentEntry.path, payload = entry, baseUrl = url
         )
     }
@@ -126,7 +98,7 @@ class APIService(
         territory: String, fromDate: String
     ): List<SalesInvoiceDto> {
         val url = authStore.getCurrentSite()
-        return clientOAuth.getERPList(
+        return client.getERPList(
             ERPDocType.SalesInvoice.path,
             ERPDocType.SalesInvoice.getFields(),
             baseUrl = url,
@@ -139,7 +111,7 @@ class APIService(
 
     suspend fun fetchPaymentTerms(): List<PaymentTermDto> {
         val url = authStore.getCurrentSite()
-        return clientOAuth.getERPList(
+        return client.getERPList(
             ERPDocType.PaymentTerm.path, listOf(
                 "payment_term_name",
                 "invoice_portion",
@@ -158,7 +130,7 @@ class APIService(
 
     suspend fun fetchDeliveryCharges(): List<DeliveryChargeDto> {
         val url = authStore.getCurrentSite()
-        return clientOAuth.getERPList(
+        return client.getERPList(
             ERPDocType.DeliveryCharges.path, ERPDocType.DeliveryCharges.getFields(), baseUrl = url
         )
     }
@@ -194,26 +166,8 @@ class APIService(
         }
     }
 
-    suspend fun refreshToken(refresh: String): TokenResponse {
-        val currentSite = authStore.getCurrentSite()
-        val oauthConfig = authStore.loadAuthInfoByUrl(currentSite!!)
-        val config = OAuthConfig(
-            oauthConfig.url,
-            oauthConfig.clientId,
-            oauthConfig.clientSecret,
-            oauthConfig.redirectUrl,
-            listOf("all", "openid")
-        )
-        return client.post(config.tokenUrl) {
-            contentType(ContentType.Application.FormUrlEncoded)
-            setBody(Parameters.build {
-                append("grant_type", "refresh_token")
-                append("refresh_token", refresh)
-                append("client_id", oauthConfig.clientId)
-                append("client_secret", oauthConfig.clientSecret)
-            }.formUrlEncode())
-        }.body()
-    }
+    suspend fun refreshToken(refresh: String): TokenResponse =
+        refreshAuthToken(tokenClient, authStore, refresh)
 
     suspend fun getUserInfo(): UserDto {
         val url = authStore.getCurrentSite()
@@ -223,7 +177,7 @@ class APIService(
 
         if (userId.isNullOrEmpty()) throw Exception("Usuario Invalido")
 
-        return clientOAuth.getERPSingle(
+        return client.getERPSingle(
             ERPDocType.User.path, userId, url
         )
     }
@@ -234,7 +188,7 @@ class APIService(
         val url = authStore.getCurrentSite() ?: return null
         val endpoint = "$url/api/method/erpnext.setup.utils.get_exchange_rate"
         return runCatching {
-            val response = clientOAuth.get(endpoint) {
+            val response = client.get(endpoint) {
                 parameter("from_currency", fromCurrency)
                 parameter("to_currency", toCurrency)
                 date?.let { parameter("date", it) }
@@ -263,7 +217,7 @@ class APIService(
 
     suspend fun getEnabledCurrencies(): List<CurrencyDto> {
         val url = authStore.getCurrentSite() ?: return emptyList()
-        return clientOAuth.getERPList(
+        return client.getERPList(
             doctype = "Currency",
             fields = listOf("name", "currency_name", "symbol", "number_format"),
             baseUrl = url,
@@ -274,7 +228,7 @@ class APIService(
 
     suspend fun getActiveModeOfPayment(): List<ModeOfPaymentDto> {
         val url = authStore.getCurrentSite() ?: return emptyList()
-        return clientOAuth.getERPList(
+        return client.getERPList(
             doctype = ERPDocType.ModeOfPayment.path,
             fields = ERPDocType.ModeOfPayment.getFields(),
             baseUrl = url,
@@ -285,21 +239,21 @@ class APIService(
 
     suspend fun getModeOfPaymentDetail(name: String): ModeOfPaymentDetailDto? {
         val url = authStore.getCurrentSite() ?: return null
-        return clientOAuth.getERPSingle(
+        return client.getERPSingle(
             doctype = ERPDocType.ModeOfPayment.path, name = name.encodeURLParameter(), baseUrl = url
         )
     }
 
     suspend fun getAccountDetail(name: String): AccountDetailDto? {
         val url = authStore.getCurrentSite() ?: return null
-        return clientOAuth.getERPSingle(
+        return client.getERPSingle(
             doctype = ERPDocType.Account.path, name = name.encodeURLParameter(), baseUrl = url
         )
     }
 
     suspend fun getCategories(): List<CategoryDto> {
         val url = authStore.getCurrentSite() ?: ""
-        return clientOAuth.getERPList<CategoryDto>(
+        return client.getERPList<CategoryDto>(
             ERPDocType.Category.path,
             ERPDocType.Category.getFields(),
             orderBy = "name asc",
@@ -311,21 +265,21 @@ class APIService(
         val url = authStore.getCurrentSite()
         if (url.isNullOrEmpty()) throw Exception("URL Invalida")
 
-        return clientOAuth.getERPSingle(
+        return client.getERPSingle(
             doctype = ERPDocType.Item.path, name = itemId, baseUrl = url
         )
     }
 
     suspend fun openCashbox(pos: POSOpeningEntryDto): POSOpeningEntryResponseDto {
         val url = authStore.getCurrentSite()
-        return clientOAuth.postERP(
+        return client.postERP(
             ERPDocType.POSOpeningEntry.path, pos, url
         )
     }
 
     suspend fun closeCashbox(entry: POSClosingEntryDto): POSClosingEntryResponse {
         val url = authStore.getCurrentSite()
-        return clientOAuth.postERP(
+        return client.postERP(
             ERPDocType.POSClosingEntry.path, entry, url
         )
     }
@@ -333,7 +287,7 @@ class APIService(
     suspend fun getPOSProfileDetails(profileId: String): POSProfileDto {
         val url = authStore.getCurrentSite()
         val fields = ERPDocType.POSProfileDetails.getFields()
-        return clientOAuth.getERPSingle(
+        return client.getERPSingle(
             doctype = ERPDocType.POSProfile.path,
             fields = fields,
             name = profileId.encodeURLParameter(),
@@ -344,7 +298,7 @@ class APIService(
     suspend fun getPOSProfiles(assignedTo: String?): List<POSProfileSimpleDto> {
         val url = authStore.getCurrentSite()
         return try {
-            clientOAuth.getERPList(
+            client.getERPList(
                 doctype = ERPDocType.POSProfile.path,
                 fields = ERPDocType.POSProfile.getFields(),
                 baseUrl = url,
@@ -380,7 +334,7 @@ class APIService(
                 listOf("all", "openid"),
                 "ERP-POS Clothing Center"
             )
-        }/*return  clientOAuth.get("") {
+        }/*return  client.get("") {
              contentType(ContentType.Application.Json)
              setBody(site)
          }.body()*/
@@ -401,7 +355,7 @@ class APIService(
         val startOffset = offset ?: 0
 
         suspend fun fetchBins(batchOffset: Int, batchLimit: Int): List<BinDto> {
-            return clientOAuth.getERPList<BinDto>(
+            return client.getERPList<BinDto>(
                 doctype = ERPDocType.Bin.path,
                 fields = ERPDocType.Bin.getFields(),
                 limit = batchLimit,
@@ -424,7 +378,7 @@ class APIService(
             val items = itemCodes
                 .chunked(chunkSize)
                 .flatMap { codes ->
-                    clientOAuth.getERPList<ItemDto>(
+                    client.getERPList<ItemDto>(
                         doctype = ERPDocType.Item.path,
                         fields = ERPDocType.Item.getFields(),
                         limit = codes.size,
@@ -440,7 +394,7 @@ class APIService(
             val prices = itemCodes
                 .chunked(chunkSize)
                 .flatMap { codes ->
-                    clientOAuth.getERPList<ItemPriceDto>(
+                    client.getERPList<ItemPriceDto>(
                         doctype = ERPDocType.ItemPrice.path,
                         fields = ERPDocType.ItemPrice.getFields(),
                         limit = codes.size,
@@ -515,7 +469,7 @@ class APIService(
         val url = authStore.getCurrentSite() ?: throw Exception("URL Invalida")
         val endpoint = "$url/api/method/erpnext.stock.get_item_details"
 
-        val response = clientOAuth.post(endpoint) {
+        val response = client.post(endpoint) {
             contentType(ContentType.Application.Json)
             setBody(
                 mapOf(
@@ -567,7 +521,7 @@ class APIService(
 
     suspend fun getCustomers(territory: String?): List<CustomerDto> {
         val url = authStore.getCurrentSite()
-        return clientOAuth.getERPList(
+        return client.getERPList(
             ERPDocType.Customer.path,
             ERPDocType.Customer.getFields(),
             baseUrl = url,
@@ -583,7 +537,7 @@ class APIService(
     //Para monto total pendientes y List (method whitelisted)
     suspend fun getCustomerOutstanding(customer: String): OutstandingInfo {
         val url = authStore.getCurrentSite()
-        val invoices = clientOAuth.getERPList<SalesInvoiceDto>(
+        val invoices = client.getERPList<SalesInvoiceDto>(
             doctype = ERPDocType.SalesInvoice.path,
             fields = ERPDocType.SalesInvoice.getFields(),
             baseUrl = url,
@@ -604,7 +558,7 @@ class APIService(
 
     suspend fun getCustomerContact(customerId: String): ContactChildDto? {
         val url = authStore.getCurrentSite()
-        return clientOAuth.getERPList<ContactChildDto>(
+        return client.getERPList<ContactChildDto>(
             doctype = ERPDocType.CustomerContact.path,
             fields = listOf("name", "mobile_no", "email_id", "phone"),
             baseUrl = url,
@@ -617,7 +571,7 @@ class APIService(
 
     suspend fun getCustomerAddress(customerId: String): CustomerAddressDto? {
         val url = authStore.getCurrentSite()
-        return clientOAuth.getERPList<CustomerAddressDto>(
+        return client.getERPList<CustomerAddressDto>(
             doctype = "Address",
             fields = listOf(
                 "name",
@@ -639,7 +593,7 @@ class APIService(
     // Batch method for all outstanding invoices
     suspend fun getAllOutstandingInvoices(): List<SalesInvoiceDto> {
         val url = authStore.getCurrentSite()
-        return clientOAuth.getERPList<SalesInvoiceDto>(
+        return client.getERPList<SalesInvoiceDto>(
             doctype = ERPDocType.SalesInvoice.path,
             fields = ERPDocType.SalesInvoice.getFields(),
             baseUrl = url,
@@ -661,7 +615,7 @@ class APIService(
     ): List<SalesInvoiceDto> {
         return try {
             val url = authStore.getCurrentSite()
-            clientOAuth.getERPList(
+            client.getERPList(
                 doctype = ERPDocType.SalesInvoice.path,
                 fields = ERPDocType.SalesInvoice.getFields(),
                 offset = offset,
@@ -690,7 +644,7 @@ class APIService(
     //region Invoice - Checkout
     suspend fun createSalesInvoice(data: SalesInvoiceDto): SalesInvoiceDto {
         val url = authStore.getCurrentSite()
-        val result: SalesInvoiceDto = clientOAuth.postERP(
+        val result: SalesInvoiceDto = client.postERP(
             doctype = ERPDocType.SalesInvoice.path,
             payload = data,
             baseUrl = url,
@@ -701,7 +655,7 @@ class APIService(
 
     suspend fun getSalesInvoiceByName(name: String): SalesInvoiceDto {
         val url = authStore.getCurrentSite()
-        return clientOAuth.getERPSingle(
+        return client.getERPSingle(
             doctype = ERPDocType.SalesInvoice.path,
             name = name,
             baseUrl = url,
@@ -710,7 +664,7 @@ class APIService(
 
     suspend fun updateSalesInvoice(name: String, data: SalesInvoiceDto): SalesInvoiceDto {
         val url = authStore.getCurrentSite()
-        return clientOAuth.putERP(
+        return client.putERP(
             doctype = ERPDocType.SalesInvoice.path, name = name, payload = data, baseUrl = url
         )
     }

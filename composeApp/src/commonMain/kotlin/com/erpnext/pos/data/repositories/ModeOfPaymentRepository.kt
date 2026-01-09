@@ -8,6 +8,7 @@ import com.erpnext.pos.remoteSource.datasources.ModeOfPaymentRemoteSource
 import com.erpnext.pos.sync.SyncTTL
 import com.erpnext.pos.utils.RepoTrace
 import com.erpnext.pos.views.CashBoxManager
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
 import kotlin.time.Clock
@@ -28,6 +29,7 @@ class ModeOfPaymentRepository(
         ttlHours: Int
     ): Flow<Resource<List<ModeOfPaymentEntity>>> {
         RepoTrace.breadcrumb("ModeOfPaymentRepository", "sync", "ttl=$ttlHours")
+        delay(1000)
         val company = context.requireContext().company
         return networkBoundResource(
             query = { flowOf(localSource.getAllModes(company)) },

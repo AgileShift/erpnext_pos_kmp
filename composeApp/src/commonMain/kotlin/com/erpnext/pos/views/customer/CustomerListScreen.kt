@@ -87,11 +87,15 @@ fun CustomerListScreen(
     var quickActionsCustomer by remember { mutableStateOf<CustomerBO?>(null) }
     var outstandingCustomer by remember { mutableStateOf<CustomerBO?>(null) }
 
-    val customers = remember(state) {
-        if (state is CustomerState.Success) state.customers else emptyList()
-    }
+    val customers = if (state is CustomerState.Success) state.customers else emptyList()
     var baseCounts by remember { mutableStateOf(CustomerCounts(0, 0)) }
     val isDesktop = getPlatformName() == "Desktop"
+
+    val posBaseCurrency = normalizeCurrency(paymentState.baseCurrency)
+    val baseRates = (invoicesState as? CustomerInvoicesState.Success)?.exchangeRateByCurrency
+
+    val isMoneyReady =
+        !posBaseCurrency.isNullOrBlank() && baseRates != null && baseRates.isNotEmpty()
 
     val filterElevation by animateDpAsState(
         targetValue = if (customers.isNotEmpty()) 4.dp else 0.dp,
@@ -196,24 +200,28 @@ fun CustomerListScreen(
                                 icon = Icons.Filled.People
                             )
                         } else {
-                            CustomerListContent(
-                                customers = filtered,
-                                actions = actions,
-                                isWideLayout = isWideLayout,
-                                isDesktop = isDesktop,
-                                onOpenQuickActions = { quickActionsCustomer = it },
-                                onQuickAction = { customer, actionType ->
-                                    handleQuickAction(actions, customer, actionType)
-                                    when (actionType) {
-                                        CustomerQuickActionType.PendingInvoices,
-                                        CustomerQuickActionType.RegisterPayment -> {
-                                            outstandingCustomer = customer
-                                        }
+                            if (!isMoneyReady) {
+                                CustomerShimmerList()
+                            } else {
+                                CustomerListContent(
+                                    customers = filtered,
+                                    actions = actions,
+                                    isWideLayout = isWideLayout,
+                                    isDesktop = isDesktop,
+                                    onOpenQuickActions = { quickActionsCustomer = it },
+                                    onQuickAction = { customer, actionType ->
+                                        handleQuickAction(actions, customer, actionType)
+                                        when (actionType) {
+                                            CustomerQuickActionType.PendingInvoices,
+                                            CustomerQuickActionType.RegisterPayment -> {
+                                                outstandingCustomer = customer
+                                            }
 
-                                        else -> handleQuickAction(actions, customer, actionType)
+                                            else -> handleQuickAction(actions, customer, actionType)
+                                        }
                                     }
-                                }
-                            )
+                                )
+                            }
                         }
                     }
 
@@ -1074,7 +1082,7 @@ private fun CustomerOutstandingInvoicesSheet(
 
     // Exchange rate de invoiceBaseCurrency -> paymentCurrency usando baseRates
     val exchangeRate =
-        remember(selectedCurrency, invoiceBaseCurrency, invoicesState, posBaseCurrency) {
+        remember(selectedCurrency, invoiceBaseCurrency, posBaseCurrency) {
             val from = normalizeCurrency(invoiceBaseCurrency) ?: posBaseCurrency
             val to = normalizeCurrency(selectedCurrency) ?: posBaseCurrency
             when {

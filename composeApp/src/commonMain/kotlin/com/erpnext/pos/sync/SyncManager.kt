@@ -17,6 +17,7 @@ import com.erpnext.pos.localSource.preferences.SyncSettings
 import com.erpnext.pos.utils.NetworkMonitor
 import com.erpnext.pos.utils.AppLogger
 import com.erpnext.pos.utils.AppSentry
+import com.erpnext.pos.auth.SessionRefresher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -51,6 +52,7 @@ class SyncManager(
     private val companyInfoRepo: CompanyRepository,
     private val cashBoxManager: CashBoxManager,
     private val networkMonitor: NetworkMonitor,
+    private val sessionRefresher: SessionRefresher,
     private val syncContextProvider: SyncContextProvider,
     private val pushSyncManager: PushSyncManager
 ) : ISyncManager {
@@ -79,6 +81,13 @@ class SyncManager(
                 _state.value = SyncState.ERROR("No hay conexión a internet.")
                 AppSentry.breadcrumb("SyncManager.fullSync aborted: offline")
                 AppLogger.warn("SyncManager.fullSync aborted: offline")
+                return@launch
+            }
+
+            if (!sessionRefresher.ensureValidSession()) {
+                _state.value = SyncState.ERROR("Sesión inválida. Redirigiendo al login.")
+                AppSentry.breadcrumb("SyncManager.fullSync aborted: invalid session")
+                AppLogger.warn("SyncManager.fullSync aborted: invalid session")
                 return@launch
             }
 

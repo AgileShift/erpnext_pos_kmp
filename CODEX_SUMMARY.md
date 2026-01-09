@@ -8,6 +8,8 @@
 - De cara a mañana, seguimos con la lista ordenada en esta misma sección: después de dejar este estado de offline-first sólido, continuamos con la primera tarea pendiente de la checklist para no romper el orden preestablecido.
 
 ## Checklist de siguientes tareas (pendiente por completar)
+- [X] Primero, antes que todo, necesitamos que si el token esta invalido manadr el refresh token en automatico y volver a autenticar, sin que de problemas antes de hacer cualquer peticion, deberiamos de hacer esto con el Ktor plugin de autenticacion
+- [X] Mejorar los "connection timeout" al sincronizar
 - [ ] **Tenemos que aplicar la misma logica de pagos, metodos de pago, monedas, cambio de moneda, vuelto a favor, aplicar el monto justo a la factura y demas en la pantalla de Registrar pago en Customer igual que como esta en BillingScreen**
 - [ ] Aplicar cambio de moneda en la vista de Customer y Registrar Pago (Customer), a la moneda actual del POS si es diferente de la moneda de la factura, tenemos un caso extrano, la primera vez al crear la factura de credit e ir a la vista de Customer, aparece el monto en dolares, al cerrar la app y volver a entrar aparece como deberia, convertido a la moneda del POS
 - [ ] Al realizar el pago desde "Registrar pago (Customer)" lo manda a pagar en el API, pero retorna el mensaje Payment exceeds outstanding amount y no actualiza la vista, sigue apareciendo la factura pendiente que ya se pago, esto implica tambien que extranamente se paga en el API no se actualiza el paid_amount en la DB

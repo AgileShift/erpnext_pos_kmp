@@ -79,15 +79,23 @@ import com.erpnext.pos.navigation.NavigationManager
 import com.erpnext.pos.remoteSource.api.APIService
 import com.erpnext.pos.remoteSource.api.defaultEngine
 import com.erpnext.pos.remoteSource.api.v2.APIServiceV2
+import com.erpnext.pos.remoteSource.oauth.refreshAuthToken
 import com.erpnext.pos.remoteSource.datasources.CustomerRemoteSource
 import com.erpnext.pos.remoteSource.datasources.InventoryRemoteSource
 import com.erpnext.pos.remoteSource.datasources.ModeOfPaymentRemoteSource
 import com.erpnext.pos.remoteSource.datasources.POSProfileRemoteSource
 import com.erpnext.pos.remoteSource.datasources.SalesInvoiceRemoteSource
 import com.erpnext.pos.remoteSource.datasources.UserRemoteSource
+import com.erpnext.pos.remoteSource.oauth.AuthInfoStore
+import com.erpnext.pos.remoteSource.oauth.TokenStore
+import com.erpnext.pos.remoteSource.oauth.refreshAuthToken
+import com.erpnext.pos.remoteSource.oauth.toBearerToken
+import com.erpnext.pos.auth.SessionRefresher
 import com.erpnext.pos.sync.PushSyncManager
 import com.erpnext.pos.sync.SyncContextProvider
 import com.erpnext.pos.sync.SyncManager
+import com.erpnext.pos.utils.AppLogger
+import com.erpnext.pos.utils.AppSentry
 import com.erpnext.pos.utils.prefsPath
 import com.erpnext.pos.utils.view.SnackbarController
 import com.erpnext.pos.views.CashBoxManager
@@ -106,6 +114,10 @@ import com.erpnext.pos.views.splash.SplashViewModel
 import com.erpnext.pos.views.paymententry.PaymentEntryViewModel
 import com.erpnext.pos.views.salesflow.SalesFlowContextStore
 import io.ktor.client.HttpClient
+import io.ktor.client.plugins.HttpTimeout
+import io.ktor.client.plugins.auth.Auth
+import io.ktor.client.plugins.auth.providers.BearerTokens
+import io.ktor.client.plugins.auth.providers.bearer
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.plugins.logging.LogLevel
 import io.ktor.client.plugins.logging.Logger
@@ -127,7 +139,17 @@ import org.koin.dsl.module
 val appModule = module {
 
     //region Core DI
+    single(named("tokenHttpClient")) {
+        HttpClient(defaultEngine()) {
+            expectSuccess = true
+        }
+    }
+
     single {
+        val tokenStore: TokenStore = get()
+        val authStore: AuthInfoStore? = getOrNull()
+        val tokenRefreshClient: HttpClient = get(named("tokenHttpClient"))
+
         HttpClient(defaultEngine()) {
             install(ContentNegotiation) {
                 json(Json {
@@ -144,13 +166,50 @@ val appModule = module {
                 }
                 level = LogLevel.ALL
             }
+            install(HttpTimeout) {
+                requestTimeoutMillis = 60_000
+                connectTimeoutMillis = 30_000
+                socketTimeoutMillis = 60_000
+            }
             expectSuccess = true
+
+            authStore?.let { authInfoStore ->
+                install(Auth) {
+                    bearer {
+                        loadTokens {
+                            tokenStore.load()?.toBearerToken()
+                        }
+                        refreshTokens {
+                            val currentTokens = tokenStore.load() ?: return@refreshTokens null
+                            val refreshToken =
+                                currentTokens.refresh_token ?: return@refreshTokens null
+                            val refreshed = runCatching {
+                                refreshAuthToken(tokenRefreshClient, authInfoStore, refreshToken)
+                            }.getOrElse { throwable ->
+                                AppSentry.capture(throwable, "refreshTokens failed")
+                                AppLogger.warn("refreshTokens failed", throwable)
+                                tokenStore.clear()
+                                return@refreshTokens null
+                            }
+                            tokenStore.save(refreshed)
+                            BearerTokens(
+                                refreshed.access_token,
+                                refreshed.refresh_token ?: currentTokens.refresh_token
+                            )
+                        }
+                        sendWithoutRequest { true }
+                    }
+                }
+            }
         }
     }
 
     single(named("apiService")) {
         APIService(
-            client = get(), authStore = get(), store = get()
+            client = get(),
+            store = get(),
+            authStore = get(),
+            tokenClient = get(named("tokenHttpClient"))
         )
     }
 
@@ -159,6 +218,14 @@ val appModule = module {
 
     single<CoroutineScope> { CoroutineScope(SupervisorJob() + Dispatchers.IO) }
     single { NavigationManager(get()) }
+    single {
+        SessionRefresher(
+            tokenStore = get(),
+            apiService = get(named("apiService")),
+            navigationManager = get(),
+            networkMonitor = get()
+        )
+    }
     single {
         PreferenceDataStoreFactory.createWithPath {
             prefsPath().toPath()
@@ -198,19 +265,20 @@ val appModule = module {
     single { SyncContextProvider(get(), get()) }
     single<SyncManager> {
         SyncManager(
-            get(),
-            get(),
-            get(),
-            get(),
-            get(),
-            get(),
-            get(),
-            get(),
-            get(),
-            get(),
-            get(),
-            get(),
-            get()
+            invoiceRepo = get(),
+            customerRepo = get(),
+            inventoryRepo = get(),
+            modeOfPaymentRepo = get(),
+            paymentTermsRepo = get(),
+            deliveryChargesRepo = get(),
+            exchangeRateRepo = get(),
+            syncPreferences = get(),
+            companyInfoRepo = get(),
+            cashBoxManager = get(),
+            networkMonitor = get(),
+            sessionRefresher = get(),
+            syncContextProvider = get(),
+            pushSyncManager = get()
         )
     }
     //endregion

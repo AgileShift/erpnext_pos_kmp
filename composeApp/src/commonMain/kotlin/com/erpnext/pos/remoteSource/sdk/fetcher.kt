@@ -4,9 +4,13 @@ import io.ktor.client.*
 import io.ktor.client.request.*
 import io.ktor.client.statement.*
 import io.ktor.http.*
+import io.ktor.client.network.sockets.ConnectTimeoutException
+import io.ktor.client.plugins.HttpRequestTimeoutException
 import kotlinx.serialization.json.*
 import com.erpnext.pos.utils.AppLogger
 import com.erpnext.pos.utils.AppSentry
+import io.ktor.client.plugins.timeout
+import kotlinx.coroutines.delay
 
 // -----------------------------
 // Configuración JSON global
@@ -21,6 +25,26 @@ fun captureFetchError(context: String, throwable: Throwable) {
     AppLogger.warn(context, throwable)
 }
 
+suspend inline fun <T> withRetries(
+    retries: Int = 2,
+    initialDelayMillis: Long = 500,
+    block: () -> T
+): T {
+    var attempt = 0
+    var delayMillis = initialDelayMillis
+    while (true) {
+        try {
+            return block()
+        } catch (e: Exception) {
+            val retryable = e is ConnectTimeoutException || e is HttpRequestTimeoutException
+            if (!retryable || attempt >= retries) throw e
+            delay(delayMillis)
+            attempt++
+            delayMillis *= 2
+        }
+    }
+}
+
 // -----------------------------
 // Funciones HTTP genéricas
 // -----------------------------
@@ -33,48 +57,56 @@ suspend inline fun <reified T> HttpClient.getERPList(
     orderBy: String? = null,
     orderType: String = "desc",
     baseUrl: String?,
-    additionalHeaders: Map<String, String> = emptyMap()
+    additionalHeaders: Map<String, String> = emptyMap(),
+    noinline block: (FiltersBuilder.() -> Unit)? = null
 ): List<T> {
     require(baseUrl != null && baseUrl.isNotBlank()) { "baseUrl no puede ser nulo o vacío" }
 
     val endpoint = baseUrl.trimEnd('/') + "/api/resource/${encodeURIComponent(doctype)}"
+    val finalFilters = mutableListOf<Filter>().apply {
+        addAll(filters)
+        block?.let { addAll(FiltersBuilder().apply(it).build()) }
+    }
 
     try {
-        val response: HttpResponse = this.get {
-            url {
-                takeFrom(endpoint)
-                limit?.let { parameters.append("limit_page_length", it.toString()) }
-                offset?.let { parameters.append("limit_start", it.toString()) }
+        val response: HttpResponse = withRetries {
+            this.get {
+                url {
+                    takeFrom(endpoint)
+                    limit?.let { parameters.append("limit_page_length", it.toString()) }
+                    offset?.let { parameters.append("limit_start", it.toString()) }
 
-                if (fields.isNotEmpty()) {
-                    // JSON array como string: ["item_code","item_name"]
-                    parameters.append("fields", json.encodeToString(fields))
+                    if (fields.isNotEmpty()) {
+                        parameters.append("fields", json.encodeToString(fields))
+                    }
+
+                    if (finalFilters.isNotEmpty()) {
+                        parameters.append("filters", buildFiltersJson(finalFilters))
+                    }
+
+                    orderBy?.let {
+                        parameters.append("order_by", it)
+                        parameters.append("order_type", orderType)
+                    }
                 }
 
-                if (filters.isNotEmpty()) {
-                    parameters.append("filters", buildFiltersJson(filters))
+                if (additionalHeaders.isNotEmpty()) {
+                    headers {
+                        additionalHeaders.forEach { (k, v) -> append(k, v) }
+                    }
                 }
 
-                orderBy?.let {
-                    parameters.append("order_by", it)
-                    parameters.append("order_type", orderType)
+                accept(ContentType.Application.Json)
+                timeout {
+                    requestTimeoutMillis = 60_000
+                    connectTimeoutMillis = 30_000
+                    socketTimeoutMillis = 60_000
                 }
             }
-
-            // Headers opcionales (Authorization, token, etc.)
-            if (additionalHeaders.isNotEmpty()) {
-                headers {
-                    additionalHeaders.forEach { (k, v) -> append(k, v) }
-                }
-            }
-
-            // Prefer JSON
-            accept(ContentType.Application.Json)
         }
 
         val responseBodyText = response.bodyAsText()
         if (!response.status.isSuccess()) {
-            // Intentar parsear error de Frappe
             try {
                 val err = json.decodeFromString<FrappeErrorResponse>(responseBodyText)
                 throw FrappeException(err.exception ?: "Error: ${response.status}", err)
@@ -83,13 +115,11 @@ suspend inline fun <reified T> HttpClient.getERPList(
             }
         }
 
-        // Parsear "data" y convertir a List<T>
-        try {
+        return try {
             val parsed = json.parseToJsonElement(responseBodyText).jsonObject
             val dataElement = parsed["data"]
                 ?: throw FrappeException("La respuesta no contiene 'data'. Respuesta: $responseBodyText")
-            // reified decodeFromJsonElement
-            return json.decodeFromJsonElement(dataElement)
+            json.decodeFromJsonElement(dataElement)
         } catch (e: Exception) {
             throw Exception(
                 "Error parseando respuesta ERPNext: ${e.message}. Body: $responseBodyText",
@@ -100,34 +130,6 @@ suspend inline fun <reified T> HttpClient.getERPList(
         captureFetchError("getERPList($doctype)", e)
         throw e
     }
-}
-
-/** Sobrecarga: admitir DSL inline de filtros para limpieza en llamada */
-suspend inline fun <reified T> HttpClient.getERPList(
-    doctype: String,
-    fields: List<String> = emptyList(),
-    limit: Int? = null,
-    offset: Int? = null,
-    orderBy: String? = null,
-    orderType: String = "desc",
-    baseUrl: String?,
-    additionalHeaders: Map<String, String> = emptyMap(),
-    block: (FiltersBuilder.() -> Unit)
-): List<T> {
-    require(baseUrl != null && baseUrl.isNotBlank()) { "baseUrl no puede ser nulo o vacío" }
-
-    val builtFilters = FiltersBuilder().apply(block).build()
-    return getERPList(
-        doctype = doctype,
-        fields = fields,
-        filters = builtFilters,
-        limit = limit,
-        offset = offset,
-        orderBy = orderBy,
-        orderType = orderType,
-        baseUrl = baseUrl,
-        additionalHeaders = additionalHeaders
-    )
 }
 
 suspend inline fun <reified T> HttpClient.getERPSingle(
@@ -142,21 +144,26 @@ suspend inline fun <reified T> HttpClient.getERPSingle(
     val endpoint = baseUrl.trimEnd('/') + "/api/resource/${encodeURIComponent(doctype)}/$name"
 
     try {
-        val response: HttpResponse = this.get {
-            url {
-                takeFrom(endpoint)
-                // Agregar campos específicos si se solicitan
-                if (fields.isNotEmpty()) {
-                    parameters.append("fields", json.encodeToString(fields))
+        val response: HttpResponse = withRetries {
+            this.get {
+                url {
+                    takeFrom(endpoint)
+                    if (fields.isNotEmpty()) {
+                        parameters.append("fields", json.encodeToString(fields))
+                    }
+                }
+
+                if (additionalHeaders.isNotEmpty()) headers {
+                    additionalHeaders.forEach { (k, v) -> append(k, v) }
+                }
+
+                accept(ContentType.Application.Json)
+                timeout {
+                    requestTimeoutMillis = 60_000
+                    connectTimeoutMillis = 30_000
+                    socketTimeoutMillis = 60_000
                 }
             }
-
-            // Headers opcionales (Auth, Token, etc.)
-            if (additionalHeaders.isNotEmpty()) headers {
-                additionalHeaders.forEach { (k, v) -> append(k, v) }
-            }
-
-            accept(ContentType.Application.Json)
         }
 
         val bodyText = response.bodyAsText()
@@ -191,19 +198,26 @@ suspend inline fun <reified T, reified R> HttpClient.postERP(
 
     val endpoint = baseUrl.trimEnd('/') + "/api/resource/${encodeURIComponent(doctype)}"
     try {
-        val bodyText = this.post {
-            url { takeFrom(endpoint) }
-            contentType(ContentType.Application.Json)
-            setBody(json.encodeToString(payload))
-            if (additionalHeaders.isNotEmpty()) headers {
-                additionalHeaders.forEach { (k, v) ->
-                    append(
-                        k,
-                        v
-                    )
+        val bodyText = withRetries {
+            this.post {
+                url { takeFrom(endpoint) }
+                contentType(ContentType.Application.Json)
+                setBody(json.encodeToString(payload))
+                if (additionalHeaders.isNotEmpty()) headers {
+                    additionalHeaders.forEach { (k, v) ->
+                        append(
+                            k,
+                            v
+                        )
+                    }
                 }
-            }
-        }.bodyAsText()
+                timeout {
+                    requestTimeoutMillis = 60_000
+                    connectTimeoutMillis = 30_000
+                    socketTimeoutMillis = 60_000
+                }
+            }.bodyAsText()
+        }
 
         val parsed = json.parseToJsonElement(bodyText).jsonObject
         val dataElement = parsed["data"]
@@ -228,19 +242,26 @@ suspend inline fun <reified T, reified R> HttpClient.putERP(
         encodeURIComponent(name)
     }"
     try {
-        val bodyText = this.put {
-            url { takeFrom(endpoint) }
-            contentType(ContentType.Application.Json)
-            setBody(json.encodeToString(payload))
-            if (additionalHeaders.isNotEmpty()) headers {
-                additionalHeaders.forEach { (k, v) ->
-                    append(
-                        k,
-                        v
-                    )
+        val bodyText = withRetries {
+            this.put {
+                url { takeFrom(endpoint) }
+                contentType(ContentType.Application.Json)
+                setBody(json.encodeToString(payload))
+                if (additionalHeaders.isNotEmpty()) headers {
+                    additionalHeaders.forEach { (k, v) ->
+                        append(
+                            k,
+                            v
+                        )
+                    }
                 }
-            }
-        }.bodyAsText()
+                timeout {
+                    requestTimeoutMillis = 60_000
+                    connectTimeoutMillis = 30_000
+                    socketTimeoutMillis = 60_000
+                }
+            }.bodyAsText()
+        }
 
         val parsed = json.parseToJsonElement(bodyText).jsonObject
         val dataElement = parsed["data"]
@@ -264,14 +285,21 @@ suspend fun HttpClient.deleteERP(
         encodeURIComponent(name)
     }"
     try {
-        val response = this.delete {
-            url { takeFrom(endpoint) }
-            if (additionalHeaders.isNotEmpty()) headers {
-                additionalHeaders.forEach { (k, v) ->
-                    append(
-                        k,
-                        v
-                    )
+        val response = withRetries {
+            this.delete {
+                url { takeFrom(endpoint) }
+                if (additionalHeaders.isNotEmpty()) headers {
+                    additionalHeaders.forEach { (k, v) ->
+                        append(
+                            k,
+                            v
+                        )
+                    }
+                }
+                timeout {
+                    requestTimeoutMillis = 60_000
+                    connectTimeoutMillis = 30_000
+                    socketTimeoutMillis = 60_000
                 }
             }
         }
