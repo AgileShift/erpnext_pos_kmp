@@ -113,6 +113,8 @@ import com.erpnext.pos.views.settings.SettingsViewModel
 import com.erpnext.pos.views.splash.SplashViewModel
 import com.erpnext.pos.views.paymententry.PaymentEntryViewModel
 import com.erpnext.pos.views.salesflow.SalesFlowContextStore
+import com.erpnext.pos.views.payment.PaymentHandler
+import com.erpnext.pos.auth.TokenHeartbeat
 import io.ktor.client.HttpClient
 import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.plugins.auth.Auth
@@ -227,6 +229,22 @@ val appModule = module {
         )
     }
     single {
+        TokenHeartbeat(
+            scope = get(),
+            sessionRefresher = get(),
+            networkMonitor = get()
+        ).apply { start(intervalMinutes = 4) }
+    }
+    single {
+        PaymentHandler(
+            api = get(named("apiService")),
+            createPaymentEntryUseCase = get(),
+            saveInvoicePaymentsUseCase = get(),
+            exchangeRateRepository = get(),
+            networkMonitor = get()
+        )
+    }
+    single {
         PreferenceDataStoreFactory.createWithPath {
             prefsPath().toPath()
         }
@@ -327,10 +345,10 @@ val appModule = module {
             fetchCustomerDetailUseCase = get(),
             fetchOutstandingInvoicesUseCase = get(),
             registerInvoicePaymentUseCase = get(),
-            createPaymentEntryUseCase = get(),
             fetchSalesInvoiceLocalUseCase = get(),
             syncSalesInvoiceFromRemoteUseCase = get(),
             modeOfPaymentDao = get(),
+            paymentHandler = get()
         )
     }
     //endregion
@@ -421,12 +439,10 @@ val appModule = module {
             loadSourceDocumentsUseCase = get(),
             createSalesInvoiceLocalUseCase = get(),
             createSalesInvoiceRemoteOnlyUseCase = get(),
-            createPaymentEntryUseCase = get(),
-            saveInvoicePaymentsUseCase = get(),
-            syncSalesInvoiceFromRemoteUseCase = get(),
             updateLocalInvoiceFromRemoteUseCase = get(),
             markSalesInvoiceSyncedUseCase = get(),
-            api = get(named("apiService"))
+            api = get(named("apiService")),
+            paymentHandler = get()
         )
     }
     single { SalesInvoiceRemoteSource(get(named("apiService")), get()) }

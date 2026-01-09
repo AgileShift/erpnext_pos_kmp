@@ -33,6 +33,7 @@
 - [ ] Tenemos que seguir el ciclo de venta de ERP, esto quiere decir que la factura puede ser creada (Quotation → Sales Order → Delivery Note → Sales Invoice → Payment).
 - [ ] Mejorar y mapear las variantes de los productos
 - [ ] Refactorizar profundamente todo el codigo, aplicando principios KISS y SOLID
+- [ ] Tenemos que crear politicas de sincronizacion, en cuantoa  tiempo los Customer, Items y Invoices deben de sincronizarse mas seguido que la tasa de cambio, informacion de empresa, etc
 - [x] Tenemos que guardar el exchange_rate en local
 - [x] Tenemos un problema al inciar, hace un llamado a /api/resource/User/{user} y esto rompe el patron Offline-First
 - [x] Necesitamos refrescar en tiempo real cuando pagamos una factura

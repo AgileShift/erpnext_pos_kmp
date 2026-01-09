@@ -2,8 +2,6 @@ package com.erpnext.pos.remoteSource.api
 
 import com.erpnext.pos.BuildKonfig
 import com.erpnext.pos.base.getPlatformName
-import com.erpnext.pos.base64UrlNoPad
-import com.erpnext.pos.domain.models.CompanyBO
 import com.erpnext.pos.remoteSource.dto.BinDto
 import com.erpnext.pos.remoteSource.dto.CategoryDto
 import com.erpnext.pos.remoteSource.dto.CurrencyDto
@@ -26,7 +24,6 @@ import com.erpnext.pos.remoteSource.dto.POSOpeningEntryResponseDto
 import com.erpnext.pos.remoteSource.dto.POSProfileDto
 import com.erpnext.pos.remoteSource.dto.POSProfileSimpleDto
 import com.erpnext.pos.remoteSource.dto.PaymentTermDto
-import com.erpnext.pos.remoteSource.dto.SalesInvoiceCreatedDto
 import com.erpnext.pos.remoteSource.dto.SalesInvoiceDto
 import com.erpnext.pos.remoteSource.dto.TokenResponse
 import com.erpnext.pos.remoteSource.dto.UserDto
@@ -39,7 +36,6 @@ import com.erpnext.pos.remoteSource.oauth.OAuthConfig
 import com.erpnext.pos.remoteSource.oauth.Pkce
 import com.erpnext.pos.remoteSource.oauth.TokenStore
 import com.erpnext.pos.remoteSource.oauth.refreshAuthToken
-import com.erpnext.pos.remoteSource.oauth.toBearerToken
 import com.erpnext.pos.remoteSource.oauth.toOAuthConfig
 import com.erpnext.pos.remoteSource.sdk.ERPDocType
 import com.erpnext.pos.remoteSource.sdk.FrappeErrorResponse

@@ -28,6 +28,8 @@ fun SalesInvoiceWithItemsAndPayments.toDto(): SalesInvoiceDto {
         postingDate = invoice.postingDate,
         dueDate = invoice.dueDate,
         currency = invoice.currency,
+        debitTo = invoice.debitTo,
+        partyAccountCurrency = invoice.partyAccountCurrency,
         status = invoice.status,
         grandTotal = invoice.grandTotal,
         outstandingAmount = invoice.outstandingAmount,
@@ -147,5 +149,33 @@ fun SalesInvoiceDto.toEntity(): SalesInvoiceWithItemsAndPayments {
         invoice = invoiceEntity,
         items = itemsEntity,
         payments = paymentsEntity
+    )
+}
+
+fun SalesInvoiceEntity.toDto(): SalesInvoiceDto {
+    return SalesInvoiceDto(
+        name = invoiceName,
+        customer = customer,
+        customerName = customerName ?: "",
+        customerPhone = customerPhone,
+        company = company,
+        postingDate = postingDate,
+        dueDate = dueDate,
+        status = status,
+        grandTotal = grandTotal,
+        outstandingAmount = outstandingAmount,
+        totalTaxesAndCharges = taxTotal,
+        netTotal = netTotal,
+        paidAmount = paidAmount,
+        items = emptyList(),
+        payments = emptyList(),
+        remarks = remarks,
+        isPos = isPos,
+        updateStock = true,
+        posProfile = profileId,
+        currency = currency,
+        partyAccountCurrency = partyAccountCurrency,
+        debitTo = debitTo,
+        docStatus = docstatus,
     )
 }

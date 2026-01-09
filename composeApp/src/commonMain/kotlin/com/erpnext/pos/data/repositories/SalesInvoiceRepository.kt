@@ -16,7 +16,6 @@ import com.erpnext.pos.remoteSource.dto.SalesInvoiceDto
 import com.erpnext.pos.remoteSource.mapper.toDto
 import com.erpnext.pos.remoteSource.mapper.toEntities
 import com.erpnext.pos.remoteSource.mapper.toEntity
-import com.erpnext.pos.sync.SyncTTL
 import com.erpnext.pos.utils.RepoTrace
 import com.erpnext.pos.views.CashBoxManager
 import kotlinx.coroutines.flow.Flow

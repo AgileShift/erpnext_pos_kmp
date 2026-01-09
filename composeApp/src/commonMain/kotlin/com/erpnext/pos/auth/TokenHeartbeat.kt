@@ -1,0 +1,33 @@
+package com.erpnext.pos.auth
+
+import com.erpnext.pos.utils.NetworkMonitor
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.first
+
+/**
+ * Ejecuta un chequeo periódico de sesión para refrescar tokens antes de que expiren.
+ * Respeta el modo offline: si no hay conexión, no intenta refrescar y deja que la app siga offline.
+ */
+class TokenHeartbeat(
+    private val scope: CoroutineScope,
+    private val sessionRefresher: SessionRefresher,
+    private val networkMonitor: NetworkMonitor
+) {
+    private var job: Job? = null
+
+    fun start(intervalMinutes: Long = 4) {
+        if (job != null) return
+        job = scope.launch {
+            while (true) {
+                delay(intervalMinutes * 60 * 1000)
+                val isOnline = networkMonitor.isConnected.first()
+                if (isOnline) {
+                    sessionRefresher.ensureValidSession()
+                }
+            }
+        }
+    }
+}

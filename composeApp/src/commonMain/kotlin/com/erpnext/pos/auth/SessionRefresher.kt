@@ -6,8 +6,8 @@ import com.erpnext.pos.remoteSource.api.APIService
 import com.erpnext.pos.remoteSource.oauth.TokenStore
 import com.erpnext.pos.utils.AppLogger
 import com.erpnext.pos.utils.AppSentry
-import com.erpnext.pos.utils.TokenUtils
 import com.erpnext.pos.utils.NetworkMonitor
+import com.erpnext.pos.utils.TokenUtils
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock

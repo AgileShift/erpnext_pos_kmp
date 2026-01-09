@@ -73,12 +73,15 @@ suspend fun resolveRateToInvoiceCurrency(
     paymentCurrency: String,
     invoiceCurrency: String,
     cache: Map<String, Double>,
+    rateResolver: (suspend (fromCurrency: String?, toCurrency: String?) -> Double?)? = null
 ): Double {
     val pay = normalizeCurrency(paymentCurrency) ?: return 1.0
     val inv = normalizeCurrency(invoiceCurrency) ?: return 1.0
     if (pay == inv) return 1.0
 
     cache[pay]?.takeIf { it > 0.0 }?.let { return it }
+
+    rateResolver?.invoke(pay, inv)?.takeIf { it > 0.0 }?.let { return it }
 
     val direct = api.getExchangeRate(fromCurrency = pay, toCurrency = inv)?.takeIf { it > 0.0 }
     if (direct != null) return direct
@@ -87,6 +90,25 @@ suspend fun resolveRateToInvoiceCurrency(
         ?.takeIf { it > 0.0 }
         ?.let { 1 / it }
 
+    return reverse ?: error("No se pudo resolver tasa $pay -> $inv")
+}
+
+suspend fun resolveRateToInvoiceCurrency(
+    paymentCurrency: String,
+    invoiceCurrency: String,
+    cache: Map<String, Double>,
+    rateResolver: suspend (fromCurrency: String, toCurrency: String) -> Double?
+): Double {
+    val pay = normalizeCurrency(paymentCurrency) ?: return 1.0
+    val inv = normalizeCurrency(invoiceCurrency) ?: return 1.0
+    if (pay == inv) return 1.0
+
+    cache[pay]?.takeIf { it > 0.0 }?.let { return it }
+
+    val direct = rateResolver(pay, inv)?.takeIf { it > 0.0 }
+    if (direct != null) return direct
+
+    val reverse = rateResolver(inv, pay)?.takeIf { it > 0.0 }?.let { 1 / it }
     return reverse ?: error("No se pudo resolver tasa $pay -> $inv")
 }
 

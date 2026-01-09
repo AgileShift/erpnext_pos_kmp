@@ -9,16 +9,9 @@ import com.erpnext.pos.domain.models.POSPaymentModeOption
 import com.erpnext.pos.domain.models.PaymentTermBO
 import com.erpnext.pos.domain.models.SourceDocumentOption
 import com.erpnext.pos.utils.calculateTotals
+import com.erpnext.pos.utils.roundToCurrency
 import com.erpnext.pos.views.salesflow.SalesFlowContext
 import com.erpnext.pos.views.salesflow.SalesFlowSource
-import com.erpnext.pos.utils.oauth.bd
-import com.erpnext.pos.utils.oauth.moneyScale
-import com.erpnext.pos.utils.oauth.toDouble
-
-fun roundToCurrency(value: Double, scale: Int = 2): Double {
-    if (!value.isFinite()) return value
-    return bd(value).moneyScale(scale).toDouble(scale)
-}
 
 data class PaymentLine(
     val modeOfPayment: String,

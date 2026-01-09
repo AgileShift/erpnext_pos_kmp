@@ -28,7 +28,7 @@ class BillingCoordinator(val viewModel: BillingViewModel) {
     fun onManualDiscountPercentChanged(value: String) = viewModel.onManualDiscountPercentChanged(value)
     fun onDeliveryChargeSelected(charge: com.erpnext.pos.domain.models.DeliveryChargeBO?) =
         viewModel.onDeliveryChargeSelected(charge)
-    fun onPaymentCurrencySelected(currency: String) = viewModel.onPaymentCurrencySelected(currency)
+    //fun onPaymentCurrencySelected(currency: String) = viewModel.onPaymentCurrencySelected(currency)
     fun onClearSuccessMessage() = viewModel.onClearSuccessMessage()
     fun onBack() = viewModel.onBack()
     fun onLinkSource(sourceType: SalesFlowSource, sourceId: String) =

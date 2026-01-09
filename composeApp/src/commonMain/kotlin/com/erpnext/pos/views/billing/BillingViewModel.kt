@@ -12,21 +12,15 @@ import com.erpnext.pos.domain.usecases.FetchBillingProductsLocalUseCase
 import com.erpnext.pos.domain.usecases.FetchCustomersLocalUseCase
 import com.erpnext.pos.domain.usecases.FetchDeliveryChargesUseCase
 import com.erpnext.pos.domain.usecases.FetchPaymentTermsUseCase
-import com.erpnext.pos.domain.usecases.CreatePaymentEntryInput
-import com.erpnext.pos.domain.usecases.CreatePaymentEntryUseCase
 import com.erpnext.pos.domain.usecases.CreateSalesInvoiceLocalInput
 import com.erpnext.pos.domain.usecases.CreateSalesInvoiceLocalUseCase
 import com.erpnext.pos.domain.usecases.CreateSalesInvoiceRemoteOnlyInput
 import com.erpnext.pos.domain.usecases.CreateSalesInvoiceRemoteOnlyUseCase
-import com.erpnext.pos.domain.usecases.SaveInvoicePaymentsInput
-import com.erpnext.pos.domain.usecases.SaveInvoicePaymentsUseCase
-import com.erpnext.pos.domain.usecases.SyncSalesInvoiceFromRemoteUseCase
 import com.erpnext.pos.domain.usecases.UpdateLocalInvoiceFromRemoteInput
 import com.erpnext.pos.domain.usecases.UpdateLocalInvoiceFromRemoteUseCase
 import com.erpnext.pos.domain.usecases.MarkSalesInvoiceSyncedUseCase
 import com.erpnext.pos.localSource.dao.ModeOfPaymentDao
 import com.erpnext.pos.localSource.entities.ModeOfPaymentEntity
-import com.erpnext.pos.localSource.entities.POSInvoicePaymentEntity
 import com.erpnext.pos.navigation.NavRoute
 import com.erpnext.pos.navigation.NavigationManager
 import com.erpnext.pos.remoteSource.dto.SalesInvoiceDto
@@ -49,27 +43,22 @@ import com.erpnext.pos.views.salesflow.SalesFlowContext
 import com.erpnext.pos.views.salesflow.SalesFlowContextStore
 import com.erpnext.pos.views.salesflow.SalesFlowSource
 import com.erpnext.pos.domain.utils.UUIDGenerator
-import com.erpnext.pos.utils.resolvePaymentCurrencyForMode
 import com.erpnext.pos.utils.normalizeCurrency
-import com.erpnext.pos.utils.resolveRateToInvoiceCurrency
 import com.erpnext.pos.utils.requiresReference
-import com.erpnext.pos.utils.buildPaymentEntryDto
-import com.erpnext.pos.utils.buildLocalPayments
-import com.erpnext.pos.utils.buildCurrencySpecs
 import com.erpnext.pos.utils.resolvePaymentStatus
 import com.erpnext.pos.utils.resolveExchangeRateBetween
-import com.erpnext.pos.utils.toBaseAmount
 import androidx.lifecycle.viewModelScope
 import com.erpnext.pos.domain.models.BillingTotals
 import com.erpnext.pos.utils.buildPaymentModeDetailMap
 import com.erpnext.pos.utils.calculateTotals
 import com.erpnext.pos.utils.resolveDiscountInfo
+import com.erpnext.pos.utils.roundToCurrency
+import com.erpnext.pos.views.payment.PaymentHandler
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.update
-import kotlin.math.pow
 import kotlin.time.ExperimentalTime
 
 class BillingViewModel(
@@ -85,12 +74,10 @@ class BillingViewModel(
     private val loadSourceDocumentsUseCase: LoadSourceDocumentsUseCase,
     private val createSalesInvoiceLocalUseCase: CreateSalesInvoiceLocalUseCase,
     private val createSalesInvoiceRemoteOnlyUseCase: CreateSalesInvoiceRemoteOnlyUseCase,
-    private val createPaymentEntryUseCase: CreatePaymentEntryUseCase,
-    private val saveInvoicePaymentsUseCase: SaveInvoicePaymentsUseCase,
-    private val syncSalesInvoiceFromRemoteUseCase: SyncSalesInvoiceFromRemoteUseCase,
     private val updateLocalInvoiceFromRemoteUseCase: UpdateLocalInvoiceFromRemoteUseCase,
     private val markSalesInvoiceSyncedUseCase: MarkSalesInvoiceSyncedUseCase,
     private val api: APIService,
+    private val paymentHandler: PaymentHandler,
 ) : BaseViewModel() {
 
     private val _state: MutableStateFlow<BillingState> = MutableStateFlow(BillingState.Loading)
@@ -557,100 +544,27 @@ class BillingViewModel(
             ?: normalizeCurrency(contextProvider.requireContext().currency)
             ?: "USD"
 
-        val paymentCurrency = resolvePaymentCurrencyForMode(
-            modeOfPayment = line.modeOfPayment,
-            invoiceCurrency = invoiceCurrency,
-            paymentModeCurrencyByMode = current.paymentModeCurrencyByMode,
-            paymentModeDetails = paymentModeDetails
-        )
-
         executeUseCase(
             action = {
-                val rate = resolveRateToInvoiceCurrency(
-                    api = api,
-                    paymentCurrency = paymentCurrency,
-                    invoiceCurrency = invoiceCurrency,
-                    cache = current.exchangeRateByCurrency
+                val result = paymentHandler.resolvePaymentLine(
+                    line = line,
+                    invoiceCurrencyInput = invoiceCurrency,
+                    paymentModeCurrencyByMode = current.paymentModeCurrencyByMode,
+                    paymentModeDetails = paymentModeDetails,
+                    exchangeRateByCurrency = current.exchangeRateByCurrency,
+                    round = ::roundToCurrency
                 )
-
-                val fixed = line.copy(
-                    currency = paymentCurrency,
-                    exchangeRate = rate
-                ).toBaseAmount(::roundToCurrency)
 
                 _state.update { st ->
                     val s = (st as? BillingState.Success) ?: return@update st
-                    val payKey = paymentCurrency.uppercase()
-                    val invKey = invoiceCurrency.uppercase()
-
-                    val newCache = s.exchangeRateByCurrency
-                        .plus(invKey to 1.0)
-                        .plus(payKey to rate)
-
-                    s.copy(exchangeRateByCurrency = newCache)
-                        .withPaymentLines(s.paymentLines + fixed)
+                    s.copy(exchangeRateByCurrency = result.exchangeRateByCurrency)
+                        .withPaymentLines(s.paymentLines + result.line)
                 }
             },
             exceptionHandler = { e ->
                 _state.update {
                     current.copy(
                         paymentErrorMessage = e.toUserMessage("No se pudo calcular moneda/tasa del pago.")
-                    )
-                }
-            }
-        )
-    }
-
-    fun onUpdatePaymentLine(index: Int, line: PaymentLine) {
-        val current = requireSuccessState() ?: return
-        if (index !in current.paymentLines.indices) return
-
-        val invoiceCurrency = normalizeCurrency(current.currency)
-            ?: normalizeCurrency(contextProvider.requireContext().currency)
-            ?: "USD"
-
-        val paymentCurrency = resolvePaymentCurrencyForMode(
-            modeOfPayment = line.modeOfPayment,
-            invoiceCurrency = invoiceCurrency,
-            paymentModeCurrencyByMode = current.paymentModeCurrencyByMode,
-            paymentModeDetails = paymentModeDetails
-        )
-
-        executeUseCase(
-            action = {
-                val rate = resolveRateToInvoiceCurrency(
-                    api = api,
-                    paymentCurrency = paymentCurrency,
-                    invoiceCurrency = invoiceCurrency,
-                    cache = current.exchangeRateByCurrency
-                )
-
-                val fixed = line.copy(
-                    currency = paymentCurrency,
-                    exchangeRate = rate
-                ).toBaseAmount(::roundToCurrency)
-
-                _state.update { st ->
-                    val s = (st as? BillingState.Success) ?: return@update st
-
-                    val updatedLines = s.paymentLines.mapIndexed { idx, existing ->
-                        if (idx == index) fixed else existing
-                    }
-
-                    val payKey = paymentCurrency.uppercase()
-                    val invKey = invoiceCurrency.uppercase()
-                    val newCache = s.exchangeRateByCurrency
-                        .plus(invKey to 1.0)
-                        .plus(payKey to rate)
-
-                    s.copy(exchangeRateByCurrency = newCache)
-                        .withPaymentLines(updatedLines)
-                }
-            },
-            exceptionHandler = { e ->
-                _state.update {
-                    current.copy(
-                        paymentErrorMessage = e.toUserMessage("No se pudo recalcular moneda/tasa del pago.")
                     )
                 }
             }
@@ -734,10 +648,6 @@ class BillingViewModel(
                 )
             )
         }
-    }
-
-    fun onPaymentCurrencySelected(currency: String) {
-        // Deprecated: no-op
     }
 
     fun onClearSuccessMessage() {
@@ -831,65 +741,18 @@ class BillingViewModel(
                 }
             }
 
-            var remotePaymentsSucceeded = false
-            if (paymentLines.isNotEmpty()) {
-                val currencySpecs = buildCurrencySpecs()
-
-                if (created != null) {
-                    var remainingOutstandingRc =
-                        created.outstandingAmount?.takeIf { it > 0.0 } ?: created.grandTotal
-
-                    var remotePaymentFailed = false
-                    paymentLines.forEach { line ->
-                        if (remainingOutstandingRc <= 0.0) return@forEach
-
-                        val paymentEntry = buildPaymentEntryDto(
-                            api = api,
-                            line = line,
-                            context = context,
-                            customer = customer,
-                            postingDate = postingDate,
-                            invoiceId = created.name ?: invoiceNameForLocal,
-                            invoiceTotalRc = created.grandTotal,
-                            outstandingRc = remainingOutstandingRc,
-                            paidFromAccount = created.debitTo,
-                            partyAccountCurrency = created.partyAccountCurrency,
-                            exchangeRateByCurrency = current.exchangeRateByCurrency,
-                            currencySpecs = currencySpecs,
-                            paymentModeDetails = paymentModeDetails
-                        )
-
-                        val paymentResult = runCatching {
-                            createPaymentEntryUseCase(CreatePaymentEntryInput(paymentEntry))
-                        }
-                        if (paymentResult.isFailure) {
-                            remotePaymentFailed = true
-                        }
-
-                        val allocated =
-                            paymentEntry.references.firstOrNull()?.allocatedAmount ?: 0.0
-                        remainingOutstandingRc =
-                            roundToCurrency((remainingOutstandingRc - allocated).coerceAtLeast(0.0))
-                    }
-
-                    if (remotePaymentFailed) {
-                        // Keep local payments as the source of truth until sync retries.
-                    } else {
-                        remotePaymentsSucceeded = true
-                    }
-                }
-
-                val localPayments =
-                    buildLocalPayments(invoiceNameForLocal, postingDate, paymentLines)
-
-                saveInvoicePaymentsUseCase(
-                    SaveInvoicePaymentsInput(
-                        invoiceName = invoiceNameForLocal,
-                        payments = localPayments
-                    )
-                )
-            }
-
+            val paymentResult = paymentHandler.registerPayments(
+                paymentLines = paymentLines,
+                createdInvoice = created,
+                invoiceNameForLocal = invoiceNameForLocal,
+                postingDate = postingDate,
+                context = context,
+                customer = customer,
+                exchangeRateByCurrency = current.exchangeRateByCurrency,
+                paymentModeDetails = paymentModeDetails
+            )
+            invoiceNameForLocal = paymentResult.invoiceNameForLocal
+            val remotePaymentsSucceeded = paymentResult.remotePaymentsSucceeded
             if (remotePaymentsSucceeded) {
                 runCatching {
                     markSalesInvoiceSyncedUseCase(invoiceNameForLocal)
@@ -960,8 +823,7 @@ class BillingViewModel(
                     cartErrorMessage = null,
                     successMessage = when {
                         created == null -> {
-                            val label = localInvoiceName
-                            "Factura $label guardada localmente (pendiente de sincronizacion)."
+                            "Factura $localInvoiceName guardada localmente (pendiente de sincronizacion)."
                         }
 
                         paymentLines.isNotEmpty() -> {
@@ -1225,21 +1087,6 @@ class BillingViewModel(
             if (shippingAmount > 0.0) add("Envío: $shippingAmount")
         }.joinToString(separator = "; ").takeIf { it.isNotBlank() }
     }
-
-
-    private data class InvoiceReceivableAmounts(
-        val receivableCurrency: String,
-        val totalRc: Double,
-        val outstandingRc: Double
-    )
-
-    private fun isSameMoneyAmount(a: Double, b: Double, decimals: Int): Boolean {
-        val factor = decimals.toDouble().pow(10.0)
-        val ra = kotlin.math.round(a * factor) / factor
-        val rb = kotlin.math.round(b * factor) / factor
-        return ra == rb
-    }
-
 
     private fun resolveDueDate(
         isCreditSale: Boolean,

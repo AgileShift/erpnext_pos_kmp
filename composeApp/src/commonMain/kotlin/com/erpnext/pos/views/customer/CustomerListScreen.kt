@@ -91,12 +91,6 @@ fun CustomerListScreen(
     var baseCounts by remember { mutableStateOf(CustomerCounts(0, 0)) }
     val isDesktop = getPlatformName() == "Desktop"
 
-    val posBaseCurrency = normalizeCurrency(paymentState.baseCurrency)
-    val baseRates = (invoicesState as? CustomerInvoicesState.Success)?.exchangeRateByCurrency
-
-    val isMoneyReady =
-        !posBaseCurrency.isNullOrBlank() && baseRates != null && baseRates.isNotEmpty()
-
     val filterElevation by animateDpAsState(
         targetValue = if (customers.isNotEmpty()) 4.dp else 0.dp,
         label = "filterElevation"
@@ -200,65 +194,59 @@ fun CustomerListScreen(
                                 icon = Icons.Filled.People
                             )
                         } else {
-                            if (!isMoneyReady) {
-                                CustomerShimmerList()
-                            } else {
-                                CustomerListContent(
-                                    customers = filtered,
-                                    actions = actions,
-                                    isWideLayout = isWideLayout,
-                                    isDesktop = isDesktop,
-                                    onOpenQuickActions = { quickActionsCustomer = it },
-                                    onQuickAction = { customer, actionType ->
-                                        handleQuickAction(actions, customer, actionType)
-                                        when (actionType) {
-                                            CustomerQuickActionType.PendingInvoices,
-                                            CustomerQuickActionType.RegisterPayment -> {
-                                                outstandingCustomer = customer
-                                            }
-
-                                            else -> handleQuickAction(actions, customer, actionType)
+                            CustomerListContent(
+                                customers = filtered,
+                                actions = actions,
+                                isWideLayout = isWideLayout,
+                                isDesktop = isDesktop,
+                                onOpenQuickActions = { quickActionsCustomer = it },
+                                onQuickAction = { customer, actionType ->
+                                    handleQuickAction(actions, customer, actionType)
+                                    when (actionType) {
+                                        CustomerQuickActionType.PendingInvoices,
+                                        CustomerQuickActionType.RegisterPayment -> {
+                                            outstandingCustomer = customer
                                         }
+
+                                        else -> handleQuickAction(actions, customer, actionType)
                                     }
-                                )
-                            }
+                                })
                         }
-                    }
-
-                    // SLOT: LOADING
-                    androidx.compose.animation.AnimatedVisibility(
-                        visible = state is CustomerState.Loading,
-                        enter = fadeIn(),
-                        exit = fadeOut()
-                    ) {
-                        CustomerShimmerList()
-                    }
-
-                    // SLOT: EMPTY
-                    androidx.compose.animation.AnimatedVisibility(
-                        visible = state is CustomerState.Empty,
-                        enter = fadeIn(),
-                        exit = fadeOut()
-                    ) {
-                        EmptyStateMessage(
-                            message = strings.customer.emptyCustomers,
-                            icon = Icons.Filled.People
-                        )
-                    }
-
-                    // SLOT: ERROR
-                    androidx.compose.animation.AnimatedVisibility(
-                        visible = state is CustomerState.Error,
-                        enter = fadeIn(),
-                        exit = fadeOut()
-                    ) {
-                        FullScreenErrorMessage(
-                            errorMessage = (state as CustomerState.Error).message,
-                            onRetry = actions.fetchAll
-                        )
                     }
                 }
 
+                // SLOT: LOADING
+                androidx.compose.animation.AnimatedVisibility(
+                    visible = state is CustomerState.Loading,
+                    enter = fadeIn(),
+                    exit = fadeOut()
+                ) {
+                    CustomerShimmerList()
+                }
+
+                // SLOT: EMPTY
+                androidx.compose.animation.AnimatedVisibility(
+                    visible = state is CustomerState.Empty,
+                    enter = fadeIn(),
+                    exit = fadeOut()
+                ) {
+                    EmptyStateMessage(
+                        message = strings.customer.emptyCustomers,
+                        icon = Icons.Filled.People
+                    )
+                }
+
+                // SLOT: ERROR
+                androidx.compose.animation.AnimatedVisibility(
+                    visible = state is CustomerState.Error,
+                    enter = fadeIn(),
+                    exit = fadeOut()
+                ) {
+                    FullScreenErrorMessage(
+                        errorMessage = (state as CustomerState.Error).message,
+                        onRetry = actions.fetchAll
+                    )
+                }
             }
         }
     }
@@ -882,7 +870,7 @@ private fun SummaryTile(
     icon: ImageVector,
     label: String,
     value: String,
-    color: androidx.compose.ui.graphics.Color
+    color: Color
 ) {
     Surface(
         color = color.copy(alpha = 0.08f),
@@ -915,7 +903,7 @@ private fun FilterSummaryTile(
     label: String,
     value: String,
     selected: Boolean,
-    color: androidx.compose.ui.graphics.Color,
+    color: Color,
     onClick: () -> Unit
 ) {
     val background = if (selected) color.copy(alpha = 0.18f) else color.copy(alpha = 0.08f)
@@ -1051,13 +1039,6 @@ private fun CustomerOutstandingInvoicesSheet(
             (fallback + normalizedBase).distinct()
         }
     }
-    /*var selectedCurrency by remember(allowedCodes, posBaseCurrency) {
-        mutableStateOf(allowedCodes.firstOrNull { it.equals(posBaseCurrency, ignoreCase = true) }
-            ?: allowedCodes.firstOrNull() ?: posBaseCurrency)
-    }*/
-    /*val paymentModes = remember(paymentState.paymentModes) {
-        paymentState.paymentModes.map { it.modeOfPayment }.distinct()
-    }*/
     val paymentModes = paymentState.paymentModes
     val modeOptions = remember(paymentModes) { paymentModes.map { it.modeOfPayment }.distinct() }
     val defaultMode = paymentModes.firstOrNull()?.modeOfPayment.orEmpty()

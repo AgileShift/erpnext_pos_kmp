@@ -142,15 +142,11 @@ import com.erpnext.pos.localSource.entities.v2.UserEntity as UserEntityV2
         PaymentScheduleEntity::class,
         SyncStateEntity::class
     ],
-    version = 19,
+    version = 20,
     exportSchema = true,
-    /*autoMigrations = [
-        AutoMigration(
-            from = 17,
-            to = 18
-        ),
-        AutoMigration(from = 18, to = 19)
-    ]*/
+    autoMigrations = [
+        AutoMigration(from = 19, to = 20)
+    ]
 )
 @ConstructedBy(AppDatabaseConstructor::class)
 abstract class AppDatabase : RoomDatabase() {
