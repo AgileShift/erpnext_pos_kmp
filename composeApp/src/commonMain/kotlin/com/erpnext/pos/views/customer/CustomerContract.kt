@@ -4,6 +4,7 @@ import com.erpnext.pos.domain.models.CustomerBO
 import com.erpnext.pos.domain.models.POSCurrencyOption
 import com.erpnext.pos.domain.models.POSPaymentModeOption
 import com.erpnext.pos.domain.models.SalesInvoiceBO
+import com.erpnext.pos.localSource.entities.ModeOfPaymentEntity
 
 sealed class CustomerState {
     object Loading : CustomerState()
@@ -31,7 +32,9 @@ data class CustomerPaymentState(
     val baseCurrency: String = "USD",
     val allowedCurrencies: List<POSCurrencyOption> = emptyList(),
     val paymentModes: List<POSPaymentModeOption> = emptyList(),
-    val exchangeRate: Double = 1.0
+    val exchangeRate: Double = 1.0,
+    val modeTypes: Map<String, ModeOfPaymentEntity>? = mapOf(),
+    val paymentModeCurrencyByMode: Map<String, String>? = mapOf()
 )
 
 data class CustomerAction(

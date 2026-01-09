@@ -1,7 +1,6 @@
 package com.erpnext.pos.localization
 
 import androidx.compose.runtime.staticCompositionLocalOf
-import kotlinx.coroutines.selects.select
 
 enum class AppLanguage(val code: String) {
     Spanish("es"),
@@ -124,7 +123,7 @@ data class BillingStrings(
 
 data class CustomerStrings(
     val title: String,
-    val selectePaymentMode: String,
+    val selectPaymentMode: String,
     val emptyOsInvoices: String,
     val refreshCustomers: String,
     val emptyCustomers: String,
@@ -355,7 +354,7 @@ object AppStringsFactory {
             inStock = "En Stock",
             baseCurrency = "Moneda principal",
             emptyOsInvoices = "No hay facturas pendientes.",
-            selectePaymentMode = "Selecciona un metodo de pago."
+            selectPaymentMode = "Selecciona un metodo de pago."
         ),
         inventory = InventoryStrings(
             loadInventoryError = "Error al cargar inventario",
@@ -550,7 +549,7 @@ object AppStringsFactory {
             inStock = "In Stock",
             baseCurrency = "Base currency",
             emptyOsInvoices = "No outstanding invoices for this customer.",
-            selectePaymentMode = "Select payment mode"
+            selectPaymentMode = "Select payment mode"
         ),
         inventory = InventoryStrings(
             loadInventoryError = "Unable to load inventory",

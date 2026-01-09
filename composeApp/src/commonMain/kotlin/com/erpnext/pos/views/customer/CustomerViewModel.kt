@@ -37,6 +37,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.launch
 
 @OptIn(FlowPreview::class)
 class CustomerViewModel(
@@ -67,7 +68,9 @@ class CustomerViewModel(
     private fun buildPaymentState(
         isSubmitting: Boolean = false,
         errorMessage: String? = null,
-        successMessage: String? = null
+        successMessage: String? = null,
+        modeTypes: Map<String, ModeOfPaymentEntity>? = mapOf(),
+        modeDetails: Map<String, String>? = mapOf()
     ): CustomerPaymentState {
         val context = cashboxManager.getContext()
         return CustomerPaymentState(
@@ -77,7 +80,9 @@ class CustomerViewModel(
             baseCurrency = context?.currency ?: "USD",
             allowedCurrencies = context?.allowedCurrencies ?: emptyList(),
             paymentModes = context?.paymentModes ?: emptyList(),
-            exchangeRate = context?.exchangeRate ?: 1.0
+            exchangeRate = context?.exchangeRate ?: 1.0,
+            modeTypes = modeTypes,
+            paymentModeCurrencyByMode = modeDetails
         )
     }
 
@@ -110,7 +115,7 @@ class CustomerViewModel(
                             else -> CustomerState.Success(
                                 customers,
                                 customers.size,
-                                customers.count { (it.pendingInvoices ?: 0) > 0 }
+                                customers.count { (it.pendingInvoices ?: 0) > 0 },
                             )
                         }
                     }
@@ -156,7 +161,31 @@ class CustomerViewModel(
 
     fun loadOutstandingInvoices(customerId: String) {
         _invoicesState.value = CustomerInvoicesState.Loading
-        _paymentState.value = buildPaymentState()
+
+        viewModelScope.launch {
+            val modeDefinitions =
+                runCatching {
+                    modeOfPaymentDao.getAllModes(
+                        cashboxManager.getContext()?.company ?: ""
+                    )
+                }.getOrElse { emptyList() }
+
+            val modeTypes = modeDefinitions.associateBy { it.modeOfPayment }
+            paymentModeDetails = buildPaymentModeDetailMap(modeDefinitions)
+
+            val paymentModeCurrencyByMode = buildMap {
+                modeDefinitions.forEach { def ->
+                    val currency = def.currency?.trim()?.uppercase().orEmpty()
+                    if (currency.isNotBlank()) {
+                        put(def.modeOfPayment, currency)
+                        put(def.name, currency)
+                    }
+                }
+            }
+
+            _paymentState.value =
+                buildPaymentState(modeTypes = modeTypes, modeDetails = paymentModeCurrencyByMode)
+        }
 
         executeUseCase(
             action = {
