@@ -43,6 +43,8 @@ class CustomerCoordinator(
         enteredCurrency,
         referenceNumber
     )
+
+    fun clearPaymentMessages() = viewModel.clearPaymentMessages()
 }
 
 @Composable

@@ -3,7 +3,7 @@ package com.erpnext.pos.base
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.erpnext.pos.utils.AppSentry
-//import com.erpnext.pos.utils.loading.LoadingIndicator
+import com.erpnext.pos.utils.loading.LoadingIndicator
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
@@ -14,17 +14,18 @@ abstract class BaseViewModel : ViewModel() {
         action: suspend CoroutineScope.() -> Unit,
         exceptionHandler: suspend (Throwable) -> Unit,
         finallyHandler: (suspend () -> Unit)? = null
-    ): Job? {
+    ): Job {
         return viewModelScope.launch {
-            //LoadingIndicator.start()
+            LoadingIndicator.start()
             try {
                 action.invoke(this)
             } catch (e: Exception) {
                 AppSentry.capture(e, e.message)
                 exceptionHandler.invoke(e)
+                LoadingIndicator.stop()
             } finally {
                 finallyHandler?.invoke()
-                //LoadingIndicator.stop()
+                LoadingIndicator.stop()
             }
         }
     }

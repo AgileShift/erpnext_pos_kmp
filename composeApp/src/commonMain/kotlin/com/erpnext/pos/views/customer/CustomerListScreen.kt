@@ -9,8 +9,6 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -60,15 +58,19 @@ import com.erpnext.pos.domain.models.CustomerQuickActionType
 import com.erpnext.pos.domain.models.POSPaymentModeOption
 import com.erpnext.pos.domain.models.SalesInvoiceBO
 import com.erpnext.pos.localization.LocalAppStrings
+import com.erpnext.pos.views.CashBoxManager
 import com.erpnext.pos.utils.QuickActions.customerQuickActions
 import com.erpnext.pos.utils.formatDoubleToString
 import com.erpnext.pos.utils.normalizeCurrency
 import com.erpnext.pos.utils.resolveRateBetweenFromBaseRates
+import com.erpnext.pos.utils.resolvePaymentCurrencyForMode
+import com.erpnext.pos.utils.toCurrencySymbol
+import com.erpnext.pos.utils.view.SnackbarController
+import com.erpnext.pos.utils.view.SnackbarType
 import com.erpnext.pos.utils.oauth.bd
 import com.erpnext.pos.utils.oauth.moneyScale
 import com.erpnext.pos.utils.oauth.toDouble
-import com.erpnext.pos.utils.resolvePaymentCurrencyForMode
-import com.erpnext.pos.utils.toCurrencySymbol
+import org.koin.compose.koinInject
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -87,6 +89,8 @@ fun CustomerListScreen(
     var quickActionsCustomer by remember { mutableStateOf<CustomerBO?>(null) }
     var outstandingCustomer by remember { mutableStateOf<CustomerBO?>(null) }
 
+    val snackbar: SnackbarController = koinInject()
+    val cashboxManager: CashBoxManager = koinInject()
     val customers = if (state is CustomerState.Success) state.customers else emptyList()
     var baseCounts by remember { mutableStateOf(CustomerCounts(0, 0)) }
     val isDesktop = getPlatformName() == "Desktop"
@@ -108,6 +112,20 @@ fun CustomerListScreen(
                 total = state.customers.size,
                 pending = pending
             )
+        }
+    }
+
+    LaunchedEffect(paymentState.successMessage) {
+        paymentState.successMessage?.takeIf { it.isNotBlank() }?.let { message ->
+            snackbar.show(message, SnackbarType.Success)
+            actions.clearPaymentMessages()
+        }
+    }
+
+    LaunchedEffect(paymentState.errorMessage) {
+        paymentState.errorMessage?.takeIf { it.isNotBlank() }?.let { message ->
+            snackbar.show(message, SnackbarType.Error)
+            actions.clearPaymentMessages()
         }
     }
 
@@ -166,86 +184,69 @@ fun CustomerListScreen(
                 Spacer(modifier = Modifier.height(8.dp))
 
                 // Contenido principal según estado
-                // Slot-based rendering: estructura fija con visibilidad dinámica
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
                         .padding(contentPadding)
                 ) {
-
-                    // SLOT: LISTA DE CLIENTES
-                    androidx.compose.animation.AnimatedVisibility(
-                        visible = state is CustomerState.Success &&
-                                (state.customers.isNotEmpty()),
-                        enter = fadeIn(),
-                        exit = fadeOut()
-                    ) {
-                        val filtered = customers.filter { customer ->
-                            customer.customerName.contains(searchQuery, ignoreCase = true) ||
-                                    (customer.mobileNo ?: "").contains(searchQuery)
+                    when (state) {
+                        is CustomerState.Loading -> {
+                            CustomerShimmerList()
                         }
 
-                        if (filtered.isEmpty()) {
+                        is CustomerState.Empty -> {
                             EmptyStateMessage(
-                                message = if (searchQuery.isEmpty())
-                                    strings.customer.emptyCustomers
-                                else
-                                    strings.customer.emptySearchCustomers,
+                                message = strings.customer.emptyCustomers,
                                 icon = Icons.Filled.People
                             )
-                        } else {
-                            CustomerListContent(
-                                customers = filtered,
-                                actions = actions,
-                                isWideLayout = isWideLayout,
-                                isDesktop = isDesktop,
-                                onOpenQuickActions = { quickActionsCustomer = it },
-                                onQuickAction = { customer, actionType ->
-                                    handleQuickAction(actions, customer, actionType)
-                                    when (actionType) {
-                                        CustomerQuickActionType.PendingInvoices,
-                                        CustomerQuickActionType.RegisterPayment -> {
-                                            outstandingCustomer = customer
-                                        }
+                        }
 
-                                        else -> handleQuickAction(actions, customer, actionType)
+                        is CustomerState.Error -> {
+                            FullScreenErrorMessage(
+                                errorMessage = state.message,
+                                onRetry = actions.fetchAll
+                            )
+                        }
+
+                        is CustomerState.Success -> {
+                            val filtered = customers.filter { customer ->
+                                customer.customerName.contains(searchQuery, ignoreCase = true) ||
+                                        (customer.mobileNo ?: "").contains(searchQuery)
+                            }
+
+                            if (filtered.isEmpty()) {
+                                EmptyStateMessage(
+                                    message = if (searchQuery.isEmpty())
+                                        strings.customer.emptyCustomers
+                                    else
+                                        strings.customer.emptySearchCustomers,
+                                    icon = Icons.Filled.People
+                                )
+                            } else {
+                                CustomerListContent(
+                                    customers = filtered,
+                                    posBaseCurrency = normalizeCurrency(paymentState.baseCurrency)
+                                        ?: "USD",
+                                    posExchangeRate = paymentState.exchangeRate,
+                                    cashboxManager = cashboxManager,
+                                    actions = actions,
+                                    isWideLayout = isWideLayout,
+                                    isDesktop = isDesktop,
+                                    onOpenQuickActions = { quickActionsCustomer = it },
+                                    onQuickAction = { customer, actionType ->
+                                        when (actionType) {
+                                            CustomerQuickActionType.PendingInvoices,
+                                            CustomerQuickActionType.RegisterPayment -> {
+                                                outstandingCustomer = customer
+                                            }
+
+                                            else -> handleQuickAction(actions, customer, actionType)
+                                        }
                                     }
-                                })
+                                )
+                            }
                         }
                     }
-                }
-
-                // SLOT: LOADING
-                androidx.compose.animation.AnimatedVisibility(
-                    visible = state is CustomerState.Loading,
-                    enter = fadeIn(),
-                    exit = fadeOut()
-                ) {
-                    CustomerShimmerList()
-                }
-
-                // SLOT: EMPTY
-                androidx.compose.animation.AnimatedVisibility(
-                    visible = state is CustomerState.Empty,
-                    enter = fadeIn(),
-                    exit = fadeOut()
-                ) {
-                    EmptyStateMessage(
-                        message = strings.customer.emptyCustomers,
-                        icon = Icons.Filled.People
-                    )
-                }
-
-                // SLOT: ERROR
-                androidx.compose.animation.AnimatedVisibility(
-                    visible = state is CustomerState.Error,
-                    enter = fadeIn(),
-                    exit = fadeOut()
-                ) {
-                    FullScreenErrorMessage(
-                        errorMessage = (state as CustomerState.Error).message,
-                        onRetry = actions.fetchAll
-                    )
                 }
             }
         }
@@ -254,6 +255,8 @@ fun CustomerListScreen(
     quickActionsCustomer?.let { customer ->
         CustomerQuickActionsSheet(
             customer = customer,
+            invoicesState = invoicesState,
+            paymentState = paymentState,
             onDismiss = { quickActionsCustomer = null },
             onActionSelected = { actionType ->
                 quickActionsCustomer = null
@@ -469,6 +472,9 @@ fun SearchTextField(
 @Composable
 private fun CustomerListContent(
     customers: List<CustomerBO>,
+    posBaseCurrency: String,
+    posExchangeRate: Double,
+    cashboxManager: CashBoxManager,
     actions: CustomerAction,
     isWideLayout: Boolean,
     isDesktop: Boolean,
@@ -487,10 +493,13 @@ private fun CustomerListContent(
             items(customers, key = { it.name }) { customer ->
                 CustomerItem(
                     customer = customer,
+                    posBaseCurrency = posBaseCurrency,
+                    posExchangeRate = posExchangeRate,
                     isDesktop = isDesktop,
                     onClick = { actions.toDetails(customer.name) },
                     onOpenQuickActions = { onOpenQuickActions(customer) },
-                    onQuickAction = { actionType -> onQuickAction(customer, actionType) }
+                    onQuickAction = { actionType -> onQuickAction(customer, actionType) },
+                    cashboxManager = cashboxManager
                 )
             }
         }
@@ -503,10 +512,13 @@ private fun CustomerListContent(
             items(customers, key = { it.name }) { customer ->
                 CustomerItem(
                     customer = customer,
+                    posBaseCurrency = posBaseCurrency,
+                    posExchangeRate = posExchangeRate,
                     isDesktop = isDesktop,
                     onClick = { actions.toDetails(customer.name) },
                     onOpenQuickActions = { onOpenQuickActions(customer) },
-                    onQuickAction = { actionType -> onQuickAction(customer, actionType) }
+                    onQuickAction = { actionType -> onQuickAction(customer, actionType) },
+                    cashboxManager = cashboxManager
                 )
             }
         }
@@ -516,6 +528,9 @@ private fun CustomerListContent(
 @Composable
 fun CustomerItem(
     customer: CustomerBO,
+    posBaseCurrency: String,
+    posExchangeRate: Double,
+    cashboxManager: CashBoxManager,
     isDesktop: Boolean,
     onClick: () -> Unit,
     onOpenQuickActions: () -> Unit,
@@ -530,8 +545,23 @@ fun CustomerItem(
     var isMenuExpanded by remember { mutableStateOf(false) }
     val quickActions = remember { customerQuickActions() }
     val avatarSize = if (isDesktop) 52.dp else 44.dp
-    val pendingAmount =
-        bd(customer.totalPendingAmount ?: customer.currentBalance ?: 0.0).moneyScale(2).toDouble(2)
+    val pendingAmountRaw =
+        bd(customer.totalPendingAmount ?: customer.currentBalance ?: 0.0).moneyScale(2)
+    val pendingAmount = pendingAmountRaw.toDouble(2)
+    val posCurrency = normalizeCurrency(posBaseCurrency) ?: "USD"
+    val customerCurrency = normalizeCurrency(customer.currency) ?: posCurrency
+    var rateToPos by remember { mutableStateOf<Double?>(null) }
+    LaunchedEffect(customerCurrency, posCurrency, pendingAmount) {
+        rateToPos = if (customerCurrency.equals(posCurrency, ignoreCase = true)) {
+            1.0
+        } else {
+            cashboxManager.resolveExchangeRateBetween(
+                fromCurrency = customerCurrency,
+                toCurrency = posCurrency
+            ) ?: posExchangeRate.takeIf { it > 0.0 }
+        }
+    }
+    val posConverted = rateToPos?.let { pendingAmount * it }
     val statusLabel = when {
         isOverLimit -> strings.customer.overdueLabel
         pendingInvoices > 0 || pendingAmount > 0.0 -> strings.customer.pendingLabel
@@ -694,6 +724,18 @@ fun CustomerItem(
                         value = "$currencySymbol $pendingAmount",
                         isCritical = emphasis
                     )
+                    if (posConverted != null && !customerCurrency.equals(
+                            posCurrency,
+                            ignoreCase = true
+                        )
+                    ) {
+                        val posSymbol = posCurrency.toCurrencySymbol().ifBlank { posCurrency }
+                        MetricBlock(
+                            label = "${strings.customer.baseCurrency} ($posCurrency)",
+                            value = "$posSymbol ${formatAmount(posConverted)}",
+                            isCritical = emphasis
+                        )
+                    }
                     MetricBlock(
                         label = strings.customer.outstandingSummaryInvoicesLabel,
                         value = "$pendingInvoices",
@@ -964,6 +1006,8 @@ fun CustomerShimmerList() {
 @Composable
 private fun CustomerQuickActionsSheet(
     customer: CustomerBO,
+    invoicesState: CustomerInvoicesState,
+    paymentState: CustomerPaymentState,
     onDismiss: () -> Unit,
     onActionSelected: (CustomerQuickActionType) -> Unit
 ) {
@@ -984,7 +1028,16 @@ private fun CustomerQuickActionsSheet(
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.SemiBold
             )
-            CustomerOutstandingSummary(customer)
+            CustomerOutstandingSummary(
+                customer = customer,
+                invoices = if (invoicesState is CustomerInvoicesState.Success) {
+                    invoicesState.invoices
+                } else emptyList(),
+                posBaseCurrency = paymentState.baseCurrency,
+                baseRates = if (invoicesState is CustomerInvoicesState.Success) {
+                    invoicesState.exchangeRateByCurrency
+                } else emptyMap()
+            )
 
             Divider()
 
@@ -1475,21 +1528,6 @@ private fun CustomerOutstandingInvoicesSheet(
                 )
             }
 
-            paymentState.errorMessage?.let { message ->
-                Text(
-                    text = message,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.error
-                )
-            }
-            paymentState.successMessage?.let { message ->
-                Text(
-                    text = message,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.primary
-                )
-            }
-
             Button(
                 onClick = {
                     val invoiceId = selectedInvoice?.invoiceId?.trim().orEmpty()
@@ -1526,8 +1564,53 @@ fun requiresReference(option: POSPaymentModeOption?): Boolean {
 }
 
 @Composable
-private fun CustomerOutstandingSummary(customer: CustomerBO) {
-    val currencySymbol = customer.currency.toCurrencySymbol()
+private fun CustomerOutstandingSummary(
+    customer: CustomerBO,
+    invoices: List<SalesInvoiceBO>,
+    posBaseCurrency: String,
+    baseRates: Map<String, Double>
+) {
+    val strings = LocalAppStrings.current
+    val posCurrency = normalizeCurrency(posBaseCurrency) ?: "USD"
+    val partyTotals = if (invoices.isNotEmpty()) {
+        invoices.groupBy { invoice ->
+            normalizeCurrency(invoice.partyAccountCurrency)
+                ?: normalizeCurrency(invoice.currency)
+                ?: posCurrency
+        }.mapValues { (_, list) ->
+            list.sumOf { it.outstandingAmount }
+        }
+    } else {
+        val fallbackCurrency = normalizeCurrency(customer.currency)
+            ?.takeIf { it.isNotBlank() } ?: posCurrency
+        val fallbackAmount = customer.totalPendingAmount
+            ?: customer.currentBalance ?: 0.0
+        mapOf(fallbackCurrency to fallbackAmount)
+    }
+
+    val customerCurrency = partyTotals.keys.firstOrNull() ?: posCurrency
+    val customerAmount = partyTotals.getOrElse(customerCurrency) { 0.0 }
+
+    val totalInPos = if (invoices.isNotEmpty()) {
+        invoices.sumOf { invoice ->
+            val invoiceCurrency = normalizeCurrency(invoice.partyAccountCurrency)
+                ?: normalizeCurrency(invoice.currency) ?: posCurrency
+            val rateToPos = resolveRateBetweenFromBaseRates(
+                fromCurrency = invoiceCurrency,
+                toCurrency = posCurrency,
+                baseCurrency = posCurrency,
+                baseRates = baseRates
+            )
+            if (rateToPos != null) invoice.outstandingAmount * rateToPos
+            else invoice.outstandingAmount
+        }
+    } else {
+        customerAmount
+    }
+
+    val posSymbol = posCurrency.toCurrencySymbol().ifBlank { posCurrency }
+    val posLabel = "$posSymbol ${formatAmount(totalInPos)}"
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -1539,7 +1622,7 @@ private fun CustomerOutstandingSummary(customer: CustomerBO) {
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         Text(
-            text = "Resumen de pendientes",
+            text = strings.customer.outstandingSummaryTitle,
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.SemiBold
         )
@@ -1547,15 +1630,30 @@ private fun CustomerOutstandingSummary(customer: CustomerBO) {
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            Text("Fac. pendientes")
-            Text("${customer.pendingInvoices}")
+            Text(strings.customer.outstandingSummaryInvoicesLabel)
+            Text("${customer.pendingInvoices ?: 0}")
+        }
+        partyTotals.forEach { (currency, amount) ->
+            val symbol = currency.toCurrencySymbol().ifBlank { currency }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                val label = if (currency.equals(customerCurrency, ignoreCase = true)) {
+                    strings.customer.outstandingSummaryAmountLabel
+                } else {
+                    currency
+                }
+                Text(label)
+                Text("$symbol ${formatAmount(amount)}")
+            }
         }
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            Text("Monto pendiente")
-            Text("$currencySymbol${customer.totalPendingAmount ?: customer.currentBalance}")
+            Text(strings.customer.baseCurrency)
+            Text(posLabel)
         }
     }
 }

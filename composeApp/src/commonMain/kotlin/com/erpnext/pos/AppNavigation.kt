@@ -21,7 +21,7 @@ import com.erpnext.pos.navigation.NavRoute
 import com.erpnext.pos.navigation.NavigationManager
 import com.erpnext.pos.navigation.v2.BottomBarWithCenterFab
 import com.erpnext.pos.utils.view.SnackbarHost
-import com.erpnext.pos.utils.view.rememberSnackbarController
+import com.erpnext.pos.utils.loading.LoadingIndicator
 import com.erpnext.pos.views.CashBoxManager
 //import com.erpnext.pos.utils.loading.LoadingIndicator
 import org.koin.compose.koinInject
@@ -34,9 +34,11 @@ fun shouldShowBottomBar(currentRoute: String): Boolean {
 @Composable
 fun AppNavigation() {
     val navController = rememberNavController()
-    val snackbarController = rememberSnackbarController()
+    // SnackbarController global provisto por Koin para compartir mensajes entre pantallas.
+    val snackbarController = koinInject<com.erpnext.pos.utils.view.SnackbarController>()
 
     val snackbar by snackbarController.snackbar.collectAsState()
+    val isLoading by LoadingIndicator.isLoading.collectAsState(initial = false)
     val cashBoxManager = koinInject<CashBoxManager>()
 
     LaunchedEffect(cashBoxManager) {
@@ -84,7 +86,7 @@ fun AppNavigation() {
                         onDismiss = snackbarController::dismiss
                     )
 
-                    /*if (isLoading) {
+                    if (isLoading) {
                         LinearProgressIndicator(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -92,7 +94,7 @@ fun AppNavigation() {
                             color = MaterialTheme.colorScheme.primary,
                             trackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.25f)
                         )
-                    }*/
+                    }
 
                     val navManager: NavigationManager = koinInject()
                     LaunchedEffect(Unit) {

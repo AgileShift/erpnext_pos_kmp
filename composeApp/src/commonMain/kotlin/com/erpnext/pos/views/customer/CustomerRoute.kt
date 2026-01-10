@@ -85,7 +85,8 @@ fun rememberCustomerActions(
             onRegisterPayment = { coordinator.loadOutstandingInvoices(it.name) },
             loadOutstandingInvoices = { coordinator.loadOutstandingInvoices(it.name) },
             clearOutstandingInvoices = coordinator::clearOutstandingInvoices,
-            registerPayment = coordinator::registerPayment
+            registerPayment = coordinator::registerPayment,
+            clearPaymentMessages = coordinator::clearPaymentMessages
         )
     }
 }

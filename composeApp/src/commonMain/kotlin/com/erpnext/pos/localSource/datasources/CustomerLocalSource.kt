@@ -17,6 +17,7 @@ interface ICustomerLocalSource {
     suspend fun getByCustomerState(state: String): Flow<List<CustomerEntity>>
     suspend fun getOldestCustomer(): CustomerEntity?
     suspend fun saveInvoices(invoices: List<SalesInvoiceWithItemsAndPayments>)
+    suspend fun refreshCustomerSummary(customerId: String)
 }
 
 class CustomerLocalSource(private val dao: CustomerDao, private val invoiceDao: SalesInvoiceDao) :
@@ -47,5 +48,9 @@ class CustomerLocalSource(private val dao: CustomerDao, private val invoiceDao: 
 
     override suspend fun getByCustomerState(state: String): Flow<List<CustomerEntity>> {
         return dao.getByCustomerState(state)
+    }
+
+    override suspend fun refreshCustomerSummary(customerId: String) {
+        invoiceDao.refreshCustomerSummary(customerId)
     }
 }

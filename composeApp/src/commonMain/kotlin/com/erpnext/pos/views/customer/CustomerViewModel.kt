@@ -13,8 +13,6 @@ import com.erpnext.pos.domain.usecases.FetchCustomerDetailUseCase
 import com.erpnext.pos.domain.usecases.FetchCustomersUseCase
 import com.erpnext.pos.domain.usecases.FetchOutstandingInvoicesForCustomerUseCase
 import com.erpnext.pos.domain.usecases.FetchSalesInvoiceLocalUseCase
-import com.erpnext.pos.domain.usecases.RegisterInvoicePaymentInput
-import com.erpnext.pos.domain.usecases.RegisterInvoicePaymentUseCase
 import com.erpnext.pos.domain.usecases.SyncSalesInvoiceFromRemoteUseCase
 import com.erpnext.pos.localSource.dao.ModeOfPaymentDao
 import com.erpnext.pos.localSource.entities.ModeOfPaymentEntity
@@ -46,7 +44,6 @@ class CustomerViewModel(
     private val checkCustomerCreditUseCase: CheckCustomerCreditUseCase,
     private val fetchCustomerDetailUseCase: FetchCustomerDetailUseCase,
     private val fetchOutstandingInvoicesUseCase: FetchOutstandingInvoicesForCustomerUseCase,
-    private val registerInvoicePaymentUseCase: RegisterInvoicePaymentUseCase,
     private val fetchSalesInvoiceLocalUseCase: FetchSalesInvoiceLocalUseCase,
     private val syncSalesInvoiceFromRemoteUseCase: SyncSalesInvoiceFromRemoteUseCase,
     private val modeOfPaymentDao: ModeOfPaymentDao,
@@ -64,6 +61,7 @@ class CustomerViewModel(
     val paymentState = _paymentState
 
     private var paymentModeDetails: Map<String, ModeOfPaymentEntity> = emptyMap()
+    private var customersJob: kotlinx.coroutines.Job? = null
 
     private fun buildPaymentState(
         isSubmitting: Boolean = false,
@@ -92,6 +90,7 @@ class CustomerViewModel(
     private val stateFlowFilter = MutableStateFlow<String?>(null)
 
     init {
+        preloadPaymentState()
         combine(searchFlow, stateFlowFilter) { q, s -> q to s }
             .debounce(250)
             .onEach { (q, s) -> fetchAllCustomers(q, s) }
@@ -100,14 +99,24 @@ class CustomerViewModel(
         fetchAllCustomers()
     }
 
+    private fun preloadPaymentState() {
+        viewModelScope.launch {
+            val context = cashboxManager.getContext() ?: return@launch
+            _paymentState.value = buildPaymentState(
+                modeTypes = paymentModeDetails,
+                modeDetails = emptyMap()
+            )
+        }
+    }
+
     fun fetchAllCustomers(query: String? = null, state: String? = null) {
         _stateFlow.value = CustomerState.Loading
 
-        executeUseCase(
+        customersJob?.cancel()
+        customersJob = executeUseCase(
             action = {
-                // dejamos respirar a Compose una recomposición
-                delay(200)
-
+                // pequeña espera para evitar parpadeos al cambiar filtros
+                delay(120)
                 fetchCustomersUseCase.invoke(CustomerQueryInput(query, state))
                     .collectLatest { customers ->
                         _stateFlow.value = when {
@@ -121,7 +130,8 @@ class CustomerViewModel(
                     }
             },
             exceptionHandler = {
-                _stateFlow.value = CustomerState.Error(it.message ?: "Error al cargar clientes")
+                _stateFlow.value =
+                    CustomerState.Error(it.message ?: "Error al cargar clientes")
             }
         )
     }
@@ -335,14 +345,6 @@ class CustomerViewModel(
                     if (fixedLine.exchangeRate > 0.0) change / fixedLine.exchangeRate else null
                 }
 
-                registerInvoicePaymentUseCase(
-                    RegisterInvoicePaymentInput(
-                        invoiceId = invoiceId,
-                        modeOfPayment = modeOfPayment,
-                        amount = appliedAmount
-                    )
-                )
-
                 if (paymentResult.remotePaymentsSucceeded) {
                     runCatching { syncSalesInvoiceFromRemoteUseCase(invoiceId) }
                 }
@@ -363,6 +365,8 @@ class CustomerViewModel(
                 val finalMessage = listOfNotNull(baseMessage, changeText).joinToString(" ")
 
                 loadOutstandingInvoices(customerId, successMessage = finalMessage)
+                // Forzamos refresco inmediato de la lista principal para reflejar nuevos saldos.
+                fetchAllCustomers(searchFilter, selectedState)
             },
             exceptionHandler = {
                 _paymentState.value = buildPaymentState(
@@ -378,5 +382,12 @@ class CustomerViewModel(
         val definitions = runCatching { modeOfPaymentDao.getAllModes(company) }
             .getOrElse { emptyList() }
         paymentModeDetails = buildPaymentModeDetailMap(definitions)
+    }
+
+    fun clearPaymentMessages() {
+        _paymentState.value = _paymentState.value.copy(
+            errorMessage = null,
+            successMessage = null
+        )
     }
 }

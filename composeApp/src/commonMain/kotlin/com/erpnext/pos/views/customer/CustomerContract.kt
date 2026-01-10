@@ -52,6 +52,7 @@ data class CustomerAction(
     val onRegisterPayment: (CustomerBO) -> Unit = {},
     val loadOutstandingInvoices: (CustomerBO) -> Unit = {},
     val clearOutstandingInvoices: () -> Unit = {},
+    val clearPaymentMessages: () -> Unit = {},
     val registerPayment: (
         customerId: String,
         invoiceId: String,

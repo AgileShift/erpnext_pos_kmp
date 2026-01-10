@@ -69,10 +69,8 @@ class CustomerRepository(
                         val totalOutstanding =
                             customerInvoices.sumOf { it.grandTotal - it.paidAmount }
                         val resolvedLimit = dto.creditLimitForCompany(contextCompany)
-                        val creditLimit = resolvedLimit?.creditLimit //?: dto.creditLimit
+                        val creditLimit = resolvedLimit?.creditLimit
                         val availableCredit = creditLimit?.let { it - totalOutstanding }
-                        //val address = remoteSource.getCustomerAddress(dto.name)
-                        //val contact = remoteSource.getCustomerContact(dto.name)
 
                         dto.toEntity(
                             creditLimit = creditLimit,
@@ -84,6 +82,9 @@ class CustomerRepository(
                     }
                 }.awaitAll()
                 localSource.insertAll(entities)
+                entities.mapNotNull { it.name }.distinct().forEach { customerId ->
+                    localSource.refreshCustomerSummary(customerId)
+                }
             }
         }, shouldFetch = { localData ->
             localData.isEmpty() || SyncTTL.isExpired(localData.maxOf {
