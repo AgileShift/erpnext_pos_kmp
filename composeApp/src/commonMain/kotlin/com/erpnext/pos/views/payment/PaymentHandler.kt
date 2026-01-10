@@ -45,7 +45,7 @@ class PaymentHandler(
 
     suspend fun resolvePaymentLine(
         line: PaymentLine,
-        invoiceCurrencyInput: String?,
+        invoiceCurrencyInput: String,
         paymentModeCurrencyByMode: Map<String, String>,
         paymentModeDetails: Map<String, ModeOfPaymentEntity>,
         exchangeRateByCurrency: Map<String, Double>,
@@ -113,7 +113,7 @@ class PaymentHandler(
             ?: "USD"
         val receivableAmounts = createdInvoice?.let {
             runCatching { resolveInvoiceAmountsInReceivable(it) }
-                .getOrElse {
+                .getOrElse { _ ->
                     val outstanding = it.outstandingAmount ?: it.grandTotal
                     val paid = it.paidAmount
                     val total = if (paid > 0.0) paid + outstanding else outstanding
@@ -127,7 +127,6 @@ class PaymentHandler(
         var remotePaymentsSucceeded = false
         var remainingOutstandingRc: Double? = receivableAmounts?.outstandingRc
             ?: createdInvoice?.outstandingAmount?.takeIf { it > 0.0 }
-            ?: createdInvoice?.grandTotal
 
         val isOnline = networkMonitor.isConnected.first()
 
@@ -192,11 +191,12 @@ class PaymentHandler(
             )
         }
         val adjustedLines = paymentLines.map { line ->
-            val amountInReceivable = if (baseToReceivableRate != null && baseToReceivableRate > 0.0) {
-                roundToCurrency(line.baseAmount * baseToReceivableRate)
-            } else {
-                roundToCurrency(line.baseAmount)
-            }
+            val amountInReceivable =
+                if (baseToReceivableRate != null && baseToReceivableRate > 0.0) {
+                    roundToCurrency(line.baseAmount * baseToReceivableRate)
+                } else {
+                    roundToCurrency(line.baseAmount)
+                }
             if (remainingLocal == null) return@map line
             val allocated = minOf(amountInReceivable, remainingLocal!!)
             remainingLocal = (remainingLocal!! - allocated).coerceAtLeast(0.0)

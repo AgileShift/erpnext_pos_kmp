@@ -559,7 +559,7 @@ fun CustomerItem(
     val quickActions = remember { customerQuickActions() }
     val avatarSize = if (isDesktop) 52.dp else 44.dp
     val pendingAmountRaw =
-        bd(customer.totalPendingAmount ?: customer.currentBalance ?: 0.0).moneyScale(2)
+        bd(customer.totalPendingAmount ?: 0.0).moneyScale(2)
     val pendingAmount = pendingAmountRaw.toDouble(2)
     val posCurr = normalizeCurrency(posCurrency) ?: "USD"
     var rateToPos by remember { mutableStateOf<Double?>(null) }
@@ -736,17 +736,20 @@ fun CustomerItem(
                     modifier = Modifier.widthIn(min = 140.dp),
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
+                    val pendingPrimaryAmount = posAmount ?: pendingAmount
+                    val pendingPrimaryCurrency = if (posAmount != null) posCurr else baseCurrency
+                    val pendingPrimarySymbol =
+                        pendingPrimaryCurrency.toCurrencySymbol().ifBlank { pendingPrimaryCurrency }
 
                     MetricBlock(
                         label = strings.customer.pendingLabel,
-                        value = "$currencySymbol ${formatAmount(pendingAmount)}",
+                        value = "$pendingPrimarySymbol ${formatAmount(pendingPrimaryAmount)}",
                         isCritical = emphasis
                     )
-                    if (!baseCurrency.equals(posCurr, ignoreCase = true) && posAmount != null) {
-                        val posSymbol = posCurr.toCurrencySymbol().ifBlank { posCurr }
+                    if (!pendingPrimaryCurrency.equals(baseCurrency, ignoreCase = true)) {
                         MetricBlock(
-                            label = "${strings.customer.baseCurrency} ($posCurr)",
-                            value = "$posSymbol ${formatAmount(posAmount)}",
+                            label = strings.customer.baseCurrency,
+                            value = "$currencySymbol ${formatAmount(pendingAmount)}",
                             isCritical = emphasis
                         )
                     }
@@ -1243,8 +1246,25 @@ private fun CustomerOutstandingInvoicesSheet(
                                 val convertedOutstanding = rateBaseToInvoice?.let { rate ->
                                     invoice.outstandingAmount * rate
                                 }
-                                val outstandingLabel =
-                                    "$baseSymbol ${formatAmount(invoice.outstandingAmount)}"
+                                val rateBaseToPos = if (posBaseCurrency.equals(
+                                        invoiceBaseCurrency,
+                                        ignoreCase = true
+                                    )
+                                ) {
+                                    1.0
+                                } else {
+                                    resolveRateBetweenFromBaseRates(
+                                        fromCurrency = invoiceBaseCurrency,
+                                        toCurrency = posBaseCurrency,
+                                        baseCurrency = posBaseCurrency,
+                                        baseRates = invoicesState.exchangeRateByCurrency
+                                    )
+                                }
+                                val posSymbol = posBaseCurrency.toCurrencySymbol()
+                                    .ifBlank { posBaseCurrency }
+                                val posLabel = rateBaseToPos?.let { rate ->
+                                    "$posSymbol ${formatAmount(invoice.outstandingAmount * rate)}"
+                                } ?: "$posSymbol --"
 
                                 Card(
                                     modifier = Modifier.fillMaxWidth(),
@@ -1359,7 +1379,7 @@ private fun CustomerOutstandingInvoicesSheet(
                                         }
 
                                         Text(
-                                            text = "${strings.customer.outstandingLabel}: $outstandingLabel",
+                                            text = "${strings.customer.outstandingLabel}: $posLabel",
                                             style = MaterialTheme.typography.bodySmall,
                                             color = MaterialTheme.colorScheme.primary
                                         )
@@ -1384,20 +1404,8 @@ private fun CustomerOutstandingInvoicesSheet(
                                                 ignoreCase = true
                                             )
                                         ) {
-                                            val rateBaseToPos = resolveRateBetweenFromBaseRates(
-                                                fromCurrency = invoiceBaseCurrency,
-                                                toCurrency = posBaseCurrency,
-                                                baseCurrency = posBaseCurrency,
-                                                baseRates = invoicesState.exchangeRateByCurrency
-                                            )
-                                            val posSymbol =
-                                                posBaseCurrency.toCurrencySymbol()
-                                                    .ifBlank { posBaseCurrency }
-                                            val posLabel = rateBaseToPos?.let { rate ->
-                                                "$posSymbol ${formatAmount(invoice.outstandingAmount * rate)}"
-                                            } ?: "$posSymbol --"
                                             Text(
-                                                text = "${strings.customer.baseCurrency}: $posLabel",
+                                                text = "${strings.customer.baseCurrency}: $baseSymbol ${formatAmount(invoice.outstandingAmount)}",
                                                 style = MaterialTheme.typography.bodySmall,
                                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                                             )

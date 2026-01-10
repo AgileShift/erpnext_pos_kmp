@@ -540,15 +540,15 @@ class BillingViewModel(
             return
         }
 
-        val invoiceCurrency = normalizeCurrency(current.currency)
-            ?: normalizeCurrency(contextProvider.requireContext().currency)
+        val contextCurrency = normalizeCurrency(contextProvider.requireContext().currency)
+            ?: normalizeCurrency(current.currency)
             ?: "USD"
 
         executeUseCase(
             action = {
                 val result = paymentHandler.resolvePaymentLine(
                     line = line,
-                    invoiceCurrencyInput = invoiceCurrency,
+                    invoiceCurrencyInput = contextCurrency,
                     paymentModeCurrencyByMode = current.paymentModeCurrencyByMode,
                     paymentModeDetails = paymentModeDetails,
                     exchangeRateByCurrency = current.exchangeRateByCurrency,
