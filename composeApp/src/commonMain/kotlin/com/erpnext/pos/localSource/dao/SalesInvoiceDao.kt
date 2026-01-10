@@ -21,12 +21,23 @@ interface SalesInvoiceDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertPayments(payments: List<POSInvoicePaymentEntity>)
 
+    @Query("SELECT * FROM tabSalesInvoicePayment WHERE parent_invoice = :invoiceName")
+    suspend fun getPaymentsForInvoice(invoiceName: String): List<POSInvoicePaymentEntity>
+
     @Transaction
     suspend fun insertFullInvoices(invoices: List<SalesInvoiceWithItemsAndPayments>) {
-        invoices.map {
-            insertInvoice(it.invoice)
-            insertItems(it.items)
-            if (it.payments.isNotEmpty()) insertPayments(it.payments)
+        invoices.map { payload ->
+            val existingPayments = if (payload.payments.isEmpty()) {
+                getPaymentsForInvoice(payload.invoice.invoiceName.orEmpty())
+            } else {
+                emptyList()
+            }
+            insertInvoice(payload.invoice)
+            insertItems(payload.items)
+            when {
+                payload.payments.isNotEmpty() -> insertPayments(payload.payments)
+                existingPayments.isNotEmpty() -> insertPayments(existingPayments)
+            }
         }
     }
 
@@ -37,9 +48,17 @@ interface SalesInvoiceDao {
         items: List<SalesInvoiceItemEntity>,
         payments: List<POSInvoicePaymentEntity> = emptyList()
     ) {
+        val existingPayments = if (payments.isEmpty()) {
+            getPaymentsForInvoice(invoice.invoiceName.orEmpty())
+        } else {
+            emptyList()
+        }
         insertInvoice(invoice)
         insertItems(items)
-        if (payments.isNotEmpty()) insertPayments(payments)
+        when {
+            payments.isNotEmpty() -> insertPayments(payments)
+            existingPayments.isNotEmpty() -> insertPayments(existingPayments)
+        }
     }
 
     // 🔹 Consultas

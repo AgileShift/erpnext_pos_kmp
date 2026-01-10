@@ -123,14 +123,18 @@ class SalesInvoiceRepository(
         val paidDelta = payments.sumOf { it.amount }
         val totalBefore = invoice.paidAmount + invoice.outstandingAmount
         val totalPaid = roundToCurrency((invoice.paidAmount + paidDelta).coerceAtLeast(0.0))
-        val newOutstanding =
+        var newOutstanding =
             roundToCurrency((invoice.outstandingAmount - paidDelta).coerceAtLeast(0.0))
+        val roundingTolerance = 0.05
         val epsilon = 0.0001
+        if (newOutstanding <= roundingTolerance) {
+            newOutstanding = 0.0
+        }
 
         invoice.outstandingAmount = newOutstanding
         invoice.paidAmount = totalPaid.coerceAtMost(totalBefore)
         invoice.status = when {
-            newOutstanding <= epsilon -> "Paid"
+            newOutstanding <= 0.0 -> "Paid"
             totalPaid <= epsilon -> "Unpaid"
             else -> "Partly Paid"
         }
