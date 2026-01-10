@@ -548,7 +548,9 @@ class APIService(
                     "Partly Paid and Discounted"
                 )
             })
-        val totalOutstanding = invoices.sumOf { it.grandTotal - it.paidAmount }
+        val totalOutstanding = invoices.sumOf { invoice ->
+            invoice.outstandingAmount ?: (invoice.grandTotal - invoice.paidAmount)
+        }
         return OutstandingInfo(totalOutstanding, invoices)
     }
 

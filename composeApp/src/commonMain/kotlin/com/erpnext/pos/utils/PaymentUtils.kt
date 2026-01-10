@@ -245,7 +245,15 @@ fun resolveInvoiceAmountsInReceivable(
     }
 
     val baseTotal = created.baseGrandTotal
-        ?: error("Falta base_grand_total en SalesInvoiceDto. Es obligatorio para multi-moneda.")
+    if (baseTotal == null) {
+        val paidRc = created.paidAmount
+        val totalRc = if (paidRc > 0.0) paidRc + invoiceOutstandingInv else invoiceOutstandingInv
+        return InvoiceReceivableAmounts(
+            receivableCurrency = receivableCurrency,
+            totalRc = totalRc,
+            outstandingRc = invoiceOutstandingInv
+        )
+    }
 
     if (invoiceTotalInv <= 0.0) {
         error("grand_total inválido para inferir tasa invoice->receivable (grand_total=$invoiceTotalInv).")
@@ -323,8 +331,11 @@ suspend fun buildPaymentEntryDto(
 
     // Caso 1: paid_to == receivable
     if (paidToCurrency.equals(receivableCurrency, ignoreCase = true)) {
-        val epsilon = 1.0 / rcSpec.minorUnits.toDouble().pow(10.0)
-        val allocated = if (entered.toDouble(2) + epsilon >= outstanding.toDouble(2)) {
+        val roundingTolerance = maxOf(
+            1.0 / rcSpec.minorUnits.toDouble().pow(10.0),
+            0.05
+        )
+        val allocated = if (entered.toDouble(2) + roundingTolerance >= outstanding.toDouble(2)) {
             outstanding
         } else {
             minOfBd(entered, outstanding).moneyScale(rcSpec.minorUnits)
@@ -372,9 +383,12 @@ suspend fun buildPaymentEntryDto(
 
     val rate = bd(rateDouble)
 
-    val epsilon = 1.0 / rcSpec.minorUnits.toDouble().pow(10.0)
+    val roundingTolerance = maxOf(
+        1.0 / rcSpec.minorUnits.toDouble().pow(10.0),
+        0.05
+    )
     val deliveredRc = entered.safeMul(rate).moneyScale(rcSpec.minorUnits)
-    val allocatedRc = if (deliveredRc.toDouble(2) + epsilon >= outstanding.toDouble(2)) {
+    val allocatedRc = if (deliveredRc.toDouble(2) + roundingTolerance >= outstanding.toDouble(2)) {
         outstanding
     } else {
         minOfBd(deliveredRc, outstanding).moneyScale(rcSpec.minorUnits)
@@ -481,8 +495,11 @@ suspend fun buildPaymentEntryDtoWithRateResolver(
 
     // Caso 1: paid_to == receivable
     if (paidToCurrency.equals(receivableCurrency, ignoreCase = true)) {
-        val epsilon = 1.0 / rcSpec.minorUnits.toDouble().pow(10.0)
-        val allocated = if (entered.toDouble(2) + epsilon >= outstanding.toDouble(2)) {
+        val roundingTolerance = maxOf(
+            1.0 / rcSpec.minorUnits.toDouble().pow(10.0),
+            0.05
+        )
+        val allocated = if (entered.toDouble(2) + roundingTolerance >= outstanding.toDouble(2)) {
             outstanding
         } else {
             minOfBd(entered, outstanding).moneyScale(rcSpec.minorUnits)
@@ -531,9 +548,12 @@ suspend fun buildPaymentEntryDtoWithRateResolver(
 
     val rate = bd(rateDouble)
 
-    val epsilon = 1.0 / rcSpec.minorUnits.toDouble().pow(10.0)
+    val roundingTolerance = maxOf(
+        1.0 / rcSpec.minorUnits.toDouble().pow(10.0),
+        0.05
+    )
     val deliveredRc = entered.safeMul(rate).moneyScale(rcSpec.minorUnits)
-    val allocatedRc = if (deliveredRc.toDouble(2) + epsilon >= outstanding.toDouble(2)) {
+    val allocatedRc = if (deliveredRc.toDouble(2) + roundingTolerance >= outstanding.toDouble(2)) {
         outstanding
     } else {
         minOfBd(deliveredRc, outstanding).moneyScale(rcSpec.minorUnits)

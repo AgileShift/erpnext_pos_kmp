@@ -95,6 +95,7 @@ fun SalesInvoiceDto.toEntity(): SalesInvoiceWithItemsAndPayments {
 
     val invoiceEntity = SalesInvoiceEntity(
         invoiceName = name,
+        profileId = posProfile,
         customer = customer,
         customerPhone = customerPhone,
         customerName = customerName,

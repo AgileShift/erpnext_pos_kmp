@@ -75,6 +75,35 @@ class SalesInvoiceRepository(
         entity.invoice.syncStatus = "Pending"
         entity.invoice.status = dto.status ?: entity.invoice.status
         entity.invoice.modifiedAt = now
+        val invoiceCurrency = dto.currency?.trim()?.uppercase()
+        val receivableCurrency = dto.partyAccountCurrency?.trim()?.uppercase()
+        if (!invoiceCurrency.isNullOrBlank() &&
+            !receivableCurrency.isNullOrBlank() &&
+            !invoiceCurrency.equals(receivableCurrency, ignoreCase = true)
+        ) {
+            val directRate = context.resolveExchangeRateBetween(invoiceCurrency, receivableCurrency)
+            val fallbackRate = if (directRate == null || directRate <= 0.0) {
+                val ctx = context.getContext()
+                when {
+                    receivableCurrency.equals("USD", true) &&
+                        invoiceCurrency.equals(ctx?.currency, true) &&
+                        (ctx?.exchangeRate ?: 0.0) > 0.0 ->
+                        1 / (ctx?.exchangeRate ?: 1.0)
+                    invoiceCurrency.equals("USD", true) &&
+                        receivableCurrency.equals(ctx?.currency, true) &&
+                        (ctx?.exchangeRate ?: 0.0) > 0.0 ->
+                        ctx?.exchangeRate
+                    else -> null
+                }
+            } else {
+                directRate
+            }
+            if (fallbackRate != null && fallbackRate > 0.0) {
+                entity.invoice.outstandingAmount =
+                    roundToCurrency(entity.invoice.outstandingAmount * fallbackRate)
+                entity.invoice.paidAmount = roundToCurrency(entity.invoice.paidAmount * fallbackRate)
+            }
+        }
         entity.items.forEach { it.parentInvoice = localInvoiceName }
         entity.payments.forEach { it.parentInvoice = localInvoiceName }
 
@@ -91,19 +120,22 @@ class SalesInvoiceRepository(
         val invoiceId = requireNotNull(invoice.invoiceName) {
             "Invoice name is required to apply payments."
         }
-        val existingPayments = localSource.getInvoiceByName(invoiceId)?.payments ?: emptyList()
-        val totalPaid = roundToCurrency(
-            existingPayments.sumOf { it.amount } + payments.sumOf { it.amount }
-        )
-        val grandTotal = invoice.grandTotal
-        val newOutstanding = roundToCurrency((grandTotal - totalPaid).coerceAtLeast(0.0))
+        val paidDelta = payments.sumOf { it.amount }
+        val totalBefore = invoice.paidAmount + invoice.outstandingAmount
+        val totalPaid = roundToCurrency((invoice.paidAmount + paidDelta).coerceAtLeast(0.0))
+        var newOutstanding =
+            roundToCurrency((invoice.outstandingAmount - paidDelta).coerceAtLeast(0.0))
+        val roundingTolerance = 0.05
         val epsilon = 0.0001
+        if (newOutstanding <= roundingTolerance) {
+            newOutstanding = 0.0
+        }
 
         invoice.outstandingAmount = newOutstanding
-        invoice.paidAmount = totalPaid.coerceAtMost(grandTotal)
+        invoice.paidAmount = totalPaid.coerceAtMost(totalBefore)
         invoice.status = when {
-            newOutstanding <= epsilon -> "Paid"
-            newOutstanding >= grandTotal - epsilon -> "Unpaid"
+            newOutstanding <= 0.0 -> "Paid"
+            totalPaid <= epsilon -> "Unpaid"
             else -> "Partly Paid"
         }
         invoice.syncStatus = "Pending"

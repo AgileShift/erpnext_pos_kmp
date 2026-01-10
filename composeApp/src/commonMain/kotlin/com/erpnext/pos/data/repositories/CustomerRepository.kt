@@ -66,8 +66,9 @@ class CustomerRepository(
                 val entities = remoteData.map { dto ->
                     async {
                         val customerInvoices = outstandingByCustomer[dto.name] ?: emptyList()
-                        val totalOutstanding =
-                            customerInvoices.sumOf { it.grandTotal - it.paidAmount }
+                        val totalOutstanding = customerInvoices.sumOf { invoice ->
+                            invoice.outstandingAmount ?: (invoice.grandTotal - invoice.paidAmount)
+                        }
                         val resolvedLimit = dto.creditLimitForCompany(contextCompany)
                         val creditLimit = resolvedLimit?.creditLimit
                         val availableCredit = creditLimit?.let { it - totalOutstanding }
@@ -124,8 +125,9 @@ class CustomerRepository(
                 val entities = remoteData.map { dto ->
                     async {
                         val customerInvoices = outstandingByCustomer[dto.name] ?: emptyList()
-                        val totalOutstanding =
-                            customerInvoices.sumOf { it.grandTotal - it.paidAmount }
+                        val totalOutstanding = customerInvoices.sumOf { invoice ->
+                            invoice.outstandingAmount ?: (invoice.grandTotal - invoice.paidAmount)
+                        }
                         val creditLimit = dto.creditLimits
                         val available = if (creditLimit.isNotEmpty()) (creditLimit[0].creditLimit
                             ?: 0.0) - totalOutstanding else 0.0

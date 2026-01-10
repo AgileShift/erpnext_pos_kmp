@@ -551,8 +551,8 @@ fun CustomerItem(
     val pendingInvoices = customer.pendingInvoices ?: 0
     val availableCredit = customer.availableCredit ?: 0.0
     val creditLimit = customer.creditLimit ?: 0.0
-    val baseCurrency = //normalizeCurrency(partyAccountCurrency)
-        normalizeCurrency(posCurrency)
+    val baseCurrency = normalizeCurrency(partyAccountCurrency)
+        ?: normalizeCurrency(posCurrency)
         ?: "USD"
     val currencySymbol = baseCurrency.toCurrencySymbol().ifBlank { baseCurrency }
     var isMenuExpanded by remember { mutableStateOf(false) }
@@ -1604,6 +1604,8 @@ private fun CustomerOutstandingSummary(
 
     val customerCurrency = partyTotals.keys.firstOrNull() ?: posCurrency
     val customerAmount = partyTotals.getOrElse(customerCurrency) { 0.0 }
+    val availableCredit = customer.availableCredit ?: 0.0
+    val creditLimit = customer.creditLimit ?: 0.0
 
     val totalInPos = if (invoices.isNotEmpty()) {
         invoices.sumOf { invoice ->
@@ -1646,6 +1648,24 @@ private fun CustomerOutstandingSummary(
         ) {
             Text(strings.customer.outstandingSummaryInvoicesLabel)
             Text("${customer.pendingInvoices ?: 0}")
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            val symbol = customerCurrency.toCurrencySymbol().ifBlank { customerCurrency }
+            val label = if (creditLimit > 0.0) {
+                "${strings.customer.availableLabel}/${strings.customer.limitLabel}"
+            } else {
+                strings.customer.availableLabel
+            }
+            val value = if (creditLimit > 0.0) {
+                "$symbol ${formatAmount(availableCredit)} / ${formatAmount(creditLimit)}"
+            } else {
+                "$symbol ${formatAmount(availableCredit)}"
+            }
+            Text(label)
+            Text(value)
         }
         partyTotals.forEach { (currency, amount) ->
             val symbol = currency.toCurrencySymbol().ifBlank { currency }
