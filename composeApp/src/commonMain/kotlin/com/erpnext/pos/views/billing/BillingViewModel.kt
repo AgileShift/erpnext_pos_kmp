@@ -185,7 +185,7 @@ class BillingViewModel(
             _state.value = BillingState.Error(
                 it.toUserMessage("No se pudo cargar la información de facturación.")
             )
-        })
+        }, showLoading = false)
     }
 
     private fun requireSuccessState(): BillingState.Success? {

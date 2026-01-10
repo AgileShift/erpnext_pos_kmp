@@ -265,21 +265,21 @@ interface SalesInvoiceDao {
                  FROM tabSalesInvoice
                  WHERE customer = :customerId
                    AND outstanding_amount > 0
-                   AND docstatus = 1), 0
+                   AND docstatus != 2), 0
             ),
             pendingInvoicesCount = COALESCE(
                 (SELECT COUNT(*)
                  FROM tabSalesInvoice
                  WHERE customer = :customerId
                    AND outstanding_amount > 0
-                   AND docstatus = 1), 0
+                   AND docstatus != 2), 0
             ),
             currentBalance = COALESCE(
                 (SELECT SUM(outstanding_amount)
                  FROM tabSalesInvoice
                  WHERE customer = :customerId
                    AND outstanding_amount > 0
-                   AND docstatus = 1), 0
+                   AND docstatus != 2), 0
             ),
             availableCredit = CASE
                 WHEN creditLimit IS NULL THEN availableCredit
@@ -288,7 +288,7 @@ interface SalesInvoiceDao {
                      FROM tabSalesInvoice
                      WHERE customer = :customerId
                        AND outstanding_amount > 0
-                       AND docstatus = 1), 0
+                       AND docstatus != 2), 0
                 )
             END,
             state = CASE
@@ -297,7 +297,7 @@ interface SalesInvoiceDao {
                      FROM tabSalesInvoice
                      WHERE customer = :customerId
                        AND outstanding_amount > 0
-                       AND docstatus = 1), 0
+                       AND docstatus != 2), 0
                 ) > 0 THEN 'Pendientes'
                 ELSE 'Sin Pendientes'
             END

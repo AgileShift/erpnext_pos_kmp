@@ -76,6 +76,7 @@ class CustomerViewModel(
             errorMessage = errorMessage,
             successMessage = successMessage,
             baseCurrency = context?.currency ?: "USD",
+            partyAccountCurrency = context?.partyAccountCurrency ?: (context?.currency ?: "USD"),
             allowedCurrencies = context?.allowedCurrencies ?: emptyList(),
             paymentModes = context?.paymentModes ?: emptyList(),
             exchangeRate = context?.exchangeRate ?: 1.0,
@@ -132,7 +133,8 @@ class CustomerViewModel(
             exceptionHandler = {
                 _stateFlow.value =
                     CustomerState.Error(it.message ?: "Error al cargar clientes")
-            }
+            },
+            showLoading = false
         )
     }
 

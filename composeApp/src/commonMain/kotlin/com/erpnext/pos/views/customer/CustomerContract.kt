@@ -30,6 +30,7 @@ data class CustomerPaymentState(
     val errorMessage: String? = null,
     val successMessage: String? = null,
     val baseCurrency: String = "USD",
+    val partyAccountCurrency: String = "USD",
     val allowedCurrencies: List<POSCurrencyOption> = emptyList(),
     val paymentModes: List<POSPaymentModeOption> = emptyList(),
     val exchangeRate: Double = 1.0,

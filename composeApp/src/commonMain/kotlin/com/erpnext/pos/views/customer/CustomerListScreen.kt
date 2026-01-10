@@ -70,6 +70,7 @@ import com.erpnext.pos.utils.view.SnackbarType
 import com.erpnext.pos.utils.oauth.bd
 import com.erpnext.pos.utils.oauth.moneyScale
 import com.erpnext.pos.utils.oauth.toDouble
+import com.erpnext.pos.utils.view.SnackbarPosition
 import org.koin.compose.koinInject
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -91,6 +92,7 @@ fun CustomerListScreen(
 
     val snackbar: SnackbarController = koinInject()
     val cashboxManager: CashBoxManager = koinInject()
+    val posContext = cashboxManager.getContext()
     val customers = if (state is CustomerState.Success) state.customers else emptyList()
     var baseCounts by remember { mutableStateOf(CustomerCounts(0, 0)) }
     val isDesktop = getPlatformName() == "Desktop"
@@ -117,14 +119,14 @@ fun CustomerListScreen(
 
     LaunchedEffect(paymentState.successMessage) {
         paymentState.successMessage?.takeIf { it.isNotBlank() }?.let { message ->
-            snackbar.show(message, SnackbarType.Success)
+            snackbar.show(message, SnackbarType.Success, position = SnackbarPosition.Top)
             actions.clearPaymentMessages()
         }
     }
 
     LaunchedEffect(paymentState.errorMessage) {
         paymentState.errorMessage?.takeIf { it.isNotBlank() }?.let { message ->
-            snackbar.show(message, SnackbarType.Error)
+            snackbar.show(message, SnackbarType.Error, position = SnackbarPosition.Top)
             actions.clearPaymentMessages()
         }
     }
@@ -223,11 +225,20 @@ fun CustomerListScreen(
                                     icon = Icons.Filled.People
                                 )
                             } else {
+                                val posCurrency = normalizeCurrency(
+                                    posContext?.currency ?: paymentState.baseCurrency
+                                ) ?: "USD"
+                                val partyCurrency = normalizeCurrency(
+                                    posContext?.partyAccountCurrency
+                                        ?: paymentState.partyAccountCurrency
+                                ) ?: "USD"
+
                                 CustomerListContent(
                                     customers = filtered,
-                                    posBaseCurrency = normalizeCurrency(paymentState.baseCurrency)
-                                        ?: "USD",
-                                    posExchangeRate = paymentState.exchangeRate,
+                                    posCurrency = posCurrency,
+                                    partyAccountCurrency = partyCurrency,
+                                    posExchangeRate = posContext?.exchangeRate
+                                        ?: paymentState.exchangeRate,
                                     cashboxManager = cashboxManager,
                                     actions = actions,
                                     isWideLayout = isWideLayout,
@@ -472,7 +483,8 @@ fun SearchTextField(
 @Composable
 private fun CustomerListContent(
     customers: List<CustomerBO>,
-    posBaseCurrency: String,
+    posCurrency: String,
+    partyAccountCurrency: String,
     posExchangeRate: Double,
     cashboxManager: CashBoxManager,
     actions: CustomerAction,
@@ -493,7 +505,8 @@ private fun CustomerListContent(
             items(customers, key = { it.name }) { customer ->
                 CustomerItem(
                     customer = customer,
-                    posBaseCurrency = posBaseCurrency,
+                    posCurrency = posCurrency,
+                    partyAccountCurrency = partyAccountCurrency,
                     posExchangeRate = posExchangeRate,
                     isDesktop = isDesktop,
                     onClick = { actions.toDetails(customer.name) },
@@ -512,7 +525,8 @@ private fun CustomerListContent(
             items(customers, key = { it.name }) { customer ->
                 CustomerItem(
                     customer = customer,
-                    posBaseCurrency = posBaseCurrency,
+                    posCurrency = posCurrency,
+                    partyAccountCurrency = partyAccountCurrency,
                     posExchangeRate = posExchangeRate,
                     isDesktop = isDesktop,
                     onClick = { actions.toDetails(customer.name) },
@@ -528,7 +542,8 @@ private fun CustomerListContent(
 @Composable
 fun CustomerItem(
     customer: CustomerBO,
-    posBaseCurrency: String,
+    posCurrency: String,
+    partyAccountCurrency: String,
     posExchangeRate: Double,
     cashboxManager: CashBoxManager,
     isDesktop: Boolean,
@@ -541,27 +556,38 @@ fun CustomerItem(
     val pendingInvoices = customer.pendingInvoices ?: 0
     val availableCredit = customer.availableCredit ?: 0.0
     val creditLimit = customer.creditLimit ?: 0.0
-    val currencySymbol = customer.currency.toCurrencySymbol()
+    val baseCurrency = normalizeCurrency(partyAccountCurrency)
+        ?: normalizeCurrency(posCurrency)
+        ?: "USD"
+    val currencySymbol = baseCurrency.toCurrencySymbol().ifBlank { baseCurrency }
     var isMenuExpanded by remember { mutableStateOf(false) }
     val quickActions = remember { customerQuickActions() }
     val avatarSize = if (isDesktop) 52.dp else 44.dp
     val pendingAmountRaw =
         bd(customer.totalPendingAmount ?: customer.currentBalance ?: 0.0).moneyScale(2)
     val pendingAmount = pendingAmountRaw.toDouble(2)
-    val posCurrency = normalizeCurrency(posBaseCurrency) ?: "USD"
-    val customerCurrency = normalizeCurrency(customer.currency) ?: posCurrency
+    val posCurr = normalizeCurrency(posCurrency) ?: "USD"
     var rateToPos by remember { mutableStateOf<Double?>(null) }
-    LaunchedEffect(customerCurrency, posCurrency, pendingAmount) {
-        rateToPos = if (customerCurrency.equals(posCurrency, ignoreCase = true)) {
+    LaunchedEffect(baseCurrency, posCurr, pendingAmount) {
+        rateToPos = if (baseCurrency.equals(posCurr, ignoreCase = true)) {
             1.0
         } else {
             cashboxManager.resolveExchangeRateBetween(
-                fromCurrency = customerCurrency,
-                toCurrency = posCurrency
-            ) ?: posExchangeRate.takeIf { it > 0.0 }
+                fromCurrency = baseCurrency,
+                toCurrency = posCurr
+            ) ?: run {
+                when {
+                    baseCurrency.equals("USD", true) -> posExchangeRate.takeIf { it > 0.0 }
+                    posCurr.equals("USD", true) && posExchangeRate > 0.0 -> 1 / posExchangeRate
+                    else -> null
+                }
+            }
         }
     }
-    val posConverted = rateToPos?.let { pendingAmount * it }
+    val posAmount = pendingAmount
+    val baseAmount = rateToPos?.let { rate ->
+        if (rate <= 0.0) null else posAmount / rate
+    } ?: if (baseCurrency.equals(posCurr, ignoreCase = true)) posAmount else null
     val statusLabel = when {
         isOverLimit -> strings.customer.overdueLabel
         pendingInvoices > 0 || pendingAmount > 0.0 -> strings.customer.pendingLabel
@@ -721,18 +747,18 @@ fun CustomerItem(
 
                     MetricBlock(
                         label = strings.customer.pendingLabel,
-                        value = "$currencySymbol $pendingAmount",
+                        value = if (baseAmount != null) {
+                            "$currencySymbol ${formatAmount(baseAmount)}"
+                        } else {
+                            "$currencySymbol ${formatAmount(posAmount)}"
+                        },
                         isCritical = emphasis
                     )
-                    if (posConverted != null && !customerCurrency.equals(
-                            posCurrency,
-                            ignoreCase = true
-                        )
-                    ) {
-                        val posSymbol = posCurrency.toCurrencySymbol().ifBlank { posCurrency }
+                    if (!baseCurrency.equals(posCurr, ignoreCase = true)) {
+                        val posSymbol = posCurr.toCurrencySymbol().ifBlank { posCurr }
                         MetricBlock(
-                            label = "${strings.customer.baseCurrency} ($posCurrency)",
-                            value = "$posSymbol ${formatAmount(posConverted)}",
+                            label = "${strings.customer.baseCurrency} ($posCurr)",
+                            value = "$posSymbol ${formatAmount(posAmount)}",
                             isCritical = emphasis
                         )
                     }

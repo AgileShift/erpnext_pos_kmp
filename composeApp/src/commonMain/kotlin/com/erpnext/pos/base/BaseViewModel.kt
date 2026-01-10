@@ -13,19 +13,21 @@ abstract class BaseViewModel : ViewModel() {
     protected fun executeUseCase(
         action: suspend CoroutineScope.() -> Unit,
         exceptionHandler: suspend (Throwable) -> Unit,
-        finallyHandler: (suspend () -> Unit)? = null
+        finallyHandler: (suspend () -> Unit)? = null,
+        showLoading: Boolean = true
     ): Job {
         return viewModelScope.launch {
-            LoadingIndicator.start()
+            if (showLoading) LoadingIndicator.start()
             try {
                 action.invoke(this)
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                // Cancelaciones por cambio de filtros/navigation no deben tratarse como error.
             } catch (e: Exception) {
                 AppSentry.capture(e, e.message)
                 exceptionHandler.invoke(e)
-                LoadingIndicator.stop()
             } finally {
                 finallyHandler?.invoke()
-                LoadingIndicator.stop()
+                if (showLoading) LoadingIndicator.stop()
             }
         }
     }

@@ -71,7 +71,8 @@ class InventoryViewModel(
                 exceptionHandler = { e ->
                     _categoriesFlow.value = emptyList()
                     onError(e.message)
-                }
+                },
+                showLoading = false
             )
         }
     }

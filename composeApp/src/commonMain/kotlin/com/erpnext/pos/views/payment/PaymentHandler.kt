@@ -147,7 +147,17 @@ class PaymentHandler(
             }
         }
 
-        val localPayments = buildLocalPayments(invoiceNameForLocal, postingDate, paymentLines)
+        val localOutstandingStart = createdInvoice?.outstandingAmount
+            ?.takeIf { it > 0.0 } ?: createdInvoice?.grandTotal
+        var remainingLocal = localOutstandingStart
+        val adjustedLines = paymentLines.map { line ->
+            if (remainingLocal == null) return@map line
+            val allocated = minOf(line.baseAmount, remainingLocal!!)
+            remainingLocal = (remainingLocal!! - allocated).coerceAtLeast(0.0)
+            line.copy(baseAmount = allocated)
+        }
+
+        val localPayments = buildLocalPayments(invoiceNameForLocal, postingDate, adjustedLines)
         saveInvoicePaymentsUseCase(
             SaveInvoicePaymentsInput(
                 invoiceName = invoiceNameForLocal,

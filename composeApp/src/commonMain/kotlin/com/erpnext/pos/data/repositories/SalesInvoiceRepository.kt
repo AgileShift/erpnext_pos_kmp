@@ -17,6 +17,7 @@ import com.erpnext.pos.remoteSource.mapper.toDto
 import com.erpnext.pos.remoteSource.mapper.toEntities
 import com.erpnext.pos.remoteSource.mapper.toEntity
 import com.erpnext.pos.utils.RepoTrace
+import com.erpnext.pos.utils.roundToCurrency
 import com.erpnext.pos.views.CashBoxManager
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
@@ -91,9 +92,11 @@ class SalesInvoiceRepository(
             "Invoice name is required to apply payments."
         }
         val existingPayments = localSource.getInvoiceByName(invoiceId)?.payments ?: emptyList()
-        val totalPaid = existingPayments.sumOf { it.amount } + payments.sumOf { it.amount }
+        val totalPaid = roundToCurrency(
+            existingPayments.sumOf { it.amount } + payments.sumOf { it.amount }
+        )
         val grandTotal = invoice.grandTotal
-        val newOutstanding = (grandTotal - totalPaid).coerceAtLeast(0.0)
+        val newOutstanding = roundToCurrency((grandTotal - totalPaid).coerceAtLeast(0.0))
         val epsilon = 0.0001
 
         invoice.outstandingAmount = newOutstanding
