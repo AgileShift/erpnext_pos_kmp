@@ -317,7 +317,7 @@ class CustomerViewModel(
 
                 val paymentResolved = paymentHandler.resolvePaymentLine(
                     line = line,
-                    invoiceCurrencyInput = invoice.currency,
+                    invoiceCurrencyInput = receivableCurrency,
                     paymentModeCurrencyByMode = _paymentState.value.paymentModeCurrencyByMode
                         ?: emptyMap(),
                     paymentModeDetails = paymentModeDetails,
@@ -335,7 +335,8 @@ class CustomerViewModel(
                     context = context,
                     customer = customer,
                     exchangeRateByCurrency = updatedCache,
-                    paymentModeDetails = paymentModeDetails
+                    paymentModeDetails = paymentModeDetails,
+                    baseAmountCurrency = receivableCurrency
                 )
 
                 val outstanding = invoice.outstandingAmount.coerceAtLeast(0.0)

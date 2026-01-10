@@ -245,7 +245,15 @@ fun resolveInvoiceAmountsInReceivable(
     }
 
     val baseTotal = created.baseGrandTotal
-        ?: error("Falta base_grand_total en SalesInvoiceDto. Es obligatorio para multi-moneda.")
+    if (baseTotal == null) {
+        val paidRc = created.paidAmount
+        val totalRc = if (paidRc > 0.0) paidRc + invoiceOutstandingInv else invoiceOutstandingInv
+        return InvoiceReceivableAmounts(
+            receivableCurrency = receivableCurrency,
+            totalRc = totalRc,
+            outstandingRc = invoiceOutstandingInv
+        )
+    }
 
     if (invoiceTotalInv <= 0.0) {
         error("grand_total inválido para inferir tasa invoice->receivable (grand_total=$invoiceTotalInv).")

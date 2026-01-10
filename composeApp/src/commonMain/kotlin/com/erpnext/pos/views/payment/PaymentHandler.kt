@@ -12,10 +12,12 @@ import com.erpnext.pos.remoteSource.api.APIService
 import com.erpnext.pos.remoteSource.dto.SalesInvoiceDto
 import com.erpnext.pos.views.POSContext
 import com.erpnext.pos.views.billing.PaymentLine
+import com.erpnext.pos.utils.InvoiceReceivableAmounts
 import com.erpnext.pos.utils.buildCurrencySpecs
 import com.erpnext.pos.utils.buildLocalPayments
 import com.erpnext.pos.utils.buildPaymentEntryDto
 import com.erpnext.pos.utils.normalizeCurrency
+import com.erpnext.pos.utils.resolveInvoiceAmountsInReceivable
 import com.erpnext.pos.utils.resolvePaymentCurrencyForMode
 import com.erpnext.pos.utils.resolveRateToInvoiceCurrency
 import com.erpnext.pos.utils.roundToCurrency
@@ -89,7 +91,8 @@ class PaymentHandler(
         context: POSContext,
         customer: CustomerBO,
         exchangeRateByCurrency: Map<String, Double>,
-        paymentModeDetails: Map<String, ModeOfPaymentEntity>
+        paymentModeDetails: Map<String, ModeOfPaymentEntity>,
+        baseAmountCurrency: String?
     ): PaymentRegistrationResult {
         if (paymentLines.isEmpty()) {
             return PaymentRegistrationResult(
@@ -100,8 +103,30 @@ class PaymentHandler(
         }
 
         val currencySpecs = buildCurrencySpecs()
+        val resolvedReceivableCurrency = normalizeCurrency(createdInvoice?.partyAccountCurrency)
+            ?: normalizeCurrency(context.partyAccountCurrency)
+            ?: normalizeCurrency(createdInvoice?.currency)
+            ?: normalizeCurrency(context.currency)
+            ?: "USD"
+        val resolvedInvoiceCurrency = normalizeCurrency(createdInvoice?.currency)
+            ?: normalizeCurrency(context.currency)
+            ?: "USD"
+        val receivableAmounts = createdInvoice?.let {
+            runCatching { resolveInvoiceAmountsInReceivable(it) }
+                .getOrElse {
+                    val outstanding = it.outstandingAmount ?: it.grandTotal
+                    val paid = it.paidAmount
+                    val total = if (paid > 0.0) paid + outstanding else outstanding
+                    InvoiceReceivableAmounts(
+                        receivableCurrency = resolvedReceivableCurrency,
+                        totalRc = total,
+                        outstandingRc = outstanding
+                    )
+                }
+        }
         var remotePaymentsSucceeded = false
-        var remainingOutstandingRc: Double? = createdInvoice?.outstandingAmount?.takeIf { it > 0.0 }
+        var remainingOutstandingRc: Double? = receivableAmounts?.outstandingRc
+            ?: createdInvoice?.outstandingAmount?.takeIf { it > 0.0 }
             ?: createdInvoice?.grandTotal
 
         val isOnline = networkMonitor.isConnected.first()
@@ -120,10 +145,10 @@ class PaymentHandler(
                     customer = customer,
                     postingDate = postingDate,
                     invoiceId = createdInvoice.name ?: invoiceNameForLocal,
-                    invoiceTotalRc = createdInvoice.grandTotal,
+                    invoiceTotalRc = receivableAmounts?.totalRc ?: createdInvoice.grandTotal,
                     outstandingRc = remainingOutstandingRc ?: createdInvoice.grandTotal,
                     paidFromAccount = paidFrom,
-                    partyAccountCurrency = createdInvoice.partyAccountCurrency,
+                    partyAccountCurrency = resolvedReceivableCurrency,
                     exchangeRateByCurrency = exchangeRateByCurrency,
                     currencySpecs = currencySpecs,
                     paymentModeDetails = paymentModeDetails
@@ -147,12 +172,33 @@ class PaymentHandler(
             }
         }
 
-        val localOutstandingStart = createdInvoice?.outstandingAmount
-            ?.takeIf { it > 0.0 } ?: createdInvoice?.grandTotal
+        val localOutstandingStart = receivableAmounts?.outstandingRc
+            ?: createdInvoice?.outstandingAmount
+                ?.takeIf { it > 0.0 }
+            ?: createdInvoice?.grandTotal
         var remainingLocal = localOutstandingStart
+        val baseAmountResolvedCurrency = normalizeCurrency(baseAmountCurrency)
+            ?: resolvedInvoiceCurrency
+        val baseToReceivableRate = if (baseAmountResolvedCurrency.equals(
+                resolvedReceivableCurrency,
+                ignoreCase = true
+            )
+        ) {
+            1.0
+        } else {
+            resolveRateBetweenCurrencies(
+                fromCurrency = baseAmountResolvedCurrency,
+                toCurrency = resolvedReceivableCurrency
+            )
+        }
         val adjustedLines = paymentLines.map { line ->
+            val amountInReceivable = if (baseToReceivableRate != null && baseToReceivableRate > 0.0) {
+                roundToCurrency(line.baseAmount * baseToReceivableRate)
+            } else {
+                roundToCurrency(line.baseAmount)
+            }
             if (remainingLocal == null) return@map line
-            val allocated = minOf(line.baseAmount, remainingLocal!!)
+            val allocated = minOf(amountInReceivable, remainingLocal!!)
             remainingLocal = (remainingLocal!! - allocated).coerceAtLeast(0.0)
             line.copy(baseAmount = allocated)
         }
@@ -170,5 +216,19 @@ class PaymentHandler(
             invoiceNameForLocal = invoiceNameForLocal,
             outstandingRemaining = remainingOutstandingRc
         )
+    }
+
+    private suspend fun resolveRateBetweenCurrencies(
+        fromCurrency: String,
+        toCurrency: String
+    ): Double? {
+        val from = normalizeCurrency(fromCurrency) ?: return null
+        val to = normalizeCurrency(toCurrency) ?: return null
+        if (from == to) return 1.0
+
+        exchangeRateRepository.getRate(from, to)?.takeIf { it > 0.0 }?.let { return it }
+        return exchangeRateRepository.getRate(to, from)
+            ?.takeIf { it > 0.0 }
+            ?.let { 1 / it }
     }
 }

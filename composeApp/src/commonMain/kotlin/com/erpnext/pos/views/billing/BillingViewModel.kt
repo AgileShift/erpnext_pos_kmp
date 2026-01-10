@@ -749,7 +749,8 @@ class BillingViewModel(
                 context = context,
                 customer = customer,
                 exchangeRateByCurrency = current.exchangeRateByCurrency,
-                paymentModeDetails = paymentModeDetails
+                paymentModeDetails = paymentModeDetails,
+                baseAmountCurrency = baseCurrency
             )
             invoiceNameForLocal = paymentResult.invoiceNameForLocal
             val remotePaymentsSucceeded = paymentResult.remotePaymentsSucceeded
@@ -993,6 +994,7 @@ class BillingViewModel(
             company = context.company,
             postingDate = postingDate,
             currency = baseCurrency,
+            partyAccountCurrency = context.partyAccountCurrency,
             dueDate = dueDate,
             status = status,
             grandTotal = totals.total,
