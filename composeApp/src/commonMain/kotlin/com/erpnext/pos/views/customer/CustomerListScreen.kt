@@ -225,13 +225,8 @@ fun CustomerListScreen(
                                     icon = Icons.Filled.People
                                 )
                             } else {
-                                val posCurrency = normalizeCurrency(
-                                    posContext?.currency ?: paymentState.baseCurrency
-                                ) ?: "USD"
-                                val partyCurrency = normalizeCurrency(
-                                    posContext?.partyAccountCurrency
-                                        ?: paymentState.partyAccountCurrency
-                                ) ?: "USD"
+                                val posCurrency = normalizeCurrency(posContext?.currency) ?: "USD"
+                                val partyCurrency = normalizeCurrency(paymentState.partyAccountCurrency) ?: "USD"
 
                                 CustomerListContent(
                                     customers = filtered,
@@ -556,8 +551,8 @@ fun CustomerItem(
     val pendingInvoices = customer.pendingInvoices ?: 0
     val availableCredit = customer.availableCredit ?: 0.0
     val creditLimit = customer.creditLimit ?: 0.0
-    val baseCurrency = normalizeCurrency(partyAccountCurrency)
-        ?: normalizeCurrency(posCurrency)
+    val baseCurrency = //normalizeCurrency(partyAccountCurrency)
+        normalizeCurrency(posCurrency)
         ?: "USD"
     val currencySymbol = baseCurrency.toCurrencySymbol().ifBlank { baseCurrency }
     var isMenuExpanded by remember { mutableStateOf(false) }
@@ -584,10 +579,7 @@ fun CustomerItem(
             }
         }
     }
-    val posAmount = pendingAmount
-    val baseAmount = rateToPos?.let { rate ->
-        if (rate <= 0.0) null else posAmount / rate
-    } ?: if (baseCurrency.equals(posCurr, ignoreCase = true)) posAmount else null
+    val posAmount = rateToPos?.let { rate -> pendingAmount * rate }
     val statusLabel = when {
         isOverLimit -> strings.customer.overdueLabel
         pendingInvoices > 0 || pendingAmount > 0.0 -> strings.customer.pendingLabel
@@ -747,14 +739,10 @@ fun CustomerItem(
 
                     MetricBlock(
                         label = strings.customer.pendingLabel,
-                        value = if (baseAmount != null) {
-                            "$currencySymbol ${formatAmount(baseAmount)}"
-                        } else {
-                            "$currencySymbol ${formatAmount(posAmount)}"
-                        },
+                        value = "$currencySymbol ${formatAmount(pendingAmount)}",
                         isCritical = emphasis
                     )
-                    if (!baseCurrency.equals(posCurr, ignoreCase = true)) {
+                    if (!baseCurrency.equals(posCurr, ignoreCase = true) && posAmount != null) {
                         val posSymbol = posCurr.toCurrencySymbol().ifBlank { posCurr }
                         MetricBlock(
                             label = "${strings.customer.baseCurrency} ($posCurr)",

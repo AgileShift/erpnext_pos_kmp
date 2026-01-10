@@ -13,7 +13,6 @@ import com.erpnext.pos.domain.usecases.FetchCustomerDetailUseCase
 import com.erpnext.pos.domain.usecases.FetchCustomersUseCase
 import com.erpnext.pos.domain.usecases.FetchOutstandingInvoicesForCustomerUseCase
 import com.erpnext.pos.domain.usecases.FetchSalesInvoiceLocalUseCase
-import com.erpnext.pos.domain.usecases.SyncSalesInvoiceFromRemoteUseCase
 import com.erpnext.pos.localSource.dao.ModeOfPaymentDao
 import com.erpnext.pos.localSource.entities.ModeOfPaymentEntity
 import com.erpnext.pos.remoteSource.mapper.toDto
@@ -45,7 +44,6 @@ class CustomerViewModel(
     private val fetchCustomerDetailUseCase: FetchCustomerDetailUseCase,
     private val fetchOutstandingInvoicesUseCase: FetchOutstandingInvoicesForCustomerUseCase,
     private val fetchSalesInvoiceLocalUseCase: FetchSalesInvoiceLocalUseCase,
-    private val syncSalesInvoiceFromRemoteUseCase: SyncSalesInvoiceFromRemoteUseCase,
     private val modeOfPaymentDao: ModeOfPaymentDao,
     private val paymentHandler: PaymentHandler
 ) : BaseViewModel() {
@@ -345,10 +343,6 @@ class CustomerViewModel(
                 val changeBase = (fixedLine.baseAmount - appliedAmount).takeIf { it > 0.0 }
                 val changeInPaymentCurrency = changeBase?.let { change ->
                     if (fixedLine.exchangeRate > 0.0) change / fixedLine.exchangeRate else null
-                }
-
-                if (paymentResult.remotePaymentsSucceeded) {
-                    runCatching { syncSalesInvoiceFromRemoteUseCase(invoiceId) }
                 }
 
                 val baseCurrencyForChange = normalizeCurrency(enteredCurrency)

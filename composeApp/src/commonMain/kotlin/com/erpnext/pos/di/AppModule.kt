@@ -345,7 +345,6 @@ val appModule = module {
             fetchCustomerDetailUseCase = get(),
             fetchOutstandingInvoicesUseCase = get(),
             fetchSalesInvoiceLocalUseCase = get(),
-            syncSalesInvoiceFromRemoteUseCase = get(),
             modeOfPaymentDao = get(),
             paymentHandler = get()
         )
