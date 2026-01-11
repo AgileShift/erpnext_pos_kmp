@@ -961,35 +961,19 @@ private fun PaymentSection(
     val requiresReference = remember(selectedModeOption) {
         requiresReference(selectedModeOption)
     }
-    val allowedCodes = remember(allowedCurrencies, baseCurrency) {
-        val codes = allowedCurrencies.map { it.code }.filter { it.isNotBlank() }
-        codes.ifEmpty { listOf(baseCurrency) }
+    val modeCurrency = remember(state, selectedMode) {
+        (state as? BillingState.Success)?.paymentModeCurrencyByMode?.get(selectedMode)
     }
-    var selectedCurrency by remember(allowedCodes, baseCurrency) {
-        mutableStateOf(allowedCodes.firstOrNull() ?: baseCurrency)
+    var selectedCurrency by remember(selectedMode, baseCurrency) {
+        mutableStateOf(modeCurrency ?: baseCurrency)
     }
     var amountInput by remember { mutableStateOf("") }
     var amountValue by remember { mutableStateOf(0.0) }
     var rateInput by remember { mutableStateOf("1.0") }
     var referenceInput by remember { mutableStateOf("") }
-    val currencyOptions = remember(allowedCodes, baseCurrency) {
-        val baseOptions = allowedCodes.ifEmpty { listOf(baseCurrency) }
-        val ensuredBase = if (baseOptions.any { it.equals(baseCurrency, ignoreCase = true) }) {
-            baseOptions
-        } else {
-            baseOptions + baseCurrency
-        }
-        ensuredBase.distinct()
-    }
 
-    LaunchedEffect(currencyOptions, baseCurrency) {
-        val resolved = currencyOptions.firstOrNull {
-            it.equals(baseCurrency, ignoreCase = true)
-        } ?: currencyOptions.firstOrNull() ?: baseCurrency
-        selectedCurrency = resolved
-        if (resolved.equals(baseCurrency, ignoreCase = true)) {
-            rateInput = "1.0"
-        }
+    LaunchedEffect(selectedMode, modeCurrency, baseCurrency) {
+        selectedCurrency = modeCurrency?.trim()?.uppercase() ?: baseCurrency
     }
 
     LaunchedEffect(selectedCurrency, exchangeRateByCurrency) {
@@ -1110,25 +1094,25 @@ private fun PaymentSection(
 
         Spacer(Modifier.height(12.dp))
         Text(
-            text = "Moneda base de factura: $baseCurrency",
+            text = "Moneda principal: $baseCurrency",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
 
         Spacer(Modifier.height(12.dp))
 
-        val currency =
-            (state as BillingState.Success).paymentModeCurrencyByMode[selectedMode] ?: baseCurrency
-        //val paymentCurrency = paymentModes[selectedMode]
+        Text("Moneda de pago: $selectedCurrency", style = MaterialTheme.typography.bodyMedium)
+        Spacer(Modifier.height(12.dp))
+
         MoneyTextField(
-            currencyCode = currency,
+            currencyCode = selectedCurrency,
             rawValue = amountInput,
             onRawValueChange = { amountInput = it },
             label = "Monto",
             enabled = true, //!isCreditSale,
             onAmountChanged = { amountValue = it },
             supportingText = {
-                if (selectedCurrency != baseCurrency) {
+                if (!selectedCurrency.equals(baseCurrency, ignoreCase = true)) {
                     val rate = rateInput.toDoubleOrNull() ?: 0.0
                     val base = amountValue * rate
                     Text("Base: ${formatAmount(baseCurrency.toCurrencySymbol(), base)}")

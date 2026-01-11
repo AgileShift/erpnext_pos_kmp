@@ -120,7 +120,16 @@ class SalesInvoiceRepository(
         val invoiceId = requireNotNull(invoice.invoiceName) {
             "Invoice name is required to apply payments."
         }
-        val paidDelta = payments.sumOf { it.amount }
+        val existingRefs = localSource.getPaymentsForInvoice(invoiceId)
+            .mapNotNull { it.paymentReference?.trim()?.uppercase() }
+            .toSet()
+        val uniquePayments = payments.filter { payment ->
+            val ref = payment.paymentReference?.trim()?.uppercase()
+            ref.isNullOrBlank() || !existingRefs.contains(ref)
+        }
+        if (uniquePayments.isEmpty()) return
+
+        val paidDelta = uniquePayments.sumOf { it.amount }
         val totalBefore = invoice.paidAmount + invoice.outstandingAmount
         val totalPaid = roundToCurrency((invoice.paidAmount + paidDelta).coerceAtLeast(0.0))
         var newOutstanding =
@@ -140,9 +149,9 @@ class SalesInvoiceRepository(
         }
         invoice.syncStatus = "Pending"
         invoice.modifiedAt = Clock.System.now().toEpochMilliseconds()
-        payments.lastOrNull()?.modeOfPayment?.let { invoice.modeOfPayment = it }
+        uniquePayments.lastOrNull()?.modeOfPayment?.let { invoice.modeOfPayment = it }
 
-        localSource.applyPayments(invoice, payments)
+        localSource.applyPayments(invoice, uniquePayments)
         localSource.refreshCustomerSummary(invoice.customer)
     }
 

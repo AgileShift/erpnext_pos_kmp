@@ -25,6 +25,7 @@ import com.erpnext.pos.utils.toErpDateTime
 import com.erpnext.pos.views.CashBoxManager
 import com.erpnext.pos.views.billing.PaymentLine
 import com.erpnext.pos.views.payment.PaymentHandler
+import com.erpnext.pos.domain.utils.UUIDGenerator
 import io.ktor.util.date.getTimeMillis
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.delay
@@ -60,6 +61,9 @@ class CustomerViewModel(
 
     private var paymentModeDetails: Map<String, ModeOfPaymentEntity> = emptyMap()
     private var customersJob: kotlinx.coroutines.Job? = null
+    private val paymentIdCache: MutableMap<String, String> = mutableMapOf()
+    private var paymentRateCacheCurrency: String? = null
+    private var paymentRateCache: MutableMap<String, Double> = mutableMapOf()
 
     private fun buildPaymentState(
         isSubmitting: Boolean = false,
@@ -283,17 +287,19 @@ class CustomerViewModel(
                 val context = cashboxManager.requireContext()
                 val postingDate = getTimeMillis().toErpDateTime()
 
-                val receivableCurrency = normalizeCurrency(invoice.partyAccountCurrency)
-                    ?: normalizeCurrency(invoice.currency)
+                val invoiceCurrency = normalizeCurrency(invoice.currency)
                     ?: normalizeCurrency(context.currency)
                     ?: "USD"
+                val receivableCurrency = normalizeCurrency(invoice.partyAccountCurrency)
+                    ?: invoiceCurrency
 
                 val paidFromAccount = invoice.debitTo?.takeIf { it.isNotBlank() }
                     ?: error("No se pudo resolver la cuenta de débito (debit_to).")
 
-                val exchangeRateByCurrency = when (val invState = _invoicesState.value) {
-                    is CustomerInvoicesState.Success -> invState.exchangeRateByCurrency
-                    else -> emptyMap()
+                val normalizedInvoiceCurrency = normalizeCurrency(invoiceCurrency) ?: "USD"
+                if (!normalizedInvoiceCurrency.equals(paymentRateCacheCurrency, ignoreCase = true)) {
+                    paymentRateCacheCurrency = normalizedInvoiceCurrency
+                    paymentRateCache = mutableMapOf(normalizedInvoiceCurrency to 1.0)
                 }
 
                 val customer = fetchCustomerDetailUseCase.invoke(customerId)
@@ -305,27 +311,37 @@ class CustomerViewModel(
                         customerType = "",
                     )
 
+                val cacheKey = listOf(
+                    invoiceId.trim(),
+                    modeOfPayment.trim(),
+                    enteredCurrency.trim().uppercase(),
+                    roundToCurrency(enteredAmount).toString()
+                ).joinToString("|")
+                val resolvedReference = referenceNumber.takeIf { it.isNotBlank() }
+                    ?: paymentIdCache.getOrPut(cacheKey) { "POSPAY-${UUIDGenerator().newId()}" }
+
                 val line = PaymentLine(
                     modeOfPayment = modeOfPayment,
                     currency = normalizeCurrency(enteredCurrency)
                         ?: normalizeCurrency(context.currency) ?: "USD",
                     enteredAmount = enteredAmount,
                     baseAmount = 0.0,
-                    referenceNumber = referenceNumber,
+                    referenceNumber = resolvedReference,
                     exchangeRate = 0.0
                 )
 
                 val paymentResolved = paymentHandler.resolvePaymentLine(
                     line = line,
-                    invoiceCurrencyInput = receivableCurrency,
+                    invoiceCurrencyInput = invoiceCurrency,
                     paymentModeCurrencyByMode = _paymentState.value.paymentModeCurrencyByMode
                         ?: emptyMap(),
                     paymentModeDetails = paymentModeDetails,
-                    exchangeRateByCurrency = exchangeRateByCurrency,
+                    exchangeRateByCurrency = paymentRateCache,
                     round = ::roundToCurrency
                 )
                 val fixedLine = paymentResolved.line
                 val updatedCache = paymentResolved.exchangeRateByCurrency
+                paymentRateCache = updatedCache.toMutableMap()
 
                 val paymentResult = paymentHandler.registerPayments(
                     paymentLines = listOf(fixedLine),
@@ -336,7 +352,7 @@ class CustomerViewModel(
                     customer = customer,
                     exchangeRateByCurrency = updatedCache,
                     paymentModeDetails = paymentModeDetails,
-                    baseAmountCurrency = receivableCurrency
+                    baseAmountCurrency = invoiceCurrency
                 )
 
                 val outstanding = invoice.outstandingAmount.coerceAtLeast(0.0)

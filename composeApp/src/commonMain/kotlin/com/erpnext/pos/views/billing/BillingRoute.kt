@@ -40,7 +40,7 @@ fun rememberBillingActions(coordinator: BillingCoordinator): BillingAction {
             onManualDiscountAmountChanged = coordinator::onManualDiscountAmountChanged,
             onManualDiscountPercentChanged = coordinator::onManualDiscountPercentChanged,
             onDeliveryChargeSelected = coordinator::onDeliveryChargeSelected,
-            //onPaymentCurrencySelected = coordinator::onPaymentCurrencySelected,
+            onPaymentCurrencySelected = coordinator::onPaymentCurrencySelected,
             onClearSuccessMessage = coordinator::onClearSuccessMessage,
             onBack = coordinator::onBack,
             onLinkSource = coordinator::onLinkSource,

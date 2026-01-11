@@ -12,12 +12,12 @@ import com.erpnext.pos.remoteSource.api.APIService
 import com.erpnext.pos.remoteSource.dto.SalesInvoiceDto
 import com.erpnext.pos.views.POSContext
 import com.erpnext.pos.views.billing.PaymentLine
+import com.erpnext.pos.domain.utils.UUIDGenerator
 import com.erpnext.pos.utils.InvoiceReceivableAmounts
 import com.erpnext.pos.utils.buildCurrencySpecs
 import com.erpnext.pos.utils.buildLocalPayments
 import com.erpnext.pos.utils.buildPaymentEntryDto
 import com.erpnext.pos.utils.normalizeCurrency
-import com.erpnext.pos.utils.resolveInvoiceAmountsInReceivable
 import com.erpnext.pos.utils.resolvePaymentCurrencyForMode
 import com.erpnext.pos.utils.resolveRateToInvoiceCurrency
 import com.erpnext.pos.utils.roundToCurrency
@@ -69,9 +69,13 @@ class PaymentHandler(
             }
         )
 
+        val resolvedReference = line.referenceNumber?.takeIf { it.isNotBlank() }
+            ?: "POSPAY-${UUIDGenerator().newId()}"
+
         val fixed = line.copy(
             currency = paymentCurrency,
-            exchangeRate = rate
+            exchangeRate = rate,
+            referenceNumber = resolvedReference
         ).toBaseAmount(round)
 
         val payKey = paymentCurrency.uppercase()
@@ -111,18 +115,41 @@ class PaymentHandler(
         val resolvedInvoiceCurrency = normalizeCurrency(createdInvoice?.currency)
             ?: normalizeCurrency(context.currency)
             ?: "USD"
+
+        val rateInvToRc = when {
+            resolvedInvoiceCurrency.equals(resolvedReceivableCurrency, ignoreCase = true) -> 1.0
+            createdInvoice?.baseGrandTotal != null && createdInvoice.grandTotal > 0.0 ->
+                createdInvoice.baseGrandTotal / createdInvoice.grandTotal
+            else -> resolveRateBetweenCurrencies(
+                fromCurrency = resolvedInvoiceCurrency,
+                toCurrency = resolvedReceivableCurrency,
+                context = context
+            )
+        }?.takeIf { it > 0.0 }
+
         val receivableAmounts = createdInvoice?.let {
-            runCatching { resolveInvoiceAmountsInReceivable(it) }
-                .getOrElse { _ ->
-                    val outstanding = it.outstandingAmount ?: it.grandTotal
-                    val paid = it.paidAmount
-                    val total = if (paid > 0.0) paid + outstanding else outstanding
-                    InvoiceReceivableAmounts(
-                        receivableCurrency = resolvedReceivableCurrency,
-                        totalRc = total,
-                        outstandingRc = outstanding
-                    )
+            val invoiceTotalInv = it.grandTotal
+            val invoiceOutstandingRc = it.outstandingAmount
+            if (rateInvToRc != null) {
+                val totalRc = when {
+                    it.baseGrandTotal != null && it.baseGrandTotal > 0.0 -> it.baseGrandTotal
+                    resolvedInvoiceCurrency.equals(resolvedReceivableCurrency, ignoreCase = true) ->
+                        invoiceTotalInv
+                    else -> invoiceTotalInv * rateInvToRc
                 }
+                InvoiceReceivableAmounts(
+                    receivableCurrency = resolvedReceivableCurrency,
+                    totalRc = totalRc,
+                    outstandingRc = invoiceOutstandingRc ?: totalRc
+                )
+            } else {
+                val total = invoiceOutstandingRc ?: invoiceTotalInv
+                InvoiceReceivableAmounts(
+                    receivableCurrency = resolvedReceivableCurrency,
+                    totalRc = total,
+                    outstandingRc = invoiceOutstandingRc ?: total
+                )
+            }
         }
         var remotePaymentsSucceeded = false
         var remainingOutstandingRc: Double? = receivableAmounts?.outstandingRc
@@ -133,9 +160,32 @@ class PaymentHandler(
         if (createdInvoice != null && isOnline) {
             val paidFrom = createdInvoice.debitTo
             var remotePaymentFailed = false
+            val cacheForReceivable = if (resolvedInvoiceCurrency.equals(
+                    resolvedReceivableCurrency,
+                    ignoreCase = true
+                )
+            ) {
+                exchangeRateByCurrency.toMutableMap()
+            } else {
+                mutableMapOf()
+            }
 
             paymentLines.forEach { line ->
                 if (remainingOutstandingRc != null && remainingOutstandingRc <= 0.0) return@forEach
+                val paidToCurrency = normalizeCurrency(
+                    paymentModeDetails[line.modeOfPayment]?.currency
+                ) ?: normalizeCurrency(line.currency) ?: resolvedInvoiceCurrency
+                if (!paidToCurrency.equals(resolvedReceivableCurrency, ignoreCase = true)) {
+                    if (cacheForReceivable[paidToCurrency] == null) {
+                        resolveRateBetweenCurrencies(
+                            fromCurrency = paidToCurrency,
+                            toCurrency = resolvedReceivableCurrency,
+                            context = context
+                        )?.takeIf { it > 0.0 }?.let { rate ->
+                            cacheForReceivable[paidToCurrency] = rate
+                        }
+                    }
+                }
 
                 val paymentEntry = buildPaymentEntryDto(
                     api = api,
@@ -148,7 +198,7 @@ class PaymentHandler(
                     outstandingRc = remainingOutstandingRc ?: createdInvoice.grandTotal,
                     paidFromAccount = paidFrom,
                     partyAccountCurrency = resolvedReceivableCurrency,
-                    exchangeRateByCurrency = exchangeRateByCurrency,
+                    exchangeRateByCurrency = cacheForReceivable,
                     currencySpecs = currencySpecs,
                     paymentModeDetails = paymentModeDetails
                 )
@@ -172,33 +222,17 @@ class PaymentHandler(
         }
 
         val localOutstandingStart = receivableAmounts?.outstandingRc
-            ?: createdInvoice?.outstandingAmount
-                ?.takeIf { it > 0.0 }
+            ?: createdInvoice?.outstandingAmount?.takeIf { it > 0.0 }
             ?: createdInvoice?.grandTotal
         var remainingLocal = localOutstandingStart
-        val baseAmountResolvedCurrency = normalizeCurrency(baseAmountCurrency)
-            ?: resolvedInvoiceCurrency
-        val baseToReceivableRate = if (baseAmountResolvedCurrency.equals(
-                resolvedReceivableCurrency,
-                ignoreCase = true
-            )
-        ) {
-            1.0
-        } else {
-            resolveRateBetweenCurrencies(
-                fromCurrency = baseAmountResolvedCurrency,
-                toCurrency = resolvedReceivableCurrency
-            )
-        }
         val adjustedLines = paymentLines.map { line ->
-            val amountInReceivable =
-                if (baseToReceivableRate != null && baseToReceivableRate > 0.0) {
-                    roundToCurrency(line.baseAmount * baseToReceivableRate)
-                } else {
-                    roundToCurrency(line.baseAmount)
-                }
-            if (remainingLocal == null) return@map line
-            val allocated = minOf(amountInReceivable, remainingLocal!!)
+            val localAmount = if (rateInvToRc != null) {
+                roundToCurrency(line.baseAmount * rateInvToRc)
+            } else {
+                line.baseAmount
+            }
+            if (remainingLocal == null) return@map line.copy(baseAmount = localAmount)
+            val allocated = minOf(localAmount, remainingLocal!!)
             remainingLocal = (remainingLocal!! - allocated).coerceAtLeast(0.0)
             line.copy(baseAmount = allocated)
         }
@@ -220,15 +254,27 @@ class PaymentHandler(
 
     private suspend fun resolveRateBetweenCurrencies(
         fromCurrency: String,
-        toCurrency: String
+        toCurrency: String,
+        context: POSContext
     ): Double? {
         val from = normalizeCurrency(fromCurrency) ?: return null
         val to = normalizeCurrency(toCurrency) ?: return null
-        if (from == to) return 1.0
+        if (from.equals(to, ignoreCase = true)) return 1.0
 
         exchangeRateRepository.getRate(from, to)?.takeIf { it > 0.0 }?.let { return it }
-        return exchangeRateRepository.getRate(to, from)
-            ?.takeIf { it > 0.0 }
-            ?.let { 1 / it }
+        exchangeRateRepository.getRate(to, from)?.takeIf { it > 0.0 }?.let { return 1 / it }
+
+        val ctxCurrency = normalizeCurrency(context.currency)
+        val ctxRate = context.exchangeRate
+        if (ctxRate > 0.0 && ctxCurrency != null) {
+            if (from.equals(ctxCurrency, true) && to.equals("USD", true)) {
+                return 1 / ctxRate
+            }
+            if (from.equals("USD", true) && to.equals(ctxCurrency, true)) {
+                return ctxRate
+            }
+        }
+        return null
     }
+
 }

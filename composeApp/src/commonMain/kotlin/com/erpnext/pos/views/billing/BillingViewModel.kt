@@ -47,6 +47,7 @@ import com.erpnext.pos.utils.normalizeCurrency
 import com.erpnext.pos.utils.requiresReference
 import com.erpnext.pos.utils.resolvePaymentStatus
 import com.erpnext.pos.utils.resolveExchangeRateBetween
+import com.erpnext.pos.utils.resolveRateToInvoiceCurrency
 import androidx.lifecycle.viewModelScope
 import com.erpnext.pos.domain.models.BillingTotals
 import com.erpnext.pos.utils.buildPaymentModeDetailMap
@@ -540,7 +541,8 @@ class BillingViewModel(
             return
         }
 
-        val contextCurrency = normalizeCurrency(contextProvider.requireContext().currency)
+        val context = contextProvider.requireContext()
+        val invoiceCurrency = normalizeCurrency(context.currency)
             ?: normalizeCurrency(current.currency)
             ?: "USD"
 
@@ -548,7 +550,7 @@ class BillingViewModel(
             action = {
                 val result = paymentHandler.resolvePaymentLine(
                     line = line,
-                    invoiceCurrencyInput = contextCurrency,
+                    invoiceCurrencyInput = invoiceCurrency,
                     paymentModeCurrencyByMode = current.paymentModeCurrencyByMode,
                     paymentModeDetails = paymentModeDetails,
                     exchangeRateByCurrency = current.exchangeRateByCurrency,
@@ -576,6 +578,41 @@ class BillingViewModel(
         if (index !in current.paymentLines.indices) return
         val updated = current.paymentLines.filterIndexed { idx, _ -> idx != index }
         _state.update { current.withPaymentLines(updated) }
+    }
+
+    fun onPaymentCurrencySelected(currency: String) {
+        val current = requireSuccessState() ?: return
+        val baseCurrency = normalizeCurrency(contextProvider.requireContext().currency) ?: "USD"
+        val paymentCurrency = normalizeCurrency(currency) ?: return
+        if (paymentCurrency.equals(baseCurrency, ignoreCase = true)) {
+            _state.update {
+                current.copy(
+                    exchangeRateByCurrency = current.exchangeRateByCurrency + (baseCurrency to 1.0)
+                )
+            }
+            return
+        }
+
+        executeUseCase(
+            action = {
+                val rate = resolveRateToInvoiceCurrency(
+                    api = api,
+                    paymentCurrency = paymentCurrency,
+                    invoiceCurrency = baseCurrency,
+                    cache = current.exchangeRateByCurrency
+                )
+                _state.update {
+                    current.copy(
+                        exchangeRateByCurrency = current.exchangeRateByCurrency
+                            .plus(baseCurrency to 1.0)
+                            .plus(paymentCurrency to rate)
+                    )
+                }
+            },
+            exceptionHandler = {
+                // No bloqueamos UI si falla la tasa; el pago resolverá tasa al guardar.
+            }
+        )
     }
 
     fun onCreditSaleChanged(isCreditSale: Boolean) {
