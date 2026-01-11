@@ -1,26 +1,24 @@
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
-import androidx.compose.material3.Typography
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
+import org.jetbrains.compose.resources.Font
+import erpnextpos.composeapp.generated.resources.Manrope_VariableFont_wght
+import erpnextpos.composeapp.generated.resources.Res
+import org.jetbrains.compose.resources.ExperimentalResourceApi
 
 enum class AppColorTheme(val label: String) {
-    Noir("Noir"),
-    Sage("Sage"),
-    Citrus("Citrus"),
-    Ocean("Ocean"),
-    Rose("Rose")
+    Noir("Noir"), Sage("Sage"), Citrus("Citrus"), Ocean("Ocean"), Rose("Rose")
 }
 
 enum class AppThemeMode(val label: String) {
-    System("Sistema"),
-    Light("Claro"),
-    Dark("Oscuro")
+    System("Sistema"), Light("Claro"), Dark("Oscuro")
 }
 
 private val NoirLight = lightColorScheme(
@@ -123,70 +121,63 @@ private val RoseDark = darkColorScheme(
     outlineVariant = Color(0xFF4B2632)
 )
 
-private val DisplayFont = FontFamily.SansSerif
-private val BodyFont = FontFamily.SansSerif
-
-private val BaseTypography = Typography()
-
-private val AppTypography = Typography(
-    displayLarge = BaseTypography.displayLarge.copy(
-        fontFamily = DisplayFont,
-        fontWeight = FontWeight.SemiBold,
-        letterSpacing = (-0.2).sp
-    ),
-    displayMedium = BaseTypography.displayMedium.copy(
-        fontFamily = DisplayFont,
-        fontWeight = FontWeight.SemiBold
-    ),
-    displaySmall = BaseTypography.displaySmall.copy(
-        fontFamily = DisplayFont,
-        fontWeight = FontWeight.SemiBold
-    ),
-    headlineLarge = BaseTypography.headlineLarge.copy(
-        fontFamily = DisplayFont,
-        fontWeight = FontWeight.SemiBold
-    ),
-    headlineMedium = BaseTypography.headlineMedium.copy(
-        fontFamily = DisplayFont,
-        fontWeight = FontWeight.SemiBold
-    ),
-    headlineSmall = BaseTypography.headlineSmall.copy(
-        fontFamily = DisplayFont,
-        fontWeight = FontWeight.Medium
-    ),
-    titleLarge = BaseTypography.titleLarge.copy(
-        fontFamily = DisplayFont,
-        fontWeight = FontWeight.SemiBold
-    ),
-    titleMedium = BaseTypography.titleMedium.copy(
-        fontFamily = DisplayFont,
-        fontWeight = FontWeight.Medium
-    ),
-    titleSmall = BaseTypography.titleSmall.copy(
-        fontFamily = DisplayFont,
-        fontWeight = FontWeight.Medium
-    ),
-    bodyLarge = BaseTypography.bodyLarge.copy(
-        fontFamily = BodyFont
-    ),
-    bodyMedium = BaseTypography.bodyMedium.copy(
-        fontFamily = BodyFont
-    ),
-    bodySmall = BaseTypography.bodySmall.copy(
-        fontFamily = BodyFont
-    ),
-    labelLarge = BaseTypography.labelLarge.copy(
-        fontFamily = BodyFont,
-        fontWeight = FontWeight.SemiBold
-    ),
-    labelMedium = BaseTypography.labelMedium.copy(
-        fontFamily = BodyFont,
-        fontWeight = FontWeight.Medium
-    ),
-    labelSmall = BaseTypography.labelSmall.copy(
-        fontFamily = BodyFont
+@OptIn(ExperimentalResourceApi::class)
+@Composable
+fun rememberManropeFamily(): FontFamily {
+    return FontFamily(
+        Font(resource = Res.font.Manrope_VariableFont_wght, weight = FontWeight.Normal),
+        Font(resource = Res.font.Manrope_VariableFont_wght, weight = FontWeight.Medium),
+        Font(resource = Res.font.Manrope_VariableFont_wght, weight = FontWeight.SemiBold),
+        Font(resource = Res.font.Manrope_VariableFont_wght, weight = FontWeight.Bold),
     )
-)
+}
+
+@Composable
+private fun appTypography(): Typography {
+    val manrope = rememberManropeFamily()
+    val base = Typography()
+
+    return Typography(
+        displayLarge = base.displayLarge.copy(
+            fontFamily = manrope,
+            fontWeight = FontWeight.SemiBold,
+            letterSpacing = (-0.2).sp
+        ),
+        displayMedium = base.displayMedium.copy(
+            fontFamily = manrope,
+            fontWeight = FontWeight.SemiBold
+        ),
+        displaySmall = base.displaySmall.copy(
+            fontFamily = manrope,
+            fontWeight = FontWeight.SemiBold
+        ),
+
+        headlineLarge = base.headlineLarge.copy(
+            fontFamily = manrope,
+            fontWeight = FontWeight.SemiBold
+        ),
+        headlineMedium = base.headlineMedium.copy(
+            fontFamily = manrope,
+            fontWeight = FontWeight.SemiBold
+        ),
+        headlineSmall = base.headlineSmall.copy(
+            fontFamily = manrope,
+            fontWeight = FontWeight.Medium
+        ),
+
+        titleLarge = base.titleLarge.copy(fontFamily = manrope, fontWeight = FontWeight.SemiBold),
+        titleMedium = base.titleMedium.copy(fontFamily = manrope, fontWeight = FontWeight.Medium),
+        titleSmall = base.titleSmall.copy(fontFamily = manrope, fontWeight = FontWeight.Medium),
+
+        bodyLarge = base.bodyLarge.copy(fontFamily = manrope),
+        bodyMedium = base.bodyMedium.copy(fontFamily = manrope),
+        bodySmall = base.bodySmall.copy(fontFamily = manrope),
+
+        labelLarge = base.labelLarge.copy(fontFamily = manrope, fontWeight = FontWeight.SemiBold),
+        labelMedium = base.labelMedium.copy(fontFamily = manrope, fontWeight = FontWeight.Medium),
+        labelSmall = base.labelSmall.copy(fontFamily = manrope),
+    )
+}
 
 @Composable
 fun AppTheme(
@@ -219,8 +210,6 @@ fun AppTheme(
     }
 
     MaterialTheme(
-        colorScheme = colorScheme,
-        typography = AppTypography,
-        content = content
+        colorScheme = colorScheme, typography = appTypography(), content = content
     )
 }

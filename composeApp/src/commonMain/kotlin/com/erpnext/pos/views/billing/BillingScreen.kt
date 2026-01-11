@@ -13,7 +13,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.hoverable
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.material.ripple.rememberRipple
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -40,9 +42,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.input.pointer.pointerMoveFilter
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -111,54 +111,56 @@ fun BillingScreen(
             sheetContainerColor = MaterialTheme.colorScheme.surface,
             sheetContentColor = MaterialTheme.colorScheme.onSurface,
             topBar = {
-            TopAppBar(title = {
-                Text("Nueva Factura")
-            }, navigationIcon = {
-                IconButton(onClick = action.onBack) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = "Atrás"
+                TopAppBar(
+                    title = {
+                        Text("Nueva Factura")
+                    }, navigationIcon = {
+                        IconButton(onClick = action.onBack) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = "Atrás"
+                            )
+                        }
+                    }, actions = {
+                        TextButton(onClick = action.onOpenLab) {
+                            Text("Modo prueba")
+                        }
+                    }, colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.surface,
+                        titleContentColor = MaterialTheme.colorScheme.onSurface,
+                        navigationIconContentColor = MaterialTheme.colorScheme.onSurface,
+                        actionIconContentColor = MaterialTheme.colorScheme.onSurface
                     )
-                }
-            }, actions = {
-                TextButton(onClick = action.onOpenLab) {
-                    Text("Modo prueba")
-                }
-            }, colors = TopAppBarDefaults.topAppBarColors(
-                containerColor = MaterialTheme.colorScheme.surface,
-                titleContentColor = MaterialTheme.colorScheme.onSurface,
-                navigationIconContentColor = MaterialTheme.colorScheme.onSurface,
-                actionIconContentColor = MaterialTheme.colorScheme.onSurface
-            ))
-        }, sheetPeekHeight = 140.dp, sheetDragHandle = {
-            Box(
-                modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Surface(
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
-                    shape = MaterialTheme.shapes.extraLarge
-                ) {
-                    Box(
-                        modifier = Modifier.size(width = 48.dp, height = 6.dp)
-                            .padding(horizontal = 12.dp)
-                    )
-                }
-            }
-        }, sheetContent = {
-            val sheetState = when (state) {
-                is BillingState.Success -> state
-                is BillingState.Error -> state.previous
-                else -> null
-            }
-            if (sheetState != null) {
-                TotalsPaymentsSheet(
-                    state = sheetState, action = action
                 )
-            } else {
-                Spacer(Modifier.height(1.dp))
-            }
-        }) { padding ->
+            }, sheetPeekHeight = 140.dp, sheetDragHandle = {
+                Box(
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Surface(
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
+                        shape = MaterialTheme.shapes.extraLarge
+                    ) {
+                        Box(
+                            modifier = Modifier.size(width = 48.dp, height = 6.dp)
+                                .padding(horizontal = 12.dp)
+                        )
+                    }
+                }
+            }, sheetContent = {
+                val sheetState = when (state) {
+                    is BillingState.Success -> state
+                    is BillingState.Error -> state.previous
+                    else -> null
+                }
+                if (sheetState != null) {
+                    TotalsPaymentsSheet(
+                        state = sheetState, action = action
+                    )
+                } else {
+                    Spacer(Modifier.height(1.dp))
+                }
+            }) { padding ->
 
             when (state) {
                 is BillingState.Loading -> {
@@ -655,8 +657,6 @@ private fun LabProductCard(
 ) {
     val colors = MaterialTheme.colorScheme
     val isDesktop = remember { getPlatformName() == "Desktop" }
-    var isHovered by remember { mutableStateOf(false) }
-    val showAction = !isDesktop || isHovered
     val imageUrl = item.image?.trim().orEmpty()
     val itemCurrency = item.currency?.trim()?.uppercase().orEmpty()
     val base = baseCurrency.trim().uppercase()
@@ -666,6 +666,24 @@ private fun LabProductCard(
         exchangeRateByCurrency[itemCurrency] ?: 1.0
     }
     val displayPrice = item.price * rate
+
+    val interactionSource = remember { MutableInteractionSource() }
+    val hovered by interactionSource.collectIsHoveredAsState()
+    var isHovered by remember { mutableStateOf(false) }
+    var prev by remember { mutableStateOf(false) }
+
+    val showAction = !isDesktop || isHovered
+
+    LaunchedEffect(isHovered) {
+        if (!prev && isHovered) {
+            isHovered = true
+        }
+        if (prev && !isHovered) {
+            isHovered = false
+        }
+        prev = hovered
+    }
+
     Surface(
         color = colors.surface,
         shape = RoundedCornerShape(18.dp),
@@ -673,16 +691,7 @@ private fun LabProductCard(
         shadowElevation = 2.dp,
         border = BorderStroke(1.dp, colors.outlineVariant),
         modifier = Modifier
-            .pointerMoveFilter(
-                onEnter = {
-                    isHovered = true
-                    false
-                },
-                onExit = {
-                    isHovered = false
-                    false
-                }
-            )
+            .hoverable(interactionSource)
             .clickable(onClick = onClick)
     ) {
         Box {
@@ -690,7 +699,7 @@ private fun LabProductCard(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(132.dp)
+                        .height(118.dp)
                         .clip(RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp))
                 ) {
                     if (imageUrl.isNotBlank()) {
@@ -748,7 +757,7 @@ private fun LabProductCard(
                             text = item.name,
                             style = MaterialTheme.typography.titleSmall,
                             color = colors.onSurface,
-                            maxLines = 1,
+                            maxLines = 2,
                             overflow = TextOverflow.Ellipsis,
                             modifier = Modifier.weight(1f)
                         )
@@ -835,22 +844,28 @@ private fun LabCartItem(
 ) {
     val colors = MaterialTheme.colorScheme
     val isDesktop = remember { getPlatformName() == "Desktop" }
+
+    val interactionSource = remember { MutableInteractionSource() }
+    val hovered by interactionSource.collectIsHoveredAsState()
     var isHovered by remember { mutableStateOf(false) }
+    var prev by remember { mutableStateOf(false) }
+
     val showActions = !isDesktop || isHovered
+
+    LaunchedEffect(isHovered) {
+        if (!prev && isHovered) {
+            isHovered = true
+        }
+        if (prev && !isHovered) {
+            isHovered = false
+        }
+        prev = hovered
+    }
     Surface(
         color = colors.surfaceVariant,
         shape = RoundedCornerShape(12.dp),
         border = BorderStroke(1.dp, colors.outlineVariant),
-        modifier = Modifier.pointerMoveFilter(
-            onEnter = {
-                isHovered = true
-                false
-            },
-            onExit = {
-                isHovered = false
-                false
-            }
-        )
+        modifier = Modifier.hoverable(interactionSource)
     ) {
         Row(
             modifier = Modifier.fillMaxWidth().padding(10.dp),

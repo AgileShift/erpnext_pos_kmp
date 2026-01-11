@@ -1,9 +1,11 @@
+/*
 package com.erpnext.pos
 
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.tooling.preview.Preview
 import com.erpnext.pos.domain.models.CustomerBO
+import com.erpnext.pos.views.CashBoxManager
 import com.erpnext.pos.views.customer.CustomerAction
 import com.erpnext.pos.views.customer.CustomerInvoicesState
 import com.erpnext.pos.views.customer.CustomerItem
@@ -108,7 +110,11 @@ fun CustomerItemPreview() {
             isDesktop = false,
             onClick = {},
             onOpenQuickActions = {},
-            onQuickAction = {}
+            onQuickAction = {},
+            posCurrency = "NIO",
+            partyAccountCurrency = "USD",
+            posExchangeRate = 36.6243,
+            cashboxManager = CashBoxManager()
         )
     }
 }
@@ -134,4 +140,4 @@ fun CustomerItemOverLimitPreview() {
             onQuickAction = {}
         )
     }
-}
+}*/
