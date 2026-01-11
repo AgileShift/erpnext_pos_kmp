@@ -1,6 +1,11 @@
-@file:OptIn(ExperimentalMaterial3Api::class, ExperimentalComposeUiApi::class)
+@file:OptIn(ExperimentalMaterial3Api::class)
 
-import androidx.compose.ui.ExperimentalComposeUiApi
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -16,7 +21,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.hoverable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsHoveredAsState
-import androidx.compose.material.ripple.rememberRipple
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -29,14 +33,12 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ConfirmationNumber
 import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.DeliveryDining
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Money
 import androidx.compose.material.icons.filled.Percent
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.ripple.rememberRipple
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -50,8 +52,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.AnnotatedString
@@ -68,24 +70,26 @@ import coil3.compose.SubcomposeAsyncImage
 import coil3.request.ImageRequest
 import coil3.request.crossfade
 import com.erpnext.pos.base.getPlatformName
+import com.erpnext.pos.domain.models.DeliveryChargeBO
 import com.erpnext.pos.utils.formatAmount
 import com.erpnext.pos.utils.toCurrencySymbol
+import com.erpnext.pos.utils.resolveRateBetweenFromBaseRates
 import com.erpnext.pos.views.billing.BillingAction
 import com.erpnext.pos.views.billing.BillingState
 import com.erpnext.pos.views.billing.PaymentLine
 import com.erpnext.pos.domain.models.POSCurrencyOption
 import com.erpnext.pos.domain.models.POSPaymentModeOption
+import com.erpnext.pos.domain.models.PaymentTermBO
 import com.erpnext.pos.utils.oauth.bd
+import com.erpnext.pos.utils.oauth.moneyScale
 import com.erpnext.pos.utils.oauth.toDouble
 import com.erpnext.pos.utils.view.SnackbarController
 import com.erpnext.pos.utils.view.SnackbarHost
 import com.erpnext.pos.utils.view.SnackbarPosition
 import com.erpnext.pos.utils.view.SnackbarType
-import com.erpnext.pos.utils.view.UiSnackbar
 import com.erpnext.pos.views.salesflow.SalesFlowContextSummary
 import com.erpnext.pos.views.salesflow.SalesFlowSource
 import org.jetbrains.compose.ui.tooling.preview.Preview
-import org.koin.compose.koinInject
 
 
 data class CartItem(
@@ -132,7 +136,7 @@ fun BillingScreen(
                         actionIconContentColor = MaterialTheme.colorScheme.onSurface
                     )
                 )
-            }, sheetPeekHeight = 140.dp, sheetDragHandle = {
+            }, sheetPeekHeight = 120.dp, sheetDragHandle = {
                 Box(
                     modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
                     contentAlignment = Alignment.Center
@@ -164,7 +168,12 @@ fun BillingScreen(
 
             when (state) {
                 is BillingState.Loading -> {
-                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(padding),
+                        contentAlignment = Alignment.Center
+                    ) {
                         CircularProgressIndicator()
                     }
                 }
@@ -288,23 +297,31 @@ fun BillingLabScreen(
             },
             sheetContent = {
                 if (state is BillingState.Success) {
-                    PaymentSection(
-                        state = state,
-                        baseCurrency = state.currency ?: "USD",
-                        exchangeRateByCurrency = state.exchangeRateByCurrency,
-                        paymentLines = state.paymentLines,
-                        paymentModes = state.paymentModes,
-                        allowedCurrencies = state.allowedCurrencies,
-                        paidAmountBase = state.paidAmountBase,
-                        totalAmount = state.total,
-                        balanceDueBase = state.balanceDueBase,
-                        changeDueBase = state.changeDueBase,
-                        paymentErrorMessage = state.paymentErrorMessage,
-                        isCreditSale = state.isCreditSale,
-                        onAddPaymentLine = action.onAddPaymentLine,
-                        onRemovePaymentLine = action.onRemovePaymentLine,
-                        onPaymentCurrencySelected = action.onPaymentCurrencySelected
-                    )
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 8.dp, vertical = 6.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        DiscountShippingInputs(state, action)
+                        PaymentSection(
+                            state = state,
+                            baseCurrency = state.currency ?: "USD",
+                            exchangeRateByCurrency = state.exchangeRateByCurrency,
+                            paymentLines = state.paymentLines,
+                            paymentModes = state.paymentModes,
+                            allowedCurrencies = state.allowedCurrencies,
+                            paidAmountBase = state.paidAmountBase,
+                            totalAmount = state.total,
+                            balanceDueBase = state.balanceDueBase,
+                            changeDueBase = state.changeDueBase,
+                            paymentErrorMessage = state.paymentErrorMessage,
+                            isCreditSale = state.isCreditSale,
+                            onAddPaymentLine = action.onAddPaymentLine,
+                            onRemovePaymentLine = action.onRemovePaymentLine,
+                            onPaymentCurrencySelected = action.onPaymentCurrencySelected
+                        )
+                    }
                 } else {
                     Box(
                         modifier = Modifier.fillMaxWidth().padding(24.dp),
@@ -330,7 +347,8 @@ fun BillingLabScreen(
                         modifier = Modifier.fillMaxSize().padding(paddingValues),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text(state.message)
+                        snackbar.dismiss()
+                        snackbar.show(state.message, SnackbarType.Error, SnackbarPosition.Top)
                     }
                 }
 
@@ -339,7 +357,11 @@ fun BillingLabScreen(
                         modifier = Modifier.fillMaxSize().padding(paddingValues),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text("Sin datos disponibles.")
+                        snackbar.show(
+                            "Sin datos disponibles.",
+                            SnackbarType.Info,
+                            SnackbarPosition.Top
+                        )
                     }
                 }
 
@@ -354,15 +376,11 @@ fun BillingLabScreen(
                 }
             }
         }
-
-        /*if (uiSnackbar != null) {
-            UiSnackbar(
-                uiSnackbar = uiSnackbar,
-                onDismiss = { snackbar.dismiss() },
-                position = SnackbarPosition.Bottom
-            )
-        }*/
     }
+
+    SnackbarHost(
+        snackbar = uiSnackbar, onDismiss = snackbar::dismiss, modifier = Modifier.fillMaxSize()
+    )
 }
 
 @Composable
@@ -377,16 +395,14 @@ private fun BillingLabContent(
     val leftPanelBg = colors.surfaceVariant
     val baseCurrency = state.currency ?: "USD"
 
-    val categories = remember(state.productSearchResults) {
+    val categories =
         state.productSearchResults.mapNotNull { it.itemGroup.takeIf { g -> g.isNotBlank() } }
             .distinct()
             .sorted()
-    }
     var selectedCategory by rememberSaveable { mutableStateOf("Todos") }
-    val filteredProducts = remember(state.productSearchResults, selectedCategory) {
+    val filteredProducts =
         if (selectedCategory == "Todos") state.productSearchResults
         else state.productSearchResults.filter { it.itemGroup == selectedCategory }
-    }
 
     Row(
         modifier = modifier
@@ -531,6 +547,7 @@ private fun BillingLabContent(
                             LabCartItem(
                                 item = item,
                                 baseCurrency = baseCurrency,
+                                exchangeRateByCurrency = state.exchangeRateByCurrency,
                                 onUpdateQuantity = { qty ->
                                     action.onQuantityChanged(item.itemCode, qty)
                                 },
@@ -658,31 +675,22 @@ private fun LabProductCard(
     val colors = MaterialTheme.colorScheme
     val isDesktop = remember { getPlatformName() == "Desktop" }
     val imageUrl = item.image?.trim().orEmpty()
+
     val itemCurrency = item.currency?.trim()?.uppercase().orEmpty()
     val base = baseCurrency.trim().uppercase()
-    val rate = if (itemCurrency.isBlank() || itemCurrency == base) {
-        1.0
-    } else {
-        exchangeRateByCurrency[itemCurrency] ?: 1.0
-    }
-    val displayPrice = item.price * rate
+    val baseRates = exchangeRateByCurrency.toMutableMap().apply { this[base] = 1.0 }
+    val rate = if (itemCurrency.isBlank() || itemCurrency == base) 1.0
+    else resolveRateBetweenFromBaseRates(
+        fromCurrency = itemCurrency,
+        toCurrency = base,
+        baseCurrency = base,
+        baseRates = baseRates
+    ) ?: 1.0
+    val displayPrice = bd(item.price * rate).moneyScale(0).toDouble(0)
 
     val interactionSource = remember { MutableInteractionSource() }
     val hovered by interactionSource.collectIsHoveredAsState()
-    var isHovered by remember { mutableStateOf(false) }
-    var prev by remember { mutableStateOf(false) }
-
-    val showAction = !isDesktop || isHovered
-
-    LaunchedEffect(isHovered) {
-        if (!prev && isHovered) {
-            isHovered = true
-        }
-        if (prev && !isHovered) {
-            isHovered = false
-        }
-        prev = hovered
-    }
+    val showAction = !isDesktop || hovered
 
     Surface(
         color = colors.surface,
@@ -699,7 +707,7 @@ private fun LabProductCard(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(118.dp)
+                        .height(106.dp)
                         .clip(RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp))
                 ) {
                     if (imageUrl.isNotBlank()) {
@@ -762,7 +770,7 @@ private fun LabProductCard(
                             modifier = Modifier.weight(1f)
                         )
                         Text(
-                            text = formatAmount(baseCurrency.toCurrencySymbol(), displayPrice),
+                            text = "${baseCurrency.toCurrencySymbol()} $displayPrice",
                             style = MaterialTheme.typography.titleSmall,
                             fontWeight = FontWeight.Bold,
                             color = accent,
@@ -839,82 +847,125 @@ private fun LabCartHeader(
 private fun LabCartItem(
     item: CartItem,
     baseCurrency: String,
+    exchangeRateByCurrency: Map<String, Double>,
     onUpdateQuantity: (Double) -> Unit,
-    onRemove: () -> Unit
+    onRemove: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     val colors = MaterialTheme.colorScheme
     val isDesktop = remember { getPlatformName() == "Desktop" }
 
     val interactionSource = remember { MutableInteractionSource() }
     val hovered by interactionSource.collectIsHoveredAsState()
-    var isHovered by remember { mutableStateOf(false) }
-    var prev by remember { mutableStateOf(false) }
 
-    val showActions = !isDesktop || isHovered
-
-    LaunchedEffect(isHovered) {
-        if (!prev && isHovered) {
-            isHovered = true
+    val showActions = !isDesktop || hovered
+    val actionAlpha by animateFloatAsState(
+        targetValue = if (showActions) 1f else 0f,
+        animationSpec = tween(durationMillis = 150),
+        label = "cartActionsAlpha"
+    )
+    val itemCurrency = item.currency?.trim()?.uppercase().orEmpty()
+    val base = baseCurrency.trim().uppercase()
+    val baseRates = exchangeRateByCurrency.toMutableMap().apply { this[base] = 1.0 }
+    val rate = if (itemCurrency.isBlank() || itemCurrency == base) 1.0
+    else resolveRateBetweenFromBaseRates(
+        fromCurrency = itemCurrency,
+        toCurrency = base,
+        baseCurrency = base,
+        baseRates = baseRates
+    ) ?: 1.0
+    val unitDisplay = bd(item.price * rate).toDouble(0)
+    val lineDisplay = unitDisplay * item.quantity
+    var appeared by remember { mutableStateOf(false) }
+    LaunchedEffect(item.itemCode) { appeared = true }
+    var isRemoving by remember { mutableStateOf(false) }
+    LaunchedEffect(isRemoving) {
+        if (isRemoving) {
+            kotlinx.coroutines.delay(180)
+            onRemove()
         }
-        if (prev && !isHovered) {
-            isHovered = false
-        }
-        prev = hovered
     }
-    Surface(
-        color = colors.surfaceVariant,
-        shape = RoundedCornerShape(12.dp),
-        border = BorderStroke(1.dp, colors.outlineVariant),
-        modifier = Modifier.hoverable(interactionSource)
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(10.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = item.name,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = colors.onSurface,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Text(
-                    text = formatAmount(baseCurrency.toCurrencySymbol(), item.price),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = colors.onSurfaceVariant
-                )
-            }
 
+    val appearAlpha by animateFloatAsState(
+        targetValue = if (appeared && !isRemoving) 1f else 0f,
+        animationSpec = tween(durationMillis = 170),
+        label = "cartAppearAlpha"
+    )
+    val appearScale by animateFloatAsState(
+        targetValue = if (appeared && !isRemoving) 1f else 0.92f,
+        animationSpec = tween(durationMillis = 170),
+        label = "cartAppearScale"
+    )
+
+    AnimatedVisibility(
+        visible = !isRemoving,
+        exit = fadeOut(tween(160)) + shrinkVertically(tween(160))
+    ) {
+        Surface(
+            color = colors.surfaceVariant,
+            shape = RoundedCornerShape(12.dp),
+            border = BorderStroke(1.dp, colors.outlineVariant),
+            modifier = modifier
+                .hoverable(interactionSource)
+                .graphicsLayer(
+                    alpha = appearAlpha,
+                    scaleX = appearScale,
+                    scaleY = appearScale
+                )
+                .animateContentSize()
+        ) {
             Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                modifier = Modifier.fillMaxWidth().padding(10.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                if (showActions) {
-                    IconButton(onClick = { onUpdateQuantity((item.quantity - 1).coerceAtLeast(1.0)) }) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = item.name,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = colors.onSurface,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        text = formatAmount(baseCurrency.toCurrencySymbol(), unitDisplay),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = colors.onSurfaceVariant
+                    )
+                }
+
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    IconButton(
+                        onClick = { onUpdateQuantity((item.quantity - 1).coerceAtLeast(1.0)) },
+                        modifier = Modifier.graphicsLayer(alpha = actionAlpha),
+                        enabled = showActions
+                    ) {
                         Icon(Icons.Default.Remove, contentDescription = "Menos")
                     }
-                }
-                Text(
-                    text = item.quantity.formatQty(),
-                    style = MaterialTheme.typography.labelLarge.copy(fontSize = 14.sp),
-                    color = colors.onSurface
-                )
-                if (showActions) {
-                    IconButton(onClick = { onUpdateQuantity(item.quantity + 1) }) {
+                    Text(
+                        text = item.quantity.formatQty(),
+                        style = MaterialTheme.typography.labelLarge.copy(fontSize = 14.sp),
+                        color = colors.onSurface
+                    )
+                    IconButton(
+                        onClick = { onUpdateQuantity(item.quantity + 1) },
+                        modifier = Modifier.graphicsLayer(alpha = actionAlpha),
+                        enabled = showActions
+                    ) {
                         Icon(Icons.Default.Add, contentDescription = "Más")
                     }
-                }
-                Text(
-                    text = formatAmount(
-                        baseCurrency.toCurrencySymbol(),
-                        item.price * item.quantity
-                    ),
-                    style = MaterialTheme.typography.labelLarge,
-                    color = colors.onSurface
-                )
-                if (showActions) {
-                    IconButton(onClick = onRemove) {
+                    Text(
+                        text = formatAmount(baseCurrency.toCurrencySymbol(), lineDisplay),
+                        style = MaterialTheme.typography.labelLarge,
+                        color = colors.onSurface
+                    )
+                    IconButton(
+                        onClick = { isRemoving = true },
+                        modifier = Modifier.graphicsLayer(alpha = actionAlpha),
+                        enabled = showActions
+                    ) {
                         Icon(Icons.Default.Delete, contentDescription = "Eliminar")
                     }
                 }
@@ -1646,6 +1697,75 @@ private fun PaymentTotalsRow(label: String, symbol: String, amount: Double) {
 }
 
 @Composable
+private fun CompactTotalsCard(
+    baseCurrency: String,
+    subtotal: Double,
+    taxes: Double,
+    discount: Double,
+    shipping: Double,
+    total: Double,
+    balance: Double,
+    change: Double
+) {
+    val colors = MaterialTheme.colorScheme
+    Surface(
+        shape = RoundedCornerShape(16.dp),
+        tonalElevation = 2.dp,
+        shadowElevation = 0.dp,
+        color = colors.surface,
+        border = BorderStroke(1.dp, colors.outlineVariant),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(
+            modifier = Modifier.padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Text(
+                text = "Resumen",
+                style = MaterialTheme.typography.labelLarge,
+                color = colors.onSurface
+            )
+            PaymentTotalsRow("Subtotal", baseCurrency, subtotal)
+            if (taxes > 0.0) PaymentTotalsRow("Impuestos", baseCurrency, taxes)
+            if (discount > 0.0) PaymentTotalsRow("Descuento", baseCurrency, -discount)
+            if (shipping > 0.0) PaymentTotalsRow("Envío", baseCurrency, shipping)
+            Divider(color = colors.outlineVariant, thickness = 1.dp)
+            PaymentTotalsRow("Total", baseCurrency, total)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(
+                    "Pendiente",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = colors.onSurfaceVariant
+                )
+                Text(
+                    formatAmount(baseCurrency.toCurrencySymbol(), balance),
+                    style = MaterialTheme.typography.bodySmall,
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(
+                    "Cambio",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = colors.onSurfaceVariant
+                )
+                Text(
+                    formatAmount(baseCurrency.toCurrencySymbol(), change),
+                    style = MaterialTheme.typography.bodySmall,
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
+        }
+    }
+}
+
+@Composable
 private fun TotalsPaymentsSheet(
     state: BillingState.Success, action: BillingAction
 ) {
@@ -1765,93 +1885,16 @@ private fun PaymentSection(
         referenceInput = ""
     }
     Column(modifier = Modifier.padding(end = 12.dp, start = 12.dp, bottom = 8.dp)) {
-        Surface(
-            shape = RoundedCornerShape(16.dp),
-            tonalElevation = 2.dp,
-            shadowElevation = 0.dp,
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Column(
-                modifier = Modifier.padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Text(
-                    text = "Total",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Text(
-                    text = formatAmount(baseCurrency.toCurrencySymbol(), totalAmount),
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold
-                )
-                Spacer(Modifier.height(4.dp))
-                var showTotalsDetails by rememberSaveable { mutableStateOf(false) }
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable { showTotalsDetails = !showTotalsDetails }
-                        .padding(vertical = 4.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = if (showTotalsDetails) "Ocultar detalle" else "Ver detalle",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                    Icon(
-                        imageVector = if (showTotalsDetails) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary
-                    )
-                }
-                if (showTotalsDetails) {
-                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                        PaymentTotalsRow("Subtotal", baseCurrency, subtotalAmount)
-                        if (taxesAmount > 0.0) {
-                            PaymentTotalsRow("Impuestos", baseCurrency, taxesAmount)
-                        }
-                        if (discountAmount > 0.0) {
-                            PaymentTotalsRow("Descuento", baseCurrency, -discountAmount)
-                        }
-                        if (shippingAmount > 0.0) {
-                            PaymentTotalsRow("Envío", baseCurrency, shippingAmount)
-                        }
-                    }
-                }
-                Spacer(Modifier.height(4.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Column {
-                        Text(
-                            text = "Pendiente",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Text(
-                            text = formatAmount(baseCurrency.toCurrencySymbol(), balanceDueBase),
-                            style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                    }
-                    Column(horizontalAlignment = Alignment.End) {
-                        Text(
-                            text = "Cambio",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Text(
-                            text = formatAmount(baseCurrency.toCurrencySymbol(), changeDueBase),
-                            style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                    }
-                }
-            }
-        }
+        CompactTotalsCard(
+            baseCurrency = baseCurrency,
+            subtotal = subtotalAmount,
+            taxes = taxesAmount,
+            discount = discountAmount,
+            shipping = shippingAmount,
+            total = totalAmount,
+            balance = balanceDueBase,
+            change = changeDueBase
+        )
 
         Spacer(Modifier.height(12.dp))
 
@@ -2241,10 +2284,10 @@ private fun DiscountShippingInputs(
 @Composable
 private fun CreditTermsSection(
     isCreditSale: Boolean,
-    paymentTerms: List<com.erpnext.pos.domain.models.PaymentTermBO>,
-    selectedPaymentTerm: com.erpnext.pos.domain.models.PaymentTermBO?,
+    paymentTerms: List<PaymentTermBO>,
+    selectedPaymentTerm: PaymentTermBO?,
     onCreditSaleChanged: (Boolean) -> Unit,
-    onPaymentTermSelected: (com.erpnext.pos.domain.models.PaymentTermBO?) -> Unit
+    onPaymentTermSelected: (PaymentTermBO?) -> Unit
 ) {
     Column(
         modifier = Modifier.padding(end = 12.dp, start = 12.dp, bottom = 8.dp),
@@ -2676,7 +2719,7 @@ private fun BillingScreenPreview() {
         CartItem("P1", "Producto A", "C$", 2.0, 150.0)
     )
     val deliveryCharges = listOf(
-        com.erpnext.pos.domain.models.DeliveryChargeBO(
+        DeliveryChargeBO(
             label = "Zona urbana", defaultRate = 10.0
         )
     )
@@ -2712,7 +2755,7 @@ private fun BillingScreenPreview() {
                     )
                 ),
                 paymentTerms = listOf(
-                    com.erpnext.pos.domain.models.PaymentTermBO(
+                    PaymentTermBO(
                         name = "Layaway 30 days", creditDays = 30
                     )
                 ),

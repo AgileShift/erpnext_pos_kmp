@@ -47,12 +47,13 @@ import com.erpnext.pos.utils.normalizeCurrency
 import com.erpnext.pos.utils.requiresReference
 import com.erpnext.pos.utils.resolvePaymentStatus
 import com.erpnext.pos.utils.resolveExchangeRateBetween
-import com.erpnext.pos.utils.resolveRateToInvoiceCurrency
 import androidx.lifecycle.viewModelScope
 import com.erpnext.pos.domain.models.BillingTotals
+import com.erpnext.pos.domain.models.POSCurrencyOption
 import com.erpnext.pos.utils.buildPaymentModeDetailMap
 import com.erpnext.pos.utils.calculateTotals
 import com.erpnext.pos.utils.resolveDiscountInfo
+import com.erpnext.pos.utils.resolveRateToInvoiceCurrency
 import com.erpnext.pos.utils.roundToCurrency
 import com.erpnext.pos.views.payment.PaymentHandler
 import kotlinx.coroutines.launch
@@ -125,7 +126,7 @@ class BillingViewModel(
                 itemsUseCase.invoke(null).collectLatest { i ->
                     products = i.filter { it.price > 0.0 && it.actualQty > 0.0 }
 
-                    val invoiceCurrency = context.currency.ifBlank { "USD" }.trim()
+                    val invoiceCurrency = context.currency.trim()
 
                     val modeDefinitions =
                         runCatching { modeOfPaymentDao.getAllModes(context.company) }
@@ -154,8 +155,9 @@ class BillingViewModel(
                         }
                     }
 
-                    // Cache de tasas "paymentCurrency -> invoiceCurrency"
-                    val exchangeRateByCurrency = mapOf(invoiceCurrency.uppercase() to 1.0)
+                    // Cache de tasas currency -> invoiceCurrency
+                    val exchangeRateByCurrency =
+                        buildExchangeRateMap(invoiceCurrency, context.allowedCurrencies)
 
                     val contextSelection = pendingSalesFlowContext
                     val selectedCustomer = contextSelection?.customerId?.let { customerId ->
@@ -923,6 +925,30 @@ class BillingViewModel(
             discount = totals.discount,
             total = totals.total
         ).recalculatePaymentTotals()
+    }
+
+    private suspend fun buildExchangeRateMap(
+        baseCurrency: String,
+        allowed: List<POSCurrencyOption>
+    ): Map<String, Double> {
+        val base = baseCurrency.trim().uppercase()
+        val map = mutableMapOf(base to 1.0)
+        val allCodes = allowed.mapNotNull { it.code.trim().uppercase().takeIf { c -> c.isNotBlank() } }
+            .toMutableSet()
+        allCodes += "USD" // asegurar USD siempre presente
+
+        for (code in allCodes) {
+            if (code == base) continue
+            val direct = contextProvider.resolveExchangeRateBetween(code, base)
+            val rate = when {
+                direct != null && direct > 0.0 -> direct
+                else -> contextProvider.resolveExchangeRateBetween(base, code)?.takeIf { it > 0.0 }?.let { 1.0 / it }
+            }
+            if (rate != null && rate > 0.0) {
+                map[code] = rate
+            }
+        }
+        return map
     }
 
     private suspend fun resolveSourceExchangeRate(

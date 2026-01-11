@@ -668,7 +668,7 @@ fun resolveRateBetweenFromBaseRates(
     val baseToFrom = if (from == base) 1.0 else baseRates[from]
     val baseToTo = if (to == base) 1.0 else baseRates[to]
     if (baseToFrom == null || baseToTo == null || baseToFrom <= 0.0 || baseToTo <= 0.0) return null
-    return baseToTo / baseToFrom
+    return baseToFrom / baseToTo
 }
 
 fun formatPendingDual(
