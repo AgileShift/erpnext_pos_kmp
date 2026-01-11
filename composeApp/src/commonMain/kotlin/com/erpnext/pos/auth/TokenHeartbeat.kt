@@ -18,7 +18,7 @@ class TokenHeartbeat(
 ) {
     private var job: Job? = null
 
-    fun start(intervalMinutes: Long = 4) {
+    fun start(intervalMinutes: Long = 5) {
         if (job != null) return
         job = scope.launch {
             while (true) {

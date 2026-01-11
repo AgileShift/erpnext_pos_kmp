@@ -5,10 +5,11 @@ import com.erpnext.pos.base.BaseViewModel
 import com.erpnext.pos.localSource.preferences.LanguagePreferences
 import com.erpnext.pos.localSource.preferences.SyncPreferences
 import com.erpnext.pos.localSource.preferences.SyncSettings
+import com.erpnext.pos.localSource.preferences.ThemePreferences
 import com.erpnext.pos.localization.AppLanguage
 import com.erpnext.pos.sync.SyncManager
 import com.erpnext.pos.sync.SyncState
-import kotlinx.coroutines.delay
+import AppColorTheme
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
@@ -17,7 +18,8 @@ import kotlinx.coroutines.launch
 class SettingsViewModel(
     private val syncPreferences: SyncPreferences,
     private val syncManager: SyncManager,
-    private val languagePreferences: LanguagePreferences
+    private val languagePreferences: LanguagePreferences,
+    private val themePreferences: ThemePreferences
 ) : BaseViewModel() {
 
     private val _uiState: MutableStateFlow<POSSettingState> =
@@ -28,6 +30,7 @@ class SettingsViewModel(
         SyncSettings(autoSync = true, syncOnStartup = true, wifiOnly = true, lastSyncAt = null)
     private var currentSyncState: SyncState = SyncState.IDLE
     private var currentLanguage: AppLanguage = AppLanguage.Spanish
+    private var currentTheme: AppColorTheme = AppColorTheme.Noir
 
     init {
         viewModelScope.launch {
@@ -45,6 +48,12 @@ class SettingsViewModel(
         viewModelScope.launch {
             languagePreferences.language.collect { language ->
                 currentLanguage = language
+                publishState()
+            }
+        }
+        viewModelScope.launch {
+            themePreferences.theme.collect { theme ->
+                currentTheme = theme
                 publishState()
             }
         }
@@ -66,7 +75,8 @@ class SettingsViewModel(
                 ),
                 syncSettings = currentSyncSettings,
                 syncState = currentSyncState,
-                language = currentLanguage
+                language = currentLanguage,
+                theme = currentTheme
             )
         }
     }
@@ -89,5 +99,9 @@ class SettingsViewModel(
 
     fun setLanguage(language: AppLanguage) {
         viewModelScope.launch { languagePreferences.setLanguage(language) }
+    }
+
+    fun setTheme(theme: AppColorTheme) {
+        viewModelScope.launch { themePreferences.setTheme(theme) }
     }
 }

@@ -1,8 +1,13 @@
-@file:OptIn(ExperimentalMaterial3Api::class)
+@file:OptIn(ExperimentalMaterial3Api::class, ExperimentalComposeUiApi::class)
 
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.foundation.BorderStroke
@@ -37,11 +42,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.input.pointer.pointerMoveFilter
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
@@ -60,6 +67,7 @@ import coil3.compose.LocalPlatformContext
 import coil3.compose.SubcomposeAsyncImage
 import coil3.request.ImageRequest
 import coil3.request.crossfade
+import com.erpnext.pos.base.getPlatformName
 import com.erpnext.pos.utils.formatAmount
 import com.erpnext.pos.utils.toCurrencySymbol
 import com.erpnext.pos.views.billing.BillingAction
@@ -67,6 +75,8 @@ import com.erpnext.pos.views.billing.BillingState
 import com.erpnext.pos.views.billing.PaymentLine
 import com.erpnext.pos.domain.models.POSCurrencyOption
 import com.erpnext.pos.domain.models.POSPaymentModeOption
+import com.erpnext.pos.utils.oauth.bd
+import com.erpnext.pos.utils.oauth.toDouble
 import com.erpnext.pos.utils.view.SnackbarController
 import com.erpnext.pos.utils.view.SnackbarHost
 import com.erpnext.pos.utils.view.SnackbarPosition
@@ -104,6 +114,10 @@ fun BillingScreen(
                         imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                         contentDescription = "Atrás"
                     )
+                }
+            }, actions = {
+                TextButton(onClick = action.onOpenLab) {
+                    Text("Modo prueba")
                 }
             })
         }, sheetPeekHeight = 140.dp, sheetDragHandle = {
@@ -198,6 +212,676 @@ fun BillingScreen(
         SnackbarHost(
             snackbar = uiSnackbar, onDismiss = snackbar::dismiss, modifier = Modifier.fillMaxSize()
         )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun BillingLabScreen(
+    state: BillingState,
+    action: BillingAction,
+    snackbar: SnackbarController
+) {
+    val uiSnackbar = snackbar.snackbar.collectAsState().value
+    val scaffoldState = rememberBottomSheetScaffoldState()
+
+    Box(Modifier.fillMaxSize()) {
+        BottomSheetScaffold(
+            scaffoldState = scaffoldState,
+            sheetShadowElevation = 12.dp,
+            sheetPeekHeight = 120.dp,
+            topBar = {
+                TopAppBar(
+                    title = { Text("POS Lab") },
+                    navigationIcon = {
+                        IconButton(onClick = action.onBack) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = "Atrás"
+                            )
+                        }
+                    },
+                    actions = {
+                        TextButton(onClick = action.onBack) {
+                            Text("Volver a clásico")
+                        }
+                    }
+                )
+            },
+            sheetDragHandle = {
+                Box(
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Surface(
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
+                        shape = MaterialTheme.shapes.extraLarge
+                    ) {
+                        Box(
+                            modifier = Modifier.size(width = 48.dp, height = 6.dp)
+                                .padding(horizontal = 12.dp)
+                        )
+                    }
+                }
+            },
+            sheetContent = {
+                if (state is BillingState.Success) {
+                    PaymentSection(
+                        state = state,
+                        baseCurrency = state.currency ?: "USD",
+                        exchangeRateByCurrency = state.exchangeRateByCurrency,
+                        paymentLines = state.paymentLines,
+                        paymentModes = state.paymentModes,
+                        allowedCurrencies = state.allowedCurrencies,
+                        paidAmountBase = state.paidAmountBase,
+                        totalAmount = state.total,
+                        balanceDueBase = state.balanceDueBase,
+                        changeDueBase = state.changeDueBase,
+                        paymentErrorMessage = state.paymentErrorMessage,
+                        isCreditSale = state.isCreditSale,
+                        onAddPaymentLine = action.onAddPaymentLine,
+                        onRemovePaymentLine = action.onRemovePaymentLine,
+                        onPaymentCurrencySelected = action.onPaymentCurrencySelected
+                    )
+                } else {
+                    Box(
+                        modifier = Modifier.fillMaxWidth().padding(24.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text("Cargando pagos...")
+                    }
+                }
+            }
+        ) { paddingValues ->
+            when (state) {
+                BillingState.Loading -> {
+                    Box(
+                        modifier = Modifier.fillMaxSize().padding(paddingValues),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        CircularProgressIndicator()
+                    }
+                }
+
+                is BillingState.Error -> {
+                    Box(
+                        modifier = Modifier.fillMaxSize().padding(paddingValues),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(state.message)
+                    }
+                }
+
+                BillingState.Empty -> {
+                    Box(
+                        modifier = Modifier.fillMaxSize().padding(paddingValues),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text("Sin datos disponibles.")
+                    }
+                }
+
+                is BillingState.Success -> {
+                    BillingLabContent(
+                        state = state,
+                        action = action,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(paddingValues)
+                    )
+                }
+            }
+        }
+
+        /*if (uiSnackbar != null) {
+            UiSnackbar(
+                uiSnackbar = uiSnackbar,
+                onDismiss = { snackbar.dismiss() },
+                position = SnackbarPosition.Bottom
+            )
+        }*/
+    }
+}
+
+@Composable
+private fun BillingLabContent(
+    state: BillingState.Success,
+    action: BillingAction,
+    modifier: Modifier = Modifier
+) {
+    val colors = MaterialTheme.colorScheme
+    val accent = colors.primary
+    val background = colors.background
+    val leftPanelBg = colors.surfaceVariant
+    val baseCurrency = state.currency ?: "USD"
+
+    val categories = remember(state.productSearchResults) {
+        state.productSearchResults.mapNotNull { it.itemGroup.takeIf { g -> g.isNotBlank() } }
+            .distinct()
+            .sorted()
+    }
+    var selectedCategory by rememberSaveable { mutableStateOf("Todos") }
+    val filteredProducts = remember(state.productSearchResults, selectedCategory) {
+        if (selectedCategory == "Todos") state.productSearchResults
+        else state.productSearchResults.filter { it.itemGroup == selectedCategory }
+    }
+
+    Row(
+        modifier = modifier
+            .background(background)
+            .padding(16.dp),
+        horizontalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxHeight()
+                .background(leftPanelBg, RoundedCornerShape(20.dp))
+                .padding(16.dp)
+        ) {
+            LabSearchBar(
+                value = state.productSearchQuery,
+                onChange = action.onProductSearchQueryChange,
+                onClear = { action.onProductSearchQueryChange("") }
+            )
+
+            Spacer(Modifier.height(12.dp))
+
+            LabCategoryTabs(
+                categories = categories,
+                selectedCategory = selectedCategory,
+                onSelect = { selectedCategory = it }
+            )
+
+            Spacer(Modifier.height(16.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = if (selectedCategory == "Todos") "Todos los productos" else selectedCategory,
+                    style = MaterialTheme.typography.titleSmall,
+                    color = colors.onSurfaceVariant
+                )
+                Text(
+                    text = "(${filteredProducts.size})",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = colors.onSurfaceVariant.copy(alpha = 0.7f)
+                )
+            }
+
+            Spacer(Modifier.height(12.dp))
+
+            LazyVerticalGrid(
+                columns = GridCells.Adaptive(minSize = 170.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                modifier = Modifier.fillMaxSize()
+            ) {
+                items(filteredProducts, key = { it.itemCode }) { item ->
+                    LabProductCard(
+                        item = item,
+                        baseCurrency = baseCurrency,
+                        accent = accent,
+                        onClick = { action.onProductAdded(item) }
+                    )
+                }
+            }
+        }
+
+        Surface(
+            color = colors.surface,
+            shape = RoundedCornerShape(22.dp),
+            tonalElevation = 2.dp,
+            shadowElevation = 12.dp,
+            modifier = Modifier
+                .widthIn(min = 320.dp, max = 420.dp)
+                .fillMaxHeight()
+        ) {
+            Column(
+                modifier = Modifier.fillMaxHeight().padding(16.dp)
+            ) {
+                LabCartHeader(
+                    itemCount = state.cartItems.sumOf { it.quantity }.toInt(),
+                    accent = accent
+                )
+
+                Spacer(Modifier.height(12.dp))
+
+                CollapsibleSection(title = "Cliente y crédito", defaultExpanded = true) {
+                    Column(
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                        modifier = Modifier.padding(bottom = 8.dp)
+                    ) {
+                        CustomerSelector(
+                            customers = state.customers,
+                            query = state.customerSearchQuery,
+                            onQueryChange = action.onCustomerSearchQueryChange,
+                            onCustomerSelected = action.onCustomerSelected
+                        )
+
+                        if (state.paymentTerms.isNotEmpty()) {
+                            CreditTermsSection(
+                                isCreditSale = state.isCreditSale,
+                                paymentTerms = state.paymentTerms,
+                                selectedPaymentTerm = state.selectedPaymentTerm,
+                                onCreditSaleChanged = action.onCreditSaleChanged,
+                                onPaymentTermSelected = action.onPaymentTermSelected
+                            )
+                        }
+                    }
+                }
+
+                Spacer(Modifier.height(12.dp))
+
+                Text(
+                    text = "Carrito",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = colors.onSurface
+                )
+
+                Spacer(Modifier.height(8.dp))
+
+                if (state.cartItems.isEmpty()) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "Carrito vacío",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = colors.onSurfaceVariant
+                        )
+                    }
+                } else {
+                    LazyColumn(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        items(state.cartItems, key = { it.itemCode }) { item ->
+                            LabCartItem(
+                                item = item,
+                                baseCurrency = baseCurrency,
+                                onUpdateQuantity = { qty ->
+                                    action.onQuantityChanged(item.itemCode, qty)
+                                },
+                                onRemove = { action.onRemoveItem(item.itemCode) }
+                            )
+                        }
+                    }
+                }
+
+                Spacer(Modifier.height(12.dp))
+
+                LabTotalsCard(
+                    baseCurrency = baseCurrency,
+                    subtotal = state.subtotal,
+                    taxes = state.taxes
+                )
+
+                Spacer(Modifier.height(12.dp))
+
+                Button(
+                    onClick = action.onFinalizeSale,
+                    enabled = state.selectedCustomer != null &&
+                            state.cartItems.isNotEmpty() &&
+                            (state.isCreditSale || state.paidAmountBase + 0.01 >= state.total) &&
+                            (!state.isCreditSale || state.selectedPaymentTerm != null),
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = colors.primary,
+                        contentColor = colors.onPrimary
+                    )
+                ) {
+                    Text("Finalizar venta")
+                }
+
+                Spacer(Modifier.height(6.dp))
+
+                Text(
+                    text = "Desliza la bandeja inferior para pagos.",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = colors.onSurfaceVariant,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun LabSearchBar(
+    value: String,
+    onChange: (String) -> Unit,
+    onClear: () -> Unit
+) {
+    OutlinedTextField(
+        value = value,
+        onValueChange = onChange,
+        modifier = Modifier.fillMaxWidth(),
+        leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+        trailingIcon = {
+            if (value.isNotBlank()) {
+                IconButton(onClick = onClear) {
+                    Icon(Icons.Default.Delete, contentDescription = null)
+                }
+            }
+        },
+        placeholder = { Text("Buscar productos o escanear...") },
+        singleLine = true,
+        shape = RoundedCornerShape(16.dp)
+    )
+}
+
+@Composable
+private fun LabCategoryTabs(
+    categories: List<String>,
+    selectedCategory: String,
+    onSelect: (String) -> Unit
+) {
+    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        item {
+            LabCategoryChip(
+                label = "Todos",
+                selected = selectedCategory == "Todos",
+                onClick = { onSelect("Todos") }
+            )
+        }
+        items(categories, key = { it }) { category ->
+            LabCategoryChip(
+                label = category,
+                selected = selectedCategory == category,
+                onClick = { onSelect(category) }
+            )
+        }
+    }
+}
+
+@Composable
+private fun LabCategoryChip(label: String, selected: Boolean, onClick: () -> Unit) {
+    val colors = MaterialTheme.colorScheme
+    val background = if (selected) colors.primary else colors.surfaceVariant
+    val textColor = if (selected) colors.onPrimary else colors.onSurfaceVariant
+    Surface(
+        color = background,
+        shape = RoundedCornerShape(999.dp),
+        shadowElevation = if (selected) 3.dp else 0.dp,
+        modifier = Modifier.clickable(onClick = onClick)
+    ) {
+        Text(
+            text = label,
+            color = textColor,
+            style = MaterialTheme.typography.labelLarge,
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)
+        )
+    }
+}
+
+@Composable
+private fun LabProductCard(
+    item: ItemBO,
+    baseCurrency: String,
+    accent: Color,
+    onClick: () -> Unit
+) {
+    val colors = MaterialTheme.colorScheme
+    val isDesktop = remember { getPlatformName() == "Desktop" }
+    var isHovered by remember { mutableStateOf(false) }
+    val showAction = !isDesktop || isHovered
+    val imageUrl = item.image?.trim().orEmpty()
+    Surface(
+        color = colors.surface,
+        shape = RoundedCornerShape(18.dp),
+        tonalElevation = 0.dp,
+        shadowElevation = 2.dp,
+        border = BorderStroke(1.dp, colors.outlineVariant),
+        modifier = Modifier
+            .pointerMoveFilter(
+                onEnter = {
+                    isHovered = true
+                    false
+                },
+                onExit = {
+                    isHovered = false
+                    false
+                }
+            )
+            .clickable(onClick = onClick)
+    ) {
+        Box {
+            Column(
+                modifier = Modifier.padding(14.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                if (imageUrl.isNotBlank()) {
+                    SubcomposeAsyncImage(
+                        model = ImageRequest.Builder(LocalPlatformContext.current)
+                            .data(imageUrl)
+                            .crossfade(true)
+                            .build(),
+                        contentDescription = item.name,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(92.dp)
+                            .clip(RoundedCornerShape(14.dp))
+                    )
+                } else {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(92.dp)
+                            .clip(RoundedCornerShape(14.dp))
+                            .background(colors.surfaceVariant),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = item.name.take(2).uppercase(),
+                            style = MaterialTheme.typography.labelLarge,
+                            color = colors.onSurfaceVariant
+                        )
+                    }
+                }
+
+                Text(
+                    text = item.name,
+                    style = MaterialTheme.typography.titleSmall,
+                    color = colors.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "${baseCurrency.toCurrencySymbol()} ${bd(item.price).toDouble(0)}",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = accent
+                    )
+                    Text(
+                        text = "Disp. ${item.actualQty.formatQty()}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = colors.onSurfaceVariant
+                    )
+                }
+            }
+
+            if (showAction) {
+                Surface(
+                    color = accent,
+                    shape = RoundedCornerShape(10.dp),
+                    shadowElevation = 4.dp,
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(12.dp)
+                        .clickable(onClick = onClick)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Add,
+                        contentDescription = "Agregar",
+                        tint = colors.onPrimary,
+                        modifier = Modifier.padding(6.dp)
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun LabCartHeader(
+    itemCount: Int,
+    accent: Color
+) {
+    val colors = MaterialTheme.colorScheme
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Surface(
+                color = accent,
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Money,
+                    contentDescription = null,
+                    tint = Color.White,
+                    modifier = Modifier.padding(8.dp)
+                )
+            }
+            Spacer(Modifier.width(10.dp))
+            Column {
+                Text(
+                    text = "Orden actual",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = colors.onSurface
+                )
+                Text(
+                    text = "$itemCount items",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = colors.onSurfaceVariant
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun LabCartItem(
+    item: CartItem,
+    baseCurrency: String,
+    onUpdateQuantity: (Double) -> Unit,
+    onRemove: () -> Unit
+) {
+    val colors = MaterialTheme.colorScheme
+    val isDesktop = remember { getPlatformName() == "Desktop" }
+    var isHovered by remember { mutableStateOf(false) }
+    val showActions = !isDesktop || isHovered
+    Surface(
+        color = colors.surfaceVariant,
+        shape = RoundedCornerShape(12.dp),
+        border = BorderStroke(1.dp, colors.outlineVariant),
+        modifier = Modifier.pointerMoveFilter(
+            onEnter = {
+                isHovered = true
+                false
+            },
+            onExit = {
+                isHovered = false
+                false
+            }
+        )
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = item.name,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = colors.onSurface,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    text = "${baseCurrency.toCurrencySymbol()}${bd(item.price).toDouble(0)}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = colors.onSurfaceVariant
+                )
+            }
+
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                if (showActions) {
+                    IconButton(onClick = { onUpdateQuantity((item.quantity - 1).coerceAtLeast(1.0)) }) {
+                        Icon(Icons.Default.Remove, contentDescription = "Menos")
+                    }
+                }
+                Text(
+                    text = item.quantity.formatQty(),
+                    style = MaterialTheme.typography.labelLarge.copy(fontSize = 14.sp),
+                    color = colors.onSurface
+                )
+                if (showActions) {
+                    IconButton(onClick = { onUpdateQuantity(item.quantity + 1) }) {
+                        Icon(Icons.Default.Add, contentDescription = "Más")
+                    }
+                }
+                Text(
+                    text = "${baseCurrency.toCurrencySymbol()}${
+                        bd((item.price * item.quantity)).toDouble(
+                            0
+                        )
+                    }",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = colors.onSurface
+                )
+                if (showActions) {
+                    IconButton(onClick = onRemove) {
+                        Icon(Icons.Default.Delete, contentDescription = "Eliminar")
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun LabTotalsCard(
+    baseCurrency: String,
+    subtotal: Double,
+    taxes: Double
+) {
+    val colors = MaterialTheme.colorScheme
+    Surface(
+        color = colors.surface,
+        shape = RoundedCornerShape(16.dp),
+        border = BorderStroke(1.dp, colors.outlineVariant)
+    ) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            SummaryRow("Subtotal", baseCurrency, subtotal)
+            if (taxes > 0.0) {
+                SummaryRow("Impuestos", baseCurrency, taxes)
+            }
+        }
     }
 }
 
@@ -306,7 +990,10 @@ private fun BillingContent(
         Button(
             onClick = action.onFinalizeSale,
             modifier = Modifier.fillMaxWidth(),
-            enabled = state.selectedCustomer != null && state.cartItems.isNotEmpty() && (state.isCreditSale || state.paidAmountBase >= state.total) && (!state.isCreditSale || state.selectedPaymentTerm != null)
+            enabled = state.selectedCustomer != null &&
+                    state.cartItems.isNotEmpty() &&
+                    (state.isCreditSale || state.paidAmountBase + 0.01 >= state.total) &&
+                    (!state.isCreditSale || state.selectedPaymentTerm != null)
         ) {
             Text("Finalizar venta")
         }
@@ -658,7 +1345,8 @@ private fun ProductSelector(
                                             .crossfade(true).build()
                                     },
                                     contentDescription = item.name,
-                                    modifier = Modifier.size(40.dp).clip(MaterialTheme.shapes.small),
+                                    modifier = Modifier.size(40.dp)
+                                        .clip(MaterialTheme.shapes.small),
                                     contentScale = ContentScale.Crop
                                 )
                                 Column {
@@ -877,6 +1565,25 @@ private fun SummaryRow(label: String, symbol: String, amount: Double, bold: Bool
 }
 
 @Composable
+private fun PaymentTotalsRow(label: String, symbol: String, amount: Double) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Text(
+            text = formatAmount(symbol.toCurrencySymbol(), amount),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurface
+        )
+    }
+}
+
+@Composable
 private fun TotalsPaymentsSheet(
     state: BillingState.Success, action: BillingAction
 ) {
@@ -971,6 +1678,11 @@ private fun PaymentSection(
     var amountValue by remember { mutableStateOf(0.0) }
     var rateInput by remember { mutableStateOf("1.0") }
     var referenceInput by remember { mutableStateOf("") }
+    val successState = state as? BillingState.Success
+    val subtotalAmount = successState?.subtotal ?: 0.0
+    val taxesAmount = successState?.taxes ?: 0.0
+    val discountAmount = successState?.discount ?: 0.0
+    val shippingAmount = successState?.shippingAmount ?: 0.0
 
     LaunchedEffect(selectedMode, modeCurrency, baseCurrency) {
         selectedCurrency = modeCurrency?.trim()?.uppercase() ?: baseCurrency
@@ -991,6 +1703,73 @@ private fun PaymentSection(
         referenceInput = ""
     }
     Column(modifier = Modifier.padding(end = 12.dp, start = 12.dp, bottom = 8.dp)) {
+        Surface(
+            shape = RoundedCornerShape(16.dp),
+            tonalElevation = 2.dp,
+            shadowElevation = 0.dp,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text(
+                    text = "Total",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                    text = formatAmount(baseCurrency.toCurrencySymbol(), totalAmount),
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(Modifier.height(4.dp))
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    PaymentTotalsRow("Subtotal", baseCurrency, subtotalAmount)
+                    if (taxesAmount > 0.0) {
+                        PaymentTotalsRow("Impuestos", baseCurrency, taxesAmount)
+                    }
+                    if (discountAmount > 0.0) {
+                        PaymentTotalsRow("Descuento", baseCurrency, -discountAmount)
+                    }
+                    if (shippingAmount > 0.0) {
+                        PaymentTotalsRow("Envío", baseCurrency, shippingAmount)
+                    }
+                }
+                Spacer(Modifier.height(4.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column {
+                        Text(
+                            text = "Pendiente",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Text(
+                            text = formatAmount(baseCurrency.toCurrencySymbol(), balanceDueBase),
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                    Column(horizontalAlignment = Alignment.End) {
+                        Text(
+                            text = "Cambio",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Text(
+                            text = formatAmount(baseCurrency.toCurrencySymbol(), changeDueBase),
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                }
+            }
+        }
+
+        Spacer(Modifier.height(12.dp))
 
         /*if (isCreditSale) {
             Text(
@@ -1128,6 +1907,32 @@ private fun PaymentSection(
         )*/
 
         Spacer(Modifier.height(12.dp))
+        val rateValue = rateInput.toDoubleOrNull() ?: 0.0
+        val exactAmount = if (rateValue > 0.0) balanceDueBase / rateValue else balanceDueBase
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            OutlinedButton(
+                onClick = {
+                    val rounded = if (exactAmount > 0.0) exactAmount else 0.0
+                    amountInput = rounded.toString()
+                    amountValue = rounded
+                },
+                modifier = Modifier.weight(1f)
+            ) {
+                Text("Pago exacto")
+            }
+            OutlinedButton(
+                onClick = {
+                    amountInput = ""
+                    amountValue = 0.0
+                },
+                modifier = Modifier.weight(1f)
+            ) {
+                Text("Limpiar")
+            }
+        }
 
         if (requiresReference) {
             AppTextField(
@@ -1151,14 +1956,12 @@ private fun PaymentSection(
         Row(
             modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            //val amountValue = amountInput.toDoubleOrNull()
-            val rateValue = rateInput.toDoubleOrNull()
             val canAdd =
-                amountValue > 0.0 && (rateValue != null && rateValue > 0.0) && selectedMode.isNotBlank() && (!requiresReference || referenceInput.isNotBlank()) && (paidAmountBase < totalAmount) // <- Para evitar sobre pago
+                amountValue > 0.0 && rateValue > 0.0 && selectedMode.isNotBlank() && (!requiresReference || referenceInput.isNotBlank()) && (paidAmountBase < totalAmount) // <- Para evitar sobre pago
 
             Button(
                 onClick = {
-                    val rate = if (selectedCurrency == baseCurrency) 1.0 else (rateValue ?: 1.0)
+                    val rate = if (selectedCurrency == baseCurrency) 1.0 else rateValue
                     onAddPaymentLine(
                         PaymentLine(
                             modeOfPayment = selectedMode,

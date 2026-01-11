@@ -264,6 +264,8 @@ fun SalesInvoiceEntity.toBO(): SalesInvoiceBO {
         total = this.grandTotal,
         customerId = this.customer,
         postingDate = this.postingDate,
+        customExchangeRate = customExchangeRate,
+        conversionRate = conversionRate,
         partyAccountCurrency = this.partyAccountCurrency
     )
 }
@@ -293,6 +295,8 @@ fun SalesInvoiceWithItemsAndPayments.toBO(): SalesInvoiceBO {
         syncStatus = invoice.syncStatus,
         items = items.toBO(),
         payments = payments.toBO(),
+        customExchangeRate = invoice.customExchangeRate,
+        conversionRate = invoice.conversionRate,
         partyAccountCurrency = invoice.partyAccountCurrency
     )
 }

@@ -18,6 +18,8 @@ data class SalesInvoiceBO(
     val currency: String?,
     val status: String?,
     val syncStatus: String? = "Pending",
+    val conversionRate: Double? = null,
+    val customExchangeRate: Double? = null,
     val items: List<SalesInvoiceItemsBO> = emptyList(),
     val payments: List<SalesInvoicePaymentsBO> = emptyList(),
     val partyAccountCurrency: String? = null

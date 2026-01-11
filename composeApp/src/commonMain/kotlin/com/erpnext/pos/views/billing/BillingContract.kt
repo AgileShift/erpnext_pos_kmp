@@ -126,6 +126,7 @@ data class BillingAction(
     val onManualDiscountPercentChanged: (String) -> Unit = {},
     val onDeliveryChargeSelected: (DeliveryChargeBO?) -> Unit = {},
     val onPaymentCurrencySelected: (String) -> Unit = {},
+    val onOpenLab: () -> Unit = {},
     val onClearSuccessMessage: () -> Unit = {},
     val onBack: () -> Unit = {},
     val onLinkSource: (SalesFlowSource, String) -> Unit = { _, _ -> },

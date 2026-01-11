@@ -19,6 +19,7 @@ import com.erpnext.pos.remoteSource.mapper.toDto
 import com.erpnext.pos.utils.buildPaymentModeDetailMap
 import com.erpnext.pos.utils.formatDoubleToString
 import com.erpnext.pos.utils.normalizeCurrency
+import com.erpnext.pos.utils.resolvePaymentToReceivableRate
 import com.erpnext.pos.utils.roundToCurrency
 import com.erpnext.pos.utils.toCurrencySymbol
 import com.erpnext.pos.utils.toErpDateTime
@@ -291,10 +292,9 @@ class CustomerViewModel(
                     ?: normalizeCurrency(context.currency)
                     ?: "USD"
                 val receivableCurrency = normalizeCurrency(invoice.partyAccountCurrency)
-                    ?: invoiceCurrency
-
-                val paidFromAccount = invoice.debitTo?.takeIf { it.isNotBlank() }
-                    ?: error("No se pudo resolver la cuenta de débito (debit_to).")
+                    ?: normalizeCurrency(context.partyAccountCurrency)
+                    ?: normalizeCurrency(invoice.currency)
+                    ?: "USD"
 
                 val normalizedInvoiceCurrency = normalizeCurrency(invoiceCurrency) ?: "USD"
                 if (!normalizedInvoiceCurrency.equals(paymentRateCacheCurrency, ignoreCase = true)) {
@@ -355,11 +355,32 @@ class CustomerViewModel(
                     baseAmountCurrency = invoiceCurrency
                 )
 
-                val outstanding = invoice.outstandingAmount.coerceAtLeast(0.0)
-                val appliedAmount = fixedLine.baseAmount.coerceAtMost(outstanding)
-                val changeBase = (fixedLine.baseAmount - appliedAmount).takeIf { it > 0.0 }
-                val changeInPaymentCurrency = changeBase?.let { change ->
-                    if (fixedLine.exchangeRate > 0.0) change / fixedLine.exchangeRate else null
+                val invoiceCurrencyResolved = normalizeCurrency(invoice.currency)
+                    ?: normalizeCurrency(context.currency)
+                    ?: receivableCurrency
+                val invoiceToReceivableRate = when {
+                    invoiceCurrencyResolved.equals(receivableCurrency, ignoreCase = true) -> 1.0
+                    invoice.conversionRate != null && (invoice.customExchangeRate ?: 0.0) > 0.0 ->
+                        invoice.conversionRate
+                    invoice.customExchangeRate != null && (invoice.customExchangeRate ?: 0.0) > 0.0 ->
+                        invoice.customExchangeRate
+                    else -> null
+                }
+
+                val outstandingRc = invoice.outstandingAmount.coerceAtLeast(0.0)
+                val fixedLineRc = invoiceToReceivableRate?.let { fixedLine.baseAmount * it }
+                    ?: fixedLine.baseAmount
+                val appliedRc = fixedLineRc.coerceAtMost(outstandingRc)
+                val changeRc = (fixedLineRc - appliedRc).takeIf { it > 0.0 }
+                val paymentToReceivableRate = resolvePaymentToReceivableRate(
+                    paymentCurrency = fixedLine.currency,
+                    invoiceCurrency = invoiceCurrencyResolved,
+                    receivableCurrency = receivableCurrency,
+                    paymentToInvoiceRate = fixedLine.exchangeRate,
+                    invoiceToReceivableRate = invoiceToReceivableRate
+                )
+                val changeInPaymentCurrency = changeRc?.let { change ->
+                    paymentToReceivableRate?.takeIf { it > 0.0 }?.let { change / it }
                 }
 
                 val baseCurrencyForChange = normalizeCurrency(enteredCurrency)

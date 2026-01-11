@@ -29,6 +29,7 @@ class BillingCoordinator(val viewModel: BillingViewModel) {
     fun onDeliveryChargeSelected(charge: com.erpnext.pos.domain.models.DeliveryChargeBO?) =
         viewModel.onDeliveryChargeSelected(charge)
     fun onPaymentCurrencySelected(currency: String) = viewModel.onPaymentCurrencySelected(currency)
+    fun onOpenLab() = viewModel.onOpenLab()
     fun onClearSuccessMessage() = viewModel.onClearSuccessMessage()
     fun onBack() = viewModel.onBack()
     fun onLinkSource(sourceType: SalesFlowSource, sourceId: String) =

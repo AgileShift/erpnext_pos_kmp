@@ -17,6 +17,7 @@ import com.erpnext.pos.remoteSource.mapper.toDto
 import com.erpnext.pos.remoteSource.mapper.toEntities
 import com.erpnext.pos.remoteSource.mapper.toEntity
 import com.erpnext.pos.utils.RepoTrace
+import com.erpnext.pos.utils.AppLogger
 import com.erpnext.pos.utils.roundToCurrency
 import com.erpnext.pos.views.CashBoxManager
 import kotlinx.coroutines.flow.Flow
@@ -60,6 +61,10 @@ class SalesInvoiceRepository(
         payments: List<POSInvoicePaymentEntity>
     ) {
         RepoTrace.breadcrumb("SalesInvoiceRepository", "saveInvoiceLocally", invoice.invoiceName)
+        if (invoice.invoiceName.isNullOrBlank()) {
+            AppLogger.warn("SalesInvoiceRepository: invoice_name vacío; se omite guardar items/pagos.")
+            return
+        }
         localSource.saveInvoiceLocally(invoice, items, payments)
         localSource.refreshCustomerSummary(invoice.customer)
     }
@@ -77,6 +82,8 @@ class SalesInvoiceRepository(
         entity.invoice.modifiedAt = now
         val invoiceCurrency = dto.currency?.trim()?.uppercase()
         val receivableCurrency = dto.partyAccountCurrency?.trim()?.uppercase()
+        val providedRate = dto.conversionRate
+            ?: dto.customExchangeRate
         if (!invoiceCurrency.isNullOrBlank() &&
             !receivableCurrency.isNullOrBlank() &&
             !invoiceCurrency.equals(receivableCurrency, ignoreCase = true)
@@ -102,7 +109,18 @@ class SalesInvoiceRepository(
                 entity.invoice.outstandingAmount =
                     roundToCurrency(entity.invoice.outstandingAmount * fallbackRate)
                 entity.invoice.paidAmount = roundToCurrency(entity.invoice.paidAmount * fallbackRate)
+                entity.invoice.conversionRate = providedRate ?: fallbackRate
+                entity.invoice.customExchangeRate = dto.customExchangeRate ?: fallbackRate
             }
+        }
+        if (entity.invoice.conversionRate == null && providedRate != null && providedRate > 0.0) {
+            entity.invoice.conversionRate = providedRate
+        }
+        if (entity.invoice.customExchangeRate == null &&
+            dto.customExchangeRate != null &&
+            dto.customExchangeRate > 0.0
+        ) {
+            entity.invoice.customExchangeRate = dto.customExchangeRate
         }
         entity.items.forEach { it.parentInvoice = localInvoiceName }
         entity.payments.forEach { it.parentInvoice = localInvoiceName }
@@ -201,6 +219,8 @@ class SalesInvoiceRepository(
             dueDate = remote.dueDate,
             currency = remote.currency ?: "NIO",
             partyAccountCurrency = remote.partyAccountCurrency,
+            conversionRate = remote.conversionRate ?: remote.customExchangeRate,
+            customExchangeRate = remote.customExchangeRate,
             netTotal = remote.netTotal,
             taxTotal = remote.totalTaxesAndCharges ?: 0.0,
             grandTotal = remote.grandTotal,
@@ -239,8 +259,13 @@ class SalesInvoiceRepository(
         pending.forEach { invoice ->
             try {
                 val dto = invoice.toDto()
-                createRemoteInvoice(dto)
-                markAsSynced(invoice.invoice.invoiceName ?: "")
+                val created = createRemoteInvoice(dto)
+                val localName = invoice.invoice.invoiceName ?: ""
+                if (created.name != null && created.name != localName) {
+                    updateLocalInvoiceFromRemote(localName, created)
+                } else {
+                    markAsSynced(localName)
+                }
             } catch (e: Exception) {
                 RepoTrace.capture("SalesInvoiceRepository", "syncPendingInvoices", e)
                 markAsFailed(invoice.invoice.invoiceName ?: "")
@@ -273,6 +298,17 @@ class SalesInvoiceRepository(
     override suspend fun countPending(): Int = localSource.countAllPendingSync()
 
     suspend fun getOutstandingInvoicesForCustomer(customerName: String): List<SalesInvoiceBO> {
+        val remoteInvoices = runCatching {
+            remoteSource.fetchOutstandingInvoicesForCustomer(customerName)
+        }.getOrNull()
+
+        if (!remoteInvoices.isNullOrEmpty()) {
+            val entities = remoteInvoices.toEntities()
+            entities.forEach { payload ->
+                saveInvoiceLocally(payload.invoice, payload.items, payload.payments)
+            }
+        }
+
         return localSource.getOutstandingInvoicesForCustomer(customerName).toBO()
     }
 }

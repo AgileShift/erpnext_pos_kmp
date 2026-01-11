@@ -911,6 +911,10 @@ class BillingViewModel(
         navManager.navigateTo(NavRoute.NavigateUp)
     }
 
+    fun onOpenLab() {
+        navManager.navigateTo(NavRoute.BillingLab)
+    }
+
     private fun recalculateTotals(current: BillingState.Success): BillingState.Success {
         val totals = calculateTotals(current)
         return current.copy(
@@ -1215,12 +1219,13 @@ class BillingViewModel(
         // No crédito: debe pagar todo
         val total = roundToCurrency(current.total)
         val paid = roundToCurrency(current.paidAmountBase)
+        val tolerance = 0.01
 
-        if (!current.isCreditSale && paid + 0.0001 < total)
+        if (!current.isCreditSale && paid + tolerance < total)
             return "El monto pagado debe cubrir el total antes de finalizar la venta."
 
         // Crédito: puede pagar parcial, pero no exceder total
-        if (current.isCreditSale && paid > total + 0.0001)
+        if (current.isCreditSale && paid > total + tolerance)
             return "El pago no puede exceder el total en una venta a crédito."
 
         /*if (current.isCreditSale && current.paymentLines.isNotEmpty()) {

@@ -31,6 +31,8 @@ interface IInvoiceLocalSource {
         invoice: SalesInvoiceEntity,
         payments: List<POSInvoicePaymentEntity>
     )
+    suspend fun getPendingPayments(): List<POSInvoicePaymentEntity>
+    suspend fun updatePaymentSyncStatus(paymentId: Int, status: String, syncedAt: Long)
     suspend fun getPaymentsForInvoice(invoiceName: String): List<POSInvoicePaymentEntity>
     suspend fun refreshCustomerSummary(customerId: String)
 
@@ -98,6 +100,14 @@ class InvoiceLocalSource(
         salesInvoiceDao.applyPayments(invoice, payments)
     }
 
+    override suspend fun getPendingPayments(): List<POSInvoicePaymentEntity> {
+        return salesInvoiceDao.getPendingPayments()
+    }
+
+    override suspend fun updatePaymentSyncStatus(paymentId: Int, status: String, syncedAt: Long) {
+        salesInvoiceDao.updatePaymentSyncStatus(paymentId, status, syncedAt)
+    }
+
     override suspend fun getPaymentsForInvoice(invoiceName: String): List<POSInvoicePaymentEntity> {
         return salesInvoiceDao.getPaymentsForInvoice(invoiceName)
     }
@@ -111,6 +121,8 @@ class InvoiceLocalSource(
         dueDate: String?,
         currency: String,
         partyAccountCurrency: String?,
+        conversionRate: Double?,
+        customExchangeRate: Double?,
         netTotal: Double,
         taxTotal: Double,
         grandTotal: Double,
@@ -133,6 +145,8 @@ class InvoiceLocalSource(
             dueDate = dueDate,
             currency = currency,
             partyAccountCurrency = partyAccountCurrency,
+            conversionRate = conversionRate,
+            customExchangeRate = customExchangeRate,
             netTotal = netTotal,
             taxTotal = taxTotal,
             grandTotal = grandTotal,

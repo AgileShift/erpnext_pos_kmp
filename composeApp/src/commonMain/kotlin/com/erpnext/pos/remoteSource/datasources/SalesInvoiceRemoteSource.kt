@@ -26,6 +26,10 @@ class SalesInvoiceRemoteSource(
         runCatching { apiService.getSalesInvoiceByName(name) }.getOrNull()
     //apiService.getInvoiceDetail(name, baseUrl, headers)
 
+    suspend fun fetchOutstandingInvoicesForCustomer(customerName: String): List<SalesInvoiceDto> {
+        return apiService.getCustomerOutstanding(customerName).pendingInvoices
+    }
+
     suspend fun createInvoice(invoice: SalesInvoiceDto): SalesInvoiceDto =
         apiService.createSalesInvoice(invoice)
 

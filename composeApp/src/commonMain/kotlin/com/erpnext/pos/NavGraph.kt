@@ -9,6 +9,7 @@ import androidx.navigation.compose.composable
 import androidx.savedstate.read
 import com.erpnext.pos.navigation.NavRoute
 import com.erpnext.pos.views.billing.BillingRoute
+import com.erpnext.pos.views.billing.BillingLabRoute
 import com.erpnext.pos.views.customer.CustomerRoute
 import com.erpnext.pos.views.deliverynote.DeliveryNoteRoute
 import com.erpnext.pos.views.home.HomeRoute
@@ -44,6 +45,9 @@ object NavGraph {
             }
             composable(NavRoute.Billing.path) {
                 BillingRoute()
+            }
+            composable(NavRoute.BillingLab.path) {
+                BillingLabRoute()
             }
             composable(NavRoute.Customer.path) {
                 CustomerRoute()

@@ -2,7 +2,9 @@ package com.erpnext.pos.domain.usecases
 
 import com.erpnext.pos.data.repositories.SalesInvoiceRepository
 import com.erpnext.pos.domain.repositories.ISaleInvoiceRepository
+import com.erpnext.pos.domain.utils.UUIDGenerator
 import com.erpnext.pos.localSource.entities.POSInvoicePaymentEntity
+import com.erpnext.pos.utils.view.DateTimeProvider
 
 data class RegisterInvoicePaymentInput(
     val invoiceId: String,
@@ -29,7 +31,12 @@ class RegisterInvoicePaymentUseCase(
         val payment = POSInvoicePaymentEntity(
             parentInvoice = invoice.invoiceName ?: input.invoiceId,
             modeOfPayment = input.modeOfPayment,
-            amount = input.amount
+            amount = input.amount,
+            enteredAmount = input.amount,
+            paymentCurrency = invoice.currency ?: invoice.partyAccountCurrency,
+            exchangeRate = 1.0,
+            paymentReference = "POSPAY-${UUIDGenerator().newId()}",
+            paymentDate = DateTimeProvider.todayDate()
         )
 
         repository.applyLocalPayment(invoice, listOf(payment))

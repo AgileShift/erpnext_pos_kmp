@@ -1,5 +1,8 @@
+@file:OptIn(ExperimentalMaterial3Api::class)
+
 package com.erpnext.pos.views.settings
 
+import AppColorTheme
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -44,28 +47,29 @@ import org.koin.compose.koinInject
 @Preview(showBackground = true, name = "Settings Screen")
 @Composable
 fun SettingsScreenPreview() {
-    PosSettingsScreen(
-        POSSettingState.Success(
-            POSSettingBO(
-                "Clothing Center",
-                "Main",
-                "Main",
-                "Standar Price List",
-                taxesIncluded = false,
-                offlineMode = true,
-                printerEnabled = true,
-                cashDrawerEnabled = true
-            ),
-            syncSettings = com.erpnext.pos.localSource.preferences.SyncSettings(
-                autoSync = true,
-                syncOnStartup = true,
-                wifiOnly = false,
-                lastSyncAt = null
-            ),
-            syncState = com.erpnext.pos.sync.SyncState.IDLE,
-            language = AppLanguage.Spanish
-        ), POSSettingAction()
-    )
+        PosSettingsScreen(
+            POSSettingState.Success(
+                POSSettingBO(
+                    "Clothing Center",
+                    "Main",
+                    "Main",
+                    "Standar Price List",
+                    taxesIncluded = false,
+                    offlineMode = true,
+                    printerEnabled = true,
+                    cashDrawerEnabled = true
+                ),
+                syncSettings = com.erpnext.pos.localSource.preferences.SyncSettings(
+                    autoSync = true,
+                    syncOnStartup = true,
+                    wifiOnly = false,
+                    lastSyncAt = null
+                ),
+                syncState = com.erpnext.pos.sync.SyncState.IDLE,
+                language = AppLanguage.Spanish,
+                theme = AppColorTheme.Noir
+            ), POSSettingAction()
+        )
 }
 
 @Composable
@@ -156,6 +160,10 @@ fun PosSettingsScreen(
                         LanguageSelector(
                             currentLanguage = state.language,
                             onLanguageSelected = action.onLanguageSelected
+                        )
+                        ThemeSelector(
+                            currentTheme = state.theme,
+                            onThemeSelected = action.onThemeSelected
                         )
                         Text(
                             text = strings.settings.languageInstantHint,
@@ -346,6 +354,35 @@ private fun LanguageSelector(
                     expanded = false
                 }
             )
+        }
+    }
+}
+
+@Composable
+private fun ThemeSelector(
+    currentTheme: AppColorTheme,
+    onThemeSelected: (AppColorTheme) -> Unit
+) {
+    var expanded by remember { mutableStateOf(false) }
+    ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = it }) {
+        OutlinedTextField(
+            value = currentTheme.label,
+            onValueChange = {},
+            readOnly = true,
+            label = { Text("Tema") },
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+            modifier = Modifier.fillMaxWidth().menuAnchor()
+        )
+        ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            AppColorTheme.values().forEach { theme ->
+                DropdownMenuItem(
+                    text = { Text(theme.label) },
+                    onClick = {
+                        onThemeSelected(theme)
+                        expanded = false
+                    }
+                )
+            }
         }
     }
 }

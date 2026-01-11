@@ -16,18 +16,6 @@ import com.erpnext.pos.data.repositories.PaymentEntryRepository
 import com.erpnext.pos.data.repositories.SalesInvoiceRepository
 import com.erpnext.pos.data.repositories.UserRepository
 import com.erpnext.pos.data.repositories.ExchangeRateRepository
-import com.erpnext.pos.data.repositories.v2.CatalogRepository
-import com.erpnext.pos.data.repositories.v2.CatalogSyncRepository
-import com.erpnext.pos.data.repositories.v2.ContextRepository
-import com.erpnext.pos.data.repositories.v2.CustomerRepository as V2CustomerRepository
-import com.erpnext.pos.data.repositories.v2.DeliveryNoteRepository
-import com.erpnext.pos.data.repositories.v2.PaymentEntryRepository as V2PaymentEntryRepository
-import com.erpnext.pos.data.repositories.v2.QuotationRepository
-import com.erpnext.pos.data.repositories.v2.SalesInvoiceRepository as V2SalesInvoiceRepository
-import com.erpnext.pos.data.repositories.v2.SalesInvoiceRemoteRepository
-import com.erpnext.pos.data.repositories.v2.SalesOrderRepository
-import com.erpnext.pos.data.repositories.v2.SourceDocumentRepository
-import com.erpnext.pos.data.repositories.v2.SyncRepository
 import com.erpnext.pos.domain.repositories.IPOSRepository
 import com.erpnext.pos.domain.repositories.IUserRepository
 import com.erpnext.pos.domain.usecases.AdjustLocalInventoryUseCase
@@ -62,7 +50,6 @@ import com.erpnext.pos.domain.policy.DatePolicy
 import com.erpnext.pos.domain.policy.DefaultPolicy
 import com.erpnext.pos.domain.policy.PolicyInput
 import com.erpnext.pos.domain.usecases.GetCompanyInfoUseCase
-import com.erpnext.pos.domain.usecases.v2.LoadSourceDocumentsUseCase
 import com.erpnext.pos.domain.usecases.UpdateLocalInvoiceFromRemoteUseCase
 import com.erpnext.pos.localSource.datasources.CustomerLocalSource
 import com.erpnext.pos.localSource.datasources.InventoryLocalSource
@@ -75,6 +62,7 @@ import com.erpnext.pos.localSource.datasources.POSProfileLocalSource
 import com.erpnext.pos.localSource.preferences.ExchangeRatePreferences
 import com.erpnext.pos.localSource.preferences.LanguagePreferences
 import com.erpnext.pos.localSource.preferences.SyncPreferences
+import com.erpnext.pos.localSource.preferences.ThemePreferences
 import com.erpnext.pos.navigation.NavigationManager
 import com.erpnext.pos.remoteSource.api.APIService
 import com.erpnext.pos.remoteSource.api.defaultEngine
@@ -95,6 +83,7 @@ import com.erpnext.pos.sync.LegacyPushSyncManager
 import com.erpnext.pos.sync.PushSyncRunner
 import com.erpnext.pos.sync.SyncContextProvider
 import com.erpnext.pos.sync.SyncManager
+import com.erpnext.pos.di.v2.appModulev2
 import com.erpnext.pos.utils.AppLogger
 import com.erpnext.pos.utils.AppSentry
 import com.erpnext.pos.utils.prefsPath
@@ -116,6 +105,8 @@ import com.erpnext.pos.views.paymententry.PaymentEntryViewModel
 import com.erpnext.pos.views.salesflow.SalesFlowContextStore
 import com.erpnext.pos.views.payment.PaymentHandler
 import com.erpnext.pos.auth.TokenHeartbeat
+import com.erpnext.pos.data.repositories.v2.SourceDocumentRepository
+import com.erpnext.pos.domain.usecases.v2.LoadSourceDocumentsUseCase
 import io.ktor.client.HttpClient
 import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.plugins.auth.Auth
@@ -234,7 +225,7 @@ val appModule = module {
             scope = get(),
             sessionRefresher = get(),
             networkMonitor = get()
-        ).apply { start(intervalMinutes = 4) }
+        ).apply { start(intervalMinutes = 5) }
     }
     single {
         PaymentHandler(
@@ -253,6 +244,7 @@ val appModule = module {
     single { ExchangeRatePreferences(get()) }
     single { LanguagePreferences(get()) }
     single { SyncPreferences(get()) }
+    single { ThemePreferences(get()) }
     single<DatePolicy> { DefaultPolicy(PolicyInput()) }
     single<CashBoxManager> {
         CashBoxManager(
@@ -270,7 +262,16 @@ val appModule = module {
     }
     single(named("apiServiceV2")) { APIServiceV2(get(), get(), get()) }
 
-    single<PushSyncRunner> { LegacyPushSyncManager(get()) }
+    single<PushSyncRunner> {
+        LegacyPushSyncManager(
+            invoiceRepository = get(),
+            invoiceLocalSource = get(),
+            modeOfPaymentDao = get(),
+            paymentEntryUseCase = get(),
+            exchangeRateRepository = get(),
+            cashBoxManager = get()
+        )
+    }
     single { SyncContextProvider(get(), get()) }
     single<SyncManager> {
         SyncManager(
@@ -383,35 +384,11 @@ val appModule = module {
     single { PaymentEntryViewModel(get(), get()) }
     //endregion
 
-    //region v2 Sync DAO/Repositories
-    single { CatalogRepository(get()) }
-    single { CatalogSyncRepository(get(), get(named("apiServiceV2"))) }
-    single { ContextRepository(get(), get(named("apiServiceV2"))) }
-    single {
-        V2CustomerRepository(
-            get(),
-            get(),
-            get(),
-            get(),
-            get(),
-            get(),
-            get(named("apiServiceV2"))
-        )
-    }
-    single { SalesInvoiceLocalAdapter(get()) }
-    single { SalesInvoiceRemoteRepository(get(named("apiServiceV2")), get()) }
-    single { V2SalesInvoiceRepository(get(), get(), get(), get(named("apiServiceV2"))) }
-    single { QuotationRepository(get(), get(), get(), get(named("apiServiceV2"))) }
-    single { SalesOrderRepository(get(), get(), get(), get(named("apiServiceV2"))) }
-    single { DeliveryNoteRepository(get(), get(), get(named("apiServiceV2"))) }
-    single { V2PaymentEntryRepository(get(), get(), get(named("apiServiceV2"))) }
-    single { SyncRepository(get(), get()) }
-    //endregion
-
     //region Checkout
-    single(named("apiServiceV2")) { APIServiceV2(get(), get(), get()) }
+    //single(named("apiServiceV2")) { APIServiceV2(get(), get(), get()) }
     single { SourceDocumentRepository(get(named("apiServiceV2"))) }
     single { LoadSourceDocumentsUseCase(get()) }
+
     single { AdjustLocalInventoryUseCase(get()) }
     single { PaymentEntryRepository(get(named("apiService"))) }
     single {
@@ -440,7 +417,7 @@ val appModule = module {
     //endregion
 
     //region Settings
-    single { SettingsViewModel(get(), get(), get()) }
+    single { SettingsViewModel(get(), get(), get(), get()) }
     //endregion
 
     //region UseCases DI
@@ -480,7 +457,7 @@ fun initKoin(
 ) {
     startKoin {
         config?.invoke(this)
-        modules(appModule + modules)
+        modules(appModule + appModulev2 + modules)
         koin.get<AppDatabase> { parametersOf(builder) }
     }
 }

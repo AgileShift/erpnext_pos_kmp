@@ -5,6 +5,7 @@ import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
 import com.erpnext.pos.di.appModule
+import com.erpnext.pos.di.v2.appModulev2
 import org.koin.compose.KoinApplication
 import org.koin.core.logger.Level
 
@@ -28,6 +29,7 @@ fun main() = application {
             printLogger(Level.DEBUG)
             modules(
                 appModule,
+                appModulev2,
                 desktopModule
             )
         }) {

@@ -205,6 +205,9 @@ fun buildLocalPayments(
             parentInvoice = invoiceId,
             modeOfPayment = line.modeOfPayment,
             amount = line.baseAmount,
+            enteredAmount = line.enteredAmount,
+            paymentCurrency = line.currency,
+            exchangeRate = line.exchangeRate,
             paymentReference = line.referenceNumber?.takeIf { it.isNotBlank() },
             paymentDate = postingDate
         )
@@ -282,6 +285,29 @@ fun isSameMoneyAmount(a: Double, b: Double, decimals: Int): Boolean {
     return ra == rb
 }
 
+fun resolvePaymentToReceivableRate(
+    paymentCurrency: String?,
+    invoiceCurrency: String?,
+    receivableCurrency: String?,
+    paymentToInvoiceRate: Double?,
+    invoiceToReceivableRate: Double?
+): Double? {
+    val pay = normalizeCurrency(paymentCurrency) ?: return null
+    val rc = normalizeCurrency(receivableCurrency) ?: return null
+    if (pay.equals(rc, ignoreCase = true)) return 1.0
+
+    val inv = normalizeCurrency(invoiceCurrency) ?: rc
+    val payToInv = paymentToInvoiceRate?.takeIf { it > 0.0 }
+    val invToRc = invoiceToReceivableRate?.takeIf { it > 0.0 }
+
+    return when {
+        pay.equals(inv, ignoreCase = true) -> invToRc
+        inv.equals(rc, ignoreCase = true) -> payToInv
+        payToInv != null && invToRc != null -> payToInv * invToRc
+        else -> null
+    }
+}
+
 suspend fun buildPaymentEntryDto(
     api: APIService,
     line: PaymentLine,
@@ -293,6 +319,8 @@ suspend fun buildPaymentEntryDto(
     outstandingRc: Double,
     paidFromAccount: String?,
     partyAccountCurrency: String?,
+    invoiceCurrency: String?,
+    invoiceToReceivableRate: Double?,
     exchangeRateByCurrency: Map<String, Double>,
     currencySpecs: Map<String, CurrencySpec>,
     paymentModeDetails: Map<String, ModeOfPaymentEntity>,
@@ -313,6 +341,9 @@ suspend fun buildPaymentEntryDto(
         ?: line.currency.takeIf { it.isNotBlank() }
         ?: error("No se pudo resolver moneda de paid_to"))
         .trim().uppercase()
+    val invoiceCurrencyResolved = normalizeCurrency(invoiceCurrency)
+        ?: normalizeCurrency(line.currency)
+        ?: receivableCurrency
 
     val rcSpec = currencySpecs[receivableCurrency]
         ?: CurrencySpec(code = receivableCurrency, minorUnits = 2, cashScale = 2)
@@ -374,11 +405,19 @@ suspend fun buildPaymentEntryDto(
     }
 
     // Caso 2: paid_to != receivable
-    val rateDouble = resolveExchangeRateBetween(
-        api = api,
-        fromCurrency = paidToCurrency,
-        toCurrency = receivableCurrency,
-    )?.takeIf { it > 0.0 }
+    val rateFromInputs = resolvePaymentToReceivableRate(
+        paymentCurrency = paidToCurrency,
+        invoiceCurrency = invoiceCurrencyResolved,
+        receivableCurrency = receivableCurrency,
+        paymentToInvoiceRate = line.exchangeRate,
+        invoiceToReceivableRate = invoiceToReceivableRate
+    )
+    val rateDouble = rateFromInputs
+        ?: resolveExchangeRateBetween(
+            api = api,
+            fromCurrency = paidToCurrency,
+            toCurrency = receivableCurrency,
+        )?.takeIf { it > 0.0 }
         ?: error("No se pudo resolver tasa $paidToCurrency -> $receivableCurrency")
 
     val rate = bd(rateDouble)
@@ -454,6 +493,8 @@ suspend fun buildPaymentEntryDtoWithRateResolver(
     outstandingRc: Double,
     paidFromAccount: String?,
     partyAccountCurrency: String?,
+    invoiceCurrency: String?,
+    invoiceToReceivableRate: Double?,
     exchangeRateByCurrency: Map<String, Double>,
     currencySpecs: Map<String, CurrencySpec>,
     paymentModeDetails: Map<String, ModeOfPaymentEntity>,
@@ -537,11 +578,25 @@ suspend fun buildPaymentEntryDtoWithRateResolver(
         )
     }
 
+    val invoiceCurrencyResolved = normalizeCurrency(invoiceCurrency)
+        ?: normalizeCurrency(line.currency)
+        ?: receivableCurrency
     // Caso 2: paid_to != receivable
-    // Priorizamos caché si la moneda destino es la receivable.
-    val cachedRate = exchangeRateByCurrency[paidToCurrency]
-        ?.takeIf { it > 0.0 && paidToCurrency != receivableCurrency }
-    val rateDouble = cachedRate
+    val rateFromInputs = resolvePaymentToReceivableRate(
+        paymentCurrency = paidToCurrency,
+        invoiceCurrency = invoiceCurrencyResolved,
+        receivableCurrency = receivableCurrency,
+        paymentToInvoiceRate = line.exchangeRate,
+        invoiceToReceivableRate = invoiceToReceivableRate
+    )
+    // Priorizamos caché solo cuando invoice == receivable (misma base de tasa).
+    val cachedRate = if (invoiceCurrencyResolved.equals(receivableCurrency, ignoreCase = true)) {
+        exchangeRateByCurrency[paidToCurrency]?.takeIf { it > 0.0 }
+    } else {
+        null
+    }
+    val rateDouble = rateFromInputs
+        ?: cachedRate
         ?: rateResolver(paidToCurrency, receivableCurrency)
             ?.takeIf { it > 0.0 }
         ?: error("No se pudo resolver tasa $paidToCurrency -> $receivableCurrency")

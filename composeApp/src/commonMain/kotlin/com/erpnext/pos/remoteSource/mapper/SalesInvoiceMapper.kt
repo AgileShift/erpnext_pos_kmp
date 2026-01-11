@@ -103,8 +103,10 @@ fun SalesInvoiceDto.toEntity(): SalesInvoiceWithItemsAndPayments {
         debitTo = debitTo,
         postingDate = postingDate,
         dueDate = dueDate,
-        currency = currency ?: "NIO",
+        currency = currency ?: "USD",
         partyAccountCurrency = partyAccountCurrency,
+        conversionRate = conversionRate,
+        customExchangeRate = customExchangeRate,
         netTotal = items.sumOf { it.amount },
         taxTotal = totalTaxesAndCharges ?: 0.0,
         grandTotal = grandTotal,
@@ -141,7 +143,10 @@ fun SalesInvoiceDto.toEntity(): SalesInvoiceWithItemsAndPayments {
             parentInvoice = name ?: "",
             modeOfPayment = dto.modeOfPayment,
             amount = dto.amount,
+            enteredAmount = dto.amount,
+            paymentCurrency = partyAccountCurrency ?: currency,
             paymentReference = dto.paymentReference,
+            syncStatus = "Synced",
             createdAt = now
         )
     }
@@ -175,7 +180,9 @@ fun SalesInvoiceEntity.toDto(): SalesInvoiceDto {
         updateStock = true,
         posProfile = profileId,
         currency = currency,
+        conversionRate = conversionRate,
         partyAccountCurrency = partyAccountCurrency,
+        customExchangeRate = customExchangeRate,
         debitTo = debitTo,
         docStatus = docstatus,
     )

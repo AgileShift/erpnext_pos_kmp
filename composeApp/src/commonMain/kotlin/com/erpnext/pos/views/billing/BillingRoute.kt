@@ -1,5 +1,6 @@
 package com.erpnext.pos.views.billing
 
+import BillingLabScreen
 import BillingScreen
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.runtime.Composable
@@ -19,6 +20,18 @@ fun BillingRoute(
     val snackbar = koinInject<SnackbarController>()
 
     BillingScreen(uiState, action, snackbar)
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun BillingLabRoute(
+    coordinator: BillingCoordinator = rememberBillingCoordinator()
+) {
+    val uiState by coordinator.screenStateFlow.collectAsState()
+    val action = rememberBillingActions(coordinator)
+    val snackbar = koinInject<SnackbarController>()
+
+    BillingLabScreen(uiState, action, snackbar)
 }
 
 @Composable
@@ -41,6 +54,7 @@ fun rememberBillingActions(coordinator: BillingCoordinator): BillingAction {
             onManualDiscountPercentChanged = coordinator::onManualDiscountPercentChanged,
             onDeliveryChargeSelected = coordinator::onDeliveryChargeSelected,
             onPaymentCurrencySelected = coordinator::onPaymentCurrencySelected,
+            onOpenLab = coordinator::onOpenLab,
             onClearSuccessMessage = coordinator::onClearSuccessMessage,
             onBack = coordinator::onBack,
             onLinkSource = coordinator::onLinkSource,

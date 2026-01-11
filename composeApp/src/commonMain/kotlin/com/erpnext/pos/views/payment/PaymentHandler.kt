@@ -202,6 +202,8 @@ class PaymentHandler(
                     outstandingRc = remainingOutstandingRc ?: createdInvoice.grandTotal,
                     paidFromAccount = paidFrom,
                     partyAccountCurrency = resolvedReceivableCurrency,
+                    invoiceCurrency = resolvedInvoiceCurrency,
+                    invoiceToReceivableRate = rateInvToRc,
                     exchangeRateByCurrency = cacheForReceivable,
                     currencySpecs = currencySpecs,
                     paymentModeDetails = paymentModeDetails

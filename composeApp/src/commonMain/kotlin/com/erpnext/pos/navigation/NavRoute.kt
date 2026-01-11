@@ -27,6 +27,7 @@ sealed class NavRoute(
     object Home : NavRoute("home", "Inicio", Icons.Filled.Home)
     object Inventory : NavRoute("inventory", "Inventario", Icons.Filled.Inventory2)
     object Billing : NavRoute("sale", "Ventas", Icons.Filled.PointOfSale)
+    object BillingLab : NavRoute("sale-lab", "POS Lab", Icons.Filled.PointOfSale)
     object Customer : NavRoute("customer", "Clientes", Icons.Filled.People)
     object Credits : NavRoute("credits", "Créditos", Icons.Filled.Receipt)
     object Quotation : NavRoute("quotation", "Cotizaciones", Icons.Filled.Description)

@@ -276,6 +276,19 @@ interface SalesInvoiceDao {
         insertPayments(payments)
     }
 
+    @Query("SELECT * FROM tabSalesInvoicePayment WHERE sync_status != 'Synced'")
+    suspend fun getPendingPayments(): List<POSInvoicePaymentEntity>
+
+    @Query(
+        """
+        UPDATE tabSalesInvoicePayment
+        SET sync_status = :status,
+            last_synced_at = :syncedAt
+        WHERE id = :paymentId
+        """
+    )
+    suspend fun updatePaymentSyncStatus(paymentId: Int, status: String, syncedAt: Long)
+
     @Query(
         """
         UPDATE customers
@@ -347,6 +360,8 @@ interface SalesInvoiceDao {
             due_date = :dueDate,
             currency = :currency,
             party_account_currency = :partyAccountCurrency,
+            conversion_rate = :conversionRate,
+            custom_exchange_rate = :customExchangeRate,
             net_total = :netTotal,
             tax_total = :taxTotal,
             grand_total = :grandTotal,
@@ -371,6 +386,8 @@ interface SalesInvoiceDao {
         dueDate: String?,
         currency: String,
         partyAccountCurrency: String?,
+        conversionRate: Double?,
+        customExchangeRate: Double?,
         netTotal: Double,
         taxTotal: Double,
         grandTotal: Double,

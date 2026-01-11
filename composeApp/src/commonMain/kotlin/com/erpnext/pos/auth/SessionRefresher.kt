@@ -21,7 +21,7 @@ class SessionRefresher(
     private val networkMonitor: NetworkMonitor
 ) {
     private val mutex = Mutex()
-    private val refreshThresholdSeconds = 5 * 60L // 5 minutos
+    private val refreshThresholdSeconds = 10 * 60L // 10 minutos
 
     suspend fun ensureValidSession(): Boolean = mutex.withLock {
         val isOnline = networkMonitor.isConnected.first()

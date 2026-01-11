@@ -3,6 +3,7 @@ package com.erpnext.pos.views.settings
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import com.erpnext.pos.localization.AppLanguage
+import AppColorTheme
 import org.koin.compose.viewmodel.koinViewModel
 
 class SettingsCoordinator(
@@ -22,6 +23,7 @@ class SettingsCoordinator(
     fun onWifiOnlyChanged(enabled: Boolean) = viewModel.setWifiOnly(enabled)
     fun onLanguageSelected(language: AppLanguage) =
         viewModel.setLanguage(language)
+    fun onThemeSelected(theme: AppColorTheme) = viewModel.setTheme(theme)
 }
 
 @Composable
