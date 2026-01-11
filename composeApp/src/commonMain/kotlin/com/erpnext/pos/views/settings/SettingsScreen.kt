@@ -3,14 +3,17 @@
 package com.erpnext.pos.views.settings
 
 import AppColorTheme
+import AppThemeMode
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -67,7 +70,8 @@ fun SettingsScreenPreview() {
                 ),
                 syncState = com.erpnext.pos.sync.SyncState.IDLE,
                 language = AppLanguage.Spanish,
-                theme = AppColorTheme.Noir
+                theme = AppColorTheme.Noir,
+                themeMode = AppThemeMode.System
             ), POSSettingAction()
         )
 }
@@ -164,6 +168,11 @@ fun PosSettingsScreen(
                         ThemeSelector(
                             currentTheme = state.theme,
                             onThemeSelected = action.onThemeSelected
+                        )
+                        Spacer(Modifier.height(12.dp))
+                        ThemeModeSelector(
+                            currentMode = state.themeMode,
+                            onModeSelected = action.onThemeModeSelected
                         )
                         Text(
                             text = strings.settings.languageInstantHint,
@@ -379,6 +388,35 @@ private fun ThemeSelector(
                     text = { Text(theme.label) },
                     onClick = {
                         onThemeSelected(theme)
+                        expanded = false
+                    }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ThemeModeSelector(
+    currentMode: AppThemeMode,
+    onModeSelected: (AppThemeMode) -> Unit
+) {
+    var expanded by remember { mutableStateOf(false) }
+    ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = it }) {
+        OutlinedTextField(
+            value = currentMode.label,
+            onValueChange = {},
+            readOnly = true,
+            label = { Text("Modo de tema") },
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+            modifier = Modifier.fillMaxWidth().menuAnchor()
+        )
+        ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+            AppThemeMode.values().forEach { mode ->
+                DropdownMenuItem(
+                    text = { Text(mode.label) },
+                    onClick = {
+                        onModeSelected(mode)
                         expanded = false
                     }
                 )

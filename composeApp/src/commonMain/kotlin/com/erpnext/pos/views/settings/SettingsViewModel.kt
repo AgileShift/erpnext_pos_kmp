@@ -10,6 +10,7 @@ import com.erpnext.pos.localization.AppLanguage
 import com.erpnext.pos.sync.SyncManager
 import com.erpnext.pos.sync.SyncState
 import AppColorTheme
+import AppThemeMode
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
@@ -31,6 +32,7 @@ class SettingsViewModel(
     private var currentSyncState: SyncState = SyncState.IDLE
     private var currentLanguage: AppLanguage = AppLanguage.Spanish
     private var currentTheme: AppColorTheme = AppColorTheme.Noir
+    private var currentThemeMode: AppThemeMode = AppThemeMode.System
 
     init {
         viewModelScope.launch {
@@ -57,6 +59,12 @@ class SettingsViewModel(
                 publishState()
             }
         }
+        viewModelScope.launch {
+            themePreferences.themeMode.collect { mode ->
+                currentThemeMode = mode
+                publishState()
+            }
+        }
     }
 
     //TODO: Esto debe de venir de API / POSContext no hardcoded
@@ -76,7 +84,8 @@ class SettingsViewModel(
                 syncSettings = currentSyncSettings,
                 syncState = currentSyncState,
                 language = currentLanguage,
-                theme = currentTheme
+                theme = currentTheme,
+                themeMode = currentThemeMode
             )
         }
     }
@@ -103,5 +112,9 @@ class SettingsViewModel(
 
     fun setTheme(theme: AppColorTheme) {
         viewModelScope.launch { themePreferences.setTheme(theme) }
+    }
+
+    fun setThemeMode(mode: AppThemeMode) {
+        viewModelScope.launch { themePreferences.setThemeMode(mode) }
     }
 }

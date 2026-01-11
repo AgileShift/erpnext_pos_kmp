@@ -4,6 +4,7 @@ import com.erpnext.pos.localSource.preferences.SyncSettings
 import com.erpnext.pos.localization.AppLanguage
 import com.erpnext.pos.sync.SyncState
 import AppColorTheme
+import AppThemeMode
 
 data class POSSettingBO(
     val company: String,
@@ -23,7 +24,8 @@ sealed class POSSettingState {
         val syncSettings: SyncSettings,
         val syncState: SyncState,
         val language: AppLanguage,
-        val theme: AppColorTheme
+        val theme: AppColorTheme,
+        val themeMode: AppThemeMode
     ) : POSSettingState()
     data class Error(val message: String) : POSSettingState()
 }
@@ -37,5 +39,6 @@ data class POSSettingAction(
     val onSyncOnStartupChanged: (Boolean) -> Unit = {},
     val onWifiOnlyChanged: (Boolean) -> Unit = {},
     val onLanguageSelected: (AppLanguage) -> Unit = {},
-    val onThemeSelected: (AppColorTheme) -> Unit = {}
+    val onThemeSelected: (AppColorTheme) -> Unit = {},
+    val onThemeModeSelected: (AppThemeMode) -> Unit = {}
 )

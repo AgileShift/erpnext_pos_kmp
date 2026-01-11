@@ -4,6 +4,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import com.erpnext.pos.localization.AppLanguage
 import AppColorTheme
+import AppThemeMode
 import org.koin.compose.viewmodel.koinViewModel
 
 class SettingsCoordinator(
@@ -24,6 +25,7 @@ class SettingsCoordinator(
     fun onLanguageSelected(language: AppLanguage) =
         viewModel.setLanguage(language)
     fun onThemeSelected(theme: AppColorTheme) = viewModel.setTheme(theme)
+    fun onThemeModeSelected(mode: AppThemeMode) = viewModel.setThemeMode(mode)
 }
 
 @Composable

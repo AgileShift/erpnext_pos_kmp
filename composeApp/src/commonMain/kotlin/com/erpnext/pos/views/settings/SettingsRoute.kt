@@ -27,7 +27,8 @@ fun rememberSettingsActions(coordinator: SettingsCoordinator): POSSettingAction 
             onSyncOnStartupChanged = coordinator::onSyncOnStartupChanged,
             onWifiOnlyChanged = coordinator::onWifiOnlyChanged,
             onLanguageSelected = coordinator::onLanguageSelected,
-            onThemeSelected = coordinator::onThemeSelected
+            onThemeSelected = coordinator::onThemeSelected,
+            onThemeModeSelected = coordinator::onThemeModeSelected
         )
     }
 }

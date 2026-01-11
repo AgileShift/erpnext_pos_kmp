@@ -1,6 +1,7 @@
 package com.erpnext.pos
 
 import AppTheme
+import AppThemeMode
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -39,6 +40,7 @@ fun AppNavigation() {
     val snackbarController = koinInject<com.erpnext.pos.utils.view.SnackbarController>()
     val themePreferences = koinInject<ThemePreferences>()
     val appTheme by themePreferences.theme.collectAsState(initial = AppColorTheme.Noir)
+    val appThemeMode by themePreferences.themeMode.collectAsState(initial = AppThemeMode.System)
 
     val snackbar by snackbarController.snackbar.collectAsState()
     val isLoading by LoadingIndicator.isLoading.collectAsState(initial = false)
@@ -53,9 +55,10 @@ fun AppNavigation() {
     val isDesktop = getPlatformName() == "Desktop"
 //    val isLoading by LoadingIndicator.isLoading.collectAsState(initial = false)
 
-    AppTheme(theme = appTheme) {
+    AppTheme(theme = appTheme, themeMode = appThemeMode) {
         ProvideAppStrings {
             Scaffold(
+                containerColor = MaterialTheme.colorScheme.background,
                 bottomBar = {
                     if (!isDesktop && shouldShowBottomBar(currentRoute)) {
                         BottomBarWithCenterFab(

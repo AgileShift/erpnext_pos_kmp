@@ -105,7 +105,12 @@ fun BillingScreen(
     val uiSnackbar = snackbar.snackbar.collectAsState().value
 
     Box(Modifier.fillMaxSize()) {
-        BottomSheetScaffold(sheetShadowElevation = 12.dp, topBar = {
+        BottomSheetScaffold(
+            sheetShadowElevation = 12.dp,
+            containerColor = MaterialTheme.colorScheme.background,
+            sheetContainerColor = MaterialTheme.colorScheme.surface,
+            sheetContentColor = MaterialTheme.colorScheme.onSurface,
+            topBar = {
             TopAppBar(title = {
                 Text("Nueva Factura")
             }, navigationIcon = {
@@ -119,7 +124,12 @@ fun BillingScreen(
                 TextButton(onClick = action.onOpenLab) {
                     Text("Modo prueba")
                 }
-            })
+            }, colors = TopAppBarDefaults.topAppBarColors(
+                containerColor = MaterialTheme.colorScheme.surface,
+                titleContentColor = MaterialTheme.colorScheme.onSurface,
+                navigationIconContentColor = MaterialTheme.colorScheme.onSurface,
+                actionIconContentColor = MaterialTheme.colorScheme.onSurface
+            ))
         }, sheetPeekHeight = 140.dp, sheetDragHandle = {
             Box(
                 modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
@@ -224,12 +234,16 @@ fun BillingLabScreen(
 ) {
     val uiSnackbar = snackbar.snackbar.collectAsState().value
     val scaffoldState = rememberBottomSheetScaffoldState()
+    val colors = MaterialTheme.colorScheme
 
     Box(Modifier.fillMaxSize()) {
         BottomSheetScaffold(
             scaffoldState = scaffoldState,
             sheetShadowElevation = 12.dp,
             sheetPeekHeight = 120.dp,
+            containerColor = colors.background,
+            sheetContainerColor = colors.surface,
+            sheetContentColor = colors.onSurface,
             topBar = {
                 TopAppBar(
                     title = { Text("POS Lab") },
@@ -245,7 +259,13 @@ fun BillingLabScreen(
                         TextButton(onClick = action.onBack) {
                             Text("Volver a clásico")
                         }
-                    }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.surface,
+                        titleContentColor = MaterialTheme.colorScheme.onSurface,
+                        navigationIconContentColor = MaterialTheme.colorScheme.onSurface,
+                        actionIconContentColor = MaterialTheme.colorScheme.onSurface
+                    )
                 )
             },
             sheetDragHandle = {
@@ -327,7 +347,7 @@ fun BillingLabScreen(
                         action = action,
                         modifier = Modifier
                             .fillMaxSize()
-                            .padding(paddingValues)
+                            .padding(top = paddingValues.calculateTopPadding())
                     )
                 }
             }
@@ -415,7 +435,7 @@ private fun BillingLabContent(
             Spacer(Modifier.height(12.dp))
 
             LazyVerticalGrid(
-                columns = GridCells.Adaptive(minSize = 170.dp),
+                columns = GridCells.Adaptive(minSize = 220.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 modifier = Modifier.fillMaxSize()
@@ -424,6 +444,7 @@ private fun BillingLabContent(
                     LabProductCard(
                         item = item,
                         baseCurrency = baseCurrency,
+                        exchangeRateByCurrency = state.exchangeRateByCurrency,
                         accent = accent,
                         onClick = { action.onProductAdded(item) }
                     )
@@ -628,6 +649,7 @@ private fun LabCategoryChip(label: String, selected: Boolean, onClick: () -> Uni
 private fun LabProductCard(
     item: ItemBO,
     baseCurrency: String,
+    exchangeRateByCurrency: Map<String, Double>,
     accent: Color,
     onClick: () -> Unit
 ) {
@@ -636,6 +658,14 @@ private fun LabProductCard(
     var isHovered by remember { mutableStateOf(false) }
     val showAction = !isDesktop || isHovered
     val imageUrl = item.image?.trim().orEmpty()
+    val itemCurrency = item.currency?.trim()?.uppercase().orEmpty()
+    val base = baseCurrency.trim().uppercase()
+    val rate = if (itemCurrency.isBlank() || itemCurrency == base) {
+        1.0
+    } else {
+        exchangeRateByCurrency[itemCurrency] ?: 1.0
+    }
+    val displayPrice = item.price * rate
     Surface(
         color = colors.surface,
         shape = RoundedCornerShape(18.dp),
@@ -656,63 +686,81 @@ private fun LabProductCard(
             .clickable(onClick = onClick)
     ) {
         Box {
-            Column(
-                modifier = Modifier.padding(14.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                if (imageUrl.isNotBlank()) {
-                    SubcomposeAsyncImage(
-                        model = ImageRequest.Builder(LocalPlatformContext.current)
-                            .data(imageUrl)
-                            .crossfade(true)
-                            .build(),
-                        contentDescription = item.name,
-                        contentScale = ContentScale.Crop,
+            Column {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(132.dp)
+                        .clip(RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp))
+                ) {
+                    if (imageUrl.isNotBlank()) {
+                        SubcomposeAsyncImage(
+                            model = ImageRequest.Builder(LocalPlatformContext.current)
+                                .data(imageUrl)
+                                .crossfade(true)
+                                .build(),
+                            contentDescription = item.name,
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    } else {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(colors.surfaceVariant),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = item.name.take(2).uppercase(),
+                                style = MaterialTheme.typography.titleMedium,
+                                color = colors.onSurfaceVariant
+                            )
+                        }
+                    }
+
+                    Surface(
+                        color = colors.primary,
+                        shape = RoundedCornerShape(999.dp),
+                        shadowElevation = 2.dp,
                         modifier = Modifier
-                            .fillMaxWidth()
-                            .height(92.dp)
-                            .clip(RoundedCornerShape(14.dp))
-                    )
-                } else {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(92.dp)
-                            .clip(RoundedCornerShape(14.dp))
-                            .background(colors.surfaceVariant),
-                        contentAlignment = Alignment.Center
+                            .align(Alignment.TopEnd)
+                            .padding(10.dp)
                     ) {
                         Text(
-                            text = item.name.take(2).uppercase(),
-                            style = MaterialTheme.typography.labelLarge,
-                            color = colors.onSurfaceVariant
+                            text = "Disp. ${item.actualQty.formatQty()}",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = colors.onPrimary,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                         )
                     }
                 }
 
-                Text(
-                    text = item.name,
-                    style = MaterialTheme.typography.titleSmall,
-                    color = colors.onSurface,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                Column(
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    Text(
-                        text = "${baseCurrency.toCurrencySymbol()} ${bd(item.price).toDouble(0)}",
-                        style = MaterialTheme.typography.labelLarge,
-                        color = accent
-                    )
-                    Text(
-                        text = "Disp. ${item.actualQty.formatQty()}",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = colors.onSurfaceVariant
-                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = item.name,
+                            style = MaterialTheme.typography.titleSmall,
+                            color = colors.onSurface,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f)
+                        )
+                        Text(
+                            text = formatAmount(baseCurrency.toCurrencySymbol(), displayPrice),
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = accent,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
                 }
             }
 
@@ -817,7 +865,7 @@ private fun LabCartItem(
                     overflow = TextOverflow.Ellipsis
                 )
                 Text(
-                    text = "${baseCurrency.toCurrencySymbol()}${bd(item.price).toDouble(0)}",
+                    text = formatAmount(baseCurrency.toCurrencySymbol(), item.price),
                     style = MaterialTheme.typography.labelSmall,
                     color = colors.onSurfaceVariant
                 )
@@ -843,11 +891,10 @@ private fun LabCartItem(
                     }
                 }
                 Text(
-                    text = "${baseCurrency.toCurrencySymbol()}${
-                        bd((item.price * item.quantity)).toDouble(
-                            0
-                        )
-                    }",
+                    text = formatAmount(
+                        baseCurrency.toCurrencySymbol(),
+                        item.price * item.quantity
+                    ),
                     style = MaterialTheme.typography.labelLarge,
                     color = colors.onSurface
                 )
@@ -1724,16 +1771,38 @@ private fun PaymentSection(
                     fontWeight = FontWeight.Bold
                 )
                 Spacer(Modifier.height(4.dp))
-                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    PaymentTotalsRow("Subtotal", baseCurrency, subtotalAmount)
-                    if (taxesAmount > 0.0) {
-                        PaymentTotalsRow("Impuestos", baseCurrency, taxesAmount)
-                    }
-                    if (discountAmount > 0.0) {
-                        PaymentTotalsRow("Descuento", baseCurrency, -discountAmount)
-                    }
-                    if (shippingAmount > 0.0) {
-                        PaymentTotalsRow("Envío", baseCurrency, shippingAmount)
+                var showTotalsDetails by rememberSaveable { mutableStateOf(false) }
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { showTotalsDetails = !showTotalsDetails }
+                        .padding(vertical = 4.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = if (showTotalsDetails) "Ocultar detalle" else "Ver detalle",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Icon(
+                        imageVector = if (showTotalsDetails) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                }
+                if (showTotalsDetails) {
+                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        PaymentTotalsRow("Subtotal", baseCurrency, subtotalAmount)
+                        if (taxesAmount > 0.0) {
+                            PaymentTotalsRow("Impuestos", baseCurrency, taxesAmount)
+                        }
+                        if (discountAmount > 0.0) {
+                            PaymentTotalsRow("Descuento", baseCurrency, -discountAmount)
+                        }
+                        if (shippingAmount > 0.0) {
+                            PaymentTotalsRow("Envío", baseCurrency, shippingAmount)
+                        }
                     }
                 }
                 Spacer(Modifier.height(4.dp))
