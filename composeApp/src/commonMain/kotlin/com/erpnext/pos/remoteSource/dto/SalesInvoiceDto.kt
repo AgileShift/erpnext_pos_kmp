@@ -68,6 +68,8 @@ data class SalesInvoiceDto(
     val posProfile: String? = null,
     @SerialName("currency")
     val currency: String? = null,
+    @SerialName("conversion_rate")
+    val conversionRate: Double? = null,
     @SerialName("party_account_currency")
     val partyAccountCurrency: String? = null,
     @SerialName("debit_to")

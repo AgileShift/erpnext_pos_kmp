@@ -732,6 +732,15 @@ class BillingViewModel(
                 round = ::roundToCurrency
             )
 
+            val invoiceCurrency = normalizeCurrency(baseCurrency) ?: "USD"
+            val receivableCurrency = normalizeCurrency(context.partyAccountCurrency)
+                ?: invoiceCurrency
+            val conversionRate = resolveInvoiceConversionRate(
+                invoiceCurrency = invoiceCurrency,
+                receivableCurrency = receivableCurrency,
+                context = context
+            )
+
             val invoiceDto = buildSalesInvoiceDto(
                 current = current,
                 customer = customer,
@@ -745,6 +754,7 @@ class BillingViewModel(
                 paymentSchedule = paymentSchedule,
                 paymentLines = paymentLines,
                 baseCurrency = baseCurrency,
+                conversionRate = conversionRate,
                 postingDate = postingDate,
                 dueDate = dueDate
             )
@@ -1010,6 +1020,7 @@ class BillingViewModel(
         paymentSchedule: List<SalesInvoicePaymentScheduleDto>,
         paymentLines: List<PaymentLine>,
         baseCurrency: String,
+        conversionRate: Double?,
         postingDate: String,
         dueDate: String
     ): SalesInvoiceDto {
@@ -1031,6 +1042,7 @@ class BillingViewModel(
             company = context.company,
             postingDate = postingDate,
             currency = baseCurrency,
+            conversionRate = conversionRate?.takeIf { it > 0.0 },
             partyAccountCurrency = context.partyAccountCurrency,
             dueDate = dueDate,
             status = status,
@@ -1045,6 +1057,7 @@ class BillingViewModel(
             paymentTerms = if (current.isCreditSale) current.selectedPaymentTerm?.name else null,
             posProfile = context.profileName,
             remarks = paymentMetadata,
+            customExchangeRate = conversionRate?.takeIf { it > 0.0 },
             updateStock = true,
             docStatus = 1
         )
@@ -1125,6 +1138,29 @@ class BillingViewModel(
             if (current.discountCode.isNotBlank()) add("Código de descuento: ${current.discountCode}")
             if (shippingAmount > 0.0) add("Envío: $shippingAmount")
         }.joinToString(separator = "; ").takeIf { it.isNotBlank() }
+    }
+
+    private suspend fun resolveInvoiceConversionRate(
+        invoiceCurrency: String,
+        receivableCurrency: String,
+        context: POSContext
+    ): Double? {
+        val invoice = normalizeCurrency(invoiceCurrency) ?: return null
+        val receivable = normalizeCurrency(receivableCurrency) ?: return null
+        if (invoice.equals(receivable, ignoreCase = true)) return 1.0
+
+        val ctxCurrency = normalizeCurrency(context.currency)
+        val ctxRate = context.exchangeRate
+        if (ctxCurrency != null && ctxRate > 0.0) {
+            if (invoice.equals(ctxCurrency, true) && receivable.equals("USD", true)) {
+                return 1 / ctxRate
+            }
+            if (invoice.equals("USD", true) && receivable.equals(ctxCurrency, true)) {
+                return ctxRate
+            }
+        }
+
+        return contextProvider.resolveExchangeRateBetween(invoice, receivable)
     }
 
     private fun resolveDueDate(

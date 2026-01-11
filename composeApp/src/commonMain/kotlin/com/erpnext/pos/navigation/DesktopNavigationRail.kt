@@ -33,8 +33,7 @@ fun DesktopNavigationRail(
         NavRoute.Home,
         NavRoute.Inventory,
         NavRoute.Billing,
-        NavRoute.Customer,
-        NavRoute.Credits
+        NavRoute.Customer
     )
     val secondaryItems = listOf(NavRoute.Settings)
 
@@ -56,8 +55,7 @@ fun DesktopNavigationRail(
 
                         NavRoute.Inventory,
                         NavRoute.Billing,
-                        NavRoute.Customer,
-                        NavRoute.Credits -> isCashBoxOpen
+                        NavRoute.Customer -> isCashBoxOpen
 
                         else -> true
                     }

@@ -9,7 +9,7 @@ import com.erpnext.pos.data.repositories.InventoryRepository
 import com.erpnext.pos.data.repositories.ModeOfPaymentRepository
 import com.erpnext.pos.data.repositories.PaymentTermsRepository
 import com.erpnext.pos.data.repositories.SalesInvoiceRepository
-import com.erpnext.pos.sync.PushSyncManager
+import com.erpnext.pos.sync.PushSyncRunner
 import com.erpnext.pos.sync.SyncContextProvider
 import com.erpnext.pos.views.CashBoxManager
 import com.erpnext.pos.localSource.preferences.SyncPreferences
@@ -54,7 +54,7 @@ class SyncManager(
     private val networkMonitor: NetworkMonitor,
     private val sessionRefresher: SessionRefresher,
     private val syncContextProvider: SyncContextProvider,
-    private val pushSyncManager: PushSyncManager
+    private val pushSyncManager: PushSyncRunner
 ) : ISyncManager {
 
     private val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())

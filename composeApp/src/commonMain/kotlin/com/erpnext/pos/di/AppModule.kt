@@ -91,7 +91,8 @@ import com.erpnext.pos.remoteSource.oauth.TokenStore
 import com.erpnext.pos.remoteSource.oauth.refreshAuthToken
 import com.erpnext.pos.remoteSource.oauth.toBearerToken
 import com.erpnext.pos.auth.SessionRefresher
-import com.erpnext.pos.sync.PushSyncManager
+import com.erpnext.pos.sync.LegacyPushSyncManager
+import com.erpnext.pos.sync.PushSyncRunner
 import com.erpnext.pos.sync.SyncContextProvider
 import com.erpnext.pos.sync.SyncManager
 import com.erpnext.pos.utils.AppLogger
@@ -269,17 +270,7 @@ val appModule = module {
     }
     single(named("apiServiceV2")) { APIServiceV2(get(), get(), get()) }
 
-    single {
-        PushSyncManager(
-            get(),
-            get(),
-            get(),
-            get(),
-            get(),
-            get(),
-            get(named("apiServiceV2"))
-        )
-    }
+    single<PushSyncRunner> { LegacyPushSyncManager(get()) }
     single { SyncContextProvider(get(), get()) }
     single<SyncManager> {
         SyncManager(

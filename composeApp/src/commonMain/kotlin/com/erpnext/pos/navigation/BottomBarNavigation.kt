@@ -37,8 +37,7 @@ fun BottomBarNavigation(
         NavRoute.Home,
         NavRoute.Inventory,
         NavRoute.Billing,
-        NavRoute.Customer,
-        NavRoute.Credits
+        NavRoute.Customer
     )
 
     BottomAppBar(
@@ -58,8 +57,7 @@ fun BottomBarNavigation(
                     NavRoute.Home -> true
                     NavRoute.Inventory,
                     NavRoute.Billing,
-                    NavRoute.Customer,
-                    NavRoute.Credits -> isCashBoxOpen
+                    NavRoute.Customer -> isCashBoxOpen
                     else -> true
                 }
                 val isSelected = currentRoutePath == navRoute.path

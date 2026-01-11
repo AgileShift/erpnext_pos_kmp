@@ -118,6 +118,10 @@ class PaymentHandler(
 
         val rateInvToRc = when {
             resolvedInvoiceCurrency.equals(resolvedReceivableCurrency, ignoreCase = true) -> 1.0
+            createdInvoice?.conversionRate != null && createdInvoice.conversionRate > 0.0 ->
+                createdInvoice.conversionRate
+            createdInvoice?.customExchangeRate != null && createdInvoice.customExchangeRate > 0.0 ->
+                createdInvoice.customExchangeRate
             createdInvoice?.baseGrandTotal != null && createdInvoice.grandTotal > 0.0 ->
                 createdInvoice.baseGrandTotal / createdInvoice.grandTotal
             else -> resolveRateBetweenCurrencies(
