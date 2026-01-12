@@ -225,7 +225,7 @@ val appModule = module {
             scope = get(),
             sessionRefresher = get(),
             networkMonitor = get()
-        ).apply { start(intervalMinutes = 5) }
+        ).apply { start(intervalMinutes = 1) }
     }
     single {
         PaymentHandler(

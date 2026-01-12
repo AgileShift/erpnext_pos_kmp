@@ -528,6 +528,26 @@ class APIService(
                 "disabled" eq false
                 if (!territory.isNullOrEmpty()) "territory" eq territory
             })
+
+        /*val detailFields = listOf("name", "credit_limit", "bypass_credit_limit_check", "company")
+        val detailMap = customers.associateWith { customer ->
+            runCatching {
+                client.getERPSingle<CustomerDto>(
+                    doctype = ERPDocType.Customer.path,
+                    name = customer.name,
+                    baseUrl = url,
+                    fields = detailFields
+                )
+            }.getOrNull()
+        }
+
+        return customers.map { customer ->
+            detailMap[customer]?.let { detail ->
+                customer.copy(
+                    creditLimits = detail.creditLimits,
+                )
+            } ?: customer
+        }*/
     }
 
     //Para monto total pendientes y List (method whitelisted)

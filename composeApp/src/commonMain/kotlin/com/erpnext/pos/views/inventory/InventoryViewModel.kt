@@ -84,52 +84,57 @@ class InventoryViewModel(
      */
     private fun loadItemsReactive() {
         viewModelScope.launch {
-            // chequeo rápido del estado de caja
-            val current = context.requireContext()
-            if (!current.isCashBoxOpen) {
-                _stateFlow.value = InventoryState.Empty
-                return@launch
-            }
+            context.contextFlow.collectLatest { current ->
+                if (current == null || !current.isCashBoxOpen) {
+                    _stateFlow.value = InventoryState.Empty
+                    return@collectLatest
+                }
+                val baseCurrency = current.currency
+                val exchangeRate = current.exchangeRate
 
-            val itemsFlow: Flow<PagingData<ItemBO>> = combine(
-                searchFilter.debounce(300),
-                categoryFilter.debounce(300)
-            ) { query, category -> query to category }
-                .debounce(200)
-                .flatMapLatest { (query, category) ->
-                    // Se asume que el usecase devuelve Flow<PagingData<ItemBO>>
-                    fetchInventoryItemUseCase.invoke(query.takeIf { it.isNotBlank() })
-                        .flowOn(Dispatchers.IO) // <<--- fuerza operaciones pesadas en IO
-                        .map { pagingData ->
-                            // filtrado "ligero" en memoria sobre PagingData (no toca DB)
-                            pagingData.filter { item ->
-                                val matchesQuery = query.isBlank() ||
-                                        item.name.contains(query, ignoreCase = true) ||
-                                        item.itemCode.contains(query, ignoreCase = true)
+                val itemsFlow: Flow<PagingData<ItemBO>> = combine(
+                    searchFilter.debounce(300),
+                    categoryFilter.debounce(300)
+                ) { query, category -> query to category }
+                    .debounce(200)
+                    .flatMapLatest { (query, category) ->
+                        fetchInventoryItemUseCase.invoke(query.takeIf { it.isNotBlank() })
+                            .flowOn(Dispatchers.IO)
+                            .map { pagingData ->
+                                pagingData.filter { item ->
+                                    val matchesQuery = query.isBlank() ||
+                                            item.name.contains(query, ignoreCase = true) ||
+                                            item.itemCode.contains(query, ignoreCase = true)
 
-                                val matchesCategory = category.isBlank() ||
-                                        category == "Todos los grupos de artículos" ||
-                                        item.itemGroup.equals(category, ignoreCase = true)
+                                    val matchesCategory = category.isBlank() ||
+                                            category == "Todos los grupos de artículos" ||
+                                            item.itemGroup.equals(category, ignoreCase = true)
 
-                                matchesQuery && matchesCategory
+                                    matchesQuery && matchesCategory
+                                }
                             }
-                        }
-                }
-                .cachedIn(viewModelScope)
+                    }
+                    .cachedIn(viewModelScope)
 
-            combine(itemsFlow, _categoriesFlow) { items, categories ->
-                InventoryState.Success(flowOf(items), categories)
+                combine(itemsFlow, _categoriesFlow) { items, categories ->
+                    InventoryState.Success(
+                        flowOf(items),
+                        categories,
+                        baseCurrency = baseCurrency,
+                        exchangeRate = exchangeRate
+                    )
+                }
+                    .onStart {
+                        _stateFlow.value = InventoryState.Loading
+                    }
+                    .catch { e ->
+                        _stateFlow.value = InventoryState.Error(e.message ?: "Error al cargar inventario")
+                        onError(e.message)
+                    }
+                    .collectLatest { state ->
+                        _stateFlow.value = state
+                    }
             }
-                .onStart {
-                    _stateFlow.value = InventoryState.Loading
-                }
-                .catch { e ->
-                    _stateFlow.value = InventoryState.Error(e.message ?: "Error al cargar inventario")
-                    onError(e.message)
-                }
-                .collectLatest { state ->
-                    _stateFlow.value = state
-                }
         }
     }
 
@@ -158,4 +163,5 @@ class InventoryViewModel(
     private fun onError(message: String?) {
         println("InventoryViewModel onError = $message")
     }
+
 }

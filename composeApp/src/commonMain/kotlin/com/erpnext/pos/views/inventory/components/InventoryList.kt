@@ -52,6 +52,8 @@ fun InventoryList(
     actions: InventoryAction,
     isWideLayout: Boolean,
     isDesktop: Boolean,
+    baseCurrency: String,
+    exchangeRate: Double,
     modifier: Modifier = Modifier
 ) {
     val strings = LocalAppStrings.current
@@ -63,7 +65,6 @@ fun InventoryList(
     ) { state ->
         when (state) {
             is LoadState.Loading if items.itemCount == 0 -> {
-                // 🔹 Shimmer elegante parcial (no cubre toda la card)
                 Column(
                     modifier = modifier
                         .fillMaxSize()
@@ -102,7 +103,8 @@ fun InventoryList(
                             count = items.itemCount,
                             key = { index ->
                                 val item = items[index]
-                                item?.itemCode ?: item?.name ?: "item-$index"
+                                val keyBase = item?.itemCode ?: item?.name ?: "item-$index"
+                                "$keyBase-$baseCurrency-${exchangeRate}"
                             }
                         ) { index ->
                             val item = items[index]
@@ -110,7 +112,9 @@ fun InventoryList(
                                 ProductCard(
                                     actions,
                                     item,
-                                    isDesktop = isDesktop
+                                    isDesktop = isDesktop,
+                                    baseCurrency = baseCurrency,
+                                    exchangeRate = exchangeRate
                                 )
                             } else {
                                 ShimmerProductPlaceholder(
@@ -132,13 +136,19 @@ fun InventoryList(
                             count = items.itemCount,
                             key = { index ->
                                 val item = items[index]
-                                // 🔸 Usa claves estables y consistentes
-                                item?.itemCode ?: item?.name ?: "item-$index"
+                                val keyBase = item?.itemCode ?: item?.name ?: "item-$index"
+                                "$keyBase-$baseCurrency-${exchangeRate}"
                             }
                         ) { index ->
                             val item = items[index]
                             if (item != null) {
-                                ProductCard(actions, item, isDesktop = isDesktop)
+                                ProductCard(
+                                    actions,
+                                    item,
+                                    isDesktop = isDesktop,
+                                    baseCurrency = baseCurrency,
+                                    exchangeRate = exchangeRate
+                                )
                             } else {
                                 // 🔹 Shimmer parcial discreto
                                 ShimmerProductPlaceholder(
@@ -260,5 +270,7 @@ fun InventoryListPreview() {
         isDesktop = true,
         modifier = Modifier,
         isWideLayout = true,
+        baseCurrency = "USD",
+        exchangeRate = 0.027
     )
 }

@@ -44,12 +44,10 @@ fun InventoryContent(
 
         when {
             itemsLazy == null -> {
-                // Aún no hay datos inicializados
                 FullScreenShimmerLoading()
             }
 
             itemsLazy.loadState.refresh is LoadState.Loading -> {
-                // Cargando por primera vez (antes de que haya data)
                 FullScreenShimmerLoading()
             }
 
@@ -59,18 +57,18 @@ fun InventoryContent(
             }
 
             itemsLazy.itemCount == 0 -> {
-                // Ya cargó, pero no hay resultados
                 EmptyStateMessage(strings.inventory.emptySearchMessage, Icons.Default.Inventory2)
             }
 
             else -> {
-                // Hay datos, muestra la lista
                 InventoryList(
                     items = itemsLazy,
                     listState = listState,
                     actions = actions,
                     isDesktop = isDesktop,
-                    isWideLayout = isWideLayout
+                    isWideLayout = isWideLayout,
+                    baseCurrency = state.baseCurrency,
+                    exchangeRate = state.exchangeRate
                 )
             }
         }

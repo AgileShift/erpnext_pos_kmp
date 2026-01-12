@@ -8,9 +8,11 @@ import kotlinx.coroutines.flow.Flow
 sealed class InventoryState {
     object Loading : InventoryState()
     object Empty : InventoryState()
-    data class Success(
+data class Success(
         val items: Flow<PagingData<ItemBO>>,
-        val categories: List<CategoryBO>? = emptyList()
+        val categories: List<CategoryBO>? = emptyList(),
+        val baseCurrency: String = "USD",
+        val exchangeRate: Double = 1.0
     ) : InventoryState()
 
     data class Error(val message: String) : InventoryState()

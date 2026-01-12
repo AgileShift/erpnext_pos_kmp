@@ -85,7 +85,7 @@ fun CustomerDto.toBO(): CustomerBO {
         territory = this.territory,
         mobileNo = this.mobileNo,
         customerType = this.customerType,
-        creditLimit = this.creditLimits.getOrElse(0, { CustomerCreditLimitDto("", 0.0, false) }).creditLimit,
+        creditLimit = this.creditLimits.firstOrNull()?.creditLimit,
         totalPendingAmount = this.totalPendingAmount,
         address = address,
         image = image,

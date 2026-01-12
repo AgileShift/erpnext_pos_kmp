@@ -11,13 +11,14 @@
 - De cara a mañana, seguimos con la lista ordenada en esta misma sección: después de dejar este estado de offline-first sólido, continuamos con la primera tarea pendiente de la checklist para no romper el orden preestablecido.
 
 ## Checklist de siguientes tareas (pendiente por completar)
-- [X] Primero, antes que todo, necesitamos que si el token esta invalido manadr el refresh token en automatico y volver a autenticar, sin que de problemas antes de hacer cualquer peticion, deberiamos de hacer esto con el Ktor plugin de autenticacion
+- [ ] Primero, antes que todo, necesitamos que si el token esta invalido manadr el refresh token en automatico y volver a autenticar, sin que de problemas antes de hacer cualquer peticion, deberiamos de hacer esto con el Ktor plugin de autenticacion
 - [X] Mejorar los "connection timeout" al sincronizar
 - [X] **Tenemos que aplicar la misma logica de pagos, metodos de pago, monedas, cambio de moneda, vuelto a favor, aplicar el monto justo a la factura y demas en la pantalla de Registrar pago en Customer igual que como esta en BillingScreen**
 - [X] **Agregar una barra de carga mientras ejecuta cualquier proceso (guardado, lectura, actualizacion, eliminacion) en cualquiera de las vistas para darle contexto visual al usuario**
 - [X] Aplicar cambio de moneda en la vista de Customer y Registrar Pago (Customer), a la moneda actual del POS si es diferente de la moneda de la factura, tenemos un caso extrano, la primera vez al crear la factura de credit e ir a la vista de Customer, aparece el monto en dolares, al cerrar la app y volver a entrar aparece como deberia, convertido a la moneda del POS
 - [X] Al realizar el pago desde "Registrar pago (Customer)" lo manda a pagar en el API, pero retorna el mensaje Payment exceeds outstanding amount y no actualiza la vista, sigue apareciendo la factura pendiente que ya se pago, esto implica tambien que extranamente se paga en el API no se actualiza el paid_amount en la DB
 - [X] No se estan registrando los pagos en tabSalesInvoicePayment cuando se paga por "Registrar pago (Customer)"
+- [ ] En la vista de customer evitar cualquier llamada al API, me di cuenta que hacemos llamado a Sales Invoice, debemos obtener las facturas locales que ya sincronizamos previamente
 - [ ] Todo monto (Moneda) dentro de la aplicacion tiene que adaptarse a la moneda del POS actualemente abierto, por ejemplo todos los KPIs BI que tenemos estan bien en NIO, pero al abrir el POS en USD no deberian aparecer esos datos que se facturaron en NIO, que opinas? deberia o no, esta seria una vista de Administradores/Gerentes, les importa por moneda o no? Si es por moneda como hariamos?
 - [ ] **Dejo de aparecer el credito disponible de los clientes**
 - [-] **Verificar que el saldo pendiente que se mira en la vista de Customer este en la ambas monedas, en la moneda de la factura que generalmente es la moneda del POS y en la moneda del party_account_currency de la factura, validar que podamos obtener esa informacion**
@@ -31,7 +32,7 @@
 - [ ] Localizar los textos dentro del viewModel
 - [ ] Localizar los textos de los menus
 - [X] La informacion del Dashboard (Resumen BI) no carga, de donde estamos trayendo la informacion?
-- [ ] El flujo de sincronizacion Push esta tomando datos de la tablas v2 cuando aun no estamos guardando la informacion ahi, por el momento estamos trabajando full legacy, corregir
+- [X] El flujo de sincronizacion Push esta tomando datos de la tablas v2 cuando aun no estamos guardando la informacion ahi, por el momento estamos trabajando full legacy, corregir
 - [ ] Terminar las vistas con los flujos e informacion real para Quotation, Delivery Note, Sales Order
 - [ ] Tenemos que seguir el ciclo de venta de ERP, esto quiere decir que la factura puede ser creada (Quotation → Sales Order → Delivery Note → Sales Invoice → Payment).
 - [-] Mejorar y mapear las variantes de los productos
@@ -48,3 +49,5 @@
 - [X] **Unir las ventas y pagos para enviar el POS Closing Entry**
 - [X] **Aplicar exactamente la misma logica de pagos en billing que en Customer para la seccion de pagos de facturas pendientes, aunque dupliquemos, o bien podemos hacer un modulo de PaymentUtils o algun otro nombre y poner ahi para que ambas vistas compartan esa logica**
 - [X] **En la pantalla de Registro de Pago, al seleccionar la cuenta por defecto ya conocemos la Moneda de esa cuenta, esto para remover el campo de Moneda y nos saltamos ese paso mas automatico, tenemos que copiar el behavior de Billing**
+
+codex resume 019ba8ce-bdba-7200-97ae-4230e0ddccef

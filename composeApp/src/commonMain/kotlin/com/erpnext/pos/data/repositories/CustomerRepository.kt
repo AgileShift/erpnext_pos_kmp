@@ -35,7 +35,6 @@ class CustomerRepository(
         RepoTrace.breadcrumb("CustomerRepository", "getCustomers", "search=$search state=$state")
         val territory: String? = context.requireContext().route
         return networkBoundResource(query = {
-            // 🔹 Consultamos localmente según filtros dinámicos
             when {
                 state.isNullOrEmpty() && search.isNullOrEmpty() -> localSource.getAll()
 
@@ -49,10 +48,8 @@ class CustomerRepository(
                 else -> localSource.getAll()
             }.map { list -> list.map { it.toBO() } }
         }, fetch = {
-            // 🔹 Obtenemos datos remotos
             remoteSource.fetchCustomers(territory)
         }, saveFetchResult = { remoteData ->
-            // 🔹 Guardamos resultados en DB local
             val invoices =
                 remoteSource.fetchInvoices(context.requireContext().profileName).toEntities()
             localSource.saveInvoices(invoices)
@@ -83,7 +80,7 @@ class CustomerRepository(
                     }
                 }.awaitAll()
                 localSource.insertAll(entities)
-                entities.mapNotNull { it.name }.distinct().forEach { customerId ->
+                entities.map { it.name }.distinct().forEach { customerId ->
                     localSource.refreshCustomerSummary(customerId)
                 }
             }
@@ -112,7 +109,6 @@ class CustomerRepository(
                         SyncTTL.isExpired(localData.maxOf { it.lastSyncedAt?.toDouble() ?: 0.0 }
                             .toLong())*/
         }, saveFetchResult = { remoteData ->
-            // 🔹 Guardamos resultados en DB local
             val invoices =
                 remoteSource.fetchInvoices(context.requireContext().profileName).toEntities()
             localSource.saveInvoices(invoices)
@@ -129,8 +125,9 @@ class CustomerRepository(
                             invoice.outstandingAmount ?: (invoice.grandTotal - invoice.paidAmount)
                         }
                         val creditLimit = dto.creditLimits
-                        val available = if (creditLimit.isNotEmpty()) (creditLimit[0].creditLimit
-                            ?: 0.0) - totalOutstanding else 0.0
+                        val available =
+                            if (creditLimit.isNotEmpty()) (creditLimit.firstOrNull()?.creditLimit
+                                ?: 0.0) - totalOutstanding else 0.0
                         //val address = remoteSource.getCustomerAddress(dto.name)
                         //val contact = remoteSource.getCustomerContact(dto.name)
 

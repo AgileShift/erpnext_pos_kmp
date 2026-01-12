@@ -38,8 +38,10 @@ import coil3.request.ImageRequest
 import coil3.request.crossfade
 import com.erpnext.pos.domain.models.ItemBO
 import com.erpnext.pos.localization.LocalAppStrings
+import com.erpnext.pos.utils.formatAmount
+import com.erpnext.pos.utils.formatDoubleToString
 import com.erpnext.pos.utils.oauth.bd
-import com.erpnext.pos.utils.oauth.moneyScale
+import com.erpnext.pos.utils.oauth.toDouble
 import com.erpnext.pos.utils.toCurrencySymbol
 import com.erpnext.pos.views.inventory.InventoryAction
 import org.jetbrains.compose.ui.tooling.preview.Preview
@@ -48,22 +50,25 @@ import org.jetbrains.compose.ui.tooling.preview.Preview
 fun ProductCard(
     actions: InventoryAction,
     product: ItemBO,
-    isDesktop: Boolean = false
+    isDesktop: Boolean = false,
+    baseCurrency: String,
+    exchangeRate: Double
 ) {
-    val formattedPrice =
-        remember(product.price) { bd(product.price).moneyScale(2) } //com.erpnext.pos.utils.formatDoubleToString(product.price, 2) }
     val formattedQty = remember(product.actualQty) {
-        com.erpnext.pos.utils.formatDoubleToString(product.actualQty, 0)
+        formatDoubleToString(product.actualQty, 0)
     }
     val context = LocalPlatformContext.current
     val strings = LocalAppStrings.current
     val imageWidth = if (isDesktop) 170.dp else 120.dp
     val cardHeight = if (isDesktop) 200.dp else 180.dp
-    val statusLabel =
-        if (product.actualQty <= 0) strings.customer.outOfStock else strings.customer.inStock
-    val hasStock = product.actualQty > 0
-    val priceLabel =
-        "${product.currency?.toCurrencySymbol().orEmpty()} $formattedPrice"
+    val posBase = baseCurrency.trim().uppercase()
+    val itemCurrency = product.currency?.trim()?.uppercase().orEmpty()
+    val displayPrice = if (itemCurrency.isBlank() || itemCurrency == posBase) {
+        product.price
+    } else {
+        bd(product.price * exchangeRate).toDouble(0)
+    }
+    val displayLabel = formatAmount(baseCurrency.toCurrencySymbol(), displayPrice)
     val colorLabel = product.brand?.takeIf { it.isNotBlank() } ?: "--"
     val sizeLabel = "--"
 
@@ -131,7 +136,7 @@ fun ProductCard(
                 )
 
                 Text(
-                    text = priceLabel,
+                    text = displayLabel,
                     fontWeight = FontWeight.Black,
                     style = MaterialTheme.typography.titleLarge,
                     color = MaterialTheme.colorScheme.primary
@@ -254,6 +259,8 @@ fun ProductCardPreview() {
             image = "https://placehold.co/600x400",
             description = "Descripción del producto de prueba"
         ),
-        isDesktop = false
+        isDesktop = false,
+        baseCurrency = "NIO",
+        exchangeRate = 0.027
     )
 }

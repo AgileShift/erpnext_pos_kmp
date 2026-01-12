@@ -31,12 +31,14 @@ data class CustomerDto(
     var pendingInvoicesCount: Int? = null,
     var totalPendingAmount: Double? = null
 ) {
-    fun creditLimitForCompany(company: String?): CustomerCreditLimitDto? {
-        val target = company?.trim().orEmpty()
+    fun creditLimitForCompany(company: String?): CustomerCreditLimitDto {
+        /*val target = company?.trim().orEmpty()
         if (target.isBlank()) return null
         return creditLimits.firstOrNull { limit ->
             limit.company?.trim()?.equals(target, ignoreCase = true) == true
-        }
+        }*/
+
+        return creditLimits.first()
     }
 }
 

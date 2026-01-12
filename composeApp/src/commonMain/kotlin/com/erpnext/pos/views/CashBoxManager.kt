@@ -26,6 +26,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.IO
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.flow
@@ -73,6 +74,8 @@ class CashBoxManager(
 
     //Contexto actual del POS cargado en memoria
     private var currentContext: POSContext? = null
+    private val _contextFlow: MutableStateFlow<POSContext?> = MutableStateFlow(null)
+    val contextFlow = _contextFlow.asStateFlow()
 
     private val _cashboxState: MutableStateFlow<Boolean> = MutableStateFlow(false)
     val cashboxState = _cashboxState.asStateFlow()
@@ -108,6 +111,7 @@ class CashBoxManager(
             allowedCurrencies = allowedCurrencies,
             paymentModes = paymentModes
         )
+        _contextFlow.value = currentContext
         currentContext
     }
 
@@ -179,6 +183,7 @@ class CashBoxManager(
             paymentModes = paymentModes,
             partyAccountCurrency = company?.defaultCurrency ?: profile.currency,
         )
+        _contextFlow.value = currentContext
         currentContext!!
     }
 
@@ -212,12 +217,10 @@ class CashBoxManager(
         closingDao.insert(dto.toEntity(pce.name))
 
         _cashboxState.update { false }
-        currentContext = ctx.copy(isCashBoxOpen = false)
+        currentContext = null
+        _contextFlow.value = null
+        currentContext = null
         currentContext
-    }
-
-    fun isCashboxOpen(): Boolean {
-        return getContext()?.isCashBoxOpen ?: false
     }
 
     fun getContext(): POSContext? = currentContext
@@ -242,6 +245,7 @@ class CashBoxManager(
         )
     }
 
+    //TODO: Sincronizar las monedas existentes y activas en el ERP
     private suspend fun resolveSupportedCurrencies(baseCurrency: String): List<POSCurrencyOption> {
         val currencies = runCatching { api.getEnabledCurrencies() }.getOrElse { emptyList() }
         val mapped = currencies.map { currency ->

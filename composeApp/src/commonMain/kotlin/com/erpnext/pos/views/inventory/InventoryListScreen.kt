@@ -34,6 +34,8 @@ fun InventoryScreen(
 ) {
     val listState = rememberLazyListState()
     val itemsLazy = (state as? InventoryState.Success)?.items?.collectAsLazyPagingItems()
+    val baseCurrencyState = (state as? InventoryState.Success)?.baseCurrency ?: "USD"
+    val exchangeRateState = (state as? InventoryState.Success)?.exchangeRate ?: 1.0
 
     val pullRefreshState = rememberPullRefreshState(
         refreshing = state is InventoryState.Loading,
@@ -43,13 +45,6 @@ fun InventoryScreen(
     var searchQuery by rememberSaveable { mutableStateOf("") }
     var selectedCategory by rememberSaveable { mutableStateOf("Todos los grupos de artículos") }
 
-    val fabVisible by remember {
-        derivedStateOf {
-            val count = itemsLazy?.itemCount ?: 0
-            count > 0 && listState.firstVisibleItemIndex == 0 && listState.firstVisibleItemScrollOffset == 0
-        }
-    }
-
     Scaffold(
         topBar = {
             InventoryTopBar(
@@ -57,20 +52,6 @@ fun InventoryScreen(
                 isLoading = state is InventoryState.Loading
             )
         },
-        floatingActionButton = {
-            AnimatedVisibility(
-                visible = fabVisible,
-                enter = fadeIn(),
-                exit = fadeOut()
-            ) {
-                FloatingActionButton(
-                    onClick = actions.onPrint,
-                    containerColor = MaterialTheme.colorScheme.primaryContainer
-                ) {
-                    Icon(Icons.Default.Print, contentDescription = "Imprimir")
-                }
-            }
-        }
     ) { innerPadding ->
         BoxWithConstraints(
             modifier = Modifier
@@ -100,7 +81,9 @@ fun InventoryScreen(
                             InventoryContent(
                                 state = InventoryState.Success(
                                     items = flowOf(PagingData.empty()),
-                                    categories = emptyList()
+                                    categories = emptyList(),
+                                    baseCurrency = baseCurrencyState,
+                                    exchangeRate = exchangeRateState
                                 ),
                                 itemsLazy = itemsLazy!!,
                                 listState = listState,
@@ -173,7 +156,6 @@ fun InventoryScreen(
     }
 }
 
-/** 🧩 Overlay shimmer elegante (no cubre todo el Card ni el texto) */
 @Composable
 fun FullScreenShimmerLoadingOverlay() {
     Box(
@@ -217,11 +199,13 @@ fun InventoryScreenPreview() {
                     )
                 )
             ),
-            categories = listOf<CategoryBO>(
+            categories = listOf(
                 CategoryBO("Carne"),
                 CategoryBO("Embutidos"),
                 CategoryBO("Pollo")
-            )
+            ),
+            baseCurrency = "USD",
+            exchangeRate = 0.027
         ),
         actions = InventoryAction(),
     )
