@@ -20,6 +20,7 @@ data class AppStrings(
     val settings: SettingsStrings,
     val salesFlow: SalesFlowStrings,
     val navigation: NavigationStrings,
+    val reconciliation: ReconciliationStrings,
     val common: CommonStrings
 )
 
@@ -223,6 +224,29 @@ data class NavigationStrings(
     val reconciliation: String
 )
 
+data class ReconciliationStrings(
+    val title: String,
+    val subtitle: String,
+    val summaryTitle: String,
+    val totalSessionsLabel: String,
+    val pendingSyncLabel: String,
+    val latestCloseLabel: String,
+    val checklistTitle: String,
+    val checklistStepOne: String,
+    val checklistStepTwo: String,
+    val checklistStepThree: String,
+    val sessionsTitle: String,
+    val loadingLabel: String,
+    val emptyTitle: String,
+    val emptyMessage: String,
+    val statusSynced: String,
+    val statusPending: String,
+    val closingAmountLabel: String,
+    val periodLabel: String,
+    val openingLabel: String,
+    val entryIdLabel: String
+)
+
 object AppStringsFactory {
     fun forLanguage(language: AppLanguage): AppStrings {
         return when (language) {
@@ -411,6 +435,28 @@ object AppStringsFactory {
             billing = "Ventas",
             invoice = "Creditos",
             reconciliation = "Conciliación"
+        ),
+        reconciliation = ReconciliationStrings(
+            title = "Conciliación de caja",
+            subtitle = "Verifica cierres, diferencias y sincronización.",
+            summaryTitle = "Resumen de cierres",
+            totalSessionsLabel = "Cierres totales",
+            pendingSyncLabel = "Pendientes de sync",
+            latestCloseLabel = "Último cierre",
+            checklistTitle = "Checklist de conciliación",
+            checklistStepOne = "Revisa los montos contados vs. registrados.",
+            checklistStepTwo = "Valida diferencias y confirma el cierre.",
+            checklistStepThree = "Sincroniza el cierre con ERPNext.",
+            sessionsTitle = "Cierres recientes",
+            loadingLabel = "Cargando cierres...",
+            emptyTitle = "Sin cierres registrados",
+            emptyMessage = "Cierra la caja para generar tu primera conciliación.",
+            statusSynced = "Sincronizado",
+            statusPending = "Pendiente",
+            closingAmountLabel = "Monto de cierre",
+            periodLabel = "Periodo",
+            openingLabel = "Apertura",
+            entryIdLabel = "ID de cierre"
         ),
         common = CommonStrings(
             back = "Atrás",
@@ -607,6 +653,28 @@ object AppStringsFactory {
             home = "Home",
             billing = "Billing",
             reconciliation = "Reconciliation"
+        ),
+        reconciliation = ReconciliationStrings(
+            title = "Cash reconciliation",
+            subtitle = "Review closures, differences, and sync status.",
+            summaryTitle = "Closing summary",
+            totalSessionsLabel = "Total closings",
+            pendingSyncLabel = "Pending sync",
+            latestCloseLabel = "Latest closing",
+            checklistTitle = "Reconciliation checklist",
+            checklistStepOne = "Compare counted cash vs. recorded totals.",
+            checklistStepTwo = "Validate differences and confirm the closing.",
+            checklistStepThree = "Sync the closing with ERPNext.",
+            sessionsTitle = "Recent closings",
+            loadingLabel = "Loading closings...",
+            emptyTitle = "No closings yet",
+            emptyMessage = "Close the cashbox to create the first reconciliation.",
+            statusSynced = "Synced",
+            statusPending = "Pending",
+            closingAmountLabel = "Closing amount",
+            periodLabel = "Period",
+            openingLabel = "Opening",
+            entryIdLabel = "Closing ID"
         ),
         common = CommonStrings(
             back = "Back",

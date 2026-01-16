@@ -38,11 +38,12 @@ fun ReconciliationScreen(
     actions: ReconciliationAction
 ) {
     val appStrings = LocalAppStrings.current
+    val strings = appStrings.reconciliation
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(appStrings.navigation.reconciliation) },
+                title = { Text(strings.title) },
                 navigationIcon = {
                     IconButton(onClick = actions.onBack) {
                         Icon(
@@ -61,19 +62,21 @@ fun ReconciliationScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
+            Text(strings.subtitle, style = MaterialTheme.typography.bodyMedium)
             when (state) {
                 ReconciliationState.Loading -> {
-                    Text("Loading reconciliation sessions...")
+                    Text(strings.loadingLabel)
                 }
                 ReconciliationState.Empty -> {
-                    Text("No reconciliation sessions available yet.")
+                    EmptyReconciliationState(strings)
                 }
                 is ReconciliationState.Error -> {
                     Text(state.message)
                 }
                 is ReconciliationState.Success -> {
-                    ReconciliationSummary(state.sessions)
-                    ReconciliationList(state.sessions)
+                    ReconciliationSummary(state.sessions, strings)
+                    ReconciliationChecklist(strings)
+                    ReconciliationList(state.sessions, strings)
                 }
             }
         }
@@ -81,7 +84,10 @@ fun ReconciliationScreen(
 }
 
 @Composable
-private fun ReconciliationSummary(sessions: List<ReconciliationSessionUi>) {
+private fun ReconciliationSummary(
+    sessions: List<ReconciliationSessionUi>,
+    strings: com.erpnext.pos.localization.ReconciliationStrings
+) {
     val pendingCount = sessions.count { it.pendingSync }
     val latest = sessions.firstOrNull()
 
@@ -90,13 +96,13 @@ private fun ReconciliationSummary(sessions: List<ReconciliationSessionUi>) {
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
     ) {
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("Session overview", style = MaterialTheme.typography.titleMedium)
+            Text(strings.summaryTitle, style = MaterialTheme.typography.titleMedium)
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Column {
-                    Text("Total sessions", style = MaterialTheme.typography.bodySmall)
+                    Text(strings.totalSessionsLabel, style = MaterialTheme.typography.bodySmall)
                     Text(
                         sessions.size.toString(),
                         style = MaterialTheme.typography.titleLarge,
@@ -104,7 +110,7 @@ private fun ReconciliationSummary(sessions: List<ReconciliationSessionUi>) {
                     )
                 }
                 Column(horizontalAlignment = Alignment.End) {
-                    Text("Pending sync", style = MaterialTheme.typography.bodySmall)
+                    Text(strings.pendingSyncLabel, style = MaterialTheme.typography.bodySmall)
                     Text(
                         pendingCount.toString(),
                         style = MaterialTheme.typography.titleLarge,
@@ -115,7 +121,7 @@ private fun ReconciliationSummary(sessions: List<ReconciliationSessionUi>) {
             latest?.let {
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    "Latest closing: ${it.periodEnd}",
+                    "${strings.latestCloseLabel}: ${it.periodEnd}",
                     style = MaterialTheme.typography.bodyMedium
                 )
             }
@@ -124,16 +130,40 @@ private fun ReconciliationSummary(sessions: List<ReconciliationSessionUi>) {
 }
 
 @Composable
-private fun ReconciliationList(sessions: List<ReconciliationSessionUi>) {
-    LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        items(sessions, key = { it.id }) { session ->
-            ReconciliationSessionCard(session)
+private fun ReconciliationChecklist(
+    strings: com.erpnext.pos.localization.ReconciliationStrings
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+    ) {
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(strings.checklistTitle, style = MaterialTheme.typography.titleMedium)
+            Text("1. ${strings.checklistStepOne}", style = MaterialTheme.typography.bodySmall)
+            Text("2. ${strings.checklistStepTwo}", style = MaterialTheme.typography.bodySmall)
+            Text("3. ${strings.checklistStepThree}", style = MaterialTheme.typography.bodySmall)
         }
     }
 }
 
 @Composable
-private fun ReconciliationSessionCard(session: ReconciliationSessionUi) {
+private fun ReconciliationList(
+    sessions: List<ReconciliationSessionUi>,
+    strings: com.erpnext.pos.localization.ReconciliationStrings
+) {
+    Text(strings.sessionsTitle, style = MaterialTheme.typography.titleMedium)
+    LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        items(sessions, key = { it.id }) { session ->
+            ReconciliationSessionCard(session, strings)
+        }
+    }
+}
+
+@Composable
+private fun ReconciliationSessionCard(
+    session: ReconciliationSessionUi,
+    strings: com.erpnext.pos.localization.ReconciliationStrings
+) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
@@ -151,23 +181,23 @@ private fun ReconciliationSessionCard(session: ReconciliationSessionUi) {
                         fontWeight = FontWeight.SemiBold
                     )
                     Text(
-                        "Opening: ${session.openingEntry}",
+                        "${strings.openingLabel}: ${session.openingEntry}",
                         style = MaterialTheme.typography.bodySmall
                     )
                 }
-                ReconciliationStatusChip(isPending = session.pendingSync)
+                ReconciliationStatusChip(isPending = session.pendingSync, strings = strings)
             }
             Text(
-                "Period: ${session.periodStart} → ${session.periodEnd}",
+                "${strings.periodLabel}: ${session.periodStart} → ${session.periodEnd}",
                 style = MaterialTheme.typography.bodySmall
             )
             Text(
-                "Closing amount: ${formatDoubleToString(session.closingAmount, 2)}",
+                "${strings.closingAmountLabel}: ${formatDoubleToString(session.closingAmount, 2)}",
                 style = MaterialTheme.typography.bodyMedium,
                 fontWeight = FontWeight.Medium
             )
             Text(
-                "Entry ID: ${session.id}",
+                "${strings.entryIdLabel}: ${session.id}",
                 style = MaterialTheme.typography.bodySmall
             )
         }
@@ -175,13 +205,31 @@ private fun ReconciliationSessionCard(session: ReconciliationSessionUi) {
 }
 
 @Composable
-private fun ReconciliationStatusChip(isPending: Boolean) {
-    val label = if (isPending) "Pending sync" else "Synced"
+private fun ReconciliationStatusChip(
+    isPending: Boolean,
+    strings: com.erpnext.pos.localization.ReconciliationStrings
+) {
+    val label = if (isPending) strings.statusPending else strings.statusSynced
     val icon = if (isPending) Icons.Filled.Sync else Icons.Filled.CheckCircle
     val color = if (isPending) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.primary
 
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
         Icon(imageVector = icon, contentDescription = null, tint = color)
         Text(label, style = MaterialTheme.typography.bodySmall, color = color)
+    }
+}
+
+@Composable
+private fun EmptyReconciliationState(
+    strings: com.erpnext.pos.localization.ReconciliationStrings
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+    ) {
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text(strings.emptyTitle, style = MaterialTheme.typography.titleMedium)
+            Text(strings.emptyMessage, style = MaterialTheme.typography.bodySmall)
+        }
     }
 }
