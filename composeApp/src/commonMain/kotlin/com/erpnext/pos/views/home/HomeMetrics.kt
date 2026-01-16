@@ -18,12 +18,33 @@ data class HomeMetrics(
     val costCoveragePercent: Double? = null,
     val topProducts: List<TopProductMetric> = emptyList(),
     val topProductsByMargin: List<TopProductMarginMetric> = emptyList(),
-    val weekSeries: List<DailyMetric> = emptyList()
+    val weekSeries: List<DailyMetric> = emptyList(),
+    val currencyMetrics: List<CurrencyHomeMetric> = emptyList()
 )
 
 data class DailyMetric(
     val date: String,
     val total: Double
+)
+
+data class CurrencyHomeMetric(
+    val currency: String,
+    val totalSalesToday: Double,
+    val invoicesToday: Int,
+    val avgTicket: Double,
+    val customersToday: Int,
+    val outstandingTotal: Double,
+    val salesYesterday: Double,
+    val salesLast7: Double,
+    val salesPrev7: Double,
+    val compareVsYesterday: Double?,
+    val compareVsLastWeek: Double?,
+    val marginToday: Double?,
+    val marginTodayPercent: Double?,
+    val marginLast7: Double?,
+    val marginLast7Percent: Double?,
+    val costCoveragePercent: Double?,
+    val weekSeries: List<DailyMetric>
 )
 
 data class TopProductMetric(
