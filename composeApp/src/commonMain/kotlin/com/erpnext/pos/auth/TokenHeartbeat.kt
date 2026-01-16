@@ -1,6 +1,7 @@
 package com.erpnext.pos.auth
 
 import com.erpnext.pos.utils.NetworkMonitor
+import com.erpnext.pos.remoteSource.oauth.TokenStore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -14,7 +15,8 @@ import kotlinx.coroutines.flow.first
 class TokenHeartbeat(
     private val scope: CoroutineScope,
     private val sessionRefresher: SessionRefresher,
-    private val networkMonitor: NetworkMonitor
+    private val networkMonitor: NetworkMonitor,
+    private val tokenStore: TokenStore
 ) {
     private var job: Job? = null
 
@@ -23,6 +25,10 @@ class TokenHeartbeat(
         job = scope.launch {
             while (true) {
                 delay(intervalMinutes * 60 * 1000)
+                val tokens = tokenStore.load()
+                if (tokens == null) {
+                    continue
+                }
                 val isOnline = networkMonitor.isConnected.first()
                 if (isOnline) {
                     sessionRefresher.ensureValidSession()
