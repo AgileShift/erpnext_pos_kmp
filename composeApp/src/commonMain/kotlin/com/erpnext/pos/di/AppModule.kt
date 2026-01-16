@@ -252,7 +252,8 @@ val appModule = module {
         TokenHeartbeat(
             scope = get(),
             sessionRefresher = get(),
-            networkMonitor = get()
+            networkMonitor = get(),
+            tokenStore = get()
         ).apply { start(intervalMinutes = 1) }
     }
     single {
