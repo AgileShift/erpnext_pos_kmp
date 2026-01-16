@@ -15,20 +15,18 @@ class PaymentTermsRepository(
         RepoTrace.breadcrumb("PaymentTermsRepository", "fetchPaymentTerms")
 
         val localData = localSource.getAll().map { it.toBO() }
-        if (localData.isNotEmpty()) return localData
 
-        val remote = runCatching { api.fetchPaymentTerms() }
+        return runCatching { api.fetchPaymentTerms() }
             .onSuccess { terms ->
+                localSource.deleteAll()
                 if (terms.isNotEmpty()) {
                     localSource.insertAll(terms.map { it.toEntity() })
                 }
             }
+            .map { terms -> terms.map { it.toEntity().toBO() } }
             .getOrElse { error ->
                 RepoTrace.capture("PaymentTermsRepository", "fetchPaymentTerms", error)
-                emptyList()
+                localData
             }
-
-        return remote.map { term -> term.toEntity().toBO() }
-            .ifEmpty { emptyList() }
     }
 }
