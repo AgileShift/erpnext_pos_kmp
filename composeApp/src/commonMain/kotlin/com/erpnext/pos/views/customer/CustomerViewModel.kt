@@ -10,8 +10,8 @@ import com.erpnext.pos.domain.usecases.CheckCustomerCreditUseCase
 import com.erpnext.pos.domain.usecases.CustomerCreditInput
 import com.erpnext.pos.domain.usecases.CustomerQueryInput
 import com.erpnext.pos.domain.usecases.FetchCustomerDetailUseCase
-import com.erpnext.pos.domain.usecases.FetchCustomersUseCase
-import com.erpnext.pos.domain.usecases.FetchOutstandingInvoicesForCustomerUseCase
+import com.erpnext.pos.domain.usecases.FetchCustomersLocalWithStateUseCase
+import com.erpnext.pos.domain.usecases.FetchOutstandingInvoicesLocalForCustomerUseCase
 import com.erpnext.pos.domain.usecases.FetchSalesInvoiceLocalUseCase
 import com.erpnext.pos.localSource.dao.ModeOfPaymentDao
 import com.erpnext.pos.localSource.entities.ModeOfPaymentEntity
@@ -39,12 +39,17 @@ import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 
 @OptIn(FlowPreview::class)
+/**
+ * Customer view consumes local-only sources:
+ * - Customers from CustomerLocalSource via FetchCustomersLocalWithStateUseCase.
+ * - Outstanding invoices from SalesInvoiceDao via FetchOutstandingInvoicesLocalForCustomerUseCase.
+ */
 class CustomerViewModel(
     private val cashboxManager: CashBoxManager,
-    private val fetchCustomersUseCase: FetchCustomersUseCase,
+    private val fetchCustomersUseCase: FetchCustomersLocalWithStateUseCase,
     private val checkCustomerCreditUseCase: CheckCustomerCreditUseCase,
     private val fetchCustomerDetailUseCase: FetchCustomerDetailUseCase,
-    private val fetchOutstandingInvoicesUseCase: FetchOutstandingInvoicesForCustomerUseCase,
+    private val fetchOutstandingInvoicesUseCase: FetchOutstandingInvoicesLocalForCustomerUseCase,
     private val fetchSalesInvoiceLocalUseCase: FetchSalesInvoiceLocalUseCase,
     private val modeOfPaymentDao: ModeOfPaymentDao,
     private val paymentHandler: PaymentHandler

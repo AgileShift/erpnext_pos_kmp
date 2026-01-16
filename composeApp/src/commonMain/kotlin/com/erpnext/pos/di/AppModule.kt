@@ -25,6 +25,7 @@ import com.erpnext.pos.domain.usecases.CreateSalesInvoiceLocalUseCase
 import com.erpnext.pos.domain.usecases.CreateSalesInvoiceRemoteOnlyUseCase
 import com.erpnext.pos.domain.usecases.FetchBillingProductsLocalUseCase
 import com.erpnext.pos.domain.usecases.FetchCustomersLocalUseCase
+import com.erpnext.pos.domain.usecases.FetchCustomersLocalWithStateUseCase
 import com.erpnext.pos.domain.usecases.CreateSalesInvoiceUseCase
 import com.erpnext.pos.domain.usecases.FetchBillingProductsWithPriceUseCase
 import com.erpnext.pos.domain.usecases.FetchCategoriesUseCase
@@ -34,6 +35,7 @@ import com.erpnext.pos.domain.usecases.FetchDeliveryChargesUseCase
 import com.erpnext.pos.domain.usecases.FetchInventoryItemUseCase
 import com.erpnext.pos.domain.usecases.FetchPendingInvoiceUseCase
 import com.erpnext.pos.domain.usecases.FetchOutstandingInvoicesForCustomerUseCase
+import com.erpnext.pos.domain.usecases.FetchOutstandingInvoicesLocalForCustomerUseCase
 import com.erpnext.pos.domain.usecases.FetchSalesInvoiceLocalUseCase
 import com.erpnext.pos.domain.usecases.FetchSalesInvoiceRemoteUseCase
 import com.erpnext.pos.domain.usecases.SyncSalesInvoiceFromRemoteUseCase
@@ -456,6 +458,7 @@ val appModule = module {
     single { CheckCustomerCreditUseCase(get()) }
     single { FetchPendingInvoiceUseCase(get()) }
     single { FetchOutstandingInvoicesForCustomerUseCase(get()) }
+    single { FetchOutstandingInvoicesLocalForCustomerUseCase(get()) }
     single { FetchSalesInvoiceRemoteUseCase(get()) }
     single { FetchSalesInvoiceLocalUseCase(get()) }
     single { SyncSalesInvoiceFromRemoteUseCase(get()) }
@@ -466,6 +469,7 @@ val appModule = module {
     single { MarkSalesInvoiceSyncedUseCase(get()) }
     single { FetchCustomersUseCase(get()) }
     single { FetchCustomersLocalUseCase(get()) }
+    single { FetchCustomersLocalWithStateUseCase(get()) }
     single { FetchPaymentTermsUseCase(get()) }
     single { FetchDeliveryChargesUseCase(get()) }
     single { FetchCustomerDetailUseCase(get()) }
