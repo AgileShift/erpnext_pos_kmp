@@ -557,8 +557,6 @@ fun CustomerItem(
     val strings = LocalAppStrings.current
     val isOverLimit = (customer.availableCredit ?: 0.0) < 0 || (customer.currentBalance ?: 0.0) > 0
     val pendingInvoices = customer.pendingInvoices ?: 0
-    val availableCredit = customer.availableCredit ?: 0.0
-    val creditLimit = customer.creditLimit ?: 0.0
     val baseCurrency = normalizeCurrency(partyAccountCurrency)
         ?: normalizeCurrency(posCurrency)
         ?: "USD"
@@ -600,17 +598,6 @@ fun CustomerItem(
     }
     val emphasis = pendingInvoices > 0 || isOverLimit
     val cardElevation = if (emphasis) 3.dp else 1.dp
-    val availableLabel = if (creditLimit > 0.0) {
-        "${strings.customer.availableLabel}/${strings.customer.limitLabel}"
-    } else {
-        strings.customer.availableLabel
-    }
-    val availableValue = if (creditLimit > 0.0) {
-        "$currencySymbol ${formatAmount(availableCredit)} / ${formatAmount(creditLimit)}"
-    } else {
-        "$currencySymbol ${formatAmount(availableCredit)}"
-    }
-
     val cardShape = RoundedCornerShape(20.dp)
     Card(
         modifier = Modifier
@@ -758,11 +745,6 @@ fun CustomerItem(
                         label = strings.customer.outstandingSummaryInvoicesLabel,
                         value = "$pendingInvoices",
                         isCritical = pendingInvoices > 0
-                    )
-                    MetricBlock(
-                        label = availableLabel,
-                        value = availableValue,
-                        isCritical = availableCredit < 0
                     )
                 }
             }
@@ -1604,9 +1586,6 @@ private fun CustomerOutstandingSummary(
 
     val customerCurrency = partyTotals.keys.firstOrNull() ?: posCurrency
     val customerAmount = partyTotals.getOrElse(customerCurrency) { 0.0 }
-    val availableCredit = customer.availableCredit ?: 0.0
-    val creditLimit = customer.creditLimit ?: 0.0
-
     val totalInPos = if (invoices.isNotEmpty()) {
         invoices.sumOf { invoice ->
             val invoiceCurrency = normalizeCurrency(invoice.partyAccountCurrency)
@@ -1648,24 +1627,6 @@ private fun CustomerOutstandingSummary(
         ) {
             Text(strings.customer.outstandingSummaryInvoicesLabel)
             Text("${customer.pendingInvoices ?: 0}")
-        }
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            val symbol = customerCurrency.toCurrencySymbol().ifBlank { customerCurrency }
-            val label = if (creditLimit > 0.0) {
-                "${strings.customer.availableLabel}/${strings.customer.limitLabel}"
-            } else {
-                strings.customer.availableLabel
-            }
-            val value = if (creditLimit > 0.0) {
-                "$symbol ${formatAmount(availableCredit)} / ${formatAmount(creditLimit)}"
-            } else {
-                "$symbol ${formatAmount(availableCredit)}"
-            }
-            Text(label)
-            Text(value)
         }
         partyTotals.forEach { (currency, amount) ->
             val symbol = currency.toCurrencySymbol().ifBlank { currency }
