@@ -86,6 +86,7 @@ import com.erpnext.pos.sync.SyncManager
 import com.erpnext.pos.di.v2.appModulev2
 import com.erpnext.pos.utils.AppLogger
 import com.erpnext.pos.utils.AppSentry
+import com.erpnext.pos.utils.TokenUtils
 import com.erpnext.pos.utils.prefsPath
 import com.erpnext.pos.utils.view.SnackbarController
 import com.erpnext.pos.views.CashBoxManager
@@ -171,7 +172,25 @@ val appModule = module {
                 install(Auth) {
                     bearer {
                         loadTokens {
-                            tokenStore.load()?.toBearerToken()
+                            val currentTokens = tokenStore.load() ?: return@loadTokens null
+                            if (TokenUtils.isValid(currentTokens.id_token)) {
+                                return@loadTokens currentTokens.toBearerToken()
+                            }
+                            val refreshToken =
+                                currentTokens.refresh_token ?: return@loadTokens null
+                            val refreshed = runCatching {
+                                refreshAuthToken(tokenRefreshClient, authInfoStore, refreshToken)
+                            }.getOrElse { throwable ->
+                                AppSentry.capture(throwable, "loadTokens refresh failed")
+                                AppLogger.warn("loadTokens refresh failed", throwable)
+                                tokenStore.clear()
+                                return@loadTokens null
+                            }
+                            tokenStore.save(refreshed)
+                            BearerTokens(
+                                refreshed.access_token,
+                                refreshed.refresh_token ?: currentTokens.refresh_token
+                            )
                         }
                         refreshTokens {
                             val currentTokens = tokenStore.load() ?: return@refreshTokens null
