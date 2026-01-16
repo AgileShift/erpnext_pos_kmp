@@ -16,6 +16,12 @@ val sentryEnv = properties["buildkonfig.flavor"]?.toString() ?: "staging"
 
 compose.desktop {
     application {
+        jvmArgs(
+            "--add-modules", "jdk.unsupported",
+            "--add-opens", "java.base/jdk.internal.misc=ALL-UNNAMED",
+            "--add-opens", "java.base/java.lang=ALL-UNNAMED",
+            "--add-opens", "java.base/java.nio=ALL-UNNAMED"
+        )
         nativeDistributions {
             packageName = "ERP POS"
             packageVersion = "1.0.0"
@@ -34,6 +40,7 @@ compose.desktop {
         }
     }
 }
+
 plugins {
     alias(libs.plugins.kotlinMultiplatform)
     alias(libs.plugins.kmpLibrary)

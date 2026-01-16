@@ -11,7 +11,7 @@
 - De cara a mañana, seguimos con la lista ordenada en esta misma sección: después de dejar este estado de offline-first sólido, continuamos con la primera tarea pendiente de la checklist para no romper el orden preestablecido.
 
 ## Checklist de siguientes tareas (pendiente por completar)
-- [ ] Primero, antes que todo, necesitamos que si el token esta invalido manadr el refresh token en automatico y volver a autenticar, sin que de problemas antes de hacer cualquer peticion, deberiamos de hacer esto con el Ktor plugin de autenticacion
+- [ ] Primero, antes que todo, necesitamos que si el token esta invalido manadr el refresh token en automatico y volver a autenticar, sin que de problemas antes de hacer cualquer peticion, deberiamos de hacer esto con el Ktor plugin de autenticacion, Hearbeath no funciona, igual el token expira y tenemos que volver a inciiar sesion
 - [X] Mejorar los "connection timeout" al sincronizar
 - [X] **Tenemos que aplicar la misma logica de pagos, metodos de pago, monedas, cambio de moneda, vuelto a favor, aplicar el monto justo a la factura y demas en la pantalla de Registrar pago en Customer igual que como esta en BillingScreen**
 - [X] **Agregar una barra de carga mientras ejecuta cualquier proceso (guardado, lectura, actualizacion, eliminacion) en cualquiera de las vistas para darle contexto visual al usuario**
@@ -20,15 +20,18 @@
 - [X] No se estan registrando los pagos en tabSalesInvoicePayment cuando se paga por "Registrar pago (Customer)"
 - [ ] En la vista de customer evitar cualquier llamada al API, me di cuenta que hacemos llamado a Sales Invoice, debemos obtener las facturas locales que ya sincronizamos previamente
 - [ ] Todo monto (Moneda) dentro de la aplicacion tiene que adaptarse a la moneda del POS actualemente abierto, por ejemplo todos los KPIs BI que tenemos estan bien en NIO, pero al abrir el POS en USD no deberian aparecer esos datos que se facturaron en NIO, que opinas? deberia o no, esta seria una vista de Administradores/Gerentes, les importa por moneda o no? Si es por moneda como hariamos?
-- [ ] **Dejo de aparecer el credito disponible de los clientes**
-- [-] **Verificar que el saldo pendiente que se mira en la vista de Customer este en la ambas monedas, en la moneda de la factura que generalmente es la moneda del POS y en la moneda del party_account_currency de la factura, validar que podamos obtener esa informacion**
+- [X] **Dejo de aparecer el credito disponible de los clientes**
+- [X] **Verificar que el saldo pendiente que se mira en la vista de Customer este en la ambas monedas, en la moneda de la factura que generalmente es la moneda del POS y en la moneda del party_account_currency de la factura, validar que podamos obtener esa informacion**
+- [ ] **Retira el blque de Credito disponible dentro de Customer**
 - [ ] **Crear la pantalla de conciliacion**
 - [ ] La barra superior del Home me gustaria que fuera fija para cualquier pantalla en la que estemos
 - [ ] Solucionar detalle con navegacion, si llamo a otra pantalla desde alguna otra no puedo regersar atras desde el menu, eso no deberia de pasar
 - [ ] Agregar capacidad de scrolling en Home y tambien hacer collapsible por secciones de BI
 - [ ] Configurar redondeo/tolerancia por moneda desde configuraciones (alineado con ERPNext)
 - [ ] En las ordenes de venta poner opcion para reservar inventario por la cantidad de tiempo que la misma orden
-- [ ] Aplicar tema oscuro a movil y desktop, por defecto del sistema o desde Configuracion
+- [X] Aplicar tema oscuro a movil y desktop, por defecto del sistema o desde Configuracion
+- [ ] Verificar que el tema se apligue automaticamente segun el sistema, por favor
+- [ ] Ajustar los temas para hacerlo mas llamativos y coorporativos, ajustar toda la UI a esos temas
 - [ ] Localizar los textos dentro del viewModel
 - [ ] Localizar los textos de los menus
 - [X] La informacion del Dashboard (Resumen BI) no carga, de donde estamos trayendo la informacion?
