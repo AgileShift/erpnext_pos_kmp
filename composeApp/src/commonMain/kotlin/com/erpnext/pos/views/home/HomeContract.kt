@@ -36,6 +36,7 @@ data class HomeAction(
     val isCashboxOpen: () -> StateFlow<Boolean> = { MutableStateFlow(false) },
     val onOpenSettings: () -> Unit = {},
     val onOpenReconciliation: () -> Unit = {},
+    val onCloseCashbox: () -> Unit = {},
     val onLogout: () -> Unit = {},
     val onError: (error: String) -> Unit = {},
 )

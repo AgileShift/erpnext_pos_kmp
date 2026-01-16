@@ -135,7 +135,11 @@ class HomeViewModel(
     }
 
     fun openReconciliation() {
-        navManager.navigateTo(NavRoute.Reconciliation)
+        navManager.navigateTo(NavRoute.Reconciliation())
+    }
+
+    fun openCloseCashbox() {
+        navManager.navigateTo(NavRoute.Reconciliation(com.erpnext.pos.views.reconciliation.ReconciliationMode.Close))
     }
 
     fun onError(error: String) {

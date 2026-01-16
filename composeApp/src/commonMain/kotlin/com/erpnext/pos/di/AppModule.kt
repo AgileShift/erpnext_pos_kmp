@@ -418,7 +418,7 @@ val appModule = module {
     //endregion
 
     //region Reconciliation
-    single { ReconciliationViewModel(get()) }
+    single { ReconciliationViewModel(get(), get()) }
     //endregion
 
     //region Checkout

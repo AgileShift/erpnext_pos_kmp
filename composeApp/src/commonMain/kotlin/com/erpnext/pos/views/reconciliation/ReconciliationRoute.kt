@@ -5,25 +5,39 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
-import com.erpnext.pos.navigation.NavRoute
+import androidx.compose.runtime.LaunchedEffect
 import com.erpnext.pos.navigation.NavigationManager
 import org.koin.compose.koinInject
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ReconciliationRoute(
+    mode: ReconciliationMode,
     viewModel: ReconciliationViewModel = koinInject(),
     navManager: NavigationManager = koinInject()
 ) {
     val state by viewModel.stateFlow.collectAsState()
-    val actions = rememberReconciliationActions(navManager)
+    val closeState by viewModel.closeState.collectAsState()
+    val actions = rememberReconciliationActions(navManager, viewModel)
 
-    ReconciliationScreen(state, actions)
+    LaunchedEffect(closeState.isClosed, mode) {
+        if (mode == ReconciliationMode.Close && closeState.isClosed) {
+            navManager.navigateTo(com.erpnext.pos.navigation.NavRoute.Home)
+        }
+    }
+
+    ReconciliationScreen(state, mode, closeState, actions)
 }
 
 @Composable
-fun rememberReconciliationActions(navManager: NavigationManager): ReconciliationAction {
-    return remember(navManager) {
-        ReconciliationAction(onBack = { navManager.navigateTo(NavRoute.NavigateUp) })
+fun rememberReconciliationActions(
+    navManager: NavigationManager,
+    viewModel: ReconciliationViewModel
+): ReconciliationAction {
+    return remember(navManager, viewModel) {
+        ReconciliationAction(
+            onBack = { navManager.navigateTo(com.erpnext.pos.navigation.NavRoute.NavigateUp) },
+            onConfirmClose = viewModel::closeCashbox
+        )
     }
 }

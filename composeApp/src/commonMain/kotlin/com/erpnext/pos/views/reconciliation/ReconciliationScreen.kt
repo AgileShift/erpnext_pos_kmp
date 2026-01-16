@@ -23,6 +23,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -35,6 +37,8 @@ import com.erpnext.pos.utils.formatDoubleToString
 @Composable
 fun ReconciliationScreen(
     state: ReconciliationState,
+    mode: ReconciliationMode,
+    closeState: CloseCashboxState,
     actions: ReconciliationAction
 ) {
     val appStrings = LocalAppStrings.current
@@ -63,6 +67,9 @@ fun ReconciliationScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             Text(strings.subtitle, style = MaterialTheme.typography.bodyMedium)
+            if (mode == ReconciliationMode.Close) {
+                CloseCashboxCard(strings, closeState, actions.onConfirmClose)
+            }
             when (state) {
                 ReconciliationState.Loading -> {
                     Text(strings.loadingLabel)
@@ -216,6 +223,38 @@ private fun ReconciliationStatusChip(
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
         Icon(imageVector = icon, contentDescription = null, tint = color)
         Text(label, style = MaterialTheme.typography.bodySmall, color = color)
+    }
+}
+
+@Composable
+private fun CloseCashboxCard(
+    strings: com.erpnext.pos.localization.ReconciliationStrings,
+    closeState: CloseCashboxState,
+    onConfirmClose: () -> Unit
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+    ) {
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text(strings.confirmCloseTitle, style = MaterialTheme.typography.titleMedium)
+            Text(strings.confirmCloseBody, style = MaterialTheme.typography.bodySmall)
+            closeState.errorMessage?.let { error ->
+                Text(error, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+            }
+            if (closeState.isClosed) {
+                Text(strings.closeSuccessMessage, style = MaterialTheme.typography.bodySmall)
+            }
+            Button(
+                onClick = onConfirmClose,
+                enabled = !closeState.isClosing && !closeState.isClosed,
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+            ) {
+                Text(
+                    if (closeState.isClosing) strings.closeInProgressLabel else strings.confirmCloseButton
+                )
+            }
+        }
     }
 }
 

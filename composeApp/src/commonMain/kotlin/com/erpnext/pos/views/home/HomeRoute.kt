@@ -29,6 +29,7 @@ fun rememberHomeActions(coordinator: HomeCoordinator): HomeAction {
             loadInitialData = coordinator::loadInitialData,
             onOpenSettings = coordinator::openSettings,
             onOpenReconciliation = coordinator::openReconciliation,
+            onCloseCashbox = coordinator::openCloseCashbox,
             onLogout = coordinator::logout,
             onError = coordinator::onError,
             openCashbox = coordinator::openCashbox,

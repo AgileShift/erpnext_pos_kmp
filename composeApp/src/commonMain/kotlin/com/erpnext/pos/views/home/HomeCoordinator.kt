@@ -60,6 +60,10 @@ class HomeCoordinator(
     fun openReconciliation() {
         viewModel.openReconciliation()
     }
+
+    fun openCloseCashbox() {
+        viewModel.openCloseCashbox()
+    }
 }
 
 @Composable

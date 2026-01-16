@@ -6,6 +6,7 @@ import androidx.navigation.NavHostController
 import androidx.navigation.navArgument
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import androidx.navigation.NavType
 import androidx.savedstate.read
 import com.erpnext.pos.navigation.NavRoute
 import com.erpnext.pos.views.billing.BillingRoute
@@ -22,6 +23,7 @@ import com.erpnext.pos.views.settings.SettingsRoute
 import com.erpnext.pos.views.splash.SplashRoute
 import com.erpnext.pos.views.paymententry.PaymentEntryRoute
 import com.erpnext.pos.views.reconciliation.ReconciliationRoute
+import com.erpnext.pos.views.reconciliation.ReconciliationMode
 
 @ExperimentalMaterial3Api
 object NavGraph {
@@ -65,8 +67,19 @@ object NavGraph {
             composable(NavRoute.DeliveryNote.path) {
                 DeliveryNoteRoute()
             }
-            composable(NavRoute.Reconciliation.path) {
-                ReconciliationRoute()
+            composable(
+                route = NavRoute.Reconciliation.route,
+                arguments = listOf(
+                    navArgument("mode") {
+                        type = NavType.StringType
+                        defaultValue = ReconciliationMode.Review.value
+                    }
+                )
+            ) { entry ->
+                val mode = ReconciliationMode.from(
+                    entry.arguments?.getString("mode")
+                )
+                ReconciliationRoute(mode)
             }
             composable(NavRoute.Settings.path) {
                 SettingsRoute()

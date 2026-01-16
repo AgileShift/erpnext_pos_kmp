@@ -180,7 +180,7 @@ fun HomeScreen(
                         ShiftOpenChip(
                             isOpen = isCashboxOpen,
                             duration = formatShiftDuration(shiftStart, tick),
-                            closeAction = actions.closeCashbox
+                            closeAction = actions.onCloseCashbox
                         )
                     }
                 },
@@ -474,7 +474,7 @@ fun HomeScreen(
                     Button(
                         onClick = {
                             if (isCashboxOpen) {
-                                actions.closeCashbox()
+                                actions.onCloseCashbox()
                             } else {
                                 if (currentProfiles.isNotEmpty()) {
                                     showDialog = true

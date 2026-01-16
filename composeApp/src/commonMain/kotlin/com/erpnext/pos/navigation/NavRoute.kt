@@ -34,7 +34,18 @@ sealed class NavRoute(
     object Quotation : NavRoute("quotation", "Cotizaciones", Icons.Filled.Description)
     object SalesOrder : NavRoute("sales-order", "Orden de venta", Icons.Filled.ShoppingCart)
     object DeliveryNote : NavRoute("delivery-note", "Nota de entrega", Icons.Filled.LocalShipping)
-    object Reconciliation : NavRoute("reconciliation", "Reconciliation", Icons.Filled.AccountBalance)
+    data class Reconciliation(
+        val mode: com.erpnext.pos.views.reconciliation.ReconciliationMode =
+            com.erpnext.pos.views.reconciliation.ReconciliationMode.Review
+    ) : NavRoute(
+        path = "reconciliation?mode=${mode.value}",
+        title = "Reconciliation",
+        icon = Icons.Filled.AccountBalance
+    ) {
+        companion object {
+            const val route = "reconciliation?mode={mode}"
+        }
+    }
     object Settings : NavRoute("settings", "", Icons.Filled.Settings)
     data class PaymentEntry(val invoiceId: String? = null) : NavRoute(
         path = if (invoiceId.isNullOrBlank()) {
