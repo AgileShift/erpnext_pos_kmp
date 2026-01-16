@@ -89,7 +89,9 @@ class LoadHomeMetricsUseCase(
             endDate = today.toString()
         ).associateBy { it.currency }
 
+        val availableCurrencies = salesInvoiceDao.getAvailableCurrencies()
         val currencies = buildSet {
+            availableCurrencies.forEach { add(it) }
             currencySummaries.forEach { add(it.currency) }
             outstandingByCurrency.keys.forEach { add(it) }
             dailyTotalsByCurrency.forEach { add(it.currency) }

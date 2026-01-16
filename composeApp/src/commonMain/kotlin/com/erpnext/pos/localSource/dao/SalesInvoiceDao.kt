@@ -87,6 +87,15 @@ interface SalesInvoiceDao {
 
     @Query(
         """
+        SELECT DISTINCT currency
+        FROM tabSalesInvoice
+        WHERE currency IS NOT NULL AND currency != ''
+        """
+    )
+    suspend fun getAvailableCurrencies(): List<String>
+
+    @Query(
+        """
         SELECT currency AS currency,
                SUM(grand_total) AS total,
                COUNT(*) AS invoices,

@@ -652,6 +652,11 @@ private fun BISection(metrics: HomeMetrics) {
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold
             )
+            Text(
+                text = "Metrics are shown per selected currency to avoid duplicated totals.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -676,11 +681,6 @@ private fun BISection(metrics: HomeMetrics) {
                     modifier = Modifier.weight(1f)
                 )
                 MetricCard(
-                    title = "Sales last 7 days",
-                    value = "$symbol ${formatAmount(selectedMetric.salesLast7)}",
-                    modifier = Modifier.weight(1f)
-                )
-                MetricCard(
                     title = "Outstanding",
                     value = "$symbol ${formatAmount(selectedMetric.outstandingTotal)}",
                     modifier = Modifier.weight(1f)
@@ -691,13 +691,8 @@ private fun BISection(metrics: HomeMetrics) {
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 MetricCard(
-                    title = "Invoices today",
-                    value = selectedMetric.invoicesToday.toString(),
-                    modifier = Modifier.weight(1f)
-                )
-                MetricCard(
-                    title = "Customers today",
-                    value = selectedMetric.customersToday.toString(),
+                    title = "Sales last 7 days",
+                    value = "$symbol ${formatAmount(selectedMetric.salesLast7)}",
                     modifier = Modifier.weight(1f)
                 )
                 MetricCard(
@@ -728,6 +723,36 @@ private fun BISection(metrics: HomeMetrics) {
                     ),
                     modifier = Modifier.weight(1f)
                 )
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                MetricCard(
+                    title = "Invoices today",
+                    value = selectedMetric.invoicesToday.toString(),
+                    modifier = Modifier.weight(1f)
+                )
+                MetricCard(
+                    title = "Customers today",
+                    value = selectedMetric.customersToday.toString(),
+                    modifier = Modifier.weight(1f)
+                )
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                val outstandingRatio = if (selectedMetric.salesLast7 > 0.0) {
+                    (selectedMetric.outstandingTotal / selectedMetric.salesLast7) * 100.0
+                } else {
+                    null
+                }
+                MetricCard(
+                    title = "Outstanding ratio (7d)",
+                    value = formatPercent(outstandingRatio),
+                    modifier = Modifier.weight(1f)
+                )
                 MetricCard(
                     title = "Cost coverage",
                     value = formatPercent(selectedMetric.costCoveragePercent),
@@ -746,11 +771,6 @@ private fun BISection(metrics: HomeMetrics) {
                 MetricCard(
                     title = "Vs last week",
                     value = formatPercent(selectedMetric.compareVsLastWeek),
-                    modifier = Modifier.weight(1f)
-                )
-                MetricCard(
-                    title = "Sales prev 7 days",
-                    value = "$symbol ${formatAmount(selectedMetric.salesPrev7)}",
                     modifier = Modifier.weight(1f)
                 )
             }
