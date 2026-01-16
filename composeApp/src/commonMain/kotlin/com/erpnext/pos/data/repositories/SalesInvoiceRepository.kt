@@ -311,4 +311,8 @@ class SalesInvoiceRepository(
 
         return localSource.getOutstandingInvoicesForCustomer(customerName).toBO()
     }
+
+    suspend fun getOutstandingInvoicesForCustomerLocal(customerName: String): List<SalesInvoiceBO> {
+        return localSource.getOutstandingInvoicesForCustomer(customerName).toBO()
+    }
 }
