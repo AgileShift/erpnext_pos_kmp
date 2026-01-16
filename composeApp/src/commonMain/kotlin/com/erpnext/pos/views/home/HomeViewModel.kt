@@ -134,6 +134,10 @@ class HomeViewModel(
         navManager.navigateTo(NavRoute.Settings)
     }
 
+    fun openReconciliation() {
+        navManager.navigateTo(NavRoute.Reconciliation)
+    }
+
     fun onError(error: String) {
         _stateFlow.update { HomeState.Error(error) }
     }

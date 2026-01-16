@@ -21,6 +21,7 @@ import com.erpnext.pos.views.salesorder.SalesOrderRoute
 import com.erpnext.pos.views.settings.SettingsRoute
 import com.erpnext.pos.views.splash.SplashRoute
 import com.erpnext.pos.views.paymententry.PaymentEntryRoute
+import com.erpnext.pos.views.reconciliation.ReconciliationRoute
 
 @ExperimentalMaterial3Api
 object NavGraph {
@@ -63,6 +64,9 @@ object NavGraph {
             }
             composable(NavRoute.DeliveryNote.path) {
                 DeliveryNoteRoute()
+            }
+            composable(NavRoute.Reconciliation.path) {
+                ReconciliationRoute()
             }
             composable(NavRoute.Settings.path) {
                 SettingsRoute()

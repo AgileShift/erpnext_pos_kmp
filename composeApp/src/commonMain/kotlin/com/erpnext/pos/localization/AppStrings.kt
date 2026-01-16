@@ -219,7 +219,8 @@ data class NavigationStrings(
     val customer: String,
     val invoice: String,
     val billing: String,
-    val inventory: String
+    val inventory: String,
+    val reconciliation: String
 )
 
 object AppStringsFactory {
@@ -408,7 +409,8 @@ object AppStringsFactory {
             inventory = "Inventario",
             home = "Inicio",
             billing = "Ventas",
-            invoice = "Creditos"
+            invoice = "Creditos",
+            reconciliation = "Conciliación"
         ),
         common = CommonStrings(
             back = "Atrás",
@@ -603,7 +605,8 @@ object AppStringsFactory {
             inventory = "Inventory",
             invoice = "Credits",
             home = "Home",
-            billing = "Billing"
+            billing = "Billing",
+            reconciliation = "Reconciliation"
         ),
         common = CommonStrings(
             back = "Back",

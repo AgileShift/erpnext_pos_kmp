@@ -4,6 +4,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material.icons.filled.LocalShipping
+import androidx.compose.material.icons.filled.AccountBalance
 import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.PointOfSale
 import androidx.compose.material.icons.filled.Payments
@@ -33,6 +34,7 @@ sealed class NavRoute(
     object Quotation : NavRoute("quotation", "Cotizaciones", Icons.Filled.Description)
     object SalesOrder : NavRoute("sales-order", "Orden de venta", Icons.Filled.ShoppingCart)
     object DeliveryNote : NavRoute("delivery-note", "Nota de entrega", Icons.Filled.LocalShipping)
+    object Reconciliation : NavRoute("reconciliation", "Reconciliation", Icons.Filled.AccountBalance)
     object Settings : NavRoute("settings", "", Icons.Filled.Settings)
     data class PaymentEntry(val invoiceId: String? = null) : NavRoute(
         path = if (invoiceId.isNullOrBlank()) {
