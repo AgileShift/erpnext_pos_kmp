@@ -26,6 +26,20 @@ interface CashboxDao {
     @Insert(entity = BalanceDetailsEntity::class, onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertDetails(details: List<BalanceDetailsEntity>)
 
+    @Query(
+        """
+        UPDATE balance_details
+        SET closing_amount = :closingAmount
+        WHERE cashbox_id = :cashboxId
+          AND mode_of_payment = :modeOfPayment
+        """
+    )
+    suspend fun updateClosingAmount(
+        cashboxId: Long,
+        modeOfPayment: String,
+        closingAmount: Double
+    )
+
     @Insert(entity = POSOpeningEntryEntity::class, onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertOpeningEntry(entry: POSOpeningEntryEntity)
 

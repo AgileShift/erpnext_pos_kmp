@@ -37,7 +37,9 @@ fun rememberReconciliationActions(
     return remember(navManager, viewModel) {
         ReconciliationAction(
             onBack = { navManager.navigateTo(com.erpnext.pos.navigation.NavRoute.NavigateUp) },
-            onConfirmClose = viewModel::closeCashbox
+            onConfirmClose = viewModel::closeCashbox,
+            onSaveDraft = {},
+            onReload = viewModel::reload
         )
     }
 }

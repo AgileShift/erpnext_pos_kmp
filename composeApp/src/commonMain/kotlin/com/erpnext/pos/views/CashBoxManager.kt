@@ -1,5 +1,6 @@
 package com.erpnext.pos.views
 
+import com.erpnext.pos.data.mappers.toBO
 import com.erpnext.pos.domain.models.POSCurrencyOption
 import com.erpnext.pos.domain.models.POSPaymentModeOption
 import com.erpnext.pos.domain.models.POSProfileSimpleBO
@@ -11,6 +12,7 @@ import com.erpnext.pos.localSource.dao.POSOpeningEntryDao
 import com.erpnext.pos.localSource.dao.POSProfileDao
 import com.erpnext.pos.localSource.dao.UserDao
 import com.erpnext.pos.localSource.entities.CashboxEntity
+import com.erpnext.pos.localSource.entities.CashboxWithDetails
 import com.erpnext.pos.localSource.preferences.ExchangeRatePreferences
 import com.erpnext.pos.remoteSource.api.APIService
 import com.erpnext.pos.remoteSource.dto.BalanceDetailsDto
@@ -19,6 +21,7 @@ import com.erpnext.pos.remoteSource.dto.POSOpeningEntryDto
 import com.erpnext.pos.remoteSource.mapper.toDto
 import com.erpnext.pos.remoteSource.mapper.toEntity
 import com.erpnext.pos.data.repositories.ExchangeRateRepository
+import com.erpnext.pos.domain.models.UserBO
 import com.erpnext.pos.localSource.dao.CompanyDao
 import com.erpnext.pos.utils.toErpDateTime
 import io.ktor.util.date.getTimeMillis
@@ -40,6 +43,7 @@ data class PaymentModeWithAmount(
 )
 
 data class POSContext(
+    val cashier: UserBO,
     val username: String,
     val profileName: String,
     val company: String,
@@ -93,6 +97,7 @@ class CashBoxManager(
         _cashboxState.update { activeCashbox != null }
 
         currentContext = POSContext(
+            cashier = user.toBO(),
             username = user.username ?: "",
             profileName = profile.profileName,
             company = company?.companyName ?: profile.company,
@@ -181,6 +186,7 @@ class CashBoxManager(
             exchangeRate = exchangeRate,
             allowedCurrencies = allowedCurrencies,
             paymentModes = paymentModes,
+            cashier = user.toBO(),
             partyAccountCurrency = company?.defaultCurrency ?: profile.currency,
         )
         _contextFlow.value = currentContext
@@ -245,6 +251,12 @@ class CashBoxManager(
         )
     }
 
+    suspend fun getActiveCashboxWithDetails(): CashboxWithDetails? = withContext(Dispatchers.IO) {
+        val ctx = currentContext ?: initializeContext() ?: return@withContext null
+        val user = userDao.getUserInfo() ?: return@withContext null
+        cashboxDao.getActiveEntry(user.email, ctx.profileName).firstOrNull()
+    }
+
     //TODO: Sincronizar las monedas existentes y activas en el ERP
     private suspend fun resolveSupportedCurrencies(baseCurrency: String): List<POSCurrencyOption> {
         val currencies = runCatching { api.getEnabledCurrencies() }.getOrElse { emptyList() }
@@ -297,6 +309,15 @@ class CashBoxManager(
     suspend fun updateManualExchangeRate(rate: Double) {
         exchangeRatePreferences.saveManualRate(rate)
         currentContext = currentContext?.copy(exchangeRate = rate)
+    }
+
+    suspend fun updateClosingAmounts(
+        cashboxId: Long,
+        closingByMode: Map<String, Double>
+    ) = withContext(Dispatchers.IO) {
+        closingByMode.forEach { (mode, amount) ->
+            cashboxDao.updateClosingAmount(cashboxId, mode, amount)
+        }
     }
 
     suspend fun resolveExchangeRateBetween(

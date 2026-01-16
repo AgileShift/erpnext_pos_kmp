@@ -5,6 +5,7 @@ import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.number
 import kotlinx.datetime.toLocalDateTime
+import kotlinx.datetime.toInstant
 import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
 import kotlin.time.Instant
@@ -67,3 +68,29 @@ fun Long.toErpDate(tz: TimeZone = TimeZone.currentSystemDefault()) = epochMillis
 @OptIn(ExperimentalTime::class)
 fun nowErpDateTime(tz: TimeZone = TimeZone.currentSystemDefault()) =
     epochMillisToErpDateTime(Clock.System.now().toEpochMilliseconds(), tz)
+
+fun parseErpDateTimeToEpochMillis(
+    value: String?,
+    tz: TimeZone = TimeZone.currentSystemDefault()
+): Long? {
+    if (value.isNullOrBlank()) return null
+    val trimmed = value.trim()
+    val parts = trimmed.split(" ")
+    val datePart = parts.getOrNull(0)?.trim().orEmpty()
+    if (datePart.isBlank()) return null
+    val timePart = parts.getOrNull(1)?.trim().orEmpty()
+    val dateTokens = datePart.split("-")
+    if (dateTokens.size < 3) return null
+    val year = dateTokens[0].toIntOrNull() ?: return null
+    val month = dateTokens[1].toIntOrNull() ?: return null
+    val day = dateTokens[2].toIntOrNull() ?: return null
+    val timeTokens = if (timePart.isBlank()) emptyList() else timePart.split(":")
+    val hour = timeTokens.getOrNull(0)?.toIntOrNull() ?: 0
+    val minute = timeTokens.getOrNull(1)?.toIntOrNull() ?: 0
+    val second = timeTokens.getOrNull(2)?.toIntOrNull() ?: 0
+    return runCatching {
+        LocalDateTime(year, month, day, hour, minute, second)
+            .toInstant(tz)
+            .toEpochMilliseconds()
+    }.getOrNull()
+}

@@ -1,21 +1,41 @@
 package com.erpnext.pos.views.reconciliation
 
-data class ReconciliationSessionUi(
-    val id: String,
-    val posProfile: String,
-    val openingEntry: String,
-    val periodStart: String,
-    val periodEnd: String,
-    val closingAmount: Double,
-    val pendingSync: Boolean
+data class OpeningBalanceDetailUi(
+    val modeOfPayment: String,
+    val openingAmount: Double
 )
 
 sealed class ReconciliationState {
     object Loading : ReconciliationState()
     object Empty : ReconciliationState()
-    data class Success(val sessions: List<ReconciliationSessionUi>) : ReconciliationState()
+    data class Success(val summary: ReconciliationSummaryUi) : ReconciliationState()
     data class Error(val message: String) : ReconciliationState()
 }
+
+data class ReconciliationSummaryUi(
+    val posProfile: String,
+    val openingEntryId: String,
+    val cashierName: String,
+    val periodStart: String,
+    val periodEnd: String?,
+    val openingAmount: Double,
+    val openingDetails: List<OpeningBalanceDetailUi>,
+    val openingByMode: Map<String, Double>,
+    val paymentsByMode: Map<String, Double>,
+    val expectedByMode: Map<String, Double>,
+    val cashModes: Set<String>,
+    val salesTotal: Double,
+    val paymentsTotal: Double,
+    val expensesTotal: Double,
+    val expectedTotal: Double,
+    val currency: String,
+    val currencySymbol: String?,
+    val invoiceCount: Int,
+    val cashByCurrency: Map<String, Double> = emptyMap(),
+    val openingCashByCurrency: Map<String, Double> = emptyMap()
+)
+
+const val UNASSIGNED_PAYMENT_MODE = "__UNASSIGNED__"
 
 enum class ReconciliationMode(val value: String) {
     Review("review"),
@@ -36,5 +56,7 @@ data class CloseCashboxState(
 
 data class ReconciliationAction(
     val onBack: () -> Unit = {},
-    val onConfirmClose: () -> Unit = {}
+    val onConfirmClose: (Map<String, Double>) -> Unit = {},
+    val onSaveDraft: () -> Unit = {},
+    val onReload: () -> Unit = {}
 )

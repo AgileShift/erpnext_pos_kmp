@@ -77,7 +77,7 @@ object NavGraph {
                 )
             ) { entry ->
                 val mode = ReconciliationMode.from(
-                    entry.arguments?.getString("mode")
+                    entry.arguments?.read { getString("mode") }
                 )
                 ReconciliationRoute(mode)
             }

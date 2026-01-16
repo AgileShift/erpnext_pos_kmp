@@ -447,6 +447,45 @@ interface SalesInvoiceDao {
     @Query("SELECT COUNT(*) FROM tabSalesInvoice WHERE sync_status = 'Pending'")
     suspend fun countAllSyncPending(): Int
 
+    @Query(
+        """
+        SELECT * FROM tabSalesInvoice
+        WHERE profile_id = :profileId
+          AND created_at BETWEEN :startMillis AND :endMillis
+          AND docstatus = 1
+          AND is_return = 0
+        ORDER BY created_at DESC
+        """
+    )
+    suspend fun getInvoicesForShift(
+        profileId: String,
+        startMillis: Long,
+        endMillis: Long
+    ): List<SalesInvoiceEntity>
+
+    @Query(
+        """
+        SELECT p.parent_invoice AS invoiceName,
+               p.mode_of_payment AS modeOfPayment,
+               p.amount AS amount,
+               p.payment_currency AS paymentCurrency,
+               p.exchange_rate AS exchangeRate,
+               i.currency AS invoiceCurrency,
+               i.party_account_currency AS partyAccountCurrency
+        FROM tabSalesInvoicePayment p
+        INNER JOIN tabSalesInvoice i ON i.invoice_name = p.parent_invoice
+        WHERE i.profile_id = :profileId
+          AND i.created_at BETWEEN :startMillis AND :endMillis
+          AND i.docstatus = 1
+          AND i.is_return = 0
+        """
+    )
+    suspend fun getShiftPayments(
+        profileId: String,
+        startMillis: Long,
+        endMillis: Long
+    ): List<ShiftPaymentRow>
+
     @Query("DELETE FROM tabSalesInvoice WHERE invoice_name =:invoiceId")
     suspend fun deleteByInvoiceId(invoiceId: String)
 
@@ -519,6 +558,16 @@ data class CurrencySalesSummary(
     val total: Double,
     val invoices: Int,
     val customers: Int
+)
+
+data class ShiftPaymentRow(
+    val invoiceName: String,
+    val modeOfPayment: String,
+    val amount: Double,
+    val paymentCurrency: String?,
+    val exchangeRate: Double,
+    val invoiceCurrency: String?,
+    val partyAccountCurrency: String?
 )
 
 data class CurrencyDailySalesTotal(
