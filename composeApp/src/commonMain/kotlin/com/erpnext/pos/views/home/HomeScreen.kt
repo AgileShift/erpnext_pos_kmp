@@ -9,6 +9,7 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -28,6 +29,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
@@ -55,6 +57,7 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -636,104 +639,122 @@ private fun BISection(metrics: HomeMetrics) {
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         } else {
-            currencyMetrics.forEach { currencyMetric ->
-                val symbol = currencyMetric.currency.toCurrencySymbol()
-                    .ifBlank { currencyMetric.currency }
-                Text(
-                    text = "Currency: ${currencyMetric.currency}",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold
-                )
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    MetricCard(
-                        title = "Sales today",
-                        value = "$symbol ${formatAmount(currencyMetric.totalSalesToday)}",
-                        modifier = Modifier.weight(1f)
-                    )
-                    MetricCard(
-                        title = "Sales last 7 days",
-                        value = "$symbol ${formatAmount(currencyMetric.salesLast7)}",
-                        modifier = Modifier.weight(1f)
-                    )
-                    MetricCard(
-                        title = "Outstanding",
-                        value = "$symbol ${formatAmount(currencyMetric.outstandingTotal)}",
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    MetricCard(
-                        title = "Invoices today",
-                        value = currencyMetric.invoicesToday.toString(),
-                        modifier = Modifier.weight(1f)
-                    )
-                    MetricCard(
-                        title = "Customers today",
-                        value = currencyMetric.customersToday.toString(),
-                        modifier = Modifier.weight(1f)
-                    )
-                    MetricCard(
-                        title = "Average ticket",
-                        value = "$symbol ${formatAmount(currencyMetric.avgTicket)}",
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    MetricCard(
-                        title = "Margin today",
-                        value = formatMargin(
-                            currencyMetric.marginToday,
-                            currencyMetric.marginTodayPercent,
-                            symbol
-                        ),
-                        modifier = Modifier.weight(1f)
-                    )
-                    MetricCard(
-                        title = "Margin 7 days",
-                        value = formatMargin(
-                            currencyMetric.marginLast7,
-                            currencyMetric.marginLast7Percent,
-                            symbol
-                        ),
-                        modifier = Modifier.weight(1f)
-                    )
-                    MetricCard(
-                        title = "Cost coverage",
-                        value = formatPercent(currencyMetric.costCoveragePercent),
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    MetricCard(
-                        title = "Vs yesterday",
-                        value = formatPercent(currencyMetric.compareVsYesterday),
-                        modifier = Modifier.weight(1f)
-                    )
-                    MetricCard(
-                        title = "Vs last week",
-                        value = formatPercent(currencyMetric.compareVsLastWeek),
-                        modifier = Modifier.weight(1f)
-                    )
-                    MetricCard(
-                        title = "Sales prev 7 days",
-                        value = "$symbol ${formatAmount(currencyMetric.salesPrev7)}",
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-                SalesLineChart(currencyMetric.weekSeries)
+            var selectedCurrency by remember(currencyMetrics) {
+                mutableStateOf(currencyMetrics.first().currency)
             }
+            val selectedMetric = currencyMetrics.firstOrNull { it.currency == selectedCurrency }
+                ?: currencyMetrics.first()
+            val symbol = selectedMetric.currency.toCurrencySymbol()
+                .ifBlank { selectedMetric.currency }
+
+            Text(
+                text = "Currency focus: ${selectedMetric.currency}",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold
+            )
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                currencyMetrics.forEach { metric ->
+                    FilterChip(
+                        selected = metric.currency == selectedCurrency,
+                        onClick = { selectedCurrency = metric.currency },
+                        label = { Text(metric.currency) }
+                    )
+                }
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                MetricCard(
+                    title = "Sales today",
+                    value = "$symbol ${formatAmount(selectedMetric.totalSalesToday)}",
+                    modifier = Modifier.weight(1f)
+                )
+                MetricCard(
+                    title = "Sales last 7 days",
+                    value = "$symbol ${formatAmount(selectedMetric.salesLast7)}",
+                    modifier = Modifier.weight(1f)
+                )
+                MetricCard(
+                    title = "Outstanding",
+                    value = "$symbol ${formatAmount(selectedMetric.outstandingTotal)}",
+                    modifier = Modifier.weight(1f)
+                )
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                MetricCard(
+                    title = "Invoices today",
+                    value = selectedMetric.invoicesToday.toString(),
+                    modifier = Modifier.weight(1f)
+                )
+                MetricCard(
+                    title = "Customers today",
+                    value = selectedMetric.customersToday.toString(),
+                    modifier = Modifier.weight(1f)
+                )
+                MetricCard(
+                    title = "Average ticket",
+                    value = "$symbol ${formatAmount(selectedMetric.avgTicket)}",
+                    modifier = Modifier.weight(1f)
+                )
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                MetricCard(
+                    title = "Margin today",
+                    value = formatMargin(
+                        selectedMetric.marginToday,
+                        selectedMetric.marginTodayPercent,
+                        symbol
+                    ),
+                    modifier = Modifier.weight(1f)
+                )
+                MetricCard(
+                    title = "Margin 7 days",
+                    value = formatMargin(
+                        selectedMetric.marginLast7,
+                        selectedMetric.marginLast7Percent,
+                        symbol
+                    ),
+                    modifier = Modifier.weight(1f)
+                )
+                MetricCard(
+                    title = "Cost coverage",
+                    value = formatPercent(selectedMetric.costCoveragePercent),
+                    modifier = Modifier.weight(1f)
+                )
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                MetricCard(
+                    title = "Vs yesterday",
+                    value = formatPercent(selectedMetric.compareVsYesterday),
+                    modifier = Modifier.weight(1f)
+                )
+                MetricCard(
+                    title = "Vs last week",
+                    value = formatPercent(selectedMetric.compareVsLastWeek),
+                    modifier = Modifier.weight(1f)
+                )
+                MetricCard(
+                    title = "Sales prev 7 days",
+                    value = "$symbol ${formatAmount(selectedMetric.salesPrev7)}",
+                    modifier = Modifier.weight(1f)
+                )
+            }
+            SalesLineChart(selectedMetric.weekSeries)
         }
         //TopProductsCard(metrics.topProducts, currencySymbol)
         //TopProductsByMarginCard(metrics.topProductsByMargin, currencySymbol)
