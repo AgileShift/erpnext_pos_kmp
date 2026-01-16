@@ -6,6 +6,7 @@ import com.erpnext.pos.localSource.datasources.PaymentTermLocalSource
 import com.erpnext.pos.remoteSource.api.APIService
 import com.erpnext.pos.remoteSource.mapper.toEntity
 import com.erpnext.pos.utils.RepoTrace
+import io.ktor.client.plugins.ClientRequestException
 
 class PaymentTermsRepository(
     private val api: APIService,
@@ -16,19 +17,21 @@ class PaymentTermsRepository(
 
         val localData = localSource.getAll().map { it.toBO() }
 
-        val remote = runCatching {
-            api.fetchPaymentTerms()
-        }
-
-        remote.onSuccess { terms ->
-            localSource.insertAll(terms.map { it.toEntity() })
-        }
-
-        return remote.map { terms ->
-            terms.map { term -> term.toEntity().toBO() }
-        }.getOrElse { error ->
-            RepoTrace.capture("PaymentTermsRepository", "fetchPaymentTerms", error)
-            localData
-        }
+        return runCatching { api.fetchPaymentTerms() }
+            .onSuccess { terms ->
+                localSource.deleteAll()
+                if (terms.isNotEmpty()) {
+                    localSource.insertAll(terms.map { it.toEntity() })
+                }
+            }
+            .map { terms -> terms.map { it.toEntity().toBO() } }
+            .getOrElse { error ->
+                if (error is ClientRequestException && error.response.status.value == 404) {
+                    localSource.deleteAll()
+                    return emptyList()
+                }
+                RepoTrace.capture("PaymentTermsRepository", "fetchPaymentTerms", error)
+                localData
+            }
     }
 }

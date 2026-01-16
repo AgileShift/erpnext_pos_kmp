@@ -6,6 +6,7 @@ import com.erpnext.pos.localSource.datasources.DeliveryChargeLocalSource
 import com.erpnext.pos.remoteSource.api.APIService
 import com.erpnext.pos.remoteSource.mapper.toEntity
 import com.erpnext.pos.utils.RepoTrace
+import io.ktor.client.plugins.ClientRequestException
 
 class DeliveryChargesRepository(
     private val api: APIService,
@@ -16,19 +17,21 @@ class DeliveryChargesRepository(
 
         val localData = localSource.getAll().map { it.toBO() }
 
-        val remoteResult = runCatching {
-            api.fetchDeliveryCharges()
-        }
-
-        remoteResult.onSuccess { charges ->
-            localSource.insertAll(charges.map { it.toEntity() })
-        }
-
-        return remoteResult.map { charges ->
-            charges.map { it.toEntity().toBO() }
-        }.getOrElse { error ->
-            RepoTrace.capture("DeliveryChargesRepository", "fetchDeliveryCharges", error)
-            localData
-        }
+        return runCatching { api.fetchDeliveryCharges() }
+            .onSuccess { charges ->
+                localSource.deleteAll()
+                if (charges.isNotEmpty()) {
+                    localSource.insertAll(charges.map { it.toEntity() })
+                }
+            }
+            .map { charges -> charges.map { it.toEntity().toBO() } }
+            .getOrElse { error ->
+                if (error is ClientRequestException && error.response.status.value == 404) {
+                    localSource.deleteAll()
+                    return emptyList()
+                }
+                RepoTrace.capture("DeliveryChargesRepository", "fetchDeliveryCharges", error)
+                localData
+            }
     }
 }

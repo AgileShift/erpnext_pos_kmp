@@ -85,6 +85,20 @@ interface SalesInvoiceDao {
     @Query("SELECT SUM(grand_total) FROM tabSalesInvoice WHERE posting_date = :date AND docstatus = 1")
     suspend fun getTotalSalesForDate(date: String): Double?
 
+    @Query(
+        """
+        SELECT currency AS currency,
+               SUM(grand_total) AS total,
+               COUNT(*) AS invoices,
+               COUNT(DISTINCT customer) AS customers
+        FROM tabSalesInvoice
+        WHERE posting_date = :date
+          AND docstatus = 1
+        GROUP BY currency
+        """
+    )
+    suspend fun getSalesSummaryForDateByCurrency(date: String): List<CurrencySalesSummary>
+
     @Query("SELECT COUNT(*) FROM tabSalesInvoice WHERE posting_date = :date AND docstatus = 1")
     suspend fun getSalesCountForDate(date: String): Int
 
@@ -105,6 +119,23 @@ interface SalesInvoiceDao {
         startDate: String,
         endDate: String
     ): List<DailySalesTotal>
+
+    @Query(
+        """
+        SELECT posting_date AS date,
+               currency AS currency,
+               SUM(grand_total) AS total
+        FROM tabSalesInvoice
+        WHERE posting_date BETWEEN :startDate AND :endDate
+          AND docstatus = 1
+        GROUP BY posting_date, currency
+        ORDER BY posting_date ASC
+        """
+    )
+    suspend fun getDailySalesTotalsByCurrency(
+        startDate: String,
+        endDate: String
+    ): List<CurrencyDailySalesTotal>
 
     @Query(
         """
@@ -147,6 +178,26 @@ interface SalesInvoiceDao {
 
     @Query(
         """
+        SELECT s.currency AS currency,
+               SUM(
+                    (CASE WHEN i.net_amount > 0 THEN i.net_amount ELSE i.amount END)
+                    - (IFNULL(t.valuation_rate, 0) * i.qty)
+               ) AS margin
+        FROM tabSalesInvoiceItem i
+        INNER JOIN tabSalesInvoice s ON s.invoice_name = i.parent_invoice
+        LEFT JOIN tabItem t ON t.itemCode = i.item_code
+        WHERE s.posting_date BETWEEN :startDate AND :endDate
+          AND s.docstatus = 1
+        GROUP BY s.currency
+        """
+    )
+    suspend fun getEstimatedMarginTotalByCurrency(
+        startDate: String,
+        endDate: String
+    ): List<CurrencyMarginTotal>
+
+    @Query(
+        """
         SELECT COUNT(*)
         FROM tabSalesInvoiceItem i
         INNER JOIN tabSalesInvoice s ON s.invoice_name = i.parent_invoice
@@ -163,6 +214,23 @@ interface SalesInvoiceDao {
 
     @Query(
         """
+        SELECT s.currency AS currency, COUNT(*) AS count
+        FROM tabSalesInvoiceItem i
+        INNER JOIN tabSalesInvoice s ON s.invoice_name = i.parent_invoice
+        LEFT JOIN tabItem t ON t.itemCode = i.item_code
+        WHERE s.posting_date BETWEEN :startDate AND :endDate
+          AND s.docstatus = 1
+          AND IFNULL(t.valuation_rate, 0) > 0
+        GROUP BY s.currency
+        """
+    )
+    suspend fun countItemsWithCostByCurrency(
+        startDate: String,
+        endDate: String
+    ): List<CurrencyItemCount>
+
+    @Query(
+        """
         SELECT COUNT(*)
         FROM tabSalesInvoiceItem i
         INNER JOIN tabSalesInvoice s ON s.invoice_name = i.parent_invoice
@@ -174,6 +242,21 @@ interface SalesInvoiceDao {
         startDate: String,
         endDate: String
     ): Int
+
+    @Query(
+        """
+        SELECT s.currency AS currency, COUNT(*) AS count
+        FROM tabSalesInvoiceItem i
+        INNER JOIN tabSalesInvoice s ON s.invoice_name = i.parent_invoice
+        WHERE s.posting_date BETWEEN :startDate AND :endDate
+          AND s.docstatus = 1
+        GROUP BY s.currency
+        """
+    )
+    suspend fun countItemsInRangeByCurrency(
+        startDate: String,
+        endDate: String
+    ): List<CurrencyItemCount>
 
     @Query(
         """
@@ -204,6 +287,17 @@ interface SalesInvoiceDao {
 
     @Query("SELECT SUM(outstanding_amount) FROM tabSalesInvoice WHERE status IN ('Draft','Submitted')")
     suspend fun getTotalOutstanding(): Double?
+
+    @Query(
+        """
+        SELECT currency AS currency,
+               SUM(outstanding_amount) AS total
+        FROM tabSalesInvoice
+        WHERE status IN ('Draft','Submitted')
+        GROUP BY currency
+        """
+    )
+    suspend fun getOutstandingTotalsByCurrency(): List<CurrencyOutstandingTotal>
 
     // 🔹 Limpieza / control
     @Query("DELETE FROM tabSalesInvoice WHERE docstatus = 2") // Cancelled
@@ -408,6 +502,34 @@ interface SalesInvoiceDao {
 
 data class DailySalesTotal(
     val date: String,
+    val total: Double
+)
+
+data class CurrencySalesSummary(
+    val currency: String,
+    val total: Double,
+    val invoices: Int,
+    val customers: Int
+)
+
+data class CurrencyDailySalesTotal(
+    val date: String,
+    val currency: String,
+    val total: Double
+)
+
+data class CurrencyMarginTotal(
+    val currency: String,
+    val margin: Double
+)
+
+data class CurrencyItemCount(
+    val currency: String,
+    val count: Int
+)
+
+data class CurrencyOutstandingTotal(
+    val currency: String,
     val total: Double
 )
 
