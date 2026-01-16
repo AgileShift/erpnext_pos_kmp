@@ -15,20 +15,20 @@ class DeliveryChargesRepository(
         RepoTrace.breadcrumb("DeliveryChargesRepository", "fetchDeliveryCharges")
 
         val localData = localSource.getAll().map { it.toBO() }
+        if (localData.isNotEmpty()) return localData
 
-        val remoteResult = runCatching {
-            api.fetchDeliveryCharges()
-        }
+        val remote = runCatching { api.fetchDeliveryCharges() }
+            .onSuccess { charges ->
+                if (charges.isNotEmpty()) {
+                    localSource.insertAll(charges.map { it.toEntity() })
+                }
+            }
+            .getOrElse { error ->
+                RepoTrace.capture("DeliveryChargesRepository", "fetchDeliveryCharges", error)
+                emptyList()
+            }
 
-        remoteResult.onSuccess { charges ->
-            localSource.insertAll(charges.map { it.toEntity() })
-        }
-
-        return remoteResult.map { charges ->
-            charges.map { it.toEntity().toBO() }
-        }.getOrElse { error ->
-            RepoTrace.capture("DeliveryChargesRepository", "fetchDeliveryCharges", error)
-            localData
-        }
+        return remote.map { charge -> charge.toEntity().toBO() }
+            .ifEmpty { emptyList() }
     }
 }
