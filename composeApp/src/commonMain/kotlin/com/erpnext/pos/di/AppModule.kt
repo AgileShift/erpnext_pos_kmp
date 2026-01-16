@@ -130,6 +130,7 @@ import org.koin.core.parameter.parametersOf
 import org.koin.core.qualifier.named
 import org.koin.dsl.KoinAppDeclaration
 import org.koin.dsl.module
+import kotlin.time.Clock
 
 val appModule = module {
 
@@ -173,11 +174,19 @@ val appModule = module {
                     bearer {
                         loadTokens {
                             val currentTokens = tokenStore.load() ?: return@loadTokens null
-                            if (TokenUtils.isValid(currentTokens.id_token)) {
+                            val shouldRefresh = shouldRefreshToken(currentTokens.id_token)
+                            if (!shouldRefresh) {
                                 return@loadTokens currentTokens.toBearerToken()
                             }
-                            val refreshToken =
-                                currentTokens.refresh_token ?: return@loadTokens null
+                            val refreshToken = currentTokens.refresh_token
+                            if (refreshToken == null) {
+                                return@loadTokens if (TokenUtils.isValid(currentTokens.id_token)) {
+                                    currentTokens.toBearerToken()
+                                } else {
+                                    tokenStore.clear()
+                                    null
+                                }
+                            }
                             val refreshed = runCatching {
                                 refreshAuthToken(tokenRefreshClient, authInfoStore, refreshToken)
                             }.getOrElse { throwable ->
@@ -469,6 +478,22 @@ val appModule = module {
     single { LoadHomeMetricsUseCase(get()) }
     single { GetCompanyInfoUseCase(get()) }
     //endregion
+}
+
+private const val refreshThresholdSeconds = 10 * 60L
+
+private fun shouldRefreshToken(idToken: String?): Boolean {
+    if (!TokenUtils.isValid(idToken)) return true
+    val secondsLeft = secondsToExpiry(idToken)
+    return secondsLeft != null && secondsLeft <= refreshThresholdSeconds
+}
+
+private fun secondsToExpiry(idToken: String?): Long? {
+    if (idToken == null) return null
+    val claims = TokenUtils.decodePayload(idToken) ?: return null
+    val exp = claims["exp"]?.toString()?.toLongOrNull() ?: return null
+    val now = Clock.System.now().epochSeconds
+    return exp - now
 }
 
 fun initKoin(
