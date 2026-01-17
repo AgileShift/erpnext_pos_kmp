@@ -171,8 +171,7 @@ fun ReconciliationScreen(
     val countedByCurrency = cashTotalsByCurrency.ifEmpty {
         mapOf(fallbackCurrency to 0.0)
     }
-    val totalCounted = countedByCurrency.values.sum()
-    val difference = totalCounted - expectedCashTotal
+    val differenceByCurrency = buildDifferenceByCurrency(expectedCashByCurrency, countedByCurrency)
     val formatAmount = remember(summary?.currency, summary?.currencySymbol) {
         { value: Double ->
             if (summary == null) value.toString() else formatCurrency(
@@ -197,11 +196,10 @@ fun ReconciliationScreen(
         bottomBar = {
             if (summary != null && mode == ReconciliationMode.Close) {
                 ReconciliationActionsBar(
-                    difference = difference,
+                    differenceByCurrency = differenceByCurrency,
                     isClosing = closeState.isClosing,
                     onClose = { actions.onConfirmClose(countedByMode) },
                     onSaveDraft = actions.onSaveDraft,
-                    formatAmount = formatAmount,
                     strings = strings
                 )
             }
@@ -254,7 +252,7 @@ fun ReconciliationScreen(
                         cashTotal = cashTotal,
                         countedByMode = countedByMode,
                         onCountedByModeChange = { _, _ -> },
-                        totalCounted = totalCounted,
+                        totalCounted = countedByCurrency.values.sum(),
                         countedByCurrency = countedByCurrency,
                         strings = strings,
                         onReload = actions.onReload
@@ -631,7 +629,12 @@ private fun SystemSummaryCardMultiCurrency(
                     )
                 }
             }
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Column(
+                modifier = Modifier
+                    .heightIn(max = 240.dp)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
                 SummaryRow(
                     label = strings.salesLabel,
                     value = salesBreakdown,
@@ -1110,14 +1113,28 @@ private fun NotesCard(strings: com.erpnext.pos.localization.ReconciliationString
 
 @Composable
 private fun ReconciliationActionsBar(
-    difference: Double,
+    differenceByCurrency: Map<String, Double>,
     isClosing: Boolean,
     onClose: () -> Unit,
     onSaveDraft: () -> Unit,
-    formatAmount: (Double) -> String,
     strings: com.erpnext.pos.localization.ReconciliationStrings
 ) {
-    val hasDifference = kotlin.math.abs(difference) > 0.01
+    val hasDifference = differenceByCurrency.values.any { kotlin.math.abs(it) > 0.01 }
+    val differenceSummary = buildCurrencySummaryLine(
+        differenceByCurrency,
+        formatAmountFor = { value, code ->
+            formatCurrency(
+                value = value,
+                currencyCode = code,
+                currencySymbol = when (code.uppercase()) {
+                    "USD" -> "$"
+                    "NIO" -> "C$"
+                    else -> code
+                },
+                formatter = DecimalFormatter()
+            )
+        }
+    )
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
@@ -1141,12 +1158,14 @@ private fun ReconciliationActionsBar(
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
-                        Text(
-                            formatAmount(kotlin.math.abs(difference)),
-                            style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.error
-                        )
+                        if (differenceSummary.isNotBlank()) {
+                            Text(
+                                differenceSummary,
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.error
+                            )
+                        }
                     } else {
                         Text(
                             strings.closeCashboxLabel,
@@ -1346,5 +1365,17 @@ fun buildCurrencySummaryLine(
     if (values.isEmpty()) return ""
     return values.entries.joinToString(" / ") { (code, amount) ->
         formatAmountFor(amount, code)
+    }
+}
+
+fun buildDifferenceByCurrency(
+    expectedByCurrency: Map<String, Double>,
+    countedByCurrency: Map<String, Double>
+): Map<String, Double> {
+    val codes = (expectedByCurrency.keys + countedByCurrency.keys).map { it.uppercase() }.distinct()
+    return codes.associateWith { code ->
+        val expected = expectedByCurrency[code] ?: 0.0
+        val counted = countedByCurrency[code] ?: 0.0
+        counted - expected
     }
 }
