@@ -234,8 +234,8 @@ fun HomeScreen(
                             onClick = {
                                 if (!isCashboxOpen)
                                     snackbar.show(
-                                        "No podemos sincronizar hasta aperturar caja",
-                                        SnackbarType.Error, SnackbarPosition.Top
+                                        "No podemos sincronizar sin anter aperturar caja",
+                                        SnackbarType.Error, SnackbarPosition.Bottom
                                     )
                                 else {
                                     actions.sync()

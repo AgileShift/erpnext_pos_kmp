@@ -20,6 +20,10 @@ fun ReconciliationRoute(
     val closeState by viewModel.closeState.collectAsState()
     val actions = rememberReconciliationActions(navManager, viewModel)
 
+    LaunchedEffect(mode) {
+        viewModel.reload()
+    }
+
     LaunchedEffect(closeState.isClosed, mode) {
         if (mode == ReconciliationMode.Close && closeState.isClosed) {
             navManager.navigateTo(com.erpnext.pos.navigation.NavRoute.Home)

@@ -154,13 +154,24 @@ class ReconciliationViewModel(
     ): Map<String, Double> {
         val totals = mutableMapOf<String, Double>()
         rows.filter { cashModes.contains(it.modeOfPayment) }.forEach { row ->
-            val payCurrency = normalizeCurrency(row.paymentCurrency) ?: normalizeCurrency(row.invoiceCurrency)
-                ?: normalizeCurrency(row.partyAccountCurrency) ?: posCurrency
+            val payCurrency = normalizeCurrency(row.paymentCurrency)
+                ?: inferCurrencyFromMode(row.modeOfPayment, posCurrency)
+                ?: normalizeCurrency(row.invoiceCurrency)
+                ?: normalizeCurrency(row.partyAccountCurrency)
+                ?: posCurrency
             val normalizedCurrency = payCurrency.uppercase()
             val amountInPayCurrency = row.amount
             totals[normalizedCurrency] = (totals[normalizedCurrency] ?: 0.0) + amountInPayCurrency
         }
         return totals.mapValues { roundToCurrency(it.value) }
+    }
+
+    private fun inferCurrencyFromMode(mode: String, fallback: String): String {
+        return when {
+            mode.contains("USD", ignoreCase = true) || mode.contains("$") -> "USD"
+            mode.contains("NIO", ignoreCase = true) || mode.contains("C$", ignoreCase = true) -> "NIO"
+            else -> fallback.uppercase()
+        }
     }
 
     private fun mapOpeningByCurrency(openingByMode: Map<String, Double>, posCurrency: String): Map<String, Double> {
