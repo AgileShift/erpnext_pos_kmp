@@ -1186,14 +1186,12 @@ private fun EmptyReconciliationState(strings: com.erpnext.pos.localization.Recon
 }
 
 fun computeCreditPartial(summary: ReconciliationSummaryUi): Double {
-    val credit = summary.expectedTotal - summary.salesTotal - summary.paymentsTotal
-    return if (credit < 0) 0.0 else credit
+    return summary.creditPartialTotal
 }
 
 fun computeCreditAmounts(summary: ReconciliationSummaryUi): Pair<Double, Double> {
     val creditPartial = computeCreditPartial(summary)
-    val creditPending = (summary.expectedTotal - summary.salesTotal - summary.paymentsTotal)
-        .takeIf { it > 0 } ?: 0.0
+    val creditPending = summary.creditPendingTotal
     return creditPartial to creditPending
 }
 

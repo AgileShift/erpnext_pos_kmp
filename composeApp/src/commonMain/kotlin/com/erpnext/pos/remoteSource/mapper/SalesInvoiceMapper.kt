@@ -111,6 +111,7 @@ fun SalesInvoiceDto.toEntity(): SalesInvoiceWithItemsAndPayments {
         taxTotal = totalTaxesAndCharges ?: 0.0,
         grandTotal = grandTotal,
         outstandingAmount = outstandingAmount ?: 0.0,
+        paidAmount = paidAmount,
         status = status ?: "Draft",
         syncStatus = "Synced",
         docstatus = if (status == "Submitted" || status == "Paid") 1 else 0,

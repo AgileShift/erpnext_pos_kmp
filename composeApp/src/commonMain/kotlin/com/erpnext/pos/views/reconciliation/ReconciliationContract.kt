@@ -36,6 +36,8 @@ data class ReconciliationSummaryUi(
     val paymentsByCurrency: Map<String, Double> = emptyMap(),
     val salesByCurrency: Map<String, Double> = emptyMap(),
     val nonCashPaymentsByCurrency: Map<String, Double> = emptyMap(),
+    val creditPartialTotal: Double = 0.0,
+    val creditPendingTotal: Double = 0.0,
     val creditPartialByCurrency: Map<String, Double> = emptyMap(),
     val creditPendingByCurrency: Map<String, Double> = emptyMap(),
     val expensesByCurrency: Map<String, Double> = emptyMap()
