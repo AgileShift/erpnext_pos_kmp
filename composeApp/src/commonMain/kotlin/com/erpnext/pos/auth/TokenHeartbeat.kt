@@ -18,17 +18,10 @@ class TokenHeartbeat(
     private val networkMonitor: NetworkMonitor,
     private val tokenStore: TokenStore
 ) {
-    private var job: Job? = null
-
     fun start(intervalMinutes: Long = 5) {
-        if (job != null) return
-        job = scope.launch {
+        scope.launch {
             while (true) {
                 delay(intervalMinutes * 60 * 1000)
-                val tokens = tokenStore.load()
-                if (tokens == null) {
-                    continue
-                }
                 val isOnline = networkMonitor.isConnected.first()
                 if (isOnline) {
                     sessionRefresher.ensureValidSession()

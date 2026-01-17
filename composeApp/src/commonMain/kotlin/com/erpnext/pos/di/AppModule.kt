@@ -29,6 +29,7 @@ import com.erpnext.pos.domain.usecases.FetchCustomersLocalWithStateUseCase
 import com.erpnext.pos.domain.usecases.CreateSalesInvoiceUseCase
 import com.erpnext.pos.domain.usecases.FetchBillingProductsWithPriceUseCase
 import com.erpnext.pos.domain.usecases.FetchCategoriesUseCase
+import com.erpnext.pos.domain.usecases.FetchClosingEntriesUseCase
 import com.erpnext.pos.domain.usecases.FetchCustomerDetailUseCase
 import com.erpnext.pos.domain.usecases.FetchCustomersUseCase
 import com.erpnext.pos.domain.usecases.FetchDeliveryChargesUseCase
@@ -107,6 +108,7 @@ import com.erpnext.pos.views.splash.SplashViewModel
 import com.erpnext.pos.views.paymententry.PaymentEntryViewModel
 import com.erpnext.pos.views.salesflow.SalesFlowContextStore
 import com.erpnext.pos.views.payment.PaymentHandler
+import com.erpnext.pos.views.reconciliation.ReconciliationViewModel
 import com.erpnext.pos.auth.TokenHeartbeat
 import com.erpnext.pos.data.repositories.v2.SourceDocumentRepository
 import com.erpnext.pos.domain.usecases.v2.LoadSourceDocumentsUseCase
@@ -415,6 +417,10 @@ val appModule = module {
     single { PaymentEntryViewModel(get(), get()) }
     //endregion
 
+    //region Reconciliation
+    single { ReconciliationViewModel(get(), get()) }
+    //endregion
+
     //region Checkout
     //single(named("apiServiceV2")) { APIServiceV2(get(), get(), get()) }
     single { SourceDocumentRepository(get(named("apiServiceV2"))) }
@@ -475,6 +481,7 @@ val appModule = module {
     single { FetchCustomerDetailUseCase(get()) }
     single { FetchInventoryItemUseCase(get()) }
     single { FetchCategoriesUseCase(get()) }
+    single { FetchClosingEntriesUseCase(get()) }
     single { FetchPosProfileUseCase(get()) }
     single { FetchPosProfileInfoUseCase(get()) }
     single { FetchUserInfoUseCase(get()) }

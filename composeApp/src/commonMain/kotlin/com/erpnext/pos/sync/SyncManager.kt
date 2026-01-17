@@ -73,6 +73,9 @@ class SyncManager(
     override fun fullSync(ttlHours: Int) {
         if (_state.value is SyncState.SYNCING) return
 
+        /* TODO: Agregar POS Profiles con sus detalles, esto lo vamos a remover en la v2
+            Porque los perfiles ya vendran en el initial data y solo los que pertenecen al usuario
+         */
         scope.launch {
             AppSentry.breadcrumb("SyncManager.fullSync start (ttl=$ttlHours)")
             AppLogger.info("SyncManager.fullSync start (ttl=$ttlHours)")
@@ -156,26 +159,26 @@ class SyncManager(
                         _state.value = SyncState.SYNCING("Términos de pago...")
                         AppSentry.breadcrumb("Sync: payment terms")
                         runCatching { paymentTermsRepo.fetchPaymentTerms() }.getOrElse { error ->
-                                val exception = Exception(
-                                    error.message ?: "Error al sincronizar términos de pago"
-                                )
-                                AppSentry.capture(exception, "Sync: payment terms failed")
-                                AppLogger.warn("Sync: payment terms failed", exception)
-                                throw exception
-                            }
+                            val exception = Exception(
+                                error.message ?: "Error al sincronizar términos de pago"
+                            )
+                            AppSentry.capture(exception, "Sync: payment terms failed")
+                            AppLogger.warn("Sync: payment terms failed", exception)
+                            throw exception
+                        }
                     }, async {
                         _state.value = SyncState.SYNCING("Cargos de envío...")
                         AppSentry.breadcrumb("Sync: delivery charges")
                         runCatching { deliveryChargesRepo.fetchDeliveryCharges() }.getOrElse { error ->
-                                val exception = Exception(
-                                    error.message ?: "Error al sincronizar cargos de envío"
-                                )
-                                AppSentry.capture(exception, "Sync: delivery charges failed")
-                                AppLogger.warn(
-                                    "Sync: delivery charges failed", exception
-                                )
-                                throw exception
-                            }
+                            val exception = Exception(
+                                error.message ?: "Error al sincronizar cargos de envío"
+                            )
+                            AppSentry.capture(exception, "Sync: delivery charges failed")
+                            AppLogger.warn(
+                                "Sync: delivery charges failed", exception
+                            )
+                            throw exception
+                        }
                     }, async {
                         _state.value = SyncState.SYNCING("Informacion de la empresa...")
                         AppSentry.breadcrumb("Sync: company info")

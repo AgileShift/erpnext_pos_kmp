@@ -115,6 +115,7 @@ fun AppNavigation() {
                                     is NavRoute.Quotation -> navController.navigate(NavRoute.Quotation.path)
                                     is NavRoute.SalesOrder -> navController.navigate(NavRoute.SalesOrder.path)
                                     is NavRoute.DeliveryNote -> navController.navigate(NavRoute.DeliveryNote.path)
+                                    is NavRoute.Reconciliation -> navController.navigate(event.path)
                                     is NavRoute.Settings -> navController.navigate(NavRoute.Settings.path)
                                     is NavRoute.PaymentEntry -> navController.navigate(event.path)
                                     is NavRoute.NavigateUp -> navController.popBackStack()

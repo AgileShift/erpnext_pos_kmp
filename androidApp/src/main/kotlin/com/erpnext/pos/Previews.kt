@@ -1,5 +1,56 @@
-/*
 package com.erpnext.pos
+
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.tooling.preview.Preview
+import com.erpnext.pos.domain.models.POSProfileSimpleBO
+import com.erpnext.pos.domain.models.UserBO
+import com.erpnext.pos.utils.view.SnackbarController
+import com.erpnext.pos.views.home.CashboxOpeningScreen
+import com.erpnext.pos.views.home.HomeState
+
+
+@Preview
+@Composable
+fun CashboxOpeningScreenPreview() {
+    CashboxOpeningScreen(
+        HomeState.POSProfiles(
+            posProfiles = listOf(
+                POSProfileSimpleBO(
+                    "POS Altamira NIO", "Clothing Center", "NIO", listOf()
+                ),
+            ),
+            user = UserBO(
+                "Herrold Real",
+                "herrold_real",
+                "Herrold",
+                "Real",
+                "realherrold@gmail.com",
+                "es",
+                true
+            )
+        ),
+        profiles = listOf(
+            POSProfileSimpleBO(
+                "POS Altamira NIO", "Clothing Center", "NIO", listOf()
+            ),
+        ),
+        UserBO(
+            "Herrold Real",
+            "herrold_real",
+            "Herrold",
+            "Real",
+            "realherrold@gmail.com",
+            "es",
+            true
+        ),
+        {},
+        { p, l -> },
+        {},
+        SnackbarController()
+    )
+}
+
+/*
 
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
