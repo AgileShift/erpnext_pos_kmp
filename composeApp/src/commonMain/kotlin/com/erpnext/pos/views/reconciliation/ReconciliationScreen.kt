@@ -56,6 +56,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.erpnext.pos.localization.LocalAppStrings
 import com.erpnext.pos.localization.ReconciliationStrings
 import com.erpnext.pos.utils.DenominationCatalog
@@ -623,26 +624,12 @@ private fun SystemSummaryCardMultiCurrency(
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.primary
                     )
-                    if (expectedBreakdown.isNotBlank()) {
-                        Text(
-                            "${strings.expectedByCurrencyLabel}: $expectedBreakdown",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                    }
                     Text(
                         "${strings.invoicesLabel}: ${summary.invoiceCount}",
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.primary
                     )
                 }
-            }
-            if (paymentsBreakdown.isNotBlank()) {
-                Text(
-                    "${strings.paymentsByCurrencyLabel}: $paymentsBreakdown",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
             }
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 SummaryRow(
@@ -717,7 +704,7 @@ private fun OpeningBalanceCard(
                 style = MaterialTheme.typography.headlineMedium,
                 fontWeight = FontWeight.Bold
             )
-            if (openingTotalsByCurrency.isNotEmpty()) {
+            /*if (openingTotalsByCurrency.isNotEmpty()) {
                 val combined = openingTotalsByCurrency.entries.joinToString(" / ") { (code, amt) ->
                     formatAmountWithCode(amt, code)
                 }
@@ -726,7 +713,7 @@ private fun OpeningBalanceCard(
                     color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.9f),
                     style = MaterialTheme.typography.bodySmall
                 )
-            }
+            }*/
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween
@@ -889,29 +876,6 @@ private fun DifferenceAlertsByCurrency(
                 style = MaterialTheme.typography.bodySmall,
                 fontWeight = FontWeight.SemiBold
             )
-            currencies.forEach { code ->
-                val expected = expectedByCurrency[code] ?: 0.0
-                val counted = countedByCurrency[code] ?: 0.0
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Text(formatCurrencyCodeLabel(code), style = MaterialTheme.typography.labelSmall)
-                    Column(horizontalAlignment = Alignment.End) {
-                        Text(
-                            "${strings.expectedLabel}: ${expected.formatCurrencyWithCode(code)}",
-                            style = MaterialTheme.typography.labelSmall
-                        )
-                        Text(
-                            "${strings.countedLabel}: ${counted.formatCurrencyWithCode(code)}",
-                            style = MaterialTheme.typography.labelSmall
-                        )
-                    }
-                }
-            }
-            if (allBalanced) {
-                Text(strings.differenceBalancedBody, style = MaterialTheme.typography.bodySmall)
-            }
         }
     }
 }
@@ -960,10 +924,21 @@ private fun DenominationCounter(
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            Text(
-                "${strings.cashCountTitle} (${strings.cashCountSubtitle})",
-                style = MaterialTheme.typography.titleMedium
-            )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Start
+            ) {
+                Text(
+                    strings.cashCountTitle,
+                    style = MaterialTheme.typography.titleMedium
+                )
+                Text(
+                    " (${strings.cashCountSubtitle})",
+                    style = MaterialTheme.typography.labelSmall,
+                    fontSize = 11.sp,
+                    color = Color.Gray
+                )
+            }
             if (coins.isNotEmpty() && bills.isNotEmpty()) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),

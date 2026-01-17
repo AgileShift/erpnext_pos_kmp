@@ -133,7 +133,7 @@ class ReconciliationViewModel(
         return ReconciliationSummaryUi(
             posProfile = context.profileName,
             openingEntryId = activeCashbox.cashbox.openingEntryId.orEmpty(),
-            cashierName = context.cashier.name,
+            cashierName = context.cashier.firstName ?: context.cashier.name,
             periodStart = activeCashbox.cashbox.periodStartDate,
             periodEnd = activeCashbox.cashbox.periodEndDate,
             openingAmount = roundToCurrency(openingByMode.values.sum()),
@@ -254,7 +254,7 @@ class ReconciliationViewModel(
         return result.mapValues { roundToCurrency(it.value) }
     }
 
-    private fun convertAmountForCurrencies(
+    private suspend fun convertAmountForCurrencies(
         amount: Double,
         sourceCurrency: String,
         currencies: Set<String>,
