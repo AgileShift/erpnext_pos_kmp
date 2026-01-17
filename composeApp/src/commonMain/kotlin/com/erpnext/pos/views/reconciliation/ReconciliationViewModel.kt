@@ -93,7 +93,7 @@ class ReconciliationViewModel(
             startMillis = startMillis,
             endMillis = endMillis
         )
-        val posCurrency = normalizeCurrency(context.currency) ?: context.currency
+        val posCurrency = normalizeCurrency(context.currency)
         val rateCache = mutableMapOf<String, Double>()
         val paymentRows = salesInvoiceDao.getShiftPayments(
             profileId = context.profileName,
@@ -460,7 +460,6 @@ class ReconciliationViewModel(
             // Resolvemos moneda de la factura para el desglose.
             val invoiceCurrency = normalizeCurrency(invoice.partyAccountCurrency)
                 ?: normalizeCurrency(invoice.currency)
-                ?: posCurrency
             val currencyKey = invoiceCurrency.uppercase()
             pendingByCurrency[currencyKey] = (pendingByCurrency[currencyKey] ?: 0.0) + outstanding
             if (paid > 0.0) {
