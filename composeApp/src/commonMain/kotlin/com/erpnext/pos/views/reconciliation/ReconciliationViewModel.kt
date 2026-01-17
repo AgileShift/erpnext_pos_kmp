@@ -1,7 +1,5 @@
 package com.erpnext.pos.views.reconciliation
 
-import androidx.compose.ui.text.capitalize
-import androidx.compose.ui.text.intl.Locale
 import androidx.lifecycle.viewModelScope
 import com.erpnext.pos.base.BaseViewModel
 import com.erpnext.pos.localSource.dao.SalesInvoiceDao
@@ -105,7 +103,9 @@ class ReconciliationViewModel(
         val paymentsByMode = aggregatePaymentsByMode(invoices, paymentRows, posCurrency, rateCache)
         val totalPaymentsAll = paymentsByMode.values.sum()
         val cashModes = resolveCashModes(context, openingByMode)
-        val paymentsCashByCurrency = aggregateCashByCurrency(paymentRows, posCurrency, rateCache, cashModes)
+        val paymentsCashByCurrency =
+            aggregateCashByCurrency(paymentRows, posCurrency, rateCache, cashModes)
+        val paymentsByCurrency = aggregatePaymentsByCurrency(paymentRows, posCurrency)
         val availableModes = context.paymentModes.mapNotNull { mode ->
             mode.modeOfPayment.takeIf { it.isNotBlank() }
         }
@@ -117,13 +117,23 @@ class ReconciliationViewModel(
         val salesTotal = cashPaymentsTotal
         val paymentsTotal =
             roundToCurrency((totalPaymentsAll - cashPaymentsTotal).coerceAtLeast(0.0))
+        val creditDelta = roundToCurrency(expectedTotal - salesTotal - paymentsTotal)
+        val creditPartial = if (creditDelta < 0) 0.0 else creditDelta
+        val creditPending = creditDelta.takeIf { it > 0 } ?: 0.0
         val symbol = context.allowedCurrencies
             .firstOrNull { it.code.equals(context.currency, ignoreCase = true) }
             ?.symbol
+        val openingByCurrency =
+            mapOpeningByCurrencyWithRates(openingByMode, posCurrency, rateCache)
+        val nonCashByCurrency = subtractCurrencyMaps(paymentsByCurrency, paymentsCashByCurrency)
+        val currencySet = (openingByCurrency.keys + paymentsByCurrency.keys).map { it.uppercase() }.toSet()
+        val creditPartialByCurrency = convertAmountForCurrencies(creditPartial, posCurrency, currencySet, rateCache)
+        val creditPendingByCurrency = convertAmountForCurrencies(creditPending, posCurrency, currencySet, rateCache)
+        val expensesByCurrency = convertAmountForCurrencies(0.0, posCurrency, currencySet, rateCache)
         return ReconciliationSummaryUi(
             posProfile = context.profileName,
             openingEntryId = activeCashbox.cashbox.openingEntryId.orEmpty(),
-            cashierName = context.cashier.name,
+            cashierName = context.cashier.firstName ?: context.cashier.name,
             periodStart = activeCashbox.cashbox.periodStartDate,
             periodEnd = activeCashbox.cashbox.periodEndDate,
             openingAmount = roundToCurrency(openingByMode.values.sum()),
@@ -142,7 +152,13 @@ class ReconciliationViewModel(
             currencySymbol = symbol,
             invoiceCount = invoices.size,
             cashByCurrency = paymentsCashByCurrency,
-            openingCashByCurrency = mapOpeningByCurrency(openingByMode, context.currency)
+            openingCashByCurrency = openingByCurrency,
+            paymentsByCurrency = paymentsByCurrency,
+            salesByCurrency = paymentsCashByCurrency,
+            nonCashPaymentsByCurrency = nonCashByCurrency,
+            creditPartialByCurrency = creditPartialByCurrency,
+            creditPendingByCurrency = creditPendingByCurrency,
+            expensesByCurrency = expensesByCurrency
         )
     }
 
@@ -154,16 +170,42 @@ class ReconciliationViewModel(
     ): Map<String, Double> {
         val totals = mutableMapOf<String, Double>()
         rows.filter { cashModes.contains(it.modeOfPayment) }.forEach { row ->
-            val payCurrency = normalizeCurrency(row.paymentCurrency)
-                ?: inferCurrencyFromMode(row.modeOfPayment, posCurrency)
-                ?: normalizeCurrency(row.invoiceCurrency)
-                ?: normalizeCurrency(row.partyAccountCurrency)
-                ?: posCurrency
+            val payCurrency = resolvePaymentCurrency(row, posCurrency)
             val normalizedCurrency = payCurrency.uppercase()
-            val amountInPayCurrency = row.amount
+            val amountInPayCurrency = resolvePaymentAmount(row)
             totals[normalizedCurrency] = (totals[normalizedCurrency] ?: 0.0) + amountInPayCurrency
         }
         return totals.mapValues { roundToCurrency(it.value) }
+    }
+
+    private fun aggregatePaymentsByCurrency(
+        rows: List<ShiftPaymentRow>,
+        posCurrency: String
+    ): Map<String, Double> {
+        val totals = mutableMapOf<String, Double>()
+        rows.forEach { row ->
+            val payCurrency = resolvePaymentCurrency(row, posCurrency)
+            val normalizedCurrency = payCurrency.uppercase()
+            totals[normalizedCurrency] = (totals[normalizedCurrency] ?: 0.0) + resolvePaymentAmount(row)
+        }
+        return totals.mapValues { roundToCurrency(it.value) }
+    }
+
+    private fun resolvePaymentCurrency(row: ShiftPaymentRow, fallback: String): String {
+        return normalizeCurrency(row.paymentCurrency)
+            ?: inferCurrencyFromMode(row.modeOfPayment, fallback)
+            ?: normalizeCurrency(row.invoiceCurrency)
+            ?: normalizeCurrency(row.partyAccountCurrency)
+            ?: fallback
+    }
+
+    private fun resolvePaymentAmount(row: ShiftPaymentRow): Double {
+        val hasEntered = row.enteredAmount > 0.0
+        return if (row.paymentCurrency != null && hasEntered) {
+            row.enteredAmount
+        } else {
+            row.amount
+        }
     }
 
     private fun inferCurrencyFromMode(mode: String, fallback: String): String {
@@ -174,7 +216,11 @@ class ReconciliationViewModel(
         }
     }
 
-    private fun mapOpeningByCurrency(openingByMode: Map<String, Double>, posCurrency: String): Map<String, Double> {
+    private suspend fun mapOpeningByCurrencyWithRates(
+        openingByMode: Map<String, Double>,
+        posCurrency: String,
+        rateCache: MutableMap<String, Double>
+    ): Map<String, Double> {
         val posCode = posCurrency.uppercase()
         val acc = mutableMapOf<String, Double>()
         openingByMode.forEach { (mode, amount) ->
@@ -183,9 +229,49 @@ class ReconciliationViewModel(
                 mode.contains("NIO", ignoreCase = true) || mode.contains("C$", ignoreCase = true) -> "NIO"
                 else -> posCode
             }
-            acc[currency] = (acc[currency] ?: 0.0) + amount
+            val adjusted = if (currency == posCode) {
+                amount
+            } else {
+                val key = "${posCode}->$currency"
+                val rate = rateCache.getOrPut(key) {
+                    cashBoxManager.resolveExchangeRateBetween(posCode, currency) ?: 1.0
+                }
+                amount * rate
+            }
+            acc[currency] = (acc[currency] ?: 0.0) + adjusted
         }
-        return acc
+        return acc.mapValues { roundToCurrency(it.value) }
+    }
+
+    private fun subtractCurrencyMaps(
+        totalByCurrency: Map<String, Double>,
+        subtractByCurrency: Map<String, Double>
+    ): Map<String, Double> {
+        val result = totalByCurrency.toMutableMap()
+        subtractByCurrency.forEach { (code, amount) ->
+            result[code] = roundToCurrency((result[code] ?: 0.0) - amount)
+        }
+        return result.mapValues { roundToCurrency(it.value) }
+    }
+
+    private suspend fun convertAmountForCurrencies(
+        amount: Double,
+        sourceCurrency: String,
+        currencies: Set<String>,
+        rateCache: MutableMap<String, Double>
+    ): Map<String, Double> {
+        if (currencies.isEmpty()) return emptyMap()
+        return currencies.associateWith { target ->
+            if (target.equals(sourceCurrency, ignoreCase = true)) {
+                roundToCurrency(amount)
+            } else {
+                val key = "${sourceCurrency.uppercase()}->${target.uppercase()}"
+                val rate = rateCache.getOrPut(key) {
+                    cashBoxManager.resolveExchangeRateBetween(sourceCurrency, target) ?: 1.0
+                }
+                roundToCurrency(amount * rate)
+            }
+        }
     }
 
     private suspend fun aggregatePaymentsByMode(
