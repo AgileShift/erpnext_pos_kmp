@@ -511,7 +511,7 @@ object AppStringsFactory {
             entryIdLabel = "ID de cierre",
             openingAmountTitle = "Monto de apertura",
             openingBreakdownLabel = "Detalle de apertura",
-            cashierLabel = "Cajero",
+            cashierLabel = "Cajero(a)",
             shiftLabel = "Turno",
             dateLabel = "Fecha",
             systemSummaryTitle = "Resumen del sistema",
