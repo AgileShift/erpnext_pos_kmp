@@ -244,17 +244,19 @@ fun BillingLabScreen(
     snackbar: SnackbarController
 ) {
     val uiSnackbar = snackbar.snackbar.collectAsState().value
-    val scaffoldState = rememberBottomSheetScaffoldState()
     val colors = MaterialTheme.colorScheme
+    var step by rememberSaveable { mutableStateOf(LabCheckoutStep.Cart) }
+
+    // Si salimos de Success, regresamos al primer paso.
+    LaunchedEffect(state) {
+        if (state !is BillingState.Success) {
+            step = LabCheckoutStep.Cart
+        }
+    }
 
     Box(Modifier.fillMaxSize()) {
-        BottomSheetScaffold(
-            scaffoldState = scaffoldState,
-            sheetShadowElevation = 12.dp,
-            sheetPeekHeight = 120.dp,
+        Scaffold(
             containerColor = colors.background,
-            sheetContainerColor = colors.surface,
-            sheetContentColor = colors.onSurface,
             topBar = {
                 TopAppBar(
                     title = { Text("POS Lab") },
@@ -279,88 +281,6 @@ fun BillingLabScreen(
                     )
                 )
             },
-            sheetDragHandle = {
-                Box(
-                    modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Surface(
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
-                        shape = MaterialTheme.shapes.extraLarge
-                    ) {
-                        Box(
-                            modifier = Modifier.size(width = 48.dp, height = 6.dp)
-                                .padding(horizontal = 12.dp)
-                        )
-                    }
-                }
-            },
-            sheetContent = {
-                if (state is BillingState.Success) {
-                    // Alineamos el bottom sheet a la izquierda y limitamos su ancho.
-                    Box(
-                        modifier = Modifier.fillMaxWidth(),
-                        contentAlignment = Alignment.CenterStart
-                    ) {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth(0.62f)
-                                .widthIn(max = 440.dp)
-                                .padding(start = 12.dp, end = 8.dp, top = 6.dp, bottom = 12.dp)
-                                .verticalScroll(rememberScrollState()),
-                            verticalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
-                            // Resumen compacto arriba.
-                            Text(
-                                text = "Resumen",
-                                style = MaterialTheme.typography.labelLarge,
-                                color = MaterialTheme.colorScheme.onSurface
-                            )
-                            CompactTotalsCard(
-                                baseCurrency = state.currency ?: "USD",
-                                subtotal = state.subtotal,
-                                taxes = state.taxes,
-                                discount = state.discount,
-                                shipping = state.shippingAmount,
-                                total = state.total,
-                                balance = state.balanceDueBase,
-                                change = state.changeDueBase
-                            )
-                            // Grupo colapsable único para descuento y envío.
-                            CollapsibleSection(
-                                title = "Descuento y envío",
-                                defaultExpanded = false
-                            ) {
-                                DiscountShippingInputs(state, action)
-                            }
-                            PaymentSection(
-                                state = state,
-                                baseCurrency = state.currency ?: "USD",
-                                exchangeRateByCurrency = state.exchangeRateByCurrency,
-                                paymentLines = state.paymentLines,
-                                paymentModes = state.paymentModes,
-                                allowedCurrencies = state.allowedCurrencies,
-                                paidAmountBase = state.paidAmountBase,
-                                totalAmount = state.total,
-                                balanceDueBase = state.balanceDueBase,
-                                changeDueBase = state.changeDueBase,
-                                paymentErrorMessage = state.paymentErrorMessage,
-                                isCreditSale = state.isCreditSale,
-                                onAddPaymentLine = action.onAddPaymentLine,
-                                onRemovePaymentLine = action.onRemovePaymentLine,
-                                onPaymentCurrencySelected = action.onPaymentCurrencySelected
-                            )
-                        }
-                    }
-                } else {
-                    Box(
-                        modifier = Modifier.fillMaxWidth().padding(24.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text("Cargando pagos...")
-                    }
-                }
-            }
         ) { paddingValues ->
             when (state) {
                 BillingState.Loading -> {
@@ -396,13 +316,24 @@ fun BillingLabScreen(
                 }
 
                 is BillingState.Success -> {
-                    BillingLabContent(
-                        state = state,
-                        action = action,
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(top = paddingValues.calculateTopPadding())
-                    )
+                    when (step) {
+                        LabCheckoutStep.Cart -> BillingLabContent(
+                            state = state,
+                            action = action,
+                            onCheckout = { step = LabCheckoutStep.Checkout },
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(top = paddingValues.calculateTopPadding())
+                        )
+                        LabCheckoutStep.Checkout -> BillingLabCheckoutStep(
+                            state = state,
+                            action = action,
+                            onBack = { step = LabCheckoutStep.Cart },
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(top = paddingValues.calculateTopPadding())
+                        )
+                    }
                 }
             }
         }
@@ -413,10 +344,16 @@ fun BillingLabScreen(
     )
 }
 
+private enum class LabCheckoutStep {
+    Cart,
+    Checkout
+}
+
 @Composable
 private fun BillingLabContent(
     state: BillingState.Success,
     action: BillingAction,
+    onCheckout: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val colors = MaterialTheme.colorScheme
@@ -597,8 +534,9 @@ private fun BillingLabContent(
 
                 Spacer(Modifier.height(12.dp))
 
+                // Botón de checkout: pasamos al siguiente paso para procesar pagos.
                 Button(
-                    onClick = action.onFinalizeSale,
+                    onClick = onCheckout,
                     enabled = state.selectedCustomer != null &&
                             state.cartItems.isNotEmpty() &&
                             (state.isCreditSale || state.paidAmountBase + 0.01 >= state.total) &&
@@ -609,18 +547,98 @@ private fun BillingLabContent(
                         contentColor = colors.onPrimary
                     )
                 ) {
-                    Text("Finalizar venta")
+                    Text("Checkout")
                 }
 
                 Spacer(Modifier.height(6.dp))
 
                 Text(
-                    text = "Desliza la bandeja inferior para pagos.",
+                    text = "Continua al paso de pagos.",
                     style = MaterialTheme.typography.labelSmall,
                     color = colors.onSurfaceVariant,
                     textAlign = TextAlign.Center,
                     modifier = Modifier.fillMaxWidth()
                 )
+            }
+        }
+    }
+}
+
+@Composable
+private fun BillingLabCheckoutStep(
+    state: BillingState.Success,
+    action: BillingAction,
+    onBack: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val colors = MaterialTheme.colorScheme
+    Column(
+        modifier = modifier
+            .padding(horizontal = 16.dp, vertical = 12.dp)
+            .verticalScroll(rememberScrollState()),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        Text(
+            text = "Checkout",
+            style = MaterialTheme.typography.titleMedium,
+            color = colors.onSurface
+        )
+        if (state.paymentTerms.isNotEmpty()) {
+            CollapsibleSection(
+                title = "Terminos de credito",
+                defaultExpanded = false
+            ) {
+                CreditTermsSection(
+                    isCreditSale = state.isCreditSale,
+                    paymentTerms = state.paymentTerms,
+                    selectedPaymentTerm = state.selectedPaymentTerm,
+                    onCreditSaleChanged = action.onCreditSaleChanged,
+                    onPaymentTermSelected = action.onPaymentTermSelected
+                )
+            }
+        }
+        CollapsibleSection(
+            title = "Descuento y envío",
+            defaultExpanded = false
+        ) {
+            DiscountShippingInputs(state, action)
+        }
+        PaymentSection(
+            state = state,
+            baseCurrency = state.currency ?: "USD",
+            exchangeRateByCurrency = state.exchangeRateByCurrency,
+            paymentLines = state.paymentLines,
+            paymentModes = state.paymentModes,
+            allowedCurrencies = state.allowedCurrencies,
+            paidAmountBase = state.paidAmountBase,
+            totalAmount = state.total,
+            balanceDueBase = state.balanceDueBase,
+            changeDueBase = state.changeDueBase,
+            paymentErrorMessage = state.paymentErrorMessage,
+            isCreditSale = state.isCreditSale,
+            onAddPaymentLine = action.onAddPaymentLine,
+            onRemovePaymentLine = action.onRemovePaymentLine,
+            onPaymentCurrencySelected = action.onPaymentCurrencySelected
+        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            OutlinedButton(
+                onClick = onBack,
+                modifier = Modifier.weight(1f)
+            ) {
+                Text("Volver")
+            }
+            Button(
+                onClick = action.onFinalizeSale,
+                modifier = Modifier.weight(1f),
+                enabled = state.selectedCustomer != null &&
+                        state.cartItems.isNotEmpty() &&
+                        (state.isCreditSale || state.paidAmountBase + 0.01 >= state.total) &&
+                        (!state.isCreditSale || state.selectedPaymentTerm != null)
+            ) {
+                Text("Finalizar venta")
             }
         }
     }
