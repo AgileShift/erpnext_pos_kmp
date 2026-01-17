@@ -33,7 +33,12 @@ data class ReconciliationSummaryUi(
     val invoiceCount: Int,
     val cashByCurrency: Map<String, Double> = emptyMap(),
     val openingCashByCurrency: Map<String, Double> = emptyMap(),
-    val paymentsByCurrency: Map<String, Double> = emptyMap()
+    val paymentsByCurrency: Map<String, Double> = emptyMap(),
+    val salesByCurrency: Map<String, Double> = emptyMap(),
+    val nonCashPaymentsByCurrency: Map<String, Double> = emptyMap(),
+    val creditPartialByCurrency: Map<String, Double> = emptyMap(),
+    val creditPendingByCurrency: Map<String, Double> = emptyMap(),
+    val expensesByCurrency: Map<String, Double> = emptyMap()
 )
 
 const val UNASSIGNED_PAYMENT_MODE = "__UNASSIGNED__"

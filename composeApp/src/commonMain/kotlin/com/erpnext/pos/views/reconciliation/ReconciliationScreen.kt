@@ -433,6 +433,11 @@ private fun ReconciliationContent(
                         summary = summary,
                         expectedCashByCurrency = expectedCashByCurrency,
                         paymentsByCurrency = summary.paymentsByCurrency,
+                        salesByCurrency = summary.salesByCurrency,
+                        nonCashPaymentsByCurrency = summary.nonCashPaymentsByCurrency,
+                        creditPartialByCurrency = summary.creditPartialByCurrency,
+                        creditPendingByCurrency = summary.creditPendingByCurrency,
+                        expensesByCurrency = summary.expensesByCurrency,
                         creditPartial = creditPartial,
                         creditPending = creditPending,
                         formatAmount = formatAmount,
@@ -495,6 +500,11 @@ private fun ReconciliationContent(
                     summary = summary,
                     expectedCashByCurrency = expectedCashByCurrency,
                     paymentsByCurrency = summary.paymentsByCurrency,
+                    salesByCurrency = summary.salesByCurrency,
+                    nonCashPaymentsByCurrency = summary.nonCashPaymentsByCurrency,
+                    creditPartialByCurrency = summary.creditPartialByCurrency,
+                    creditPendingByCurrency = summary.creditPendingByCurrency,
+                    expensesByCurrency = summary.expensesByCurrency,
                     creditPartial = creditPartial,
                     creditPending = creditPending,
                     formatAmount = formatAmount,
@@ -542,6 +552,11 @@ private fun SystemSummaryCardMultiCurrency(
     summary: ReconciliationSummaryUi,
     expectedCashByCurrency: Map<String, Double>,
     paymentsByCurrency: Map<String, Double>,
+    salesByCurrency: Map<String, Double>,
+    nonCashPaymentsByCurrency: Map<String, Double>,
+    creditPartialByCurrency: Map<String, Double>,
+    creditPendingByCurrency: Map<String, Double>,
+    expensesByCurrency: Map<String, Double>,
     creditPartial: Double,
     creditPending: Double,
     formatAmount: (Double) -> String,
@@ -557,6 +572,26 @@ private fun SystemSummaryCardMultiCurrency(
     val expectedBreakdown = buildCurrencySummaryLine(currencies, formatAmountFor)
     val paymentsBreakdown = buildCurrencySummaryLine(
         paymentsByCurrency.ifEmpty { mapOf(summary.currency.uppercase() to summary.paymentsTotal) },
+        formatAmountFor
+    )
+    val salesBreakdown = buildCurrencySummaryLine(
+        salesByCurrency.ifEmpty { mapOf(summary.currency.uppercase() to summary.salesTotal) },
+        formatAmountFor
+    )
+    val nonCashBreakdown = buildCurrencySummaryLine(
+        nonCashPaymentsByCurrency.ifEmpty { mapOf(summary.currency.uppercase() to summary.paymentsTotal) },
+        formatAmountFor
+    )
+    val creditPartialBreakdown = buildCurrencySummaryLine(
+        creditPartialByCurrency.ifEmpty { mapOf(summary.currency.uppercase() to creditPartial) },
+        formatAmountFor
+    )
+    val creditPendingBreakdown = buildCurrencySummaryLine(
+        creditPendingByCurrency.ifEmpty { mapOf(summary.currency.uppercase() to creditPending) },
+        formatAmountFor
+    )
+    val expensesBreakdown = buildCurrencySummaryLine(
+        expensesByCurrency.ifEmpty { mapOf(summary.currency.uppercase() to summary.expensesTotal) },
         formatAmountFor
     )
     Card(
@@ -612,33 +647,33 @@ private fun SystemSummaryCardMultiCurrency(
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 SummaryRow(
                     label = strings.salesLabel,
-                    value = formatAmount(summary.salesTotal),
+                    value = salesBreakdown,
                     valueColor = MaterialTheme.colorScheme.onSurface,
                     icon = Icons.Filled.ShoppingCart
                 )
                 SummaryRow(
                     label = strings.paymentsLabel,
-                    value = formatAmount(summary.paymentsTotal),
+                    value = nonCashBreakdown,
                     valueColor = MaterialTheme.colorScheme.onSurface,
                     icon = Icons.Filled.ArrowDownward
                 )
                 SummaryRow(
                     label = strings.creditPartialLabel,
-                    value = formatAmount(creditPartial),
+                    value = creditPartialBreakdown,
                     valueColor = MaterialTheme.colorScheme.primary,
                     icon = Icons.Filled.ArrowDownward,
                     badgeColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
                 )
                 SummaryRow(
                     label = strings.creditPendingLabel,
-                    value = formatAmount(creditPending),
+                    value = creditPendingBreakdown,
                     valueColor = MaterialTheme.colorScheme.error,
                     icon = Icons.Filled.ArrowUpward,
                     badgeColor = MaterialTheme.colorScheme.error.copy(alpha = 0.12f)
                 )
                 SummaryRow(
                     label = strings.expensesLabel,
-                    value = formatAmount(summary.expensesTotal),
+                    value = expensesBreakdown,
                     valueColor = MaterialTheme.colorScheme.error,
                     icon = Icons.Filled.ArrowUpward,
                     badgeColor = MaterialTheme.colorScheme.error.copy(alpha = 0.12f)
@@ -847,8 +882,7 @@ private fun DifferenceAlertsByCurrency(
                 val expected = expectedByCurrency[code] ?: 0.0
                 val counted = countedByCurrency[code] ?: 0.0
                 val difference = counted - expected
-                val formatted = difference.formatCurrencyWithCode(code)
-                "$code $formatted"
+                difference.formatCurrencyWithCode(code)
             }
             Text(
                 "${strings.differenceLabel}: $differenceSummary",
@@ -862,7 +896,7 @@ private fun DifferenceAlertsByCurrency(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    Text(code, style = MaterialTheme.typography.labelSmall)
+                    Text(formatCurrencyCodeLabel(code), style = MaterialTheme.typography.labelSmall)
                     Column(horizontalAlignment = Alignment.End) {
                         Text(
                             "${strings.expectedLabel}: ${expected.formatCurrencyWithCode(code)}",
@@ -926,11 +960,9 @@ private fun DenominationCounter(
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            Text(strings.cashCountTitle, style = MaterialTheme.typography.titleMedium)
             Text(
-                strings.cashCountSubtitle,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                "${strings.cashCountTitle} (${strings.cashCountSubtitle})",
+                style = MaterialTheme.typography.titleMedium
             )
             if (coins.isNotEmpty() && bills.isNotEmpty()) {
                 Row(
@@ -1322,6 +1354,14 @@ fun formatAmountWithCode(amount: Double, code: String): String {
         else -> code
     }
     return formatCurrency(amount, code, symbol, formatter)
+}
+
+fun formatCurrencyCodeLabel(code: String): String {
+    return when (code.uppercase()) {
+        "USD" -> "$"
+        "NIO" -> "C$"
+        else -> code
+    }
 }
 
 fun buildCurrencySummaryLine(
