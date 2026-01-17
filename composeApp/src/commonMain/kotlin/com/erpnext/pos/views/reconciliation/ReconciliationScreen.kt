@@ -116,17 +116,6 @@ fun ReconciliationScreen(
         mutableStateOf(countState[selectedCountCurrency] ?: emptyList())
     }
     val cashTotal = if (summary == null) 0.0 else denominations.sumOf { it.value * it.count }
-    fun inferCurrencyFromMode(mode: String, posCode: String): String {
-        return when {
-            mode.contains("USD", ignoreCase = true) || mode.contains("$") -> "USD"
-            mode.contains("NIO", ignoreCase = true) || mode.contains(
-                "C$",
-                ignoreCase = true
-            ) -> "NIO"
-
-            else -> posCode
-        }
-    }
 
     val expectedCashByMode: Map<String, Double> = summary?.let {
         val cashKeys = it.cashModes.ifEmpty { it.expectedByMode.keys }
@@ -443,6 +432,7 @@ private fun ReconciliationContent(
                     SystemSummaryCardMultiCurrency(
                         summary = summary,
                         expectedCashByCurrency = expectedCashByCurrency,
+                        paymentsByCurrency = summary.paymentsByCurrency,
                         creditPartial = creditPartial,
                         creditPending = creditPending,
                         formatAmount = formatAmount,
@@ -504,6 +494,7 @@ private fun ReconciliationContent(
                 SystemSummaryCardMultiCurrency(
                     summary = summary,
                     expectedCashByCurrency = expectedCashByCurrency,
+                    paymentsByCurrency = summary.paymentsByCurrency,
                     creditPartial = creditPartial,
                     creditPending = creditPending,
                     formatAmount = formatAmount,
@@ -550,6 +541,7 @@ private fun ReconciliationContent(
 private fun SystemSummaryCardMultiCurrency(
     summary: ReconciliationSummaryUi,
     expectedCashByCurrency: Map<String, Double>,
+    paymentsByCurrency: Map<String, Double>,
     creditPartial: Double,
     creditPending: Double,
     formatAmount: (Double) -> String,
@@ -562,6 +554,11 @@ private fun SystemSummaryCardMultiCurrency(
     val expectedCombined = currencies.entries.joinToString(" / ") { (code, amount) ->
         formatAmountFor(amount, code)
     }
+    val expectedBreakdown = buildCurrencySummaryLine(currencies, formatAmountFor)
+    val paymentsBreakdown = buildCurrencySummaryLine(
+        paymentsByCurrency.ifEmpty { mapOf(summary.currency.uppercase() to summary.paymentsTotal) },
+        formatAmountFor
+    )
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
@@ -591,6 +588,13 @@ private fun SystemSummaryCardMultiCurrency(
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.primary
                     )
+                    if (expectedBreakdown.isNotBlank()) {
+                        Text(
+                            "${strings.expectedByCurrencyLabel}: $expectedBreakdown",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
                     Text(
                         "${strings.invoicesLabel}: ${summary.invoiceCount}",
                         style = MaterialTheme.typography.labelSmall,
@@ -598,28 +602,35 @@ private fun SystemSummaryCardMultiCurrency(
                     )
                 }
             }
+            if (paymentsBreakdown.isNotBlank()) {
+                Text(
+                    "${strings.paymentsByCurrencyLabel}: $paymentsBreakdown",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 SummaryRow(
-                    label = "Ventas de contado",
+                    label = strings.salesLabel,
                     value = formatAmount(summary.salesTotal),
                     valueColor = MaterialTheme.colorScheme.onSurface,
                     icon = Icons.Filled.ShoppingCart
                 )
                 SummaryRow(
-                    label = "Pagos recibidos",
+                    label = strings.paymentsLabel,
                     value = formatAmount(summary.paymentsTotal),
                     valueColor = MaterialTheme.colorScheme.onSurface,
                     icon = Icons.Filled.ArrowDownward
                 )
                 SummaryRow(
-                    label = "Ventas crédito / pagos parciales",
+                    label = strings.creditPartialLabel,
                     value = formatAmount(creditPartial),
                     valueColor = MaterialTheme.colorScheme.primary,
                     icon = Icons.Filled.ArrowDownward,
                     badgeColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
                 )
                 SummaryRow(
-                    label = "Pagos pendientes (crédito)",
+                    label = strings.creditPendingLabel,
                     value = formatAmount(creditPending),
                     valueColor = MaterialTheme.colorScheme.error,
                     icon = Icons.Filled.ArrowUpward,
@@ -760,26 +771,26 @@ private fun SystemSummaryCard(
             }
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 SummaryRow(
-                    label = "Ventas de contado",
+                    label = strings.salesLabel,
                     value = formatAmount(summary.salesTotal),
                     valueColor = MaterialTheme.colorScheme.onSurface,
                     icon = Icons.Filled.ShoppingCart
                 )
                 SummaryRow(
-                    label = "Pagos recibidos",
+                    label = strings.paymentsLabel,
                     value = formatAmount(summary.paymentsTotal),
                     valueColor = MaterialTheme.colorScheme.onSurface,
                     icon = Icons.Filled.ArrowDownward
                 )
                 SummaryRow(
-                    label = "Ventas crédito / pagos parciales",
+                    label = strings.creditPartialLabel,
                     value = formatAmount(creditPartial),
                     valueColor = MaterialTheme.colorScheme.primary,
                     icon = Icons.Filled.ArrowDownward,
                     badgeColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
                 )
                 SummaryRow(
-                    label = "Pagos pendientes (crédito)",
+                    label = strings.creditPendingLabel,
                     value = formatAmount(creditPending),
                     valueColor = MaterialTheme.colorScheme.error,
                     icon = Icons.Filled.ArrowUpward,
@@ -827,16 +838,26 @@ private fun DifferenceAlertsByCurrency(
                 val icon = if (allBalanced) Icons.Filled.CheckCircle else Icons.Filled.Warning
                 Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                 Text(
-                    strings.differenceTitle,
+                    if (allBalanced) strings.differenceBalancedTitle else strings.differenceTitle,
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.SemiBold
                 )
             }
-            currencies.forEach { code ->
+            val differenceSummary = currencies.joinToString(" / ") { code ->
                 val expected = expectedByCurrency[code] ?: 0.0
                 val counted = countedByCurrency[code] ?: 0.0
                 val difference = counted - expected
-                val isBalanced = kotlin.math.abs(difference) < 0.01
+                val formatted = difference.formatCurrencyWithCode(code)
+                "$code $formatted"
+            }
+            Text(
+                "${strings.differenceLabel}: $differenceSummary",
+                style = MaterialTheme.typography.bodySmall,
+                fontWeight = FontWeight.SemiBold
+            )
+            currencies.forEach { code ->
+                val expected = expectedByCurrency[code] ?: 0.0
+                val counted = countedByCurrency[code] ?: 0.0
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween
@@ -844,20 +865,13 @@ private fun DifferenceAlertsByCurrency(
                     Text(code, style = MaterialTheme.typography.labelSmall)
                     Column(horizontalAlignment = Alignment.End) {
                         Text(
-                            "Esp: ${expected.formatCurrencyWithCode(code)}",
+                            "${strings.expectedLabel}: ${expected.formatCurrencyWithCode(code)}",
                             style = MaterialTheme.typography.labelSmall
                         )
                         Text(
-                            "Cont: ${counted.formatCurrencyWithCode(code)}",
+                            "${strings.countedLabel}: ${counted.formatCurrencyWithCode(code)}",
                             style = MaterialTheme.typography.labelSmall
                         )
-                        if (!isBalanced) {
-                            Text(
-                                "Dif: ${difference.formatCurrencyWithCode(code)}",
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
                     }
                 }
             }
@@ -1308,4 +1322,14 @@ fun formatAmountWithCode(amount: Double, code: String): String {
         else -> code
     }
     return formatCurrency(amount, code, symbol, formatter)
+}
+
+fun buildCurrencySummaryLine(
+    values: Map<String, Double>,
+    formatAmountFor: (Double, String) -> String
+): String {
+    if (values.isEmpty()) return ""
+    return values.entries.joinToString(" / ") { (code, amount) ->
+        formatAmountFor(amount, code)
+    }
 }
