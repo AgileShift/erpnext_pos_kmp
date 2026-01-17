@@ -166,7 +166,7 @@ class ReconciliationViewModel(
         )
     }
 
-    private fun aggregateCashByCurrency(
+    private suspend fun aggregateCashByCurrency(
         rows: List<ShiftPaymentRow>,
         posCurrency: String,
         cashModes: Set<String>,
