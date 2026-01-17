@@ -13,10 +13,12 @@ class BillingCoordinator(val viewModel: BillingViewModel) {
     fun onCustomerSearchQueryChange(query: String) = viewModel.onCustomerSearchQueryChange(query)
     fun onCustomerSelected(customer: com.erpnext.pos.domain.models.CustomerBO) =
         viewModel.onCustomerSelected(customer)
+
     fun onProductSearchQueryChange(query: String) = viewModel.onProductSearchQueryChange(query)
     fun onProductAdded(item: com.erpnext.pos.domain.models.ItemBO) = viewModel.onProductAdded(item)
     fun onQuantityChanged(itemCode: String, newQuantity: Double) =
         viewModel.onQuantityChanged(itemCode, newQuantity)
+
     fun onRemoveItem(itemCode: String) = viewModel.onRemoveItem(itemCode)
     fun onAddPaymentLine(line: PaymentLine) = viewModel.onAddPaymentLine(line)
     fun onRemovePaymentLine(index: Int) = viewModel.onRemovePaymentLine(index)
@@ -24,17 +26,24 @@ class BillingCoordinator(val viewModel: BillingViewModel) {
     fun onCreditSaleChanged(isCreditSale: Boolean) = viewModel.onCreditSaleChanged(isCreditSale)
     fun onPaymentTermSelected(term: com.erpnext.pos.domain.models.PaymentTermBO?) =
         viewModel.onPaymentTermSelected(term)
+
     fun onDiscountCodeChanged(code: String) = viewModel.onDiscountCodeChanged(code)
-    fun onManualDiscountAmountChanged(value: String) = viewModel.onManualDiscountAmountChanged(value)
-    fun onManualDiscountPercentChanged(value: String) = viewModel.onManualDiscountPercentChanged(value)
+    fun onManualDiscountAmountChanged(value: String) =
+        viewModel.onManualDiscountAmountChanged(value)
+
+    fun onManualDiscountPercentChanged(value: String) =
+        viewModel.onManualDiscountPercentChanged(value)
+
     fun onDeliveryChargeSelected(charge: com.erpnext.pos.domain.models.DeliveryChargeBO?) =
         viewModel.onDeliveryChargeSelected(charge)
+
     fun onPaymentCurrencySelected(currency: String) = viewModel.onPaymentCurrencySelected(currency)
     fun onOpenLab() = viewModel.onOpenLab()
     fun onClearSuccessMessage() = viewModel.onClearSuccessMessage()
     fun onBack() = viewModel.onBack()
     fun onLinkSource(sourceType: SalesFlowSource, sourceId: String) =
         viewModel.linkSourceDocument(sourceType, sourceId)
+
     fun onClearSource() = viewModel.clearSourceDocument()
     fun onLoadSourceDocuments(sourceType: SalesFlowSource) =
         viewModel.loadSourceDocuments(sourceType)
@@ -54,7 +63,7 @@ fun rememberBillingCoordinator(): BillingCoordinator {
 @Composable
 fun rememberBillingLabCoordinator(owner: ViewModelStoreOwner): BillingCoordinator {
     // Se crea un ViewModel aislado por destino para evitar estado persistente en Lab.
-    val viewModel: BillingViewModel = koinViewModel(owner = { owner })
+    val viewModel: BillingViewModel = koinViewModel(viewModelStoreOwner = owner)
 
     return remember(viewModel) {
         BillingCoordinator(

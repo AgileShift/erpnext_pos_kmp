@@ -8,6 +8,7 @@ import com.erpnext.pos.views.CashBoxManager
 import com.erpnext.pos.utils.parseErpDateTimeToEpochMillis
 import com.erpnext.pos.utils.normalizeCurrency
 import com.erpnext.pos.utils.roundToCurrency
+import com.erpnext.pos.views.POSContext
 import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -390,7 +391,7 @@ class ReconciliationViewModel(
     }
 
     private fun resolveCashModes(
-        context: com.erpnext.pos.views.POSContext,
+        context: POSContext,
         openingByMode: Map<String, Double>
     ): Set<String> {
         val direct = context.paymentModes.filter { mode ->
@@ -460,7 +461,6 @@ class ReconciliationViewModel(
             // Resolvemos moneda de la factura para el desglose.
             val invoiceCurrency = normalizeCurrency(invoice.partyAccountCurrency)
                 ?: normalizeCurrency(invoice.currency)
-                ?: posCurrency
             val currencyKey = invoiceCurrency.uppercase()
             pendingByCurrency[currencyKey] = (pendingByCurrency[currencyKey] ?: 0.0) + outstanding
             if (paid > 0.0) {
