@@ -297,30 +297,60 @@ fun BillingLabScreen(
             },
             sheetContent = {
                 if (state is BillingState.Success) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 8.dp, vertical = 6.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    // Alineamos el bottom sheet a la izquierda y limitamos su ancho.
+                    Box(
+                        modifier = Modifier.fillMaxWidth(),
+                        contentAlignment = Alignment.CenterStart
                     ) {
-                        DiscountShippingInputs(state, action)
-                        PaymentSection(
-                            state = state,
-                            baseCurrency = state.currency ?: "USD",
-                            exchangeRateByCurrency = state.exchangeRateByCurrency,
-                            paymentLines = state.paymentLines,
-                            paymentModes = state.paymentModes,
-                            allowedCurrencies = state.allowedCurrencies,
-                            paidAmountBase = state.paidAmountBase,
-                            totalAmount = state.total,
-                            balanceDueBase = state.balanceDueBase,
-                            changeDueBase = state.changeDueBase,
-                            paymentErrorMessage = state.paymentErrorMessage,
-                            isCreditSale = state.isCreditSale,
-                            onAddPaymentLine = action.onAddPaymentLine,
-                            onRemovePaymentLine = action.onRemovePaymentLine,
-                            onPaymentCurrencySelected = action.onPaymentCurrencySelected
-                        )
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth(0.62f)
+                                .widthIn(max = 440.dp)
+                                .padding(start = 12.dp, end = 8.dp, top = 6.dp, bottom = 12.dp)
+                                .verticalScroll(rememberScrollState()),
+                            verticalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            // Resumen compacto arriba.
+                            Text(
+                                text = "Resumen",
+                                style = MaterialTheme.typography.labelLarge,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            CompactTotalsCard(
+                                baseCurrency = state.currency ?: "USD",
+                                subtotal = state.subtotal,
+                                taxes = state.taxes,
+                                discount = state.discount,
+                                shipping = state.shippingAmount,
+                                total = state.total,
+                                balance = state.balanceDueBase,
+                                change = state.changeDueBase
+                            )
+                            // Grupo colapsable único para descuento y envío.
+                            CollapsibleSection(
+                                title = "Descuento y envío",
+                                defaultExpanded = false
+                            ) {
+                                DiscountShippingInputs(state, action)
+                            }
+                            PaymentSection(
+                                state = state,
+                                baseCurrency = state.currency ?: "USD",
+                                exchangeRateByCurrency = state.exchangeRateByCurrency,
+                                paymentLines = state.paymentLines,
+                                paymentModes = state.paymentModes,
+                                allowedCurrencies = state.allowedCurrencies,
+                                paidAmountBase = state.paidAmountBase,
+                                totalAmount = state.total,
+                                balanceDueBase = state.balanceDueBase,
+                                changeDueBase = state.changeDueBase,
+                                paymentErrorMessage = state.paymentErrorMessage,
+                                isCreditSale = state.isCreditSale,
+                                onAddPaymentLine = action.onAddPaymentLine,
+                                onRemovePaymentLine = action.onRemovePaymentLine,
+                                onPaymentCurrencySelected = action.onPaymentCurrencySelected
+                            )
+                        }
                     }
                 } else {
                     Box(

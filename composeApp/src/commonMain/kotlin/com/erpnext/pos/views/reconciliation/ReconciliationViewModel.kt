@@ -93,7 +93,7 @@ class ReconciliationViewModel(
             startMillis = startMillis,
             endMillis = endMillis
         )
-        val posCurrency = normalizeCurrency(context.currency)
+        val posCurrency = normalizeCurrency(context.currency) ?: context.currency
         val rateCache = mutableMapOf<String, Double>()
         val paymentRows = salesInvoiceDao.getShiftPayments(
             profileId = context.profileName,
@@ -104,21 +104,22 @@ class ReconciliationViewModel(
         val totalPaymentsAll = paymentsByMode.values.sum()
         val cashModes = resolveCashModes(context, openingByMode)
         val paymentsCashByCurrency =
-            aggregateCashByCurrency(paymentRows, posCurrency, cashModes)
+            aggregateCashByCurrency(paymentRows, invoices, posCurrency, cashModes, rateCache)
         val paymentsByCurrency = aggregatePaymentsByCurrency(paymentRows, posCurrency)
         val availableModes = context.paymentModes.mapNotNull { mode ->
             mode.modeOfPayment.takeIf { it.isNotBlank() }
         }
+        // Construye el esperado por modo (apertura + pagos del turno).
         val expectedByMode = buildExpectedByMode(openingByMode, paymentsByMode, availableModes)
-        val expectedTotal = roundToCurrency(expectedByMode.values.sum())
+        // El total esperado en caja solo debe contemplar modos de efectivo.
+        val expectedTotal = roundToCurrency(
+            expectedByMode.filterKeys { cashModes.contains(it) }.values.sum()
+        )
         val cashPaymentsTotal = roundToCurrency(
             paymentsByMode.filterKeys { cashModes.contains(it) }.values.sum()
         )
         val paymentsTotal =
             roundToCurrency((totalPaymentsAll - cashPaymentsTotal).coerceAtLeast(0.0))
-        val creditDelta = roundToCurrency(expectedTotal - cashPaymentsTotal - paymentsTotal)
-        val creditPartial = if (creditDelta < 0) 0.0 else creditDelta
-        val creditPending = creditDelta.takeIf { it > 0 } ?: 0.0
         val symbol = context.allowedCurrencies
             .firstOrNull { it.code.equals(context.currency, ignoreCase = true) }
             ?.symbol
@@ -127,10 +128,8 @@ class ReconciliationViewModel(
         val nonCashByCurrency = subtractCurrencyMaps(paymentsByCurrency, paymentsCashByCurrency)
         val currencySet =
             (openingByCurrency.keys + paymentsByCurrency.keys).map { it.uppercase() }.toSet()
-        val creditPartialByCurrency =
-            convertAmountForCurrencies(creditPartial, posCurrency, currencySet, rateCache)
-        val creditPendingByCurrency =
-            convertAmountForCurrencies(creditPending, posCurrency, currencySet, rateCache)
+        // Totales de crédito basados en facturas del turno (pagos parciales y pendientes).
+        val creditTotals = aggregateCreditTotals(invoices, posCurrency, rateCache)
         val expensesByCurrency =
             convertAmountForCurrencies(0.0, posCurrency, currencySet, rateCache)
         return ReconciliationSummaryUi(
@@ -159,25 +158,82 @@ class ReconciliationViewModel(
             paymentsByCurrency = paymentsByCurrency,
             salesByCurrency = paymentsCashByCurrency,
             nonCashPaymentsByCurrency = nonCashByCurrency,
-            creditPartialByCurrency = creditPartialByCurrency,
-            creditPendingByCurrency = creditPendingByCurrency,
+            creditPartialTotal = creditTotals.partialTotal,
+            creditPendingTotal = creditTotals.pendingTotal,
+            creditPartialByCurrency = creditTotals.partialByCurrency,
+            creditPendingByCurrency = creditTotals.pendingByCurrency,
             expensesByCurrency = expensesByCurrency
         )
     }
 
     private fun aggregateCashByCurrency(
         rows: List<ShiftPaymentRow>,
+        invoices: List<com.erpnext.pos.localSource.entities.SalesInvoiceEntity>,
         posCurrency: String,
-        cashModes: Set<String>
+        cashModes: Set<String>,
+        rateCache: MutableMap<String, Double>
     ): Map<String, Double> {
+        // Mapa de facturas para resolver totales y calcular vuelto real por invoice.
+        val invoicesByName = invoices.associateBy { it.invoiceName }
         val totals = mutableMapOf<String, Double>()
+        val cashRowsByInvoice = mutableMapOf<String, MutableList<ShiftPaymentRow>>()
+        val nonCashBaseByInvoice = mutableMapOf<String, Double>()
         rows.filter { cashModes.contains(it.modeOfPayment) }.forEach { row ->
             val payCurrency = resolvePaymentCurrency(row, posCurrency)
             val normalizedCurrency = payCurrency.uppercase()
+            // Para efectivo sumamos lo recibido (entered_amount) si existe.
             val amountInPayCurrency = resolvePaymentAmount(row)
             totals[normalizedCurrency] = (totals[normalizedCurrency] ?: 0.0) + amountInPayCurrency
+            cashRowsByInvoice.getOrPut(row.invoiceName) { mutableListOf() }.add(row)
+        }
+        rows.filterNot { cashModes.contains(it.modeOfPayment) }.forEach { row ->
+            // Pagos no efectivo en base (POS) para descontar del total de la factura.
+            nonCashBaseByInvoice[row.invoiceName] =
+                (nonCashBaseByInvoice[row.invoiceName] ?: 0.0) + row.amount
+        }
+        // Calculamos vuelto por factura para restarlo en la moneda donde realmente se entregó.
+        cashRowsByInvoice.forEach { (invoiceName, cashRows) ->
+            val invoice = invoicesByName[invoiceName] ?: return@forEach
+            val invoiceTotal = invoice.grandTotal
+            val nonCashPaid = nonCashBaseByInvoice[invoiceName] ?: 0.0
+            val cashDue = (invoiceTotal - nonCashPaid).coerceAtLeast(0.0)
+            val cashPaidBase = cashRows.sumOf { it.amount }
+            val changeBase = (cashPaidBase - cashDue).takeIf { it > 0.0 } ?: 0.0
+            if (changeBase <= 0.0) return@forEach
+            val changeCurrency = resolveChangeCurrency(cashRows, posCurrency)
+            val changeInCurrency = if (changeCurrency.equals(posCurrency, ignoreCase = true)) {
+                changeBase
+            } else {
+                val key = "${posCurrency.uppercase()}->${changeCurrency.uppercase()}"
+                val rate = rateCache.getOrPut(key) {
+                    cashBoxManager.resolveExchangeRateBetween(posCurrency, changeCurrency) ?: 1.0
+                }
+                changeBase * rate
+            }
+            val changeKey = changeCurrency.uppercase()
+            totals[changeKey] = (totals[changeKey] ?: 0.0) - changeInCurrency
         }
         return totals.mapValues { roundToCurrency(it.value) }
+    }
+
+    private fun resolveChangeCurrency(
+        cashRows: List<ShiftPaymentRow>,
+        posCurrency: String
+    ): String {
+        // Heurística: si el modo de pago indica moneda explícita, usamos esa caja.
+        val totalsByCurrency = mutableMapOf<String, Double>()
+        cashRows.forEach { row ->
+            val mode = row.modeOfPayment
+            val currency = when {
+                mode.contains("USD", ignoreCase = true) || mode.contains("$") -> "USD"
+                mode.contains("NIO", ignoreCase = true) || mode.contains("C$", ignoreCase = true) ->
+                    "NIO"
+                else -> posCurrency
+            }
+            totalsByCurrency[currency] =
+                (totalsByCurrency[currency] ?: 0.0) + row.amount
+        }
+        return totalsByCurrency.maxByOrNull { it.value }?.key ?: posCurrency
     }
 
     private fun aggregatePaymentsByCurrency(
@@ -376,5 +432,60 @@ class ReconciliationViewModel(
             expected[mode] = roundToCurrency((expected[mode] ?: 0.0) + amount)
         }
         return expected.mapValues { roundToCurrency(it.value) }
+    }
+
+    // Contenedor de totales de crédito calculados desde facturas del turno.
+    private data class CreditTotals(
+        val partialTotal: Double,
+        val pendingTotal: Double,
+        val partialByCurrency: Map<String, Double>,
+        val pendingByCurrency: Map<String, Double>
+    )
+
+    private suspend fun aggregateCreditTotals(
+        invoices: List<com.erpnext.pos.localSource.entities.SalesInvoiceEntity>,
+        posCurrency: String,
+        rateCache: MutableMap<String, Double>
+    ): CreditTotals {
+        // Separamos pagos parciales (paid) y pendientes (outstanding) por moneda.
+        val partialByCurrency = mutableMapOf<String, Double>()
+        val pendingByCurrency = mutableMapOf<String, Double>()
+        var partialTotal = 0.0
+        var pendingTotal = 0.0
+        invoices.forEach { invoice ->
+            // Solo consideramos facturas con saldo pendiente para crédito.
+            val outstanding = invoice.outstandingAmount
+            if (outstanding <= 0.0) return@forEach
+            val paid = invoice.paidAmount.coerceAtLeast(0.0)
+            // Resolvemos moneda de la factura para el desglose.
+            val invoiceCurrency = normalizeCurrency(invoice.partyAccountCurrency)
+                ?: normalizeCurrency(invoice.currency)
+                ?: posCurrency
+            val currencyKey = invoiceCurrency.uppercase()
+            pendingByCurrency[currencyKey] = (pendingByCurrency[currencyKey] ?: 0.0) + outstanding
+            if (paid > 0.0) {
+                partialByCurrency[currencyKey] = (partialByCurrency[currencyKey] ?: 0.0) + paid
+            }
+            // Convertimos a moneda del POS para los totales globales.
+            val rate = if (invoiceCurrency.equals(posCurrency, ignoreCase = true)) {
+                1.0
+            } else {
+                val key = "${invoiceCurrency.uppercase()}->$posCurrency"
+                rateCache.getOrPut(key) {
+                    cashBoxManager.resolveExchangeRateBetween(invoiceCurrency, posCurrency) ?: 1.0
+                }
+            }
+            pendingTotal += outstanding * rate
+            if (paid > 0.0) {
+                partialTotal += paid * rate
+            }
+        }
+        // Redondeamos para mantener consistencia visual y contable.
+        return CreditTotals(
+            partialTotal = roundToCurrency(partialTotal),
+            pendingTotal = roundToCurrency(pendingTotal),
+            partialByCurrency = partialByCurrency.mapValues { roundToCurrency(it.value) },
+            pendingByCurrency = pendingByCurrency.mapValues { roundToCurrency(it.value) }
+        )
     }
 }

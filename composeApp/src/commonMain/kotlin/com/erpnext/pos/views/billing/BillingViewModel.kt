@@ -695,6 +695,7 @@ class BillingViewModel(
         _state.update { current.copy(successMessage = null) }
     }
 
+
     fun onFinalizeSale() {
         val current = requireSuccessState() ?: return
         val validationError = validateFinalizeSale(current)
@@ -891,9 +892,10 @@ class BillingViewModel(
                 )
             }
         }, exceptionHandler = { e ->
-            val errorMessage = e.toUserMessage("No se pudo crear la factura.")
+            // En modo prueba necesitamos mensajes útiles: agregamos contexto del flujo.
             _state.update { currentState ->
                 val previous = currentState as? BillingState.Success
+                val errorMessage = buildFinalizeErrorMessage(previous, e)
                 BillingState.Error(errorMessage, previous)
             }
         }, finallyHandler = {
@@ -925,6 +927,34 @@ class BillingViewModel(
             discount = totals.discount,
             total = totals.total
         ).recalculatePaymentTotals()
+    }
+
+    private fun buildFinalizeErrorMessage(
+        current: BillingState.Success?,
+        error: Throwable
+    ): String {
+        // Mensaje base para el usuario.
+        val baseMessage = error.toUserMessage("No se pudo crear la factura.")
+        // Construimos contexto adicional para identificar el punto del error.
+        val sourceInfo = current?.salesFlowContext?.sourceLabel()?.let { label ->
+            current.salesFlowContext.sourceId?.let { id -> "$label ($id)" } ?: label
+        } ?: "N/A"
+        val customerInfo = current?.selectedCustomer?.name ?: "N/A"
+        val totalInfo = current?.total?.let { roundToCurrency(it) } ?: 0.0
+        val paidInfo = current?.paidAmountBase?.let { roundToCurrency(it) } ?: 0.0
+        val linesInfo = current?.paymentLines?.size ?: 0
+        val creditInfo = current?.isCreditSale ?: false
+        val errorType = error::class.simpleName ?: "Error"
+        return buildString {
+            append(baseMessage)
+            append(" | Tipo: ").append(errorType)
+            append(" | Cliente: ").append(customerInfo)
+            append(" | Origen: ").append(sourceInfo)
+            append(" | Total: ").append(totalInfo)
+            append(" | Pagado: ").append(paidInfo)
+            append(" | Pagos: ").append(linesInfo)
+            append(" | Crédito: ").append(creditInfo)
+        }
     }
 
     private suspend fun buildExchangeRateMap(
@@ -1063,7 +1093,16 @@ class BillingViewModel(
             ?: current.paymentModes.firstOrNull()?.modeOfPayment
             ?: error("No hay modo de pago disponible para crear la factura.")
 
-        val payments = listOf(SalesInvoicePaymentDto(paymentMode, 0.0))
+        // Si ya conocemos los pagos (offline-first), los enviamos con sus montos reales.
+        // Esto asegura paid_amount/outstanding_amount correctos desde el inicio.
+        val payments = if (paymentLines.isNotEmpty()) {
+            paymentLines.map { line ->
+                SalesInvoicePaymentDto(line.modeOfPayment, line.baseAmount)
+            }
+        } else {
+            // En crédito sin pagos, enviamos una línea vacía para mantener compatibilidad.
+            listOf(SalesInvoicePaymentDto(paymentMode, 0.0))
+        }
 
         return SalesInvoiceDto(
             customer = customer.name,
