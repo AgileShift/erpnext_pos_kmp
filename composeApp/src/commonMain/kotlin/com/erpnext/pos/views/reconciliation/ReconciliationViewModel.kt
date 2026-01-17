@@ -8,6 +8,7 @@ import com.erpnext.pos.views.CashBoxManager
 import com.erpnext.pos.utils.parseErpDateTimeToEpochMillis
 import com.erpnext.pos.utils.normalizeCurrency
 import com.erpnext.pos.utils.roundToCurrency
+import com.erpnext.pos.views.POSContext
 import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -334,7 +335,7 @@ class ReconciliationViewModel(
     }
 
     private fun resolveCashModes(
-        context: com.erpnext.pos.views.POSContext,
+        context: POSContext,
         openingByMode: Map<String, Double>
     ): Set<String> {
         val direct = context.paymentModes.filter { mode ->

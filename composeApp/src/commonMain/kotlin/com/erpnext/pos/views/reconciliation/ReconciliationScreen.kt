@@ -67,6 +67,7 @@ import com.erpnext.pos.localization.ReconciliationStrings
 import com.erpnext.pos.utils.DenominationCatalog
 import com.erpnext.pos.utils.DecimalFormatter
 import com.erpnext.pos.utils.normalizeCurrency
+import kotlin.math.abs
 
 data class DenominationUi(
     val value: Double,
@@ -142,7 +143,7 @@ fun ReconciliationScreen(
         }
         map
     } ?: emptyMap()
-   // Totales contados por moneda
+    // Totales contados por moneda
     val cashTotalsByCurrency = countState.mapValues { entry ->
         entry.value.sumOf { it.value * it.count }
     }
@@ -263,7 +264,10 @@ private fun ReconciliationHeader(
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 IconButton(onClick = onBack) {
-                    Icon(imageVector = Icons.AutoMirrored.Default.ArrowBack, contentDescription = backLabel)
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Default.ArrowBack,
+                        contentDescription = backLabel
+                    )
                 }
                 Text(strings.title, style = MaterialTheme.typography.titleMedium)
             }
@@ -347,7 +351,6 @@ private fun ReconciliationContent(
     countCurrencies: List<String>,
     selectedCountCurrency: String,
     onCurrencyChange: (String) -> Unit,
-    //openingTotalsByCurrency: Map<String, Double>,
     denominations: List<DenominationUi>,
     onDenominationChange: (Double, Int) -> Unit,
     cashTotal: Double,
@@ -413,7 +416,6 @@ private fun ReconciliationContent(
                         summary = summary,
                         expectedCashByCurrency = expectedCashByCurrency,
                         salesByCurrency = summary.salesByCurrency,
-                        nonCashPaymentsByCurrency = summary.nonCashPaymentsByCurrency,
                         creditPartialByCurrency = summary.creditPartialByCurrency,
                         creditPendingByCurrency = summary.creditPendingByCurrency,
                         expensesByCurrency = summary.expensesByCurrency,
@@ -441,11 +443,6 @@ private fun ReconciliationContent(
                         .verticalScroll(rightScrollState),
                     verticalArrangement = Arrangement.spacedBy(20.dp)
                 ) {
-                    CurrencySelector(
-                        currencies = countCurrencies,
-                        selected = selectedCountCurrency,
-                        onSelect = onCurrencyChange
-                    )
                     DifferenceAlertsByCurrency(
                         expectedByCurrency = expectedCashByCurrency,
                         countedByCurrency = countedByCurrency,
@@ -457,7 +454,10 @@ private fun ReconciliationContent(
                             onCountChange = onDenominationChange,
                             total = cashTotal,
                             formatAmount = formatCountAmount,
-                            strings = strings
+                            strings = strings,
+                            countCurrencies = countCurrencies,
+                            selectedCountCurrency = selectedCountCurrency,
+                            onCurrencyChange = onCurrencyChange
                         )
                     }
                     NotesCard(strings = strings)
@@ -481,7 +481,6 @@ private fun ReconciliationContent(
                     summary = summary,
                     expectedCashByCurrency = expectedCashByCurrency,
                     salesByCurrency = summary.salesByCurrency,
-                    nonCashPaymentsByCurrency = summary.nonCashPaymentsByCurrency,
                     creditPartialByCurrency = summary.creditPartialByCurrency,
                     creditPendingByCurrency = summary.creditPendingByCurrency,
                     expensesByCurrency = summary.expensesByCurrency,
@@ -517,7 +516,10 @@ private fun ReconciliationContent(
                         onCountChange = onDenominationChange,
                         total = cashTotal,
                         formatAmount = formatCountAmount,
-                        strings = strings
+                        strings = strings,
+                        countCurrencies = countCurrencies,
+                        selectedCountCurrency = selectedCountCurrency,
+                        onCurrencyChange = onCurrencyChange
                     )
                 }
                 NotesCard(strings = strings)
@@ -531,7 +533,6 @@ private fun SystemSummaryCardMultiCurrency(
     summary: ReconciliationSummaryUi,
     expectedCashByCurrency: Map<String, Double>,
     salesByCurrency: Map<String, Double>,
-    nonCashPaymentsByCurrency: Map<String, Double>,
     creditPartialByCurrency: Map<String, Double>,
     creditPendingByCurrency: Map<String, Double>,
     expensesByCurrency: Map<String, Double>,
@@ -548,10 +549,6 @@ private fun SystemSummaryCardMultiCurrency(
     }
     val salesBreakdown = buildCurrencySummaryLine(
         salesByCurrency.ifEmpty { mapOf(summary.currency.uppercase() to summary.salesTotal) },
-        formatAmountFor
-    )
-    val nonCashBreakdown = buildCurrencySummaryLine(
-        nonCashPaymentsByCurrency.ifEmpty { mapOf(summary.currency.uppercase() to summary.paymentsTotal) },
         formatAmountFor
     )
     val creditPartialBreakdown = buildCurrencySummaryLine(
@@ -716,13 +713,13 @@ private fun OpeningBalanceCard(
 private fun DifferenceAlertsByCurrency(
     expectedByCurrency: Map<String, Double>,
     countedByCurrency: Map<String, Double>,
-    strings: com.erpnext.pos.localization.ReconciliationStrings
+    strings: ReconciliationStrings
 ) {
     if (expectedByCurrency.isEmpty()) return
     val currencies =
         (expectedByCurrency.keys + countedByCurrency.keys).map { it.uppercase() }.distinct()
     val allBalanced = currencies.all { code ->
-        kotlin.math.abs((countedByCurrency[code] ?: 0.0) - (expectedByCurrency[code] ?: 0.0)) < 0.01
+        abs((countedByCurrency[code] ?: 0.0) - (expectedByCurrency[code] ?: 0.0)) < 0.01
     }
     val cardColors = if (allBalanced) {
         CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f))
@@ -757,7 +754,7 @@ private fun DifferenceAlertsByCurrency(
                     difference < -0.01 -> strings.differenceShortLabel
                     else -> ""
                 }
-                val amount = kotlin.math.abs(difference).formatCurrencyWithCode(code)
+                val amount = abs(difference).formatCurrencyWithCode(code)
                 if (label.isBlank()) amount else "$label $amount"
             }
             Text(
@@ -796,7 +793,10 @@ private fun DenominationCounter(
     onCountChange: (value: Double, count: Int) -> Unit,
     total: Double,
     formatAmount: (Double) -> String,
-    strings: com.erpnext.pos.localization.ReconciliationStrings
+    strings: ReconciliationStrings,
+    countCurrencies: List<String>,
+    selectedCountCurrency: String,
+    onCurrencyChange: (String) -> Unit,
 ) {
     var activeTab by remember { mutableStateOf(DenominationType.Bill) }
     val bills = denominations.filter { it.type == DenominationType.Bill }
@@ -813,12 +813,6 @@ private fun DenominationCounter(
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-/*<<<<<<< HEAD
-            Text(
-                "${strings.cashCountTitle} (${strings.cashCountSubtitle})",
-                style = MaterialTheme.typography.titleMedium
-            )
-=======*/
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.Start
@@ -832,6 +826,11 @@ private fun DenominationCounter(
                     style = MaterialTheme.typography.labelSmall,
                     fontSize = 11.sp,
                     color = Color.Gray
+                )
+                CurrencySelector(
+                    currencies = countCurrencies,
+                    selected = selectedCountCurrency,
+                    onSelect = onCurrencyChange
                 )
             }
 
@@ -989,7 +988,7 @@ private fun DenominationRow(
 }
 
 @Composable
-private fun NotesCard(strings: com.erpnext.pos.localization.ReconciliationStrings) {
+private fun NotesCard(strings: ReconciliationStrings) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
@@ -1017,7 +1016,7 @@ private fun ReconciliationActionsBar(
     onSaveDraft: () -> Unit,
     strings: ReconciliationStrings
 ) {
-    val hasDifference = differenceByCurrency.values.any { kotlin.math.abs(it) > 0.01 }
+    val hasDifference = differenceByCurrency.values.any { abs(it) > 0.01 }
     val differenceSummary = buildCurrencySummaryLine(
         differenceByCurrency,
         formatAmountFor = { value, code ->
@@ -1170,7 +1169,7 @@ private fun InfoLabelValue(label: String, value: String, color: Color) {
 }
 
 @Composable
-private fun EmptyReconciliationState(strings: com.erpnext.pos.localization.ReconciliationStrings) {
+private fun EmptyReconciliationState(strings: ReconciliationStrings) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
