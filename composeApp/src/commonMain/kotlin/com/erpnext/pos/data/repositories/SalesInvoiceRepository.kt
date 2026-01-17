@@ -208,8 +208,25 @@ class SalesInvoiceRepository(
         localInvoiceName: String,
         remote: SalesInvoiceDto
     ) {
+        // Se lee la factura local para no perder pagos locales en modo offline-first.
+        val localInvoice = localSource.getInvoiceByName(localInvoiceName)?.invoice
         val remoteName = remote.name ?: return
         val now = Clock.System.now().toEpochMilliseconds()
+        // Se valida si el servidor trae montos pagados reales o si aún están en cero.
+        val remoteOutstanding = remote.outstandingAmount
+        val remotePaid = remote.paidAmount
+        val remoteTotal = remote.grandTotal
+        val localPaid = localInvoice?.paidAmount ?: 0.0
+        val localOutstanding = localInvoice?.outstandingAmount ?: 0.0
+        val remoteHasPayments =
+            remotePaid > 0.0 || (remoteOutstanding != null && remoteOutstanding < remoteTotal - 0.01)
+        // Si el servidor aún no refleja pagos, preservamos lo local.
+        val resolvedPaidAmount = if (remoteHasPayments) remotePaid else localPaid
+        val resolvedOutstandingAmount =
+            if (remoteHasPayments) (remoteOutstanding ?: 0.0) else localOutstanding
+        // El status se alinea con la fuente de verdad escogida.
+        val resolvedStatus = if (remoteHasPayments) remote.status ?: "Draft"
+        else localInvoice?.status ?: (remote.status ?: "Draft")
         localSource.updateFromRemote(
             oldName = localInvoiceName,
             newName = remoteName,
@@ -224,9 +241,9 @@ class SalesInvoiceRepository(
             netTotal = remote.netTotal,
             taxTotal = remote.totalTaxesAndCharges ?: 0.0,
             grandTotal = remote.grandTotal,
-            paidAmount = remote.paidAmount,
-            outstandingAmount = remote.outstandingAmount ?: 0.0,
-            status = remote.status ?: "Draft",
+            paidAmount = resolvedPaidAmount,
+            outstandingAmount = resolvedOutstandingAmount,
+            status = resolvedStatus,
             docstatus = remote.docStatus,
             modeOfPayment = remote.payments.firstOrNull()?.modeOfPayment,
             debitTo = remote.debitTo,

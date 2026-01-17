@@ -93,6 +93,7 @@ fun List<SalesInvoiceDto>.toEntities(): List<SalesInvoiceWithItemsAndPayments> {
 fun SalesInvoiceDto.toEntity(): SalesInvoiceWithItemsAndPayments {
     val now = Clock.System.now().toEpochMilliseconds()
 
+    // Se asegura que la factura local conserve los montos pagados recibidos del servidor.
     val invoiceEntity = SalesInvoiceEntity(
         invoiceName = name,
         profileId = posProfile,
@@ -111,6 +112,8 @@ fun SalesInvoiceDto.toEntity(): SalesInvoiceWithItemsAndPayments {
         taxTotal = totalTaxesAndCharges ?: 0.0,
         grandTotal = grandTotal,
         outstandingAmount = outstandingAmount ?: 0.0,
+        // El paid_amount remoto es la fuente de verdad para reconciliación y BI.
+        paidAmount = paidAmount,
         status = status ?: "Draft",
         syncStatus = "Synced",
         docstatus = if (status == "Submitted" || status == "Paid") 1 else 0,
