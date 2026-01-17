@@ -2,6 +2,7 @@ package com.erpnext.pos.views.billing
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
+import androidx.lifecycle.ViewModelStoreOwner
 import com.erpnext.pos.views.salesflow.SalesFlowSource
 import org.koin.compose.viewmodel.koinViewModel
 
@@ -31,7 +32,6 @@ class BillingCoordinator(val viewModel: BillingViewModel) {
     fun onPaymentCurrencySelected(currency: String) = viewModel.onPaymentCurrencySelected(currency)
     fun onOpenLab() = viewModel.onOpenLab()
     fun onClearSuccessMessage() = viewModel.onClearSuccessMessage()
-    fun onResetLab() = viewModel.resetLabState()
     fun onBack() = viewModel.onBack()
     fun onLinkSource(sourceType: SalesFlowSource, sourceId: String) =
         viewModel.linkSourceDocument(sourceType, sourceId)
@@ -43,6 +43,18 @@ class BillingCoordinator(val viewModel: BillingViewModel) {
 @Composable
 fun rememberBillingCoordinator(): BillingCoordinator {
     val viewModel: BillingViewModel = koinViewModel()
+
+    return remember(viewModel) {
+        BillingCoordinator(
+            viewModel = viewModel
+        )
+    }
+}
+
+@Composable
+fun rememberBillingLabCoordinator(owner: ViewModelStoreOwner): BillingCoordinator {
+    // Se crea un ViewModel aislado por destino para evitar estado persistente en Lab.
+    val viewModel: BillingViewModel = koinViewModel(owner = { owner })
 
     return remember(viewModel) {
         BillingCoordinator(

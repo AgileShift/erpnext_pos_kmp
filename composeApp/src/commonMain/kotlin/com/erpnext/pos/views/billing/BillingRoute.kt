@@ -8,6 +8,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import com.erpnext.pos.utils.view.SnackbarController
+import androidx.navigation.NavBackStackEntry
 import org.koin.compose.koinInject
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -25,16 +26,12 @@ fun BillingRoute(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun BillingLabRoute(
-    coordinator: BillingCoordinator = rememberBillingCoordinator()
+    backStackEntry: NavBackStackEntry,
+    coordinator: BillingCoordinator = rememberBillingLabCoordinator(backStackEntry)
 ) {
     val uiState by coordinator.screenStateFlow.collectAsState()
     val action = rememberBillingActions(coordinator)
     val snackbar = koinInject<SnackbarController>()
-
-    // Reinicia el estado al entrar en modo prueba para evitar estados persistentes.
-    androidx.compose.runtime.LaunchedEffect(Unit) {
-        action.onResetLab()
-    }
 
     BillingLabScreen(uiState, action, snackbar)
 }
@@ -61,7 +58,6 @@ fun rememberBillingActions(coordinator: BillingCoordinator): BillingAction {
             onPaymentCurrencySelected = coordinator::onPaymentCurrencySelected,
             onOpenLab = coordinator::onOpenLab,
             onClearSuccessMessage = coordinator::onClearSuccessMessage,
-            onResetLab = coordinator::onResetLab,
             onBack = coordinator::onBack,
             onLinkSource = coordinator::onLinkSource,
             onClearSource = coordinator::onClearSource,
