@@ -10,6 +10,7 @@ import com.erpnext.pos.localSource.dao.CashboxDao
 import com.erpnext.pos.localSource.dao.POSClosingEntryDao
 import com.erpnext.pos.localSource.dao.POSOpeningEntryDao
 import com.erpnext.pos.localSource.dao.POSProfileDao
+import com.erpnext.pos.localSource.dao.SalesInvoiceDao
 import com.erpnext.pos.localSource.dao.UserDao
 import com.erpnext.pos.localSource.entities.CashboxEntity
 import com.erpnext.pos.localSource.entities.CashboxWithDetails
@@ -17,12 +18,14 @@ import com.erpnext.pos.localSource.preferences.ExchangeRatePreferences
 import com.erpnext.pos.remoteSource.api.APIService
 import com.erpnext.pos.remoteSource.dto.BalanceDetailsDto
 import com.erpnext.pos.remoteSource.dto.POSClosingEntryDto
+import com.erpnext.pos.remoteSource.dto.POSClosingInvoiceDto
 import com.erpnext.pos.remoteSource.dto.POSOpeningEntryDto
 import com.erpnext.pos.remoteSource.mapper.toDto
 import com.erpnext.pos.remoteSource.mapper.toEntity
 import com.erpnext.pos.data.repositories.ExchangeRateRepository
 import com.erpnext.pos.domain.models.UserBO
 import com.erpnext.pos.localSource.dao.CompanyDao
+import com.erpnext.pos.utils.parseErpDateTimeToEpochMillis
 import com.erpnext.pos.utils.toErpDateTime
 import io.ktor.util.date.getTimeMillis
 import kotlinx.coroutines.Dispatchers
@@ -73,7 +76,8 @@ class CashBoxManager(
     private val userDao: UserDao,
     private val exchangeRatePreferences: ExchangeRatePreferences,
     private val exchangeRateRepository: ExchangeRateRepository,
-    private val modeOfPaymentDao: ModeOfPaymentDao
+    private val modeOfPaymentDao: ModeOfPaymentDao,
+    private val salesInvoiceDao: SalesInvoiceDao
 ) {
 
     //Contexto actual del POS cargado en memoria
@@ -200,15 +204,39 @@ class CashBoxManager(
         val user = userDao.getUserInfo() ?: return@withContext null
 
         val entry = cashboxDao.getActiveEntry(user.email, ctx.profileName).firstOrNull()
+        if (entry == null) return@withContext null
+        val endMillis = getTimeMillis()
+        val startMillis = parseErpDateTimeToEpochMillis(entry.cashbox.periodStartDate)
+            ?: endMillis
+        val openingEntryId = entry.cashbox.openingEntryId?.takeIf { it.isNotBlank() }
+            ?: return@withContext null
+        val shiftInvoices = salesInvoiceDao.getInvoicesForShift(
+            profileId = ctx.profileName,
+            startMillis = startMillis,
+            endMillis = endMillis
+        )
+        val invoiceDetails = shiftInvoices.mapNotNull { invoice ->
+            val name = invoice.invoiceName?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
+            POSClosingInvoiceDto(
+                salesInvoice = name,
+                postingDate = invoice.postingDate,
+                customer = invoice.customer,
+                grandTotal = invoice.grandTotal,
+                paidAmount = invoice.paidAmount,
+                outstandingAmount = invoice.outstandingAmount,
+                isReturn = invoice.isReturn
+            )
+        }
         val dto = POSClosingEntryDto(
             posProfile = ctx.profileName,
-            posOpeningEntry = entry?.cashbox?.openingEntryId!!,
+            posOpeningEntry = openingEntryId,
             user = user.email,
             company = ctx.company,
             postingDate = getTimeMillis().toErpDateTime(),
             periodStartDate = entry.cashbox.periodStartDate,
             periodEndDate = getTimeMillis().toErpDateTime(),
-            balanceDetails = entry.details.toDto()
+            balanceDetails = entry.details.toDto(),
+            posTransactions = invoiceDetails
         )
         val pce = api.closeCashbox(dto)
 
