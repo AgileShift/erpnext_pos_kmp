@@ -166,7 +166,7 @@ class ReconciliationViewModel(
         )
     }
 
-    private fun aggregateCashByCurrency(
+    private suspend fun aggregateCashByCurrency(
         rows: List<ShiftPaymentRow>,
         invoices: List<com.erpnext.pos.localSource.entities.SalesInvoiceEntity>,
         posCurrency: String,
