@@ -695,6 +695,47 @@ class BillingViewModel(
         _state.update { current.copy(successMessage = null) }
     }
 
+    fun resetLabState() {
+        // Reinicia todo el estado de Billing Lab al entrar/salir del modo prueba.
+        _state.update { current ->
+            val success = when (current) {
+                is BillingState.Success -> current
+                is BillingState.Error -> current.previous
+                else -> null
+            } ?: return@update current
+            success.copy(
+                selectedCustomer = null,
+                customerSearchQuery = "",
+                productSearchQuery = "",
+                cartItems = emptyList(),
+                subtotal = 0.0,
+                taxes = 0.0,
+                discount = 0.0,
+                discountCode = "",
+                manualDiscountAmount = 0.0,
+                manualDiscountPercent = 0.0,
+                shippingAmount = 0.0,
+                selectedDeliveryCharge = null,
+                total = 0.0,
+                isCreditSale = false,
+                selectedPaymentTerm = null,
+                paymentLines = emptyList(),
+                paidAmountBase = 0.0,
+                balanceDueBase = 0.0,
+                changeDueBase = 0.0,
+                paymentErrorMessage = null,
+                cartErrorMessage = null,
+                successMessage = null,
+                sourceDocument = null,
+                isSourceDocumentApplied = false,
+                salesFlowContext = null,
+                sourceDocuments = emptyList(),
+                isLoadingSourceDocuments = false,
+                sourceDocumentsError = null
+            )
+        }
+    }
+
     fun onFinalizeSale() {
         val current = requireSuccessState() ?: return
         val validationError = validateFinalizeSale(current)

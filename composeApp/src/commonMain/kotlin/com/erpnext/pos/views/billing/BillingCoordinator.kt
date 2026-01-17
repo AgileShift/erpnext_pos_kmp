@@ -31,6 +31,7 @@ class BillingCoordinator(val viewModel: BillingViewModel) {
     fun onPaymentCurrencySelected(currency: String) = viewModel.onPaymentCurrencySelected(currency)
     fun onOpenLab() = viewModel.onOpenLab()
     fun onClearSuccessMessage() = viewModel.onClearSuccessMessage()
+    fun onResetLab() = viewModel.resetLabState()
     fun onBack() = viewModel.onBack()
     fun onLinkSource(sourceType: SalesFlowSource, sourceId: String) =
         viewModel.linkSourceDocument(sourceType, sourceId)

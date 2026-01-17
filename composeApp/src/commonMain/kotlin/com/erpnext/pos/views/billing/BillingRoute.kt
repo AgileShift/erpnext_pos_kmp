@@ -31,6 +31,11 @@ fun BillingLabRoute(
     val action = rememberBillingActions(coordinator)
     val snackbar = koinInject<SnackbarController>()
 
+    // Reinicia el estado al entrar en modo prueba para evitar estados persistentes.
+    androidx.compose.runtime.LaunchedEffect(Unit) {
+        action.onResetLab()
+    }
+
     BillingLabScreen(uiState, action, snackbar)
 }
 
@@ -56,6 +61,7 @@ fun rememberBillingActions(coordinator: BillingCoordinator): BillingAction {
             onPaymentCurrencySelected = coordinator::onPaymentCurrencySelected,
             onOpenLab = coordinator::onOpenLab,
             onClearSuccessMessage = coordinator::onClearSuccessMessage,
+            onResetLab = coordinator::onResetLab,
             onBack = coordinator::onBack,
             onLinkSource = coordinator::onLinkSource,
             onClearSource = coordinator::onClearSource,
