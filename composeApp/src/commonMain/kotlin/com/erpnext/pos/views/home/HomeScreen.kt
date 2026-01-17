@@ -54,18 +54,14 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TooltipBox
 import androidx.compose.material3.TooltipDefaults
@@ -73,7 +69,6 @@ import androidx.compose.material3.PlainTooltip
 import androidx.compose.material3.rememberTooltipState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -87,14 +82,12 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.erpnext.pos.domain.models.POSProfileSimpleBO
-import com.erpnext.pos.domain.models.PaymentModesBO
 import com.erpnext.pos.domain.models.UserBO
 import com.erpnext.pos.localization.LocalAppStrings
 import com.erpnext.pos.localSource.preferences.SyncSettings
@@ -108,10 +101,8 @@ import com.erpnext.pos.utils.view.SnackbarController
 import com.erpnext.pos.utils.view.SnackbarPosition
 import com.erpnext.pos.utils.view.SnackbarType
 import com.erpnext.pos.views.CashBoxManager
-import io.ktor.client.request.invoke
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.datetime.DayOfWeek
 import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.Month
 import kotlinx.datetime.TimeZone
@@ -343,50 +334,6 @@ fun HomeScreen(
                             BISection(metrics = homeMetrics)
 
                             Spacer(Modifier.height(24.dp))
-
-                            // Tarjetas resumen
-                            /*Column(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
-                            Card(modifier = Modifier.fillMaxWidth()) {
-                                Row(
-                                    modifier = Modifier.padding(16.dp).fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        Text(
-                                            "Stock pendiente por recibir",
-                                            fontWeight = FontWeight.Bold
-                                        )
-                                        Text("Tienes 3 productos en espera")
-                                    }
-                                    Spacer(Modifier.width(8.dp))
-                                    Icon(Icons.Filled.Warehouse, contentDescription = null)
-                                }
-                            }
-
-                            Card(modifier = Modifier.fillMaxWidth()) {
-                                Row(
-                                    modifier = Modifier.padding(16.dp).fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        Text(
-                                            "Recarga pendiente por recibir",
-                                            fontWeight = FontWeight.Bold
-                                        )
-                                        Text("Tienes 2 recargas en espera")
-                                    }
-                                    Spacer(Modifier.width(8.dp))
-                                    Icon(Icons.Filled.CreditCard, contentDescription = null)
-                                }
-                            }
-                        }
-
-                        Spacer(Modifier.height(36.dp)) */
 
                             Column(
                                 modifier = Modifier.fillMaxWidth(),
