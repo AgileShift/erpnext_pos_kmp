@@ -142,7 +142,7 @@ fun ReconciliationScreen(
         }
         map
     } ?: emptyMap()
-   // Totales contados por moneda
+    // Totales contados por moneda
     val cashTotalsByCurrency = countState.mapValues { entry ->
         entry.value.sumOf { it.value * it.count }
     }
@@ -263,7 +263,10 @@ private fun ReconciliationHeader(
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 IconButton(onClick = onBack) {
-                    Icon(imageVector = Icons.AutoMirrored.Default.ArrowBack, contentDescription = backLabel)
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Default.ArrowBack,
+                        contentDescription = backLabel
+                    )
                 }
                 Text(strings.title, style = MaterialTheme.typography.titleMedium)
             }
@@ -460,7 +463,7 @@ private fun ReconciliationContent(
                             strings = strings
                         )
                     }
-                    NotesCard(strings = strings)
+                    //NotesCard(strings = strings)
                 }
             }
         } else {
@@ -520,7 +523,7 @@ private fun ReconciliationContent(
                         strings = strings
                     )
                 }
-                NotesCard(strings = strings)
+                //NotesCard(strings = strings)
             }
         }
     }
