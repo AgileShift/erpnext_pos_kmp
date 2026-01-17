@@ -695,6 +695,7 @@ class BillingViewModel(
         _state.update { current.copy(successMessage = null) }
     }
 
+
     fun onFinalizeSale() {
         val current = requireSuccessState() ?: return
         val validationError = validateFinalizeSale(current)
