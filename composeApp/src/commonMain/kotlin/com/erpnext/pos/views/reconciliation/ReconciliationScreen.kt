@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -21,6 +22,7 @@ import androidx.compose.material.icons.filled.Remove
 import androidx.compose.animation.core.animateIntAsState
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.ArrowDownward
@@ -28,7 +30,6 @@ import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.ShoppingCart
-import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -39,11 +40,14 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LocalMinimumInteractiveComponentEnforcement
+import androidx.compose.material3.LocalMinimumInteractiveComponentSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
@@ -54,6 +58,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -62,7 +67,6 @@ import com.erpnext.pos.localization.ReconciliationStrings
 import com.erpnext.pos.utils.DenominationCatalog
 import com.erpnext.pos.utils.DecimalFormatter
 import com.erpnext.pos.utils.normalizeCurrency
-import kotlinx.datetime.Month
 
 data class DenominationUi(
     val value: Double,
@@ -138,14 +142,7 @@ fun ReconciliationScreen(
         }
         map
     } ?: emptyMap()
-    val expectedCashTotal = when {
-        summary == null -> 0.0
-        expectedCashByCurrency.isNotEmpty() -> expectedCashByCurrency.values.sum()
-        summary.cashModes.isEmpty() -> summary.expectedTotal
-        else -> expectedCashByMode.values.sum()
-    }
-    val openingTotalsByCurrency: Map<String, Double> = summary?.openingCashByCurrency ?: emptyMap()
-    // Totales contados por moneda
+   // Totales contados por moneda
     val cashTotalsByCurrency = countState.mapValues { entry ->
         entry.value.sumOf { it.value * it.count }
     }
@@ -173,22 +170,11 @@ fun ReconciliationScreen(
         mapOf(fallbackCurrency to 0.0)
     }
     val differenceByCurrency = buildDifferenceByCurrency(expectedCashByCurrency, countedByCurrency)
-    val formatAmount = remember(summary?.currency, summary?.currencySymbol) {
-        { value: Double ->
-            if (summary == null) value.toString() else formatCurrency(
-                value = value,
-                currencyCode = summary.currency,
-                currencySymbol = summary.currencySymbol,
-                formatter = formatter
-            )
-        }
-    }
 
     Scaffold(
         topBar = {
             ReconciliationHeader(
                 state = state,
-                actions = actions,
                 onBack = actions.onBack,
                 strings = strings,
                 backLabel = appStrings.common.back
@@ -240,8 +226,7 @@ fun ReconciliationScreen(
                             selectedCountCurrency = currency
                             denominations = countState[currency] ?: emptyList()
                         },
-                        openingTotalsByCurrency = openingTotalsByCurrency,
-                        expectedCashTotal = expectedCashTotal,
+                        //openingTotalsByCurrency = openingTotalsByCurrency,
                         denominations = denominations,
                         onDenominationChange = { value, count ->
                             val updated = denominations.map { denom ->
@@ -251,12 +236,8 @@ fun ReconciliationScreen(
                             countState[selectedCountCurrency] = updated
                         },
                         cashTotal = cashTotal,
-                        countedByMode = countedByMode,
-                        onCountedByModeChange = { _, _ -> },
-                        totalCounted = countedByCurrency.values.sum(),
                         countedByCurrency = countedByCurrency,
                         strings = strings,
-                        onReload = actions.onReload
                     )
                 }
             }
@@ -267,7 +248,6 @@ fun ReconciliationScreen(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ReconciliationHeader(
-    actions: ReconciliationAction,
     state: ReconciliationState,
     onBack: () -> Unit,
     strings: ReconciliationStrings,
@@ -283,7 +263,7 @@ private fun ReconciliationHeader(
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 IconButton(onClick = onBack) {
-                    Icon(imageVector = Icons.Filled.ArrowBack, contentDescription = backLabel)
+                    Icon(imageVector = Icons.AutoMirrored.Default.ArrowBack, contentDescription = backLabel)
                 }
                 Text(strings.title, style = MaterialTheme.typography.titleMedium)
             }
@@ -303,7 +283,7 @@ private fun ReconciliationHeader(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 IconButton(onClick = onBack) {
                     Icon(
-                        imageVector = Icons.Filled.ArrowBack,
+                        imageVector = Icons.AutoMirrored.Default.ArrowBack,
                         contentDescription = backLabel
                     )
                 }
@@ -367,17 +347,12 @@ private fun ReconciliationContent(
     countCurrencies: List<String>,
     selectedCountCurrency: String,
     onCurrencyChange: (String) -> Unit,
-    openingTotalsByCurrency: Map<String, Double>,
-    expectedCashTotal: Double,
+    //openingTotalsByCurrency: Map<String, Double>,
     denominations: List<DenominationUi>,
     onDenominationChange: (Double, Int) -> Unit,
     cashTotal: Double,
-    countedByMode: Map<String, Double>,
-    onCountedByModeChange: (String, Double) -> Unit,
-    totalCounted: Double,
     countedByCurrency: Map<String, Double>,
     strings: ReconciliationStrings,
-    onReload: () -> Unit
 ) {
     val formatter = remember { DecimalFormatter() }
     val formatAmount = remember(summary.currency, summary.currencySymbol) {
@@ -418,21 +393,25 @@ private fun ReconciliationContent(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(24.dp)
             ) {
+                val leftScrollState = rememberScrollState()
+                val rightScrollState = rememberScrollState()
                 Column(
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxHeight()
+                        .verticalScroll(leftScrollState),
                     verticalArrangement = Arrangement.spacedBy(20.dp)
                 ) {
                     OpeningBalanceCard(
                         summary = summary,
                         formatAmount = formatAmount,
-                        openingTotalsByCurrency = openingTotalsByCurrency,
+                        //openingTotalsByCurrency = openingTotalsByCurrency,
                         strings = strings
                     )
                     val (creditPartial, creditPending) = computeCreditAmounts(summary)
                     SystemSummaryCardMultiCurrency(
                         summary = summary,
                         expectedCashByCurrency = expectedCashByCurrency,
-                        paymentsByCurrency = summary.paymentsByCurrency,
                         salesByCurrency = summary.salesByCurrency,
                         nonCashPaymentsByCurrency = summary.nonCashPaymentsByCurrency,
                         creditPartialByCurrency = summary.creditPartialByCurrency,
@@ -440,7 +419,6 @@ private fun ReconciliationContent(
                         expensesByCurrency = summary.expensesByCurrency,
                         creditPartial = creditPartial,
                         creditPending = creditPending,
-                        formatAmount = formatAmount,
                         formatAmountFor = { value, code ->
                             formatCurrency(
                                 value,
@@ -457,7 +435,10 @@ private fun ReconciliationContent(
                     )
                 }
                 Column(
-                    modifier = Modifier.weight(1.6f),
+                    modifier = Modifier
+                        .weight(1.6f)
+                        .fillMaxHeight()
+                        .verticalScroll(rightScrollState),
                     verticalArrangement = Arrangement.spacedBy(20.dp)
                 ) {
                     CurrencySelector(
@@ -492,14 +473,13 @@ private fun ReconciliationContent(
                 OpeningBalanceCard(
                     summary = summary,
                     formatAmount = formatAmount,
-                    openingTotalsByCurrency = openingTotalsByCurrency,
+                    //openingTotalsByCurrency = openingTotalsByCurrency,
                     strings = strings
                 )
                 val (creditPartial, creditPending) = computeCreditAmounts(summary)
                 SystemSummaryCardMultiCurrency(
                     summary = summary,
                     expectedCashByCurrency = expectedCashByCurrency,
-                    paymentsByCurrency = summary.paymentsByCurrency,
                     salesByCurrency = summary.salesByCurrency,
                     nonCashPaymentsByCurrency = summary.nonCashPaymentsByCurrency,
                     creditPartialByCurrency = summary.creditPartialByCurrency,
@@ -507,7 +487,6 @@ private fun ReconciliationContent(
                     expensesByCurrency = summary.expensesByCurrency,
                     creditPartial = creditPartial,
                     creditPending = creditPending,
-                    formatAmount = formatAmount,
                     formatAmountFor = { value, code ->
                         formatCurrency(
                             value,
@@ -551,7 +530,6 @@ private fun ReconciliationContent(
 private fun SystemSummaryCardMultiCurrency(
     summary: ReconciliationSummaryUi,
     expectedCashByCurrency: Map<String, Double>,
-    paymentsByCurrency: Map<String, Double>,
     salesByCurrency: Map<String, Double>,
     nonCashPaymentsByCurrency: Map<String, Double>,
     creditPartialByCurrency: Map<String, Double>,
@@ -559,7 +537,6 @@ private fun SystemSummaryCardMultiCurrency(
     expensesByCurrency: Map<String, Double>,
     creditPartial: Double,
     creditPending: Double,
-    formatAmount: (Double) -> String,
     formatAmountFor: (Double, String) -> String,
     strings: ReconciliationStrings
 ) {
@@ -569,11 +546,6 @@ private fun SystemSummaryCardMultiCurrency(
     val expectedCombined = currencies.entries.joinToString(" / ") { (code, amount) ->
         formatAmountFor(amount, code)
     }
-    val expectedBreakdown = buildCurrencySummaryLine(currencies, formatAmountFor)
-    val paymentsBreakdown = buildCurrencySummaryLine(
-        paymentsByCurrency.ifEmpty { mapOf(summary.currency.uppercase() to summary.paymentsTotal) },
-        formatAmountFor
-    )
     val salesBreakdown = buildCurrencySummaryLine(
         salesByCurrency.ifEmpty { mapOf(summary.currency.uppercase() to summary.salesTotal) },
         formatAmountFor
@@ -599,8 +571,10 @@ private fun SystemSummaryCardMultiCurrency(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
     ) {
         Column(
-            modifier = Modifier.padding(20.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+            modifier = Modifier.padding(20.dp)
+                .fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+            //horizontalAlignment = Alignment.End
         ) {
             Text(strings.systemSummaryTitle, style = MaterialTheme.typography.titleMedium)
             Card(
@@ -642,12 +616,12 @@ private fun SystemSummaryCardMultiCurrency(
                     valueColor = MaterialTheme.colorScheme.onSurface,
                     icon = Icons.Filled.ShoppingCart
                 )
-                SummaryRow(
+                /*SummaryRow(
                     label = strings.paymentsLabel,
                     value = nonCashBreakdown,
                     valueColor = MaterialTheme.colorScheme.onSurface,
                     icon = Icons.Filled.ArrowDownward
-                )
+                )*/
                 SummaryRow(
                     label = strings.creditPartialLabel,
                     value = creditPartialBreakdown,
@@ -678,8 +652,7 @@ private fun SystemSummaryCardMultiCurrency(
 private fun OpeningBalanceCard(
     summary: ReconciliationSummaryUi,
     formatAmount: (Double) -> String,
-    openingTotalsByCurrency: Map<String, Double>,
-    strings: com.erpnext.pos.localization.ReconciliationStrings
+    strings: ReconciliationStrings
 ) {
     val gradient = Brush.linearGradient(
         colors = listOf(
@@ -708,16 +681,6 @@ private fun OpeningBalanceCard(
                 style = MaterialTheme.typography.headlineMedium,
                 fontWeight = FontWeight.Bold
             )
-            /*if (openingTotalsByCurrency.isNotEmpty()) {
-                val combined = openingTotalsByCurrency.entries.joinToString(" / ") { (code, amt) ->
-                    formatAmountWithCode(amt, code)
-                }
-                Text(
-                    combined,
-                    color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.9f),
-                    style = MaterialTheme.typography.bodySmall
-                )
-            }*/
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween
@@ -743,91 +706,6 @@ private fun OpeningBalanceCard(
                     "${strings.openingLabel}: ${summary.openingEntryId}",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.82f)
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun SystemSummaryCard(
-    summary: ReconciliationSummaryUi,
-    expectedTotalDisplay: Double,
-    creditPartial: Double,
-    creditPending: Double,
-    formatAmount: (Double) -> String,
-    strings: com.erpnext.pos.localization.ReconciliationStrings,
-    modifier: Modifier = Modifier
-) {
-    Card(
-        modifier = modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-    ) {
-        Column(
-            modifier = Modifier.padding(20.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            Text(strings.systemSummaryTitle, style = MaterialTheme.typography.titleMedium)
-            Card(
-                colors = CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.08f)
-                )
-            ) {
-                Column(
-                    modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
-                ) {
-                    Text(
-                        strings.expectedTotalLabel,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                    Text(
-                        formatAmount(expectedTotalDisplay),
-                        style = MaterialTheme.typography.headlineSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                    Text(
-                        "${strings.invoicesLabel}: ${summary.invoiceCount}",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                }
-            }
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                SummaryRow(
-                    label = strings.salesLabel,
-                    value = formatAmount(summary.salesTotal),
-                    valueColor = MaterialTheme.colorScheme.onSurface,
-                    icon = Icons.Filled.ShoppingCart
-                )
-                SummaryRow(
-                    label = strings.paymentsLabel,
-                    value = formatAmount(summary.paymentsTotal),
-                    valueColor = MaterialTheme.colorScheme.onSurface,
-                    icon = Icons.Filled.ArrowDownward
-                )
-                SummaryRow(
-                    label = strings.creditPartialLabel,
-                    value = formatAmount(creditPartial),
-                    valueColor = MaterialTheme.colorScheme.primary,
-                    icon = Icons.Filled.ArrowDownward,
-                    badgeColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
-                )
-                SummaryRow(
-                    label = strings.creditPendingLabel,
-                    value = formatAmount(creditPending),
-                    valueColor = MaterialTheme.colorScheme.error,
-                    icon = Icons.Filled.ArrowUpward,
-                    badgeColor = MaterialTheme.colorScheme.error.copy(alpha = 0.12f)
-                )
-                SummaryRow(
-                    label = strings.expensesLabel,
-                    value = formatAmount(summary.expensesTotal),
-                    valueColor = MaterialTheme.colorScheme.error,
-                    icon = Icons.Filled.ArrowUpward,
-                    badgeColor = MaterialTheme.colorScheme.error.copy(alpha = 0.12f)
                 )
             }
         }
@@ -873,7 +751,14 @@ private fun DifferenceAlertsByCurrency(
                 val expected = expectedByCurrency[code] ?: 0.0
                 val counted = countedByCurrency[code] ?: 0.0
                 val difference = counted - expected
-                difference.formatCurrencyWithCode(code)
+
+                val label = when {
+                    difference > 0.01 -> strings.differenceOverLabel
+                    difference < -0.01 -> strings.differenceShortLabel
+                    else -> ""
+                }
+                val amount = kotlin.math.abs(difference).formatCurrencyWithCode(code)
+                if (label.isBlank()) amount else "$label $amount"
             }
             Text(
                 "${strings.differenceLabel}: $differenceSummary",
@@ -928,6 +813,12 @@ private fun DenominationCounter(
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
+/*<<<<<<< HEAD
+            Text(
+                "${strings.cashCountTitle} (${strings.cashCountSubtitle})",
+                style = MaterialTheme.typography.titleMedium
+            )
+=======*/
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.Start
@@ -943,6 +834,7 @@ private fun DenominationCounter(
                     color = Color.Gray
                 )
             }
+
             if (coins.isNotEmpty() && bills.isNotEmpty()) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -1018,6 +910,7 @@ private fun DenominationSection(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun DenominationRow(
     denom: DenominationUi,
@@ -1048,44 +941,48 @@ private fun DenominationRow(
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            IconButton(
-                onClick = { onCountChange(denom.value, (denom.count - 1).coerceAtLeast(0)) },
-                modifier = Modifier
-                    .size(26.dp)
-                    .background(
-                        MaterialTheme.colorScheme.surface,
-                        shape = MaterialTheme.shapes.small
-                    )
+        CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides 0.dp) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Icon(
-                    Icons.Filled.Remove,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary
-                )
-            }
-            Text(
-                animatedCount.toString(),
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold
-            )
-            IconButton(
-                onClick = { onCountChange(denom.value, denom.count + 1) },
-                modifier = Modifier
-                    .size(26.dp)
-                    .background(
-                        MaterialTheme.colorScheme.primary,
-                        shape = MaterialTheme.shapes.small
+                IconButton(
+                    onClick = { onCountChange(denom.value, (denom.count - 1).coerceAtLeast(0)) },
+                    modifier = Modifier
+                        .size(22.dp)
+                        .background(
+                            MaterialTheme.colorScheme.surface,
+                            shape = MaterialTheme.shapes.small
+                        )
+                ) {
+                    Icon(
+                        Icons.Filled.Remove,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(14.dp)
                     )
-            ) {
-                Icon(
-                    Icons.Filled.Add,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onPrimary
+                }
+                Text(
+                    animatedCount.toString(),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
                 )
+                IconButton(
+                    onClick = { onCountChange(denom.value, denom.count + 1) },
+                    modifier = Modifier
+                        .size(22.dp)
+                        .background(
+                            MaterialTheme.colorScheme.primary,
+                            shape = MaterialTheme.shapes.small
+                        )
+                ) {
+                    Icon(
+                        Icons.Filled.Add,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onPrimary,
+                        modifier = Modifier.size(14.dp)
+                    )
+                }
             }
         }
     }
@@ -1118,7 +1015,7 @@ private fun ReconciliationActionsBar(
     isClosing: Boolean,
     onClose: () -> Unit,
     onSaveDraft: () -> Unit,
-    strings: com.erpnext.pos.localization.ReconciliationStrings
+    strings: ReconciliationStrings
 ) {
     val hasDifference = differenceByCurrency.values.any { kotlin.math.abs(it) > 0.01 }
     val differenceSummary = buildCurrencySummaryLine(
@@ -1221,7 +1118,7 @@ private fun SummaryRow(
     label: String,
     value: String,
     valueColor: Color,
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    icon: ImageVector,
     badgeColor: Color = MaterialTheme.colorScheme.surfaceVariant
 ) {
     Row(
@@ -1339,24 +1236,6 @@ fun Double.formatCurrencyWithCode(code: String): String {
         else -> code
     }
     return formatCurrency(this, code, symbol, formatter)
-}
-
-fun formatAmountWithCode(amount: Double, code: String): String {
-    val formatter = DecimalFormatter()
-    val symbol = when (code.uppercase()) {
-        "USD" -> "$"
-        "NIO" -> "C$"
-        else -> code
-    }
-    return formatCurrency(amount, code, symbol, formatter)
-}
-
-fun formatCurrencyCodeLabel(code: String): String {
-    return when (code.uppercase()) {
-        "USD" -> "$"
-        "NIO" -> "C$"
-        else -> code
-    }
 }
 
 fun buildCurrencySummaryLine(

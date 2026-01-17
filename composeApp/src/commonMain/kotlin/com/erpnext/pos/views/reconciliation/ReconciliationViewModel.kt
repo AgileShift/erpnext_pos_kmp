@@ -93,7 +93,7 @@ class ReconciliationViewModel(
             startMillis = startMillis,
             endMillis = endMillis
         )
-        val posCurrency = normalizeCurrency(context.currency) ?: "USD"
+        val posCurrency = normalizeCurrency(context.currency)
         val rateCache = mutableMapOf<String, Double>()
         val paymentRows = salesInvoiceDao.getShiftPayments(
             profileId = context.profileName,
@@ -104,7 +104,7 @@ class ReconciliationViewModel(
         val totalPaymentsAll = paymentsByMode.values.sum()
         val cashModes = resolveCashModes(context, openingByMode)
         val paymentsCashByCurrency =
-            aggregateCashByCurrency(paymentRows, posCurrency, rateCache, cashModes)
+            aggregateCashByCurrency(paymentRows, posCurrency, cashModes)
         val paymentsByCurrency = aggregatePaymentsByCurrency(paymentRows, posCurrency)
         val availableModes = context.paymentModes.mapNotNull { mode ->
             mode.modeOfPayment.takeIf { it.isNotBlank() }
@@ -114,10 +114,9 @@ class ReconciliationViewModel(
         val cashPaymentsTotal = roundToCurrency(
             paymentsByMode.filterKeys { cashModes.contains(it) }.values.sum()
         )
-        val salesTotal = cashPaymentsTotal
         val paymentsTotal =
             roundToCurrency((totalPaymentsAll - cashPaymentsTotal).coerceAtLeast(0.0))
-        val creditDelta = roundToCurrency(expectedTotal - salesTotal - paymentsTotal)
+        val creditDelta = roundToCurrency(expectedTotal - cashPaymentsTotal - paymentsTotal)
         val creditPartial = if (creditDelta < 0) 0.0 else creditDelta
         val creditPending = creditDelta.takeIf { it > 0 } ?: 0.0
         val symbol = context.allowedCurrencies
@@ -126,14 +125,18 @@ class ReconciliationViewModel(
         val openingByCurrency =
             mapOpeningByCurrencyWithRates(openingByMode, posCurrency, rateCache)
         val nonCashByCurrency = subtractCurrencyMaps(paymentsByCurrency, paymentsCashByCurrency)
-        val currencySet = (openingByCurrency.keys + paymentsByCurrency.keys).map { it.uppercase() }.toSet()
-        val creditPartialByCurrency = convertAmountForCurrencies(creditPartial, posCurrency, currencySet, rateCache)
-        val creditPendingByCurrency = convertAmountForCurrencies(creditPending, posCurrency, currencySet, rateCache)
-        val expensesByCurrency = convertAmountForCurrencies(0.0, posCurrency, currencySet, rateCache)
+        val currencySet =
+            (openingByCurrency.keys + paymentsByCurrency.keys).map { it.uppercase() }.toSet()
+        val creditPartialByCurrency =
+            convertAmountForCurrencies(creditPartial, posCurrency, currencySet, rateCache)
+        val creditPendingByCurrency =
+            convertAmountForCurrencies(creditPending, posCurrency, currencySet, rateCache)
+        val expensesByCurrency =
+            convertAmountForCurrencies(0.0, posCurrency, currencySet, rateCache)
         return ReconciliationSummaryUi(
             posProfile = context.profileName,
             openingEntryId = activeCashbox.cashbox.openingEntryId.orEmpty(),
-            cashierName = context.cashier.firstName ?: context.cashier.name,
+            cashierName = context.cashier.firstName,
             periodStart = activeCashbox.cashbox.periodStartDate,
             periodEnd = activeCashbox.cashbox.periodEndDate,
             openingAmount = roundToCurrency(openingByMode.values.sum()),
@@ -144,7 +147,7 @@ class ReconciliationViewModel(
             paymentsByMode = paymentsByMode,
             expectedByMode = expectedByMode,
             cashModes = cashModes,
-            salesTotal = salesTotal,
+            salesTotal = cashPaymentsTotal,
             paymentsTotal = paymentsTotal,
             expensesTotal = 0.0,
             expectedTotal = expectedTotal,
@@ -162,10 +165,9 @@ class ReconciliationViewModel(
         )
     }
 
-    private suspend fun aggregateCashByCurrency(
+    private fun aggregateCashByCurrency(
         rows: List<ShiftPaymentRow>,
         posCurrency: String,
-        rateCache: MutableMap<String, Double>,
         cashModes: Set<String>
     ): Map<String, Double> {
         val totals = mutableMapOf<String, Double>()
@@ -186,7 +188,8 @@ class ReconciliationViewModel(
         rows.forEach { row ->
             val payCurrency = resolvePaymentCurrency(row, posCurrency)
             val normalizedCurrency = payCurrency.uppercase()
-            totals[normalizedCurrency] = (totals[normalizedCurrency] ?: 0.0) + resolvePaymentAmount(row)
+            totals[normalizedCurrency] =
+                (totals[normalizedCurrency] ?: 0.0) + resolvePaymentAmount(row)
         }
         return totals.mapValues { roundToCurrency(it.value) }
     }
@@ -194,9 +197,6 @@ class ReconciliationViewModel(
     private fun resolvePaymentCurrency(row: ShiftPaymentRow, fallback: String): String {
         return normalizeCurrency(row.paymentCurrency)
             ?: inferCurrencyFromMode(row.modeOfPayment, fallback)
-            ?: normalizeCurrency(row.invoiceCurrency)
-            ?: normalizeCurrency(row.partyAccountCurrency)
-            ?: fallback
     }
 
     private fun resolvePaymentAmount(row: ShiftPaymentRow): Double {
@@ -211,7 +211,11 @@ class ReconciliationViewModel(
     private fun inferCurrencyFromMode(mode: String, fallback: String): String {
         return when {
             mode.contains("USD", ignoreCase = true) || mode.contains("$") -> "USD"
-            mode.contains("NIO", ignoreCase = true) || mode.contains("C$", ignoreCase = true) -> "NIO"
+            mode.contains("NIO", ignoreCase = true) || mode.contains(
+                "C$",
+                ignoreCase = true
+            ) -> "NIO"
+
             else -> fallback.uppercase()
         }
     }
@@ -226,7 +230,11 @@ class ReconciliationViewModel(
         openingByMode.forEach { (mode, amount) ->
             val currency = when {
                 mode.contains("USD", ignoreCase = true) || mode.contains("$") -> "USD"
-                mode.contains("NIO", ignoreCase = true) || mode.contains("C$", ignoreCase = true) -> "NIO"
+                mode.contains("NIO", ignoreCase = true) || mode.contains(
+                    "C$",
+                    ignoreCase = true
+                ) -> "NIO"
+
                 else -> posCode
             }
             val adjusted = if (currency == posCode) {
@@ -305,7 +313,6 @@ class ReconciliationViewModel(
             if (paidAmount <= 0.0) return@forEach
             val invoiceCurrency = normalizeCurrency(invoice.partyAccountCurrency)
                 ?: normalizeCurrency(invoice.currency)
-                ?: posCurrency
             val paidInPos = if (invoiceCurrency.equals(posCurrency, ignoreCase = true)) {
                 paidAmount
             } else {
