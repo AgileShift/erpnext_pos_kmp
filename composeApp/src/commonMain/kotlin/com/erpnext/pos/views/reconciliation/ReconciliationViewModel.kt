@@ -109,7 +109,9 @@ class ReconciliationViewModel(
         val availableModes = context.paymentModes.mapNotNull { mode ->
             mode.modeOfPayment.takeIf { it.isNotBlank() }
         }
+        // Construye el esperado por modo (apertura + pagos del turno).
         val expectedByMode = buildExpectedByMode(openingByMode, paymentsByMode, availableModes)
+        // El total esperado en caja solo debe contemplar modos de efectivo.
         val expectedTotal = roundToCurrency(
             expectedByMode.filterKeys { cashModes.contains(it) }.values.sum()
         )
@@ -126,6 +128,7 @@ class ReconciliationViewModel(
         val nonCashByCurrency = subtractCurrencyMaps(paymentsByCurrency, paymentsCashByCurrency)
         val currencySet =
             (openingByCurrency.keys + paymentsByCurrency.keys).map { it.uppercase() }.toSet()
+        // Totales de crédito basados en facturas del turno (pagos parciales y pendientes).
         val creditTotals = aggregateCreditTotals(invoices, posCurrency, rateCache)
         val expensesByCurrency =
             convertAmountForCurrencies(0.0, posCurrency, currencySet, rateCache)
@@ -376,6 +379,7 @@ class ReconciliationViewModel(
         return expected.mapValues { roundToCurrency(it.value) }
     }
 
+    // Contenedor de totales de crédito calculados desde facturas del turno.
     private data class CreditTotals(
         val partialTotal: Double,
         val pendingTotal: Double,
@@ -388,14 +392,17 @@ class ReconciliationViewModel(
         posCurrency: String,
         rateCache: MutableMap<String, Double>
     ): CreditTotals {
+        // Separamos pagos parciales (paid) y pendientes (outstanding) por moneda.
         val partialByCurrency = mutableMapOf<String, Double>()
         val pendingByCurrency = mutableMapOf<String, Double>()
         var partialTotal = 0.0
         var pendingTotal = 0.0
         invoices.forEach { invoice ->
+            // Solo consideramos facturas con saldo pendiente para crédito.
             val outstanding = invoice.outstandingAmount
             if (outstanding <= 0.0) return@forEach
             val paid = invoice.paidAmount.coerceAtLeast(0.0)
+            // Resolvemos moneda de la factura para el desglose.
             val invoiceCurrency = normalizeCurrency(invoice.partyAccountCurrency)
                 ?: normalizeCurrency(invoice.currency)
                 ?: posCurrency
@@ -404,6 +411,7 @@ class ReconciliationViewModel(
             if (paid > 0.0) {
                 partialByCurrency[currencyKey] = (partialByCurrency[currencyKey] ?: 0.0) + paid
             }
+            // Convertimos a moneda del POS para los totales globales.
             val rate = if (invoiceCurrency.equals(posCurrency, ignoreCase = true)) {
                 1.0
             } else {
@@ -417,6 +425,7 @@ class ReconciliationViewModel(
                 partialTotal += paid * rate
             }
         }
+        // Redondeamos para mantener consistencia visual y contable.
         return CreditTotals(
             partialTotal = roundToCurrency(partialTotal),
             pendingTotal = roundToCurrency(pendingTotal),

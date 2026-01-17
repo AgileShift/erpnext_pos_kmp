@@ -1189,10 +1189,12 @@ private fun EmptyReconciliationState(strings: com.erpnext.pos.localization.Recon
 }
 
 fun computeCreditPartial(summary: ReconciliationSummaryUi): Double {
+    // Usa el total calculado por facturas del turno.
     return summary.creditPartialTotal
 }
 
 fun computeCreditAmounts(summary: ReconciliationSummaryUi): Pair<Double, Double> {
+    // Separa pagos parciales de pendientes usando el resumen ya calculado.
     val creditPartial = computeCreditPartial(summary)
     val creditPending = summary.creditPendingTotal
     return creditPartial to creditPending
