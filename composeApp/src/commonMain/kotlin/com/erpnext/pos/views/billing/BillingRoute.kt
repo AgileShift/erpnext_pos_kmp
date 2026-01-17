@@ -8,6 +8,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import com.erpnext.pos.utils.view.SnackbarController
+import androidx.navigation.NavBackStackEntry
 import org.koin.compose.koinInject
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -25,7 +26,8 @@ fun BillingRoute(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun BillingLabRoute(
-    coordinator: BillingCoordinator = rememberBillingCoordinator()
+    backStackEntry: NavBackStackEntry,
+    coordinator: BillingCoordinator = rememberBillingLabCoordinator(backStackEntry)
 ) {
     val uiState by coordinator.screenStateFlow.collectAsState()
     val action = rememberBillingActions(coordinator)

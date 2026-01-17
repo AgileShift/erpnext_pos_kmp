@@ -28,9 +28,14 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.FlingBehavior
+import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.rememberScrollableState
+import androidx.compose.foundation.gestures.scrollable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material.icons.filled.CloudOff
@@ -593,14 +598,15 @@ private fun StatusIconButton(
 private fun BISection(metrics: HomeMetrics) {
     val currencyMetrics = metrics.currencyMetrics
     Column(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth()
+            .verticalScroll(rememberScrollState(), true),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Text(
+        /*Text(
             text = "Business Insights",
             style = MaterialTheme.typography.titleLarge,
             fontWeight = FontWeight.Bold
-        )
+        )*/
         if (currencyMetrics.isEmpty()) {
             Text(
                 text = "No currency metrics available.",
@@ -616,16 +622,6 @@ private fun BISection(metrics: HomeMetrics) {
             val symbol = selectedMetric.currency.toCurrencySymbol()
                 .ifBlank { selectedMetric.currency }
 
-            Text(
-                text = "Currency focus: ${selectedMetric.currency}",
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold
-            )
-            Text(
-                text = "Metrics are shown per selected currency to avoid duplicated totals.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -745,8 +741,8 @@ private fun BISection(metrics: HomeMetrics) {
             }
             SalesLineChart(selectedMetric.weekSeries)
         }
-        //TopProductsCard(metrics.topProducts, currencySymbol)
-        //TopProductsByMarginCard(metrics.topProductsByMargin, currencySymbol)
+        TopProductsCard(metrics.topProducts, "C$")
+        TopProductsByMarginCard(metrics.topProductsByMargin, "C$")
     }
 }
 
