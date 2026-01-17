@@ -608,71 +608,124 @@ private fun BillingLabCheckoutStep(
             .verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Text(
-            text = "Checkout",
-            style = MaterialTheme.typography.titleMedium,
-            color = colors.onSurface
-        )
-        // Resumen superior con total y cliente.
-        Card(
+        // Encabezado principal del checkout.
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(
+                text = "Checkout",
+                style = MaterialTheme.typography.titleLarge,
+                color = colors.onSurface
+            )
+            Text(
+                text = "Revisa y confirma la venta",
+                style = MaterialTheme.typography.bodySmall,
+                color = colors.onSurfaceVariant
+            )
+        }
+        // Resumen superior con cliente y total.
+        ElevatedCard(
             modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(containerColor = colors.surfaceVariant)
+            colors = CardDefaults.elevatedCardColors(containerColor = colors.surface)
         ) {
             Column(
-                modifier = Modifier.padding(12.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp)
+                modifier = Modifier.padding(14.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Text(
-                    text = "Cliente: ${state.selectedCustomer?.customerName ?: "--"}",
-                    style = MaterialTheme.typography.bodySmall,
+                    text = "Cliente",
+                    style = MaterialTheme.typography.labelSmall,
                     color = colors.onSurfaceVariant
                 )
+                Text(
+                    text = state.selectedCustomer?.customerName ?: "--",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = colors.onSurface
+                )
+                Divider(color = colors.outlineVariant, thickness = 1.dp)
                 PaymentTotalsRow("Total", state.currency ?: "USD", state.total)
+                PaymentTotalsRow("Pagado", state.currency ?: "USD", state.paidAmountBase)
+                PaymentTotalsRow("Pendiente", state.currency ?: "USD", state.balanceDueBase)
             }
         }
         if (state.paymentTerms.isNotEmpty()) {
-            CollapsibleSection(
-                title = "Terminos de credito",
-                defaultExpanded = false
+            // Sección de crédito con estilo de tarjeta.
+            ElevatedCard(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.elevatedCardColors(containerColor = colors.surface)
             ) {
-                CreditTermsSection(
+                Column(
+                    modifier = Modifier.padding(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        text = "Crédito",
+                        style = MaterialTheme.typography.titleSmall,
+                        color = colors.onSurface
+                    )
+                    CreditTermsSection(
+                        isCreditSale = state.isCreditSale,
+                        paymentTerms = state.paymentTerms,
+                        selectedPaymentTerm = state.selectedPaymentTerm,
+                        onCreditSaleChanged = action.onCreditSaleChanged,
+                        onPaymentTermSelected = action.onPaymentTermSelected
+                    )
+                }
+            }
+        }
+        // Sección de descuento y envío con estilo compacto.
+        ElevatedCard(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.elevatedCardColors(containerColor = colors.surface)
+        ) {
+            Column(
+                modifier = Modifier.padding(12.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text(
+                    text = "Descuento y envío",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = colors.onSurface
+                )
+                DiscountShippingInputs(state, action)
+            }
+        }
+        // Sección de pagos completa con multimoneda y métodos de pago.
+        ElevatedCard(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.elevatedCardColors(containerColor = colors.surface)
+        ) {
+            Column(
+                modifier = Modifier.padding(12.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text(
+                    text = "Pagos",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = colors.onSurface
+                )
+                Text(
+                    text = "Métodos disponibles: ${state.paymentModes.size}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = colors.onSurfaceVariant
+                )
+                PaymentSection(
+                    state = state,
+                    baseCurrency = state.currency ?: "USD",
+                    exchangeRateByCurrency = state.exchangeRateByCurrency,
+                    paymentLines = state.paymentLines,
+                    paymentModes = state.paymentModes,
+                    allowedCurrencies = state.allowedCurrencies,
+                    paidAmountBase = state.paidAmountBase,
+                    totalAmount = state.total,
+                    balanceDueBase = state.balanceDueBase,
+                    changeDueBase = state.changeDueBase,
+                    paymentErrorMessage = state.paymentErrorMessage,
                     isCreditSale = state.isCreditSale,
-                    paymentTerms = state.paymentTerms,
-                    selectedPaymentTerm = state.selectedPaymentTerm,
-                    onCreditSaleChanged = action.onCreditSaleChanged,
-                    onPaymentTermSelected = action.onPaymentTermSelected
+                    onAddPaymentLine = action.onAddPaymentLine,
+                    onRemovePaymentLine = action.onRemovePaymentLine,
+                    onPaymentCurrencySelected = action.onPaymentCurrencySelected
                 )
             }
         }
-        CollapsibleSection(
-            title = "Descuento y envío",
-            defaultExpanded = false
-        ) {
-            DiscountShippingInputs(state, action)
-        }
-        // Sección de pagos completa con multimoneda y métodos de pago.
-        PaymentSection(
-            state = state,
-            baseCurrency = state.currency ?: "USD",
-            exchangeRateByCurrency = state.exchangeRateByCurrency,
-            paymentLines = state.paymentLines,
-            paymentModes = state.paymentModes,
-            allowedCurrencies = state.allowedCurrencies,
-            paidAmountBase = state.paidAmountBase,
-            totalAmount = state.total,
-            balanceDueBase = state.balanceDueBase,
-            changeDueBase = state.changeDueBase,
-            paymentErrorMessage = state.paymentErrorMessage,
-            isCreditSale = state.isCreditSale,
-            onAddPaymentLine = action.onAddPaymentLine,
-            onRemovePaymentLine = action.onRemovePaymentLine,
-            onPaymentCurrencySelected = action.onPaymentCurrencySelected
-        )
-        Text(
-            text = "Métodos de pago disponibles: ${state.paymentModes.size}",
-            style = MaterialTheme.typography.labelSmall,
-            color = colors.onSurfaceVariant
-        )
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(12.dp)
