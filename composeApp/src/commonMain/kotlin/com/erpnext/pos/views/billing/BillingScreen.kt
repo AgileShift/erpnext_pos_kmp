@@ -526,21 +526,51 @@ private fun BillingLabContent(
 
                 Spacer(Modifier.height(12.dp))
 
-                LabTotalsCard(
-                    baseCurrency = baseCurrency,
-                    subtotal = state.subtotal,
-                    taxes = state.taxes
-                )
+                // Resumen de carrito para contexto rápido.
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = colors.surfaceVariant)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Text(
+                            text = "Resumen",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = colors.onSurface
+                        )
+                        Text(
+                            text = "Cliente: ${state.selectedCustomer?.customerName ?: "--"}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = colors.onSurfaceVariant
+                        )
+                        Text(
+                            text = "Artículos: ${state.cartItems.size}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = colors.onSurfaceVariant
+                        )
+                        Divider(color = colors.outlineVariant, thickness = 1.dp)
+                        PaymentTotalsRow("Subtotal", baseCurrency, state.subtotal)
+                        if (state.taxes > 0.0) {
+                            PaymentTotalsRow("Impuestos", baseCurrency, state.taxes)
+                        }
+                        if (state.discount > 0.0) {
+                            PaymentTotalsRow("Descuento", baseCurrency, -state.discount)
+                        }
+                        if (state.shippingAmount > 0.0) {
+                            PaymentTotalsRow("Envío", baseCurrency, state.shippingAmount)
+                        }
+                        PaymentTotalsRow("Total", baseCurrency, state.total)
+                    }
+                }
 
                 Spacer(Modifier.height(12.dp))
 
-                // Botón de checkout: pasamos al siguiente paso para procesar pagos.
+                // Botón de checkout: pasamos al siguiente paso sin validar pagos.
                 Button(
                     onClick = onCheckout,
-                    enabled = state.selectedCustomer != null &&
-                            state.cartItems.isNotEmpty() &&
-                            (state.isCreditSale || state.paidAmountBase + 0.01 >= state.total) &&
-                            (!state.isCreditSale || state.selectedPaymentTerm != null),
+                    enabled = state.selectedCustomer != null && state.cartItems.isNotEmpty(),
                     modifier = Modifier.fillMaxWidth(),
                     colors = ButtonDefaults.buttonColors(
                         containerColor = colors.primary,
@@ -583,6 +613,23 @@ private fun BillingLabCheckoutStep(
             style = MaterialTheme.typography.titleMedium,
             color = colors.onSurface
         )
+        // Resumen superior con total y cliente.
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = colors.surfaceVariant)
+        ) {
+            Column(
+                modifier = Modifier.padding(12.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Text(
+                    text = "Cliente: ${state.selectedCustomer?.customerName ?: "--"}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = colors.onSurfaceVariant
+                )
+                PaymentTotalsRow("Total", state.currency ?: "USD", state.total)
+            }
+        }
         if (state.paymentTerms.isNotEmpty()) {
             CollapsibleSection(
                 title = "Terminos de credito",
@@ -603,6 +650,7 @@ private fun BillingLabCheckoutStep(
         ) {
             DiscountShippingInputs(state, action)
         }
+        // Sección de pagos completa con multimoneda y métodos de pago.
         PaymentSection(
             state = state,
             baseCurrency = state.currency ?: "USD",
@@ -619,6 +667,11 @@ private fun BillingLabCheckoutStep(
             onAddPaymentLine = action.onAddPaymentLine,
             onRemovePaymentLine = action.onRemovePaymentLine,
             onPaymentCurrencySelected = action.onPaymentCurrencySelected
+        )
+        Text(
+            text = "Métodos de pago disponibles: ${state.paymentModes.size}",
+            style = MaterialTheme.typography.labelSmall,
+            color = colors.onSurfaceVariant
         )
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -1132,32 +1185,7 @@ private fun BillingContent(
 
         Spacer(Modifier.height(12.dp))
 
-        if (state.paymentTerms.isNotEmpty()) {
-            CollapsibleSection(
-                title = "Terminos de credito", defaultExpanded = false
-            ) {
-                CreditTermsSection(
-                    isCreditSale = state.isCreditSale,
-                    paymentTerms = state.paymentTerms,
-                    selectedPaymentTerm = state.selectedPaymentTerm,
-                    onCreditSaleChanged = action.onCreditSaleChanged,
-                    onPaymentTermSelected = action.onPaymentTermSelected
-                )
-            }
-        }
-
-        Spacer(Modifier.height(12.dp))
-
-        Button(
-            onClick = action.onFinalizeSale,
-            modifier = Modifier.fillMaxWidth(),
-            enabled = state.selectedCustomer != null &&
-                    state.cartItems.isNotEmpty() &&
-                    (state.isCreditSale || state.paidAmountBase + 0.01 >= state.total) &&
-                    (!state.isCreditSale || state.selectedPaymentTerm != null)
-        ) {
-            Text("Finalizar venta")
-        }
+        Spacer(Modifier.height(4.dp))
     }
 
     if (showSourceSheet) {
