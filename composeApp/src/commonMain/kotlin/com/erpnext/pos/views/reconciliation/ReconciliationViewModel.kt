@@ -93,7 +93,7 @@ class ReconciliationViewModel(
             startMillis = startMillis,
             endMillis = endMillis
         )
-        val posCurrency = normalizeCurrency(context.currency)
+        val posCurrency = normalizeCurrency(context.currency) ?: context.currency
         val rateCache = mutableMapOf<String, Double>()
         val paymentRows = salesInvoiceDao.getShiftPayments(
             profileId = context.profileName,
@@ -104,7 +104,7 @@ class ReconciliationViewModel(
         val totalPaymentsAll = paymentsByMode.values.sum()
         val cashModes = resolveCashModes(context, openingByMode)
         val paymentsCashByCurrency =
-            aggregateCashByCurrency(paymentRows, posCurrency, cashModes)
+            aggregateCashByCurrency(paymentRows, posCurrency, cashModes, rateCache)
         val paymentsByCurrency = aggregatePaymentsByCurrency(paymentRows, posCurrency)
         val availableModes = context.paymentModes.mapNotNull { mode ->
             mode.modeOfPayment.takeIf { it.isNotBlank() }
@@ -169,14 +169,35 @@ class ReconciliationViewModel(
     private fun aggregateCashByCurrency(
         rows: List<ShiftPaymentRow>,
         posCurrency: String,
-        cashModes: Set<String>
+        cashModes: Set<String>,
+        rateCache: MutableMap<String, Double>
     ): Map<String, Double> {
         val totals = mutableMapOf<String, Double>()
+        var changeInPosCurrency = 0.0
         rows.filter { cashModes.contains(it.modeOfPayment) }.forEach { row ->
             val payCurrency = resolvePaymentCurrency(row, posCurrency)
             val normalizedCurrency = payCurrency.uppercase()
+            // Para efectivo sumamos lo recibido (entered_amount) si existe.
             val amountInPayCurrency = resolvePaymentAmount(row)
             totals[normalizedCurrency] = (totals[normalizedCurrency] ?: 0.0) + amountInPayCurrency
+            // Si hubo vuelto, lo descontamos del efectivo en moneda POS.
+            val changeInPaymentCurrency = (row.enteredAmount - row.amount).takeIf { it > 0.0 } ?: 0.0
+            if (changeInPaymentCurrency > 0.0) {
+                val rate = if (payCurrency.equals(posCurrency, ignoreCase = true)) {
+                    1.0
+                } else {
+                    val key = "${payCurrency.uppercase()}->$posCurrency"
+                    rateCache.getOrPut(key) {
+                        cashBoxManager.resolveExchangeRateBetween(payCurrency, posCurrency) ?: 1.0
+                    }
+                }
+                changeInPosCurrency += changeInPaymentCurrency * rate
+            }
+        }
+        // Aplicamos el vuelto contra la moneda base (POS), porque sale de caja.
+        if (changeInPosCurrency > 0.0) {
+            val posKey = posCurrency.uppercase()
+            totals[posKey] = (totals[posKey] ?: 0.0) - changeInPosCurrency
         }
         return totals.mapValues { roundToCurrency(it.value) }
     }
