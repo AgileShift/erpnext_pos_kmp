@@ -2106,55 +2106,70 @@ private fun PaymentSection(
         }*/
 
         if (paymentLines.isEmpty()) {
-            Text(
-                "Sin pagos registrados",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+            // Estado vacío con tarjeta para mayor claridad visual.
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+            ) {
+                Column(modifier = Modifier.padding(12.dp)) {
+                    Text(
+                        "Sin pagos registrados",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
         } else {
             Column(
                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 paymentLines.forEachIndexed { index, line ->
-                    Surface(
-                        tonalElevation = 0.dp,
-                        shadowElevation = 0.dp,
-                        shape = MaterialTheme.shapes.medium,
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                    // Animamos la aparición/desaparición de cada pago.
+                    AnimatedVisibility(
+                        visible = true,
+                        enter = fadeIn(animationSpec = tween(180)),
+                        exit = fadeOut(animationSpec = tween(160))
                     ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth().padding(12.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
+                        Card(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .animateContentSize(),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
                         ) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(line.modeOfPayment, fontWeight = FontWeight.SemiBold)
-                                Text(
-                                    "Monto: ${
-                                        formatAmount(
-                                            line.currency.toCurrencySymbol(), line.enteredAmount
-                                        )
-                                    }"
-                                )
-                                Text(
-                                    "Base: ${
-                                        formatAmount(
-                                            baseCurrency.toCurrencySymbol(), line.baseAmount
-                                        )
-                                    }"
-                                )
-                                Text("Tasa: ${line.exchangeRate}")
-                                if (!line.referenceNumber.isNullOrBlank()) {
-                                    Text("Referencia: ${line.referenceNumber}")
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(12.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(line.modeOfPayment, fontWeight = FontWeight.SemiBold)
+                                    Text(
+                                        "Monto: ${
+                                            formatAmount(
+                                                line.currency.toCurrencySymbol(), line.enteredAmount
+                                            )
+                                        }"
+                                    )
+                                    Text(
+                                        "Base: ${
+                                            formatAmount(
+                                                baseCurrency.toCurrencySymbol(), line.baseAmount
+                                            )
+                                        }"
+                                    )
+                                    Text("Tasa: ${line.exchangeRate}")
+                                    if (!line.referenceNumber.isNullOrBlank()) {
+                                        Text("Referencia: ${line.referenceNumber}")
+                                    }
                                 }
-                            }
-                            IconButton(onClick = { onRemovePaymentLine(index) }) {
-                                Icon(
-                                    Icons.Default.Delete,
-                                    contentDescription = "Eliminar línea de pago",
-                                    tint = MaterialTheme.colorScheme.error
-                                )
+                                IconButton(onClick = { onRemovePaymentLine(index) }) {
+                                    Icon(
+                                        Icons.Default.Delete,
+                                        contentDescription = "Eliminar línea de pago",
+                                        tint = MaterialTheme.colorScheme.error
+                                    )
+                                }
                             }
                         }
                     }
