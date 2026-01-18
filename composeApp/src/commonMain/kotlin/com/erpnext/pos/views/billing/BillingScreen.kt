@@ -1,5 +1,7 @@
 @file:OptIn(ExperimentalMaterial3Api::class)
 
+package com.erpnext.pos.views.billing
+
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.animateFloatAsState
@@ -73,14 +75,9 @@ import coil3.compose.SubcomposeAsyncImage
 import coil3.request.ImageRequest
 import coil3.request.crossfade
 import com.erpnext.pos.base.getPlatformName
-import com.erpnext.pos.domain.models.DeliveryChargeBO
 import com.erpnext.pos.utils.formatAmount
 import com.erpnext.pos.utils.toCurrencySymbol
 import com.erpnext.pos.utils.resolveRateBetweenFromBaseRates
-import com.erpnext.pos.views.billing.BillingAction
-import com.erpnext.pos.views.billing.BillingState
-import com.erpnext.pos.views.billing.PaymentLine
-import com.erpnext.pos.domain.models.POSCurrencyOption
 import com.erpnext.pos.domain.models.POSPaymentModeOption
 import com.erpnext.pos.domain.models.PaymentTermBO
 import com.erpnext.pos.utils.oauth.bd
@@ -92,8 +89,6 @@ import com.erpnext.pos.utils.view.SnackbarPosition
 import com.erpnext.pos.utils.view.SnackbarType
 import com.erpnext.pos.views.salesflow.SalesFlowContextSummary
 import com.erpnext.pos.views.salesflow.SalesFlowSource
-import org.jetbrains.compose.ui.tooling.preview.Preview
-
 
 data class CartItem(
     val itemCode: String,
@@ -103,7 +98,6 @@ data class CartItem(
     val price: Double
 )
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun BillingScreen(
     state: BillingState, action: BillingAction,
@@ -302,7 +296,6 @@ fun BillingLabScreen(
                         Button(
                             onClick = action.onFinalizeSale,
                             modifier = Modifier
-                                .fillMaxWidth()
                                 .padding(horizontal = 16.dp, vertical = 16.dp),
                             enabled = state.selectedCustomer != null &&
                                     state.cartItems.isNotEmpty() &&
@@ -648,19 +641,19 @@ private fun BillingLabCheckoutStep(
     val baseCurrency = state.currency ?: "USD"
     Column(modifier = modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
         // Encabezado principal del checkout.
-        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Text(
-                text = "Checkout",
-                style = MaterialTheme.typography.titleLarge,
-                color = colors.onSurface
-            )
-            Text(
-                text = "Revisa y confirma la venta",
-                style = MaterialTheme.typography.bodySmall,
-                color = colors.onSurfaceVariant
-            )
-        }
-        Spacer(Modifier.height(12.dp))
+        /* Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+             Text(
+                 text = "Checkout",
+                 style = MaterialTheme.typography.titleLarge,
+                 color = colors.onSurface
+             )
+             Text(
+                 text = "Revisa y confirma la venta",
+                 style = MaterialTheme.typography.bodySmall,
+                 color = colors.onSurfaceVariant
+             )
+         }
+         Spacer(Modifier.height(12.dp))*/
         // Tarjetas de total y crédito alineadas.
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -761,11 +754,8 @@ private fun BillingLabCheckoutStep(
                     exchangeRateByCurrency = state.exchangeRateByCurrency,
                     paymentLines = state.paymentLines,
                     paymentModes = state.paymentModes,
-                    allowedCurrencies = state.allowedCurrencies,
                     paidAmountBase = state.paidAmountBase,
                     totalAmount = state.total,
-                    balanceDueBase = state.balanceDueBase,
-                    changeDueBase = state.changeDueBase,
                     paymentErrorMessage = state.paymentErrorMessage,
                     isCreditSale = state.isCreditSale,
                     onAddPaymentLine = action.onAddPaymentLine,
@@ -774,7 +764,7 @@ private fun BillingLabCheckoutStep(
                 )
             }
         }
-        Button(
+        /*Button(
             onClick = action.onFinalizeSale,
             modifier = Modifier.fillMaxWidth(),
             enabled = state.selectedCustomer != null &&
@@ -783,29 +773,7 @@ private fun BillingLabCheckoutStep(
                     (!state.isCreditSale || state.selectedPaymentTerm != null)
         ) {
             Text("Pagar")
-        }
-    }
-}
-
-@Composable
-private fun LabStepTile(
-    title: String,
-    isActive: Boolean,
-    onClick: () -> Unit
-) {
-    val colors = MaterialTheme.colorScheme
-    val container = if (isActive) colors.primaryContainer else colors.surfaceVariant
-    val content = if (isActive) colors.onPrimaryContainer else colors.onSurfaceVariant
-    Card(
-        modifier = Modifier/*.weight(1f)*/.clickable(onClick = onClick),
-        colors = CardDefaults.cardColors(containerColor = container)
-    ) {
-        Box(
-            modifier = Modifier.padding(vertical = 10.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            Text(text = title, style = MaterialTheme.typography.labelMedium, color = content)
-        }
+        }*/
     }
 }
 
@@ -1188,30 +1156,6 @@ private fun LabCartItem(
 }
 
 @Composable
-private fun LabTotalsCard(
-    baseCurrency: String,
-    subtotal: Double,
-    taxes: Double
-) {
-    val colors = MaterialTheme.colorScheme
-    Surface(
-        color = colors.surface,
-        shape = RoundedCornerShape(16.dp),
-        border = BorderStroke(1.dp, colors.outlineVariant)
-    ) {
-        Column(
-            modifier = Modifier.fillMaxWidth().padding(14.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp)
-        ) {
-            SummaryRow("Subtotal", baseCurrency, subtotal)
-            if (taxes > 0.0) {
-                SummaryRow("Impuestos", baseCurrency, taxes)
-            }
-        }
-    }
-}
-
-@Composable
 private fun BillingContent(
     state: BillingState.Success,
     action: BillingAction,
@@ -1303,11 +1247,10 @@ private fun BillingContent(
     if (showSourceSheet) {
         SourceDocumentSheet(
             state = state,
-            onDismiss = { showSourceSheet = false },
+            onDismiss = { },
             onLoad = action.onLoadSourceDocuments,
             onApply = { source, reference ->
                 action.onLinkSource(source, reference)
-                showSourceSheet = false
             }
         )
     }
@@ -1390,7 +1333,8 @@ private fun SourceDocumentSheet(
                     readOnly = true,
                     label = { Text("Source type") },
                     trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-                    modifier = Modifier.menuAnchor(MenuAnchorType.PrimaryEditable).fillMaxWidth()
+                    modifier = Modifier.menuAnchor(ExposedDropdownMenuAnchorType.PrimaryEditable)
+                        .fillMaxWidth()
                 )
                 ExposedDropdownMenu(
                     expanded = expanded,
@@ -1442,7 +1386,7 @@ private fun SourceDocumentSheet(
 
                     !state.sourceDocumentsError.isNullOrBlank() -> {
                         Text(
-                            text = state.sourceDocumentsError.orEmpty(),
+                            text = state.sourceDocumentsError,
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.error
                         )
@@ -1530,7 +1474,7 @@ private fun CustomerSelector(
 
     //Text("Cliente", style = MaterialTheme.typography.titleMedium)
     ExposedDropdownMenuBox(
-        expanded = expanded && hasCustomers, onExpandedChange = { expanded = it }) {
+        expanded = expanded && hasCustomers, onExpandedChange = { }) {
         AppTextField(
             value = query,
             onValueChange = {
@@ -1539,7 +1483,7 @@ private fun CustomerSelector(
             },
             modifier = Modifier
                 .fillMaxWidth()
-                .menuAnchor(MenuAnchorType.PrimaryEditable)
+                .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryEditable)
                 .onGloballyPositioned { anchorWidthPx = it.size.width },
             /*.onFocusChanged { focusState ->
                 expanded = focusState.isFocused
@@ -1609,7 +1553,7 @@ private fun ProductSelector(
                 },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .menuAnchor(MenuAnchorType.PrimaryEditable)
+                    .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryEditable)
                     .onGloballyPositioned { anchorWidthPx = it.size.width }/*.onFocusChanged { focusState ->
                     expanded = focusState.isFocused
                 }*/,
@@ -1885,75 +1829,6 @@ private fun PaymentTotalsRow(label: String, symbol: String, amount: Double) {
 }
 
 @Composable
-private fun CompactTotalsCard(
-    baseCurrency: String,
-    subtotal: Double,
-    taxes: Double,
-    discount: Double,
-    shipping: Double,
-    total: Double,
-    balance: Double,
-    change: Double
-) {
-    val colors = MaterialTheme.colorScheme
-    Surface(
-        shape = RoundedCornerShape(16.dp),
-        tonalElevation = 2.dp,
-        shadowElevation = 0.dp,
-        color = colors.surface,
-        border = BorderStroke(1.dp, colors.outlineVariant),
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Column(
-            modifier = Modifier.padding(14.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp)
-        ) {
-            Text(
-                text = "Resumen",
-                style = MaterialTheme.typography.labelLarge,
-                color = colors.onSurface
-            )
-            PaymentTotalsRow("Subtotal", baseCurrency, subtotal)
-            if (taxes > 0.0) PaymentTotalsRow("Impuestos", baseCurrency, taxes)
-            if (discount > 0.0) PaymentTotalsRow("Descuento", baseCurrency, -discount)
-            if (shipping > 0.0) PaymentTotalsRow("Envío", baseCurrency, shipping)
-            HorizontalDivider(color = colors.outlineVariant, thickness = 1.dp)
-            PaymentTotalsRow("Total", baseCurrency, total)
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Text(
-                    "Pendiente",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = colors.onSurfaceVariant
-                )
-                Text(
-                    formatAmount(baseCurrency.toCurrencySymbol(), balance),
-                    style = MaterialTheme.typography.bodySmall,
-                    fontWeight = FontWeight.SemiBold
-                )
-            }
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Text(
-                    "Cambio",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = colors.onSurfaceVariant
-                )
-                Text(
-                    formatAmount(baseCurrency.toCurrencySymbol(), change),
-                    style = MaterialTheme.typography.bodySmall,
-                    fontWeight = FontWeight.SemiBold
-                )
-            }
-        }
-    }
-}
-
-@Composable
 private fun TotalsPaymentsSheet(
     state: BillingState.Success, action: BillingAction
 ) {
@@ -1994,11 +1869,8 @@ private fun TotalsPaymentsSheet(
                     exchangeRateByCurrency = state.exchangeRateByCurrency,
                     paymentLines = state.paymentLines,
                     paymentModes = state.paymentModes,
-                    allowedCurrencies = state.allowedCurrencies,
                     paidAmountBase = state.paidAmountBase,
                     totalAmount = state.total,
-                    balanceDueBase = state.balanceDueBase,
-                    changeDueBase = state.changeDueBase,
                     paymentErrorMessage = state.paymentErrorMessage,
                     isCreditSale = state.isCreditSale,
                     onAddPaymentLine = action.onAddPaymentLine,
@@ -2020,11 +1892,8 @@ private fun PaymentSection(
     exchangeRateByCurrency: Map<String, Double>,
     paymentLines: List<PaymentLine>,
     paymentModes: List<POSPaymentModeOption>,
-    allowedCurrencies: List<POSCurrencyOption>,
     paidAmountBase: Double,
     totalAmount: Double,
-    balanceDueBase: Double,
-    changeDueBase: Double,
     paymentErrorMessage: String?,
     isCreditSale: Boolean,
     onAddPaymentLine: (PaymentLine) -> Unit,
@@ -2047,7 +1916,6 @@ private fun PaymentSection(
     var amountValue by remember { mutableStateOf(0.0) }
     var rateInput by remember { mutableStateOf("1.0") }
     var referenceInput by remember { mutableStateOf("") }
-    val successState = state as? BillingState.Success
 
     LaunchedEffect(selectedMode, modeCurrency, baseCurrency) {
         selectedCurrency = modeCurrency?.trim()?.uppercase() ?: baseCurrency
@@ -2182,7 +2050,7 @@ private fun PaymentSection(
             AppTextField(
                 value = selectedMode,
                 onValueChange = {},
-                modifier = Modifier.menuAnchor(MenuAnchorType.PrimaryNotEditable),
+                modifier = Modifier.menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable),
                 label = "Método de pago",
                 placeholder = "Selecciona el metodo de pago del cliente",
                 leadingIcon = { Icon(Icons.Default.Money, contentDescription = null) },
@@ -2297,10 +2165,6 @@ private fun DiscountShippingInputs(
     state: BillingState.Success, action: BillingAction
 ) {
     val baseCurrency = state.currency ?: "USD"
-    var usePercent by rememberSaveable(state.manualDiscountPercent, state.manualDiscountAmount) {
-        mutableStateOf(state.manualDiscountPercent > 0.0 || state.manualDiscountAmount == 0.0)
-    }
-
     val initialType = remember(
         state.discountCode,
         state.manualDiscountPercent,
@@ -2408,7 +2272,7 @@ private fun DiscountShippingInputs(
                     onValueChange = {},
                     label = "Cargo de envío",
                     modifier = Modifier.fillMaxWidth()
-                        .menuAnchor(MenuAnchorType.PrimaryNotEditable),
+                        .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable),
                     trailingIcon = {
                         ExposedDropdownMenuDefaults.TrailingIcon(expanded = deliveryExpanded)
                     })
@@ -2477,7 +2341,7 @@ private fun CreditTermsSection(
                     label = "Selecciona la condicion de pago",
                     placeholder = "Condicion de pago",
                     modifier = Modifier//.fillMaxWidth()
-                        .menuAnchor(MenuAnchorType.PrimaryNotEditable),
+                        .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable),
                     trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = templateExpanded) },
                     leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) })
                 ExposedDropdownMenu(
@@ -2593,8 +2457,7 @@ data class MoneyUiSpec(
 )
 
 private fun moneyUiSpec(currencyCode: String, fallbackDecimals: Int = 2): MoneyUiSpec {
-    val code = currencyCode.trim().uppercase()
-    return when (code) {
+    return when (val code = currencyCode.trim().uppercase()) {
         "NIO", "USD" -> MoneyUiSpec(code = code, decimals = 2, groupSep = ',', decimalSep = '.')
         "EUR" -> MoneyUiSpec(code = code, decimals = 2, groupSep = '.', decimalSep = ',')
         else -> MoneyUiSpec(
@@ -2615,31 +2478,12 @@ private fun sanitizeMoneyInput(input: String, maxDecimals: Int): String {
     fun normalizeInt(digits: String): String = digits.trimStart('0').ifBlank { "0" }
 
     return if (decIdx >= 0) {
-        val intDigits = filtered.substring(0, decIdx).filter { it.isDigit() }
+        val intDigits = filtered.take(decIdx).filter { it.isDigit() }
         val decDigits = filtered.substring(decIdx + 1).filter { it.isDigit() }.take(maxDecimals)
         normalizeInt(intDigits) + "." + decDigits
     } else {
         val intDigits = filtered.filter { it.isDigit() }
         normalizeInt(intDigits)
-    }
-}
-
-private fun formatWithGrouping(intPart: String, groupSep: Char): String =
-    intPart.ifBlank { "0" }.reversed().chunked(3).joinToString(groupSep.toString()).reversed()
-
-private fun formatMoneyDisplay(raw: String, spec: MoneyUiSpec, focused: Boolean): String {
-    if (raw.isBlank()) return ""
-    val parts = raw.split('.', limit = 2)
-    val intPart = parts.getOrNull(0).orEmpty()
-    val decPart = parts.getOrNull(1).orEmpty()
-
-    return if (focused) {
-        // En edición: NO estorbar, NO agrupar, NO forzar .00
-        if (raw.contains('.')) intPart + spec.decimalSep + decPart else intPart
-    } else {
-        val grouped = formatWithGrouping(intPart, spec.groupSep)
-        val padded = decPart.padEnd(spec.decimals, '0').take(spec.decimals)
-        grouped + spec.decimalSep + padded
     }
 }
 
@@ -2663,11 +2507,11 @@ private fun normalizeRawMoneyInput(input: String, maxDecimals: Int): String {
         val digits = d.filter { it.isDigit() }
         // Evita "00012" -> "12"
         val trimmed = digits.trimStart('0')
-        return if (trimmed.isBlank()) "0" else trimmed
+        return trimmed.ifBlank { "0" }
     }
 
     return if (decIdx >= 0) {
-        val intDigits = cleanIntDigits(filtered.substring(0, decIdx))
+        val intDigits = cleanIntDigits(filtered.take(decIdx))
         val decDigits = filtered.substring(decIdx + 1).filter { it.isDigit() }.take(maxDecimals)
         "$intDigits.$decDigits" // raw siempre con '.'
     } else {
@@ -2690,7 +2534,7 @@ private class MoneyVisualTransformation(
 
         val dotIndex = value.indexOf('.')
         val hasDot = dotIndex >= 0
-        val intPart = if (hasDot) value.substring(0, dotIndex) else value
+        val intPart = if (hasDot) value.take(dotIndex) else value
         val decRaw = if (hasDot) value.substring(dotIndex + 1) else ""
 
         // --- build grouped int + mapping int offsets ---
@@ -2719,8 +2563,7 @@ private class MoneyVisualTransformation(
         }
 
         val intTransLen = groupedInt.length
-        val decSepPos = intTransLen
-        val decStart = decSepPos + 1
+        val decStart = intTransLen + 1
 
         val offsetMapping = object : OffsetMapping {
             override fun originalToTransformed(offset: Int): Int {
@@ -2761,7 +2604,7 @@ private class MoneyVisualTransformation(
                 }
 
                 // hay punto en raw: permitimos editar decimales
-                if (t == decSepPos) return intPart.length
+                if (t == intTransLen) return intPart.length
                 if (t == decStart) return intPart.length + 1
 
                 val decOffset = (t - decStart).coerceIn(0, spec.decimals)
@@ -2800,10 +2643,6 @@ fun MoneyTextField(
     var tfv by remember(rawValue, spec.decimals) {
         val sanitized = sanitizeMoneyInput(rawValue, spec.decimals)
         mutableStateOf(TextFieldValue(sanitized, selection = TextRange(sanitized.length)))
-    }
-
-    val display = remember(tfv.text, spec) {
-        formatMoneyDisplay(tfv.text, spec, true)
     }
 
     LaunchedEffect(tfv.text) {
@@ -2852,85 +2691,4 @@ fun MoneyTextField(
             disabledIndicatorColor = Color.Transparent
         )
     )
-}
-
-@Preview
-@Composable
-private fun BillingScreenPreview() {
-    val sampleCustomers = listOf(
-        CustomerBO(
-            name = "Cliente Ejemplo 1",
-            customerName = "Cliente Ejemplo 1",
-            customerType = "Individual"
-        ), CustomerBO(
-            name = "Cliente Frecuente 2",
-            customerName = "Cliente Ejemplo 2",
-            customerType = "Company"
-        )
-    )
-    val sampleProducts = listOf(
-        ItemBO(
-            itemCode = "P1", name = "Producto A", price = 150.0, description = "", uom = "Unidad"
-        ), ItemBO(
-            itemCode = "P2", name = "Producto B", price = 2500.0, description = "", uom = "Unidad"
-        )
-    )
-    val sampleCart = listOf(
-        CartItem("P1", "Producto A", "C$", 2.0, 150.0)
-    )
-    val deliveryCharges = listOf(
-        DeliveryChargeBO(
-            label = "Zona urbana", defaultRate = 10.0
-        )
-    )
-
-    MaterialTheme {
-        BillingScreen(
-            state = BillingState.Success(
-                customers = sampleCustomers,
-                selectedCustomer = sampleCustomers.first(),
-                productSearchResults = sampleProducts,
-                cartItems = sampleCart,
-                subtotal = 300.0,
-                taxes = 45.0,
-                currency = "USD",
-                discount = 0.0,
-                shippingAmount = 10.0,
-                deliveryCharges = deliveryCharges,
-                selectedDeliveryCharge = deliveryCharges.first(),
-                total = 355.0,
-                paymentLines = listOf(
-                    PaymentLine(
-                        modeOfPayment = "Cash",
-                        enteredAmount = 100.0,
-                        currency = "USD",
-                        exchangeRate = 1.0,
-                        baseAmount = 100.0
-                    )
-                ),
-                paymentModes = listOf(
-                    POSPaymentModeOption(
-                        name = "Cash",
-                        modeOfPayment = "Cash",
-                    )
-                ),
-                paymentTerms = listOf(
-                    PaymentTermBO(
-                        name = "Layaway 30 days", creditDays = 30
-                    )
-                ),
-                selectedPaymentTerm = null,
-                allowedCurrencies = listOf(
-                    POSCurrencyOption(
-                        code = "USD", name = "US Dollar", symbol = "$"
-                    )
-                ),
-                paidAmountBase = 100.0,
-                balanceDueBase = 255.0,
-                changeDueBase = 0.0,
-                exchangeRate = 1.0
-            ), action = BillingAction(),
-            snackbar = SnackbarController()
-        )
-    }
 }

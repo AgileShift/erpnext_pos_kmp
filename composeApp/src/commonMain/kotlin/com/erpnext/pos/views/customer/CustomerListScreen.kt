@@ -1,7 +1,5 @@
 package com.erpnext.pos.views.customer
 
-import AppTextField
-import MoneyTextField
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateDpAsState
@@ -71,6 +69,8 @@ import com.erpnext.pos.utils.oauth.bd
 import com.erpnext.pos.utils.oauth.moneyScale
 import com.erpnext.pos.utils.oauth.toDouble
 import com.erpnext.pos.utils.view.SnackbarPosition
+import com.erpnext.pos.views.billing.AppTextField
+import com.erpnext.pos.views.billing.MoneyTextField
 import org.koin.compose.koinInject
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -234,7 +234,7 @@ fun CustomerListScreen(
                                 )
                             } else {
                                 val posCurrency = normalizeCurrency(posContext?.currency) ?: "USD"
-                                val partyCurrency = normalizeCurrency(paymentState.partyAccountCurrency) ?: "USD"
+                                val partyCurrency = normalizeCurrency(paymentState.partyAccountCurrency)
 
                                 CustomerListContent(
                                     customers = filtered,
@@ -271,9 +271,8 @@ fun CustomerListScreen(
             customer = customer,
             invoicesState = invoicesState,
             paymentState = paymentState,
-            onDismiss = { quickActionsCustomer = null },
+            onDismiss = {  },
             onActionSelected = { actionType ->
-                quickActionsCustomer = null
                 when (actionType) {
                     CustomerQuickActionType.PendingInvoices,
                     CustomerQuickActionType.RegisterPayment -> {
@@ -558,16 +557,13 @@ fun CustomerItem(
     val isOverLimit = (customer.availableCredit ?: 0.0) < 0 || (customer.currentBalance ?: 0.0) > 0
     val pendingInvoices = customer.pendingInvoices ?: 0
     val baseCurrency = normalizeCurrency(partyAccountCurrency)
-        ?: normalizeCurrency(posCurrency)
-        ?: "USD"
-    val currencySymbol = baseCurrency.toCurrencySymbol().ifBlank { baseCurrency }
     var isMenuExpanded by remember { mutableStateOf(false) }
     val quickActions = remember { customerQuickActions() }
     val avatarSize = if (isDesktop) 52.dp else 44.dp
     val pendingAmountRaw =
         bd(customer.totalPendingAmount ?: 0.0).moneyScale(2)
     val pendingAmount = pendingAmountRaw.toDouble(2)
-    val posCurr = normalizeCurrency(posCurrency) ?: "USD"
+    val posCurr = normalizeCurrency(posCurrency)
     var rateToPos by remember { mutableStateOf<Double?>(null) }
     LaunchedEffect(baseCurrency, posCurr, pendingAmount) {
         rateToPos = if (baseCurrency.equals(posCurr, ignoreCase = true)) {
@@ -597,7 +593,6 @@ fun CustomerItem(
         else -> MaterialTheme.colorScheme.primary
     }
     val emphasis = pendingInvoices > 0 || isOverLimit
-    val cardElevation = if (emphasis) 3.dp else 1.dp
     val cardShape = RoundedCornerShape(20.dp)
     Card(
         modifier = Modifier
@@ -607,16 +602,14 @@ fun CustomerItem(
             .clip(cardShape)
             .pointerInput(customer.name, isDesktop) {
                 if (!isDesktop) {
-                    var totalDrag = 0f
+                    val totalDrag = 0f
                     detectHorizontalDragGestures(
                         onDragEnd = {
                             if (kotlin.math.abs(totalDrag) > 64) {
                                 onOpenQuickActions()
                             }
-                            totalDrag = 0f
                         },
-                        onHorizontalDrag = { _, dragAmount ->
-                            totalDrag += dragAmount
+                        onHorizontalDrag = { _, _ ->
                         }
                     )
                 }
@@ -653,7 +646,7 @@ fun CustomerItem(
                             .clip(RoundedCornerShape(50.dp)),
                         model = remember(customer.image) {
                             ImageRequest.Builder(context)
-                                .data(customer.image?.ifBlank { "https://placehold.co/600x400" })
+                                .data(customer.image.ifBlank { "https://placehold.co/600x400" })
                                 .crossfade(true)
                                 .build()
                         },
@@ -763,7 +756,7 @@ fun CustomerItem(
                     if (customer.mobileNo?.isNotEmpty() == true) {
                         CustomerInfoChip(
                             icon = Icons.Filled.Phone,
-                            text = customer.mobileNo ?: "Residencial Palmanova #117"
+                            text = customer.mobileNo
                         )
                     }
                     if (customer.address?.isNotEmpty() == true) {
@@ -873,74 +866,6 @@ private fun CustomerInfoChip(icon: ImageVector, text: String) {
 }
 
 @Composable
-private fun CustomerSummaryRow(
-    customers: List<CustomerBO>,
-    modifier: Modifier = Modifier
-) {
-    val strings = LocalAppStrings.current
-    val pendingCount = customers.count { (it.pendingInvoices ?: 0) > 0 }
-    val overdueCount = customers.count {
-        (it.availableCredit ?: 0.0) < 0 || (it.currentBalance ?: 0.0) > 0
-    }
-    Row(
-        modifier = modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        SummaryTile(
-            icon = Icons.Filled.People,
-            label = strings.customer.title,
-            value = "${customers.size}",
-            color = MaterialTheme.colorScheme.primary
-        )
-        SummaryTile(
-            icon = Icons.Filled.ReceiptLong,
-            label = strings.customer.pendingLabel,
-            value = "$pendingCount",
-            color = MaterialTheme.colorScheme.tertiary
-        )
-        SummaryTile(
-            icon = Icons.Filled.Warning,
-            label = strings.customer.overdueLabel,
-            value = "$overdueCount",
-            color = MaterialTheme.colorScheme.error
-        )
-    }
-}
-
-@Composable
-private fun SummaryTile(
-    icon: ImageVector,
-    label: String,
-    value: String,
-    color: Color
-) {
-    Surface(
-        color = color.copy(alpha = 0.08f),
-        shape = RoundedCornerShape(14.dp),
-        tonalElevation = 0.dp
-    ) {
-        Row(
-            modifier = Modifier
-                .padding(horizontal = 12.dp, vertical = 10.dp)
-                .heightIn(min = 44.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Icon(
-                icon,
-                contentDescription = null,
-                tint = color,
-                modifier = Modifier.size(20.dp)
-            )
-            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Text(label, style = MaterialTheme.typography.labelSmall, color = color)
-                Text(value, style = MaterialTheme.typography.titleMedium, color = color)
-            }
-        }
-    }
-}
-
-@Composable
 private fun FilterSummaryTile(
     label: String,
     value: String,
@@ -1039,7 +964,7 @@ private fun CustomerQuickActionsSheet(
                 } else emptyMap()
             )
 
-            Divider()
+            HorizontalDivider()
 
             quickActions.forEach { action ->
                 ListItem(
@@ -1072,7 +997,7 @@ private fun CustomerOutstandingInvoicesSheet(
     var selectedInvoice by remember { mutableStateOf<SalesInvoiceBO?>(null) }
     var amountRaw by remember { mutableStateOf("") }
     var amountValue by remember { mutableStateOf(0.0) }
-    val posBaseCurrency = normalizeCurrency(paymentState.baseCurrency) ?: "USD"
+    val posBaseCurrency = normalizeCurrency(paymentState.baseCurrency)
     val receivableCurrency = normalizeCurrency(selectedInvoice?.partyAccountCurrency)
         ?: posBaseCurrency
     val invoiceBaseCurrency = normalizeCurrency(selectedInvoice?.currency)
@@ -1115,8 +1040,8 @@ private fun CustomerOutstandingInvoicesSheet(
     // Exchange rate de invoiceBaseCurrency -> paymentCurrency usando baseRates
     val exchangeRate =
         remember(selectedCurrency, invoiceBaseCurrency, posBaseCurrency) {
-            val from = normalizeCurrency(invoiceBaseCurrency) ?: posBaseCurrency
-            val to = normalizeCurrency(selectedCurrency) ?: posBaseCurrency
+            val from = normalizeCurrency(invoiceBaseCurrency)
+            val to = normalizeCurrency(selectedCurrency)
             when {
                 from == to -> 1.0
                 invoicesState is CustomerInvoicesState.Success -> {
@@ -1162,7 +1087,6 @@ private fun CustomerOutstandingInvoicesSheet(
             }
         )
     }
-    val baseSymbol = invoiceBaseCurrency.toCurrencySymbol().ifBlank { invoiceBaseCurrency }
     val receivableSymbol = receivableCurrency.toCurrencySymbol().ifBlank { receivableCurrency }
     val baseOutstandingLabel = "$receivableSymbol ${formatAmount(outstandingReceivable)}"
     val changeDue = outstandingInSelectedCurrency?.let { amountValue - it } ?: 0.0
@@ -1395,7 +1319,7 @@ private fun CustomerOutstandingInvoicesSheet(
                     onValueChange = {},
                     label = strings.customer.selectPaymentMode,
                     placeholder = strings.customer.selectPaymentMode,
-                    modifier = Modifier.menuAnchor(MenuAnchorType.PrimaryNotEditable),
+                    modifier = Modifier.menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable),
                     leadingIcon = { Icon(Icons.Default.Money, contentDescription = null) },
                     trailingIcon = {
                         ExposedDropdownMenuDefaults.TrailingIcon(expanded = modeExpanded)
@@ -1527,7 +1451,6 @@ private fun CustomerOutstandingInvoicesSheet(
             Button(
                 onClick = {
                     val invoiceId = selectedInvoice?.invoiceId?.trim().orEmpty()
-                    val amount = minOf(baseAmount, outstandingBase)
                     onRegisterPayment(
                         invoiceId,
                         selectedMode,
@@ -1567,7 +1490,7 @@ private fun CustomerOutstandingSummary(
     baseRates: Map<String, Double>
 ) {
     val strings = LocalAppStrings.current
-    val posCurrency = normalizeCurrency(posBaseCurrency) ?: "USD"
+    val posCurrency = normalizeCurrency(posBaseCurrency)
     val partyTotals = if (invoices.isNotEmpty()) {
         invoices.groupBy { invoice ->
             normalizeCurrency(invoice.partyAccountCurrency)
@@ -1578,7 +1501,7 @@ private fun CustomerOutstandingSummary(
         }
     } else {
         val fallbackCurrency = normalizeCurrency(customer.currency)
-            ?.takeIf { it.isNotBlank() } ?: posCurrency
+            .takeIf { it.isNotBlank() } ?: posCurrency
         val fallbackAmount = customer.totalPendingAmount
             ?: customer.currentBalance ?: 0.0
         mapOf(fallbackCurrency to fallbackAmount)

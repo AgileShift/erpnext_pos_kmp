@@ -1,6 +1,5 @@
 package com.erpnext.pos.views.billing
 
-import CartItem
 import com.erpnext.pos.domain.models.CustomerBO
 import com.erpnext.pos.domain.models.DeliveryChargeBO
 import com.erpnext.pos.domain.models.ItemBO
@@ -8,7 +7,6 @@ import com.erpnext.pos.domain.models.POSCurrencyOption
 import com.erpnext.pos.domain.models.POSPaymentModeOption
 import com.erpnext.pos.domain.models.PaymentTermBO
 import com.erpnext.pos.domain.models.SourceDocumentOption
-import com.erpnext.pos.utils.calculateTotals
 import com.erpnext.pos.utils.roundToCurrency
 import com.erpnext.pos.views.salesflow.SalesFlowContext
 import com.erpnext.pos.views.salesflow.SalesFlowSource
@@ -75,16 +73,6 @@ sealed interface BillingState {
         val successMessage: String? = null,
         val isFinalizingSale: Boolean = false
     ) : BillingState {
-        fun recalculateCartTotals(): Success {
-            val totals = calculateTotals(this)
-            return copy(
-                subtotal = roundToCurrency(totals.subtotal),
-                taxes = roundToCurrency(totals.taxes),
-                discount = roundToCurrency(totals.discount),
-                total = roundToCurrency(totals.total)
-            ).recalculatePaymentTotals()
-        }
-
         fun recalculatePaymentTotals(): Success {
             val newPaidAmountBase = roundToCurrency(paymentLines.sumOf { it.baseAmount })
             val newBalanceDueBase = roundToCurrency((total - newPaidAmountBase).coerceAtLeast(0.0))

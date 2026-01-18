@@ -2,7 +2,6 @@
 
 package com.erpnext.pos.views.billing
 
-import CartItem
 import com.erpnext.pos.base.BaseViewModel
 import com.erpnext.pos.domain.models.CustomerBO
 import com.erpnext.pos.domain.models.DeliveryChargeBO
@@ -545,8 +544,6 @@ class BillingViewModel(
 
         val context = contextProvider.requireContext()
         val invoiceCurrency = normalizeCurrency(context.currency)
-            ?: normalizeCurrency(current.currency)
-            ?: "USD"
 
         executeUseCase(
             action = {
@@ -584,8 +581,8 @@ class BillingViewModel(
 
     fun onPaymentCurrencySelected(currency: String) {
         val current = requireSuccessState() ?: return
-        val baseCurrency = normalizeCurrency(contextProvider.requireContext().currency) ?: "USD"
-        val paymentCurrency = normalizeCurrency(currency) ?: return
+        val baseCurrency = normalizeCurrency(contextProvider.requireContext().currency)
+        val paymentCurrency = normalizeCurrency(currency)
         if (paymentCurrency.equals(baseCurrency, ignoreCase = true)) {
             _state.update {
                 current.copy(
@@ -735,9 +732,8 @@ class BillingViewModel(
                 round = ::roundToCurrency
             )
 
-            val invoiceCurrency = normalizeCurrency(baseCurrency) ?: "USD"
+            val invoiceCurrency = normalizeCurrency(baseCurrency)
             val receivableCurrency = normalizeCurrency(context.partyAccountCurrency)
-                ?: invoiceCurrency
             val conversionRate = resolveInvoiceConversionRate(
                 invoiceCurrency = invoiceCurrency,
                 receivableCurrency = receivableCurrency,
@@ -1214,13 +1210,13 @@ class BillingViewModel(
         receivableCurrency: String,
         context: POSContext
     ): Double? {
-        val invoice = normalizeCurrency(invoiceCurrency) ?: return null
-        val receivable = normalizeCurrency(receivableCurrency) ?: return null
+        val invoice = normalizeCurrency(invoiceCurrency)
+        val receivable = normalizeCurrency(receivableCurrency)
         if (invoice.equals(receivable, ignoreCase = true)) return 1.0
 
         val ctxCurrency = normalizeCurrency(context.currency)
         val ctxRate = context.exchangeRate
-        if (ctxCurrency != null && ctxRate > 0.0) {
+        if (ctxRate > 0.0) {
             if (invoice.equals(ctxCurrency, true) && receivable.equals("USD", true)) {
                 return 1 / ctxRate
             }
