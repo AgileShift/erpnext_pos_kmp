@@ -602,6 +602,7 @@ private fun BillingLabCheckoutStep(
     modifier: Modifier = Modifier
 ) {
     val colors = MaterialTheme.colorScheme
+    val baseCurrency = state.currency ?: "USD"
     Column(
         modifier = modifier
             .padding(horizontal = 16.dp, vertical = 12.dp)
@@ -609,7 +610,7 @@ private fun BillingLabCheckoutStep(
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         // Encabezado principal del checkout.
-        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text(
                 text = "Checkout",
                 style = MaterialTheme.typography.titleLarge,
@@ -621,29 +622,85 @@ private fun BillingLabCheckoutStep(
                 color = colors.onSurfaceVariant
             )
         }
-        // Resumen superior con cliente y total.
+        // Tarjeta hero con total, cliente y saldo.
         ElevatedCard(
             modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.elevatedCardColors(containerColor = colors.surface)
         ) {
             Column(
-                modifier = Modifier.padding(14.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 Text(
-                    text = "Cliente",
+                    text = "Total",
                     style = MaterialTheme.typography.labelSmall,
                     color = colors.onSurfaceVariant
                 )
                 Text(
-                    text = state.selectedCustomer?.customerName ?: "--",
-                    style = MaterialTheme.typography.titleSmall,
+                    text = formatAmount(baseCurrency.toCurrencySymbol(), state.total),
+                    style = MaterialTheme.typography.headlineSmall,
                     color = colors.onSurface
                 )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text(
+                            text = "Cliente",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = colors.onSurfaceVariant
+                        )
+                        Text(
+                            text = state.selectedCustomer?.customerName ?: "--",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = colors.onSurface
+                        )
+                    }
+                    Column(horizontalAlignment = Alignment.End) {
+                        Text(
+                            text = "Artículos",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = colors.onSurfaceVariant
+                        )
+                        Text(
+                            text = state.cartItems.size.toString(),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = colors.onSurface
+                        )
+                    }
+                }
                 Divider(color = colors.outlineVariant, thickness = 1.dp)
-                PaymentTotalsRow("Total", state.currency ?: "USD", state.total)
-                PaymentTotalsRow("Pagado", state.currency ?: "USD", state.paidAmountBase)
-                PaymentTotalsRow("Pendiente", state.currency ?: "USD", state.balanceDueBase)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        text = "Pagado",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = colors.onSurfaceVariant
+                    )
+                    Text(
+                        text = formatAmount(baseCurrency.toCurrencySymbol(), state.paidAmountBase),
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        text = "Pendiente",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = colors.onSurfaceVariant
+                    )
+                    Text(
+                        text = formatAmount(baseCurrency.toCurrencySymbol(), state.balanceDueBase),
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
             }
         }
         if (state.paymentTerms.isNotEmpty()) {
@@ -709,7 +766,7 @@ private fun BillingLabCheckoutStep(
                 )
                 PaymentSection(
                     state = state,
-                    baseCurrency = state.currency ?: "USD",
+                    baseCurrency = baseCurrency,
                     exchangeRateByCurrency = state.exchangeRateByCurrency,
                     paymentLines = state.paymentLines,
                     paymentModes = state.paymentModes,
