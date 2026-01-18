@@ -284,20 +284,31 @@ fun BillingLabScreen(
             bottomBar = {
                 if (state is BillingState.Success && step == LabCheckoutStep.Checkout) {
                     // Botón fijo para pagar siempre visible.
-                    Surface(
-                        tonalElevation = 4.dp,
-                        color = colors.surface,
-                        modifier = Modifier.fillMaxWidth()
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(
+                                Brush.verticalGradient(
+                                    colors = listOf(
+                                        colors.background.copy(alpha = 0.0f),
+                                        colors.background
+                                    )
+                                )
+                            )
                     ) {
                         Button(
                             onClick = action.onFinalizeSale,
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 16.dp, vertical = 12.dp),
+                                .padding(horizontal = 16.dp, vertical = 16.dp),
                             enabled = state.selectedCustomer != null &&
                                     state.cartItems.isNotEmpty() &&
                                     (state.isCreditSale || state.paidAmountBase + 0.01 >= state.total) &&
-                                    (!state.isCreditSale || state.selectedPaymentTerm != null)
+                                    (!state.isCreditSale || state.selectedPaymentTerm != null),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = colors.primary,
+                                contentColor = colors.onPrimary
+                            )
                         ) {
                             Text("Pagar")
                         }
@@ -637,7 +648,7 @@ private fun BillingLabCheckoutStep(
         ) {
             ElevatedCard(
                 modifier = Modifier.weight(1f),
-                colors = CardDefaults.elevatedCardColors(containerColor = colors.surface)
+                colors = CardDefaults.elevatedCardColors(containerColor = colors.surfaceVariant)
             ) {
                 Column(
                     modifier = Modifier.padding(16.dp),
@@ -667,7 +678,7 @@ private fun BillingLabCheckoutStep(
             }
             ElevatedCard(
                 modifier = Modifier.weight(1f),
-                colors = CardDefaults.elevatedCardColors(containerColor = colors.surface)
+                colors = CardDefaults.elevatedCardColors(containerColor = colors.surfaceVariant)
             ) {
                 Column(
                     modifier = Modifier.padding(12.dp),
@@ -706,7 +717,7 @@ private fun BillingLabCheckoutStep(
         ) {
             ElevatedCard(
                 modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.elevatedCardColors(containerColor = colors.surface)
+                colors = CardDefaults.elevatedCardColors(containerColor = colors.surfaceVariant)
             ) {
                 Column(
                     modifier = Modifier.padding(12.dp),
@@ -722,7 +733,7 @@ private fun BillingLabCheckoutStep(
             }
             ElevatedCard(
                 modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.elevatedCardColors(containerColor = colors.surface)
+                colors = CardDefaults.elevatedCardColors(containerColor = colors.surfaceVariant)
             ) {
                 Column(
                     modifier = Modifier.padding(12.dp),
@@ -2053,14 +2064,16 @@ private fun PaymentSection(
                     // Animamos la aparición/desaparición de cada pago.
                     AnimatedVisibility(
                         visible = true,
-                        enter = fadeIn(animationSpec = tween(180)),
-                        exit = fadeOut(animationSpec = tween(160))
+                        enter = fadeIn(animationSpec = tween(180)) + expandVertically(),
+                        exit = fadeOut(animationSpec = tween(160)) + shrinkVertically()
                     ) {
                         Card(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .animateContentSize(),
-                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                            colors = CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceVariant
+                            )
                         ) {
                             Row(
                                 modifier = Modifier.fillMaxWidth().padding(12.dp),
@@ -2068,24 +2081,36 @@ private fun PaymentSection(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Column(modifier = Modifier.weight(1f)) {
-                                    Text(line.modeOfPayment, fontWeight = FontWeight.SemiBold)
                                     Text(
-                                        "Monto: ${
-                                            formatAmount(
-                                                line.currency.toCurrencySymbol(), line.enteredAmount
-                                            )
-                                        }"
+                                        text = line.modeOfPayment,
+                                        fontWeight = FontWeight.SemiBold
                                     )
                                     Text(
-                                        "Base: ${
+                                        text = formatAmount(
+                                            line.currency.toCurrencySymbol(), line.enteredAmount
+                                        ),
+                                        style = MaterialTheme.typography.titleSmall
+                                    )
+                                    Text(
+                                        text = "Base: ${
                                             formatAmount(
                                                 baseCurrency.toCurrencySymbol(), line.baseAmount
                                             )
-                                        }"
+                                        }",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
-                                    Text("Tasa: ${line.exchangeRate}")
+                                    Text(
+                                        text = "Tasa: ${line.exchangeRate}",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
                                     if (!line.referenceNumber.isNullOrBlank()) {
-                                        Text("Referencia: ${line.referenceNumber}")
+                                        Text(
+                                            text = "Referencia: ${line.referenceNumber}",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
                                     }
                                 }
                                 IconButton(onClick = { onRemovePaymentLine(index) }) {
