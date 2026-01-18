@@ -229,6 +229,7 @@ class ReconciliationViewModel(
                 mode.contains("USD", ignoreCase = true) || mode.contains("$") -> "USD"
                 mode.contains("NIO", ignoreCase = true) || mode.contains("C$", ignoreCase = true) ->
                     "NIO"
+
                 else -> posCurrency
             }
             totalsByCurrency[currency] =
