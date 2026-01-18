@@ -12,7 +12,7 @@ object DenominationCatalog {
             coins = emptyList()
         ),
         "NIO" to CurrencyDenominations(
-            bills = listOf(1000.0, 500.0, 200.0, 100.0, 50.0, 20.0, 10.0, 5.0),
+            bills = listOf(1000.0, 500.0, 200.0, 100.0, 50.0, 20.0, 10.0),
             coins = listOf(5.0, 1.0, 0.5, 0.25)
         ),
         "EUR" to CurrencyDenominations(
