@@ -4,6 +4,8 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.layout.*
@@ -52,6 +54,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -354,11 +357,27 @@ fun BillingLabScreen(
                         LabCheckoutStep.Cart -> BillingLabContent(
                             state = state,
                             action = action,
-                            onCheckout = { step = LabCheckoutStep.Checkout },
+                            onCheckout = {
+                                if (state.selectedCustomer == null)
+                                    snackbar.show(
+                                        "Selecciona al cliente",
+                                        SnackbarType.Error,
+                                        SnackbarPosition.Top
+                                    )
+                                else if (state.cartItems.isEmpty()) {
+                                    snackbar.show(
+                                        "Selecciona el o los productos del cliente.",
+                                        SnackbarType.Error,
+                                        SnackbarPosition.Top
+                                    )
+                                } else
+                                    step = LabCheckoutStep.Checkout
+                            },
                             modifier = Modifier
                                 .fillMaxSize()
                                 .padding(top = paddingValues.calculateTopPadding())
                         )
+
                         LabCheckoutStep.Checkout -> BillingLabCheckoutStep(
                             state = state,
                             action = action,
@@ -411,208 +430,209 @@ private fun BillingLabContent(
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-        Column(
-            modifier = Modifier
-                .weight(1f)
-                .fillMaxHeight()
-                .background(leftPanelBg, RoundedCornerShape(20.dp))
-                .padding(16.dp)
-        ) {
-            LabSearchBar(
-                value = state.productSearchQuery,
-                onChange = action.onProductSearchQueryChange,
-                onClear = { action.onProductSearchQueryChange("") }
-            )
-
-            Spacer(Modifier.height(12.dp))
-
-            LabCategoryTabs(
-                categories = categories,
-                selectedCategory = selectedCategory,
-                onSelect = { selectedCategory = it }
-            )
-
-            Spacer(Modifier.height(16.dp))
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight()
+                    .background(leftPanelBg, RoundedCornerShape(20.dp))
+                    .padding(16.dp)
             ) {
-                Text(
-                    text = if (selectedCategory == "Todos") "Todos los productos" else selectedCategory,
-                    style = MaterialTheme.typography.titleSmall,
-                    color = colors.onSurfaceVariant
+                LabSearchBar(
+                    value = state.productSearchQuery,
+                    onChange = action.onProductSearchQueryChange,
+                    onClear = { action.onProductSearchQueryChange("") }
                 )
-                Text(
-                    text = "(${filteredProducts.size})",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = colors.onSurfaceVariant.copy(alpha = 0.7f)
+
+                Spacer(Modifier.height(12.dp))
+
+                LabCategoryTabs(
+                    categories = categories,
+                    selectedCategory = selectedCategory,
+                    onSelect = { selectedCategory = it }
                 )
-            }
 
-            Spacer(Modifier.height(12.dp))
+                Spacer(Modifier.height(16.dp))
 
-            LazyVerticalGrid(
-                columns = GridCells.Adaptive(minSize = 220.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                modifier = Modifier.fillMaxSize()
-            ) {
-                items(filteredProducts, key = { it.itemCode }) { item ->
-                    LabProductCard(
-                        item = item,
-                        baseCurrency = baseCurrency,
-                        exchangeRateByCurrency = state.exchangeRateByCurrency,
-                        accent = accent,
-                        onClick = { action.onProductAdded(item) }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = if (selectedCategory == "Todos") "Todos los productos" else selectedCategory,
+                        style = MaterialTheme.typography.titleSmall,
+                        color = colors.onSurfaceVariant
+                    )
+                    Text(
+                        text = "(${filteredProducts.size})",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = colors.onSurfaceVariant.copy(alpha = 0.7f)
                     )
                 }
-            }
-        }
-
-        Surface(
-            color = colors.surface,
-            shape = RoundedCornerShape(22.dp),
-            tonalElevation = 2.dp,
-            shadowElevation = 12.dp,
-            modifier = Modifier
-                .widthIn(min = 320.dp, max = 420.dp)
-                .fillMaxHeight()
-        ) {
-            Column(
-                modifier = Modifier.fillMaxHeight().padding(16.dp)
-            ) {
-                LabCartHeader(
-                    itemCount = state.cartItems.sumOf { it.quantity }.toInt(),
-                    accent = accent
-                )
 
                 Spacer(Modifier.height(12.dp))
 
-                CollapsibleSection(title = "Cliente", defaultExpanded = true) {
-                    Column(
-                        verticalArrangement = Arrangement.spacedBy(12.dp),
-                        modifier = Modifier.padding(bottom = 8.dp)
-                    ) {
-                        CustomerSelector(
-                            customers = state.customers,
-                            query = state.customerSearchQuery,
-                            onQueryChange = action.onCustomerSearchQueryChange,
-                            onCustomerSelected = action.onCustomerSelected
+                LazyVerticalGrid(
+                    columns = GridCells.Adaptive(minSize = 220.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    modifier = Modifier.fillMaxSize()
+                ) {
+                    items(filteredProducts, key = { it.itemCode }) { item ->
+                        LabProductCard(
+                            item = item,
+                            baseCurrency = baseCurrency,
+                            exchangeRateByCurrency = state.exchangeRateByCurrency,
+                            accent = accent,
+                            onClick = { action.onProductAdded(item) }
                         )
                     }
                 }
+            }
 
-                Spacer(Modifier.height(12.dp))
+            Surface(
+                color = colors.surface,
+                shape = RoundedCornerShape(22.dp),
+                tonalElevation = 2.dp,
+                shadowElevation = 12.dp,
+                modifier = Modifier
+                    .widthIn(min = 320.dp, max = 420.dp)
+                    .fillMaxHeight()
+            ) {
+                Column(
+                    modifier = Modifier.fillMaxHeight().padding(16.dp)
+                ) {
+                    LabCartHeader(
+                        itemCount = state.cartItems.sumOf { it.quantity }.toInt(),
+                        accent = accent
+                    )
 
-                Text(
-                    text = "Carrito",
-                    style = MaterialTheme.typography.titleSmall,
-                    color = colors.onSurface
-                )
+                    Spacer(Modifier.height(12.dp))
 
-                Spacer(Modifier.height(8.dp))
-
-                if (state.cartItems.isEmpty()) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .weight(1f),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = "Carrito vacío",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = colors.onSurfaceVariant
-                        )
-                    }
-                } else {
-                    LazyColumn(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .weight(1f),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        items(state.cartItems, key = { it.itemCode }) { item ->
-                            LabCartItem(
-                                item = item,
-                                baseCurrency = baseCurrency,
-                                exchangeRateByCurrency = state.exchangeRateByCurrency,
-                                onUpdateQuantity = { qty ->
-                                    action.onQuantityChanged(item.itemCode, qty)
-                                },
-                                onRemove = { action.onRemoveItem(item.itemCode) }
+                    CollapsibleSection(title = "Cliente", defaultExpanded = true) {
+                        Column(
+                            verticalArrangement = Arrangement.spacedBy(12.dp),
+                            modifier = Modifier.padding(bottom = 8.dp)
+                        ) {
+                            CustomerSelector(
+                                customers = state.customers,
+                                query = state.customerSearchQuery,
+                                onQueryChange = action.onCustomerSearchQueryChange,
+                                onCustomerSelected = action.onCustomerSelected
                             )
                         }
                     }
-                }
 
-                Spacer(Modifier.height(12.dp))
+                    Spacer(Modifier.height(12.dp))
 
-                // Resumen de carrito para contexto rápido.
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(containerColor = colors.surfaceVariant)
-                ) {
-                    Column(
-                        modifier = Modifier.padding(12.dp),
-                        verticalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        Text(
-                            text = "Resumen",
-                            style = MaterialTheme.typography.labelLarge,
-                            color = colors.onSurface
-                        )
-                        Text(
-                            text = "Cliente: ${state.selectedCustomer?.customerName ?: "--"}",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = colors.onSurfaceVariant
-                        )
-                        Text(
-                            text = "Artículos: ${state.cartItems.size}",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = colors.onSurfaceVariant
-                        )
-                        Divider(color = colors.outlineVariant, thickness = 1.dp)
-                        PaymentTotalsRow("Subtotal", baseCurrency, state.subtotal)
-                        if (state.taxes > 0.0) {
-                            PaymentTotalsRow("Impuestos", baseCurrency, state.taxes)
-                        }
-                        if (state.discount > 0.0) {
-                            PaymentTotalsRow("Descuento", baseCurrency, -state.discount)
-                        }
-                        if (state.shippingAmount > 0.0) {
-                            PaymentTotalsRow("Envío", baseCurrency, state.shippingAmount)
-                        }
-                        PaymentTotalsRow("Total", baseCurrency, state.total)
-                    }
-                }
-
-                Spacer(Modifier.height(12.dp))
-
-                // Botón de checkout: pasamos al siguiente paso sin validar pagos.
-                Button(
-                    onClick = onCheckout,
-                    enabled = state.selectedCustomer != null && state.cartItems.isNotEmpty(),
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = colors.primary,
-                        contentColor = colors.onPrimary
+                    Text(
+                        text = "Carrito",
+                        style = MaterialTheme.typography.titleSmall,
+                        color = colors.onSurface
                     )
-                ) {
-                    Text("Checkout")
+
+                    Spacer(Modifier.height(8.dp))
+
+                    if (state.cartItems.isEmpty()) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .weight(1f),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "Carrito vacío",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = colors.onSurfaceVariant
+                            )
+                        }
+                    } else {
+                        LazyColumn(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .weight(1f),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            items(state.cartItems, key = { it.itemCode }) { item ->
+                                LabCartItem(
+                                    item = item,
+                                    baseCurrency = baseCurrency,
+                                    exchangeRateByCurrency = state.exchangeRateByCurrency,
+                                    onUpdateQuantity = { qty ->
+                                        action.onQuantityChanged(item.itemCode, qty)
+                                    },
+                                    onRemove = { action.onRemoveItem(item.itemCode) }
+                                )
+                            }
+                        }
+                    }
+
+                    Spacer(Modifier.height(12.dp))
+
+                    // Resumen de carrito para contexto rápido.
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(containerColor = colors.surfaceVariant)
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(12.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Text(
+                                text = "Resumen",
+                                style = MaterialTheme.typography.labelLarge,
+                                color = colors.onSurface
+                            )
+                            Text(
+                                text = "Cliente: ${state.selectedCustomer?.customerName ?: "--"}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = colors.onSurfaceVariant
+                            )
+                            Text(
+                                text = "Artículos: ${state.cartItems.size}",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = colors.onSurfaceVariant
+                            )
+                            HorizontalDivider(color = colors.outlineVariant, thickness = 1.dp)
+                            PaymentTotalsRow("Subtotal", baseCurrency, state.subtotal)
+                            if (state.taxes > 0.0) {
+                                PaymentTotalsRow("Impuestos", baseCurrency, state.taxes)
+                            }
+                            if (state.discount > 0.0) {
+                                PaymentTotalsRow("Descuento", baseCurrency, -state.discount)
+                            }
+                            if (state.shippingAmount > 0.0) {
+                                PaymentTotalsRow("Envío", baseCurrency, state.shippingAmount)
+                            }
+                            PaymentTotalsRow("Total", baseCurrency, state.total)
+                        }
+                    }
+
+                    Spacer(Modifier.height(12.dp))
+
+                    // Botón de checkout: pasamos al siguiente paso sin validar pagos.
+                    Button(
+                        onClick = onCheckout,
+                        enabled = state.selectedCustomer != null && state.cartItems.isNotEmpty(),
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = colors.primary,
+                            contentColor = colors.onPrimary
+                        )
+                    ) {
+                        Text("Checkout")
+                    }
+
+                    Spacer(Modifier.height(6.dp))
+
+                    Text(
+                        text = "Continua al paso de pagos.",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = colors.onSurfaceVariant,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth()
+                    )
                 }
-
-                Spacer(Modifier.height(6.dp))
-
-                Text(
-                    text = "Continua al paso de pagos.",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = colors.onSurfaceVariant,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.fillMaxWidth()
-                )
             }
         }
     }
@@ -661,12 +681,12 @@ private fun BillingLabCheckoutStep(
                     )
                     Text(
                         text = formatAmount(baseCurrency.toCurrencySymbol(), state.total),
-                        style = MaterialTheme.typography.headlineSmall,
+                        style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.ExtraBold),
                         color = colors.onSurface
                     )
                     Text(
                         text = "Cliente: ${state.selectedCustomer?.customerName ?: "--"}",
-                        style = MaterialTheme.typography.bodySmall,
+                        style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
                         color = colors.onSurfaceVariant
                     )
                     Text(
@@ -676,32 +696,27 @@ private fun BillingLabCheckoutStep(
                     )
                 }
             }
-            ElevatedCard(
-                modifier = Modifier.weight(1f),
-                colors = CardDefaults.elevatedCardColors(containerColor = colors.surfaceVariant)
-            ) {
-                Column(
-                    modifier = Modifier.padding(12.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+            if (state.paymentTerms.isNotEmpty()) {
+                ElevatedCard(
+                    modifier = Modifier.weight(1f),
+                    colors = CardDefaults.elevatedCardColors(containerColor = colors.surfaceVariant)
                 ) {
-                    Text(
-                        text = "Crédito",
-                        style = MaterialTheme.typography.titleSmall,
-                        color = colors.onSurface
-                    )
-                    if (state.paymentTerms.isNotEmpty()) {
+                    Column(
+                        modifier = Modifier.padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text(
+                            text = "Crédito",
+                            style = MaterialTheme.typography.titleSmall,
+                            color = colors.onSurface
+                        )
+
                         CreditTermsSection(
                             isCreditSale = state.isCreditSale,
                             paymentTerms = state.paymentTerms,
                             selectedPaymentTerm = state.selectedPaymentTerm,
                             onCreditSaleChanged = action.onCreditSaleChanged,
                             onPaymentTermSelected = action.onPaymentTermSelected
-                        )
-                    } else {
-                        Text(
-                            text = "Sin términos disponibles",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = colors.onSurfaceVariant
                         )
                     }
                 }
@@ -735,39 +750,61 @@ private fun BillingLabCheckoutStep(
                 modifier = Modifier.fillMaxWidth(),
                 colors = CardDefaults.elevatedCardColors(containerColor = colors.surfaceVariant)
             ) {
-                Column(
-                    modifier = Modifier.padding(12.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Text(
-                        text = "Pagos",
-                        style = MaterialTheme.typography.titleSmall,
-                        color = colors.onSurface
-                    )
-                    Text(
-                        text = "Métodos disponibles: ${state.paymentModes.size}",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = colors.onSurfaceVariant
-                    )
-                    PaymentSection(
-                        state = state,
-                        baseCurrency = baseCurrency,
-                        exchangeRateByCurrency = state.exchangeRateByCurrency,
-                        paymentLines = state.paymentLines,
-                        paymentModes = state.paymentModes,
-                        allowedCurrencies = state.allowedCurrencies,
-                        paidAmountBase = state.paidAmountBase,
-                        totalAmount = state.total,
-                        balanceDueBase = state.balanceDueBase,
-                        changeDueBase = state.changeDueBase,
-                        paymentErrorMessage = state.paymentErrorMessage,
-                        isCreditSale = state.isCreditSale,
-                        onAddPaymentLine = action.onAddPaymentLine,
-                        onRemovePaymentLine = action.onRemovePaymentLine,
-                        onPaymentCurrencySelected = action.onPaymentCurrencySelected
-                    )
-                }
+                Text(
+                    text = "Pagos",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = colors.onSurface
+                )
+                PaymentSection(
+                    state = state,
+                    baseCurrency = baseCurrency,
+                    exchangeRateByCurrency = state.exchangeRateByCurrency,
+                    paymentLines = state.paymentLines,
+                    paymentModes = state.paymentModes,
+                    allowedCurrencies = state.allowedCurrencies,
+                    paidAmountBase = state.paidAmountBase,
+                    totalAmount = state.total,
+                    balanceDueBase = state.balanceDueBase,
+                    changeDueBase = state.changeDueBase,
+                    paymentErrorMessage = state.paymentErrorMessage,
+                    isCreditSale = state.isCreditSale,
+                    onAddPaymentLine = action.onAddPaymentLine,
+                    onRemovePaymentLine = action.onRemovePaymentLine,
+                    onPaymentCurrencySelected = action.onPaymentCurrencySelected
+                )
             }
+        }
+        Button(
+            onClick = action.onFinalizeSale,
+            modifier = Modifier.fillMaxWidth(),
+            enabled = state.selectedCustomer != null &&
+                    state.cartItems.isNotEmpty() &&
+                    (state.isCreditSale || state.paidAmountBase + 0.01 >= state.total) &&
+                    (!state.isCreditSale || state.selectedPaymentTerm != null)
+        ) {
+            Text("Pagar")
+        }
+    }
+}
+
+@Composable
+private fun LabStepTile(
+    title: String,
+    isActive: Boolean,
+    onClick: () -> Unit
+) {
+    val colors = MaterialTheme.colorScheme
+    val container = if (isActive) colors.primaryContainer else colors.surfaceVariant
+    val content = if (isActive) colors.onPrimaryContainer else colors.onSurfaceVariant
+    Card(
+        modifier = Modifier/*.weight(1f)*/.clickable(onClick = onClick),
+        colors = CardDefaults.cardColors(containerColor = container)
+    ) {
+        Box(
+            modifier = Modifier.padding(vertical = 10.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(text = title, style = MaterialTheme.typography.labelMedium, color = content)
         }
     }
 }
@@ -1880,7 +1917,7 @@ private fun CompactTotalsCard(
             if (taxes > 0.0) PaymentTotalsRow("Impuestos", baseCurrency, taxes)
             if (discount > 0.0) PaymentTotalsRow("Descuento", baseCurrency, -discount)
             if (shipping > 0.0) PaymentTotalsRow("Envío", baseCurrency, shipping)
-            Divider(color = colors.outlineVariant, thickness = 1.dp)
+            HorizontalDivider(color = colors.outlineVariant, thickness = 1.dp)
             PaymentTotalsRow("Total", baseCurrency, total)
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -2145,7 +2182,7 @@ private fun PaymentSection(
             AppTextField(
                 value = selectedMode,
                 onValueChange = {},
-                modifier = Modifier.fillMaxWidth().menuAnchor(MenuAnchorType.PrimaryNotEditable),
+                modifier = Modifier.menuAnchor(MenuAnchorType.PrimaryNotEditable),
                 label = "Método de pago",
                 placeholder = "Selecciona el metodo de pago del cliente",
                 leadingIcon = { Icon(Icons.Default.Money, contentDescription = null) },
@@ -2161,16 +2198,6 @@ private fun PaymentSection(
             }
         }
 
-        Spacer(Modifier.height(12.dp))
-        Text(
-            text = "Moneda principal: $baseCurrency",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-
-        Spacer(Modifier.height(12.dp))
-
-        Text("Moneda de pago: $selectedCurrency", style = MaterialTheme.typography.bodyMedium)
         Spacer(Modifier.height(12.dp))
 
         val rateValue = rateInput.toDoubleOrNull() ?: 0.0
@@ -2336,8 +2363,8 @@ private fun DiscountShippingInputs(
                 AppTextField(
                     value = state.discountCode,
                     onValueChange = action.onDiscountCodeChanged,
-                    label = "Discount code",
-                    placeholder = "Enter discount code",
+                    label = "Codigo de descuento",
+                    placeholder = "Ingresa el codigo de descuento",
                     trailingIcon = { Icon(Icons.Default.Money, contentDescription = null) },
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -2347,7 +2374,7 @@ private fun DiscountShippingInputs(
                 AppTextField(
                     value = if (state.manualDiscountPercent > 0.0) state.manualDiscountPercent.toString() else "",
                     onValueChange = action.onManualDiscountPercentChanged,
-                    label = "Percent (%)",
+                    label = "Porcentaje (%)",
                     trailingIcon = { Icon(Icons.Default.Percent, contentDescription = null) },
                     keyboardOptions = KeyboardOptions(
                         keyboardType = KeyboardType.Number, imeAction = ImeAction.Next
@@ -2360,7 +2387,7 @@ private fun DiscountShippingInputs(
                 AppTextField(
                     value = if (state.manualDiscountAmount > 0.0) state.manualDiscountAmount.toString() else "",
                     onValueChange = action.onManualDiscountAmountChanged,
-                    label = "Amount (${baseCurrency.toCurrencySymbol()})",
+                    label = "Monto (${baseCurrency.toCurrencySymbol()})",
                     trailingIcon = { Icon(Icons.Default.Money, contentDescription = null) },
                     keyboardOptions = KeyboardOptions(
                         keyboardType = KeyboardType.Number, imeAction = ImeAction.Next
@@ -2369,33 +2396,37 @@ private fun DiscountShippingInputs(
                 )
             }
         }
-        Text("Envío", style = MaterialTheme.typography.bodyMedium)
-        val deliveryChargeLabel = state.selectedDeliveryCharge?.label ?: "Selecciona cargo de envío"
-        var deliveryExpanded by remember { mutableStateOf(false) }
-        ExposedDropdownMenuBox(
-            expanded = deliveryExpanded, onExpandedChange = { deliveryExpanded = it }) {
-            AppTextField(
-                value = deliveryChargeLabel,
-                onValueChange = {},
-                label = "Cargo de envío",
-                modifier = Modifier.fillMaxWidth().menuAnchor(MenuAnchorType.PrimaryNotEditable),
-                trailingIcon = {
-                    ExposedDropdownMenuDefaults.TrailingIcon(expanded = deliveryExpanded)
-                })
-            ExposedDropdownMenu(
-                expanded = deliveryExpanded, onDismissRequest = { deliveryExpanded = false }) {
-                DropdownMenuItem(text = { Text("Sin envío") }, onClick = {
-                    action.onDeliveryChargeSelected(null)
-                    deliveryExpanded = false
-                })
-                state.deliveryCharges.forEach { charge ->
-                    val chargeLabel = "${
-                        charge.label
-                    } (${formatAmount(baseCurrency.toCurrencySymbol(), charge.defaultRate)})"
-                    DropdownMenuItem(text = { Text(chargeLabel) }, onClick = {
-                        action.onDeliveryChargeSelected(charge)
+        if (state.deliveryCharges.isNotEmpty()) {
+            Text("Envío", style = MaterialTheme.typography.bodyMedium)
+            val deliveryChargeLabel =
+                state.selectedDeliveryCharge?.label ?: "Selecciona cargo de envío"
+            var deliveryExpanded by remember { mutableStateOf(false) }
+            ExposedDropdownMenuBox(
+                expanded = deliveryExpanded, onExpandedChange = { deliveryExpanded = it }) {
+                AppTextField(
+                    value = deliveryChargeLabel,
+                    onValueChange = {},
+                    label = "Cargo de envío",
+                    modifier = Modifier.fillMaxWidth()
+                        .menuAnchor(MenuAnchorType.PrimaryNotEditable),
+                    trailingIcon = {
+                        ExposedDropdownMenuDefaults.TrailingIcon(expanded = deliveryExpanded)
+                    })
+                ExposedDropdownMenu(
+                    expanded = deliveryExpanded, onDismissRequest = { deliveryExpanded = false }) {
+                    DropdownMenuItem(text = { Text("Sin envío") }, onClick = {
+                        action.onDeliveryChargeSelected(null)
                         deliveryExpanded = false
                     })
+                    state.deliveryCharges.forEach { charge ->
+                        val chargeLabel = "${
+                            charge.label
+                        } (${formatAmount(baseCurrency.toCurrencySymbol(), charge.defaultRate)})"
+                        DropdownMenuItem(text = { Text(chargeLabel) }, onClick = {
+                            action.onDeliveryChargeSelected(charge)
+                            deliveryExpanded = false
+                        })
+                    }
                 }
             }
         }
