@@ -321,6 +321,7 @@ fun BillingLabScreen(
                             state = state,
                             action = action,
                             onCheckout = { step = LabCheckoutStep.Checkout },
+                            onStepSelected = { step = it },
                             modifier = Modifier
                                 .fillMaxSize()
                                 .padding(top = paddingValues.calculateTopPadding())
@@ -328,7 +329,7 @@ fun BillingLabScreen(
                         LabCheckoutStep.Checkout -> BillingLabCheckoutStep(
                             state = state,
                             action = action,
-                            onBack = { step = LabCheckoutStep.Cart },
+                            onStepSelected = { step = it },
                             modifier = Modifier
                                 .fillMaxSize()
                                 .padding(top = paddingValues.calculateTopPadding())
@@ -354,6 +355,7 @@ private fun BillingLabContent(
     state: BillingState.Success,
     action: BillingAction,
     onCheckout: () -> Unit,
+    onStepSelected: (LabCheckoutStep) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val colors = MaterialTheme.colorScheme
@@ -371,12 +373,14 @@ private fun BillingLabContent(
         if (selectedCategory == "Todos") state.productSearchResults
         else state.productSearchResults.filter { it.itemGroup == selectedCategory }
 
-    Row(
+    Column(
         modifier = modifier
             .background(background)
             .padding(16.dp),
-        horizontalArrangement = Arrangement.spacedBy(16.dp)
+        verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
+        LabStepper(current = LabCheckoutStep.Cart, onStepSelected = onStepSelected)
+        Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
         Column(
             modifier = Modifier
                 .weight(1f)
@@ -456,7 +460,7 @@ private fun BillingLabContent(
 
                 Spacer(Modifier.height(12.dp))
 
-                CollapsibleSection(title = "Cliente y crédito", defaultExpanded = true) {
+                CollapsibleSection(title = "Cliente", defaultExpanded = true) {
                     Column(
                         verticalArrangement = Arrangement.spacedBy(12.dp),
                         modifier = Modifier.padding(bottom = 8.dp)
@@ -467,16 +471,6 @@ private fun BillingLabContent(
                             onQueryChange = action.onCustomerSearchQueryChange,
                             onCustomerSelected = action.onCustomerSelected
                         )
-
-                        if (state.paymentTerms.isNotEmpty()) {
-                            CreditTermsSection(
-                                isCreditSale = state.isCreditSale,
-                                paymentTerms = state.paymentTerms,
-                                selectedPaymentTerm = state.selectedPaymentTerm,
-                                onCreditSaleChanged = action.onCreditSaleChanged,
-                                onPaymentTermSelected = action.onPaymentTermSelected
-                            )
-                        }
                     }
                 }
 
@@ -598,7 +592,7 @@ private fun BillingLabContent(
 private fun BillingLabCheckoutStep(
     state: BillingState.Success,
     action: BillingAction,
-    onBack: () -> Unit,
+    onStepSelected: (LabCheckoutStep) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val colors = MaterialTheme.colorScheme
@@ -609,6 +603,7 @@ private fun BillingLabCheckoutStep(
             .verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
+        LabStepper(current = LabCheckoutStep.Checkout, onStepSelected = onStepSelected)
         // Encabezado principal del checkout.
         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text(
@@ -783,26 +778,60 @@ private fun BillingLabCheckoutStep(
                 )
             }
         }
-        Row(
+        Button(
+            onClick = action.onFinalizeSale,
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
+            enabled = state.selectedCustomer != null &&
+                    state.cartItems.isNotEmpty() &&
+                    (state.isCreditSale || state.paidAmountBase + 0.01 >= state.total) &&
+                    (!state.isCreditSale || state.selectedPaymentTerm != null)
         ) {
-            OutlinedButton(
-                onClick = onBack,
-                modifier = Modifier.weight(1f)
-            ) {
-                Text("Volver")
-            }
-            Button(
-                onClick = action.onFinalizeSale,
-                modifier = Modifier.weight(1f),
-                enabled = state.selectedCustomer != null &&
-                        state.cartItems.isNotEmpty() &&
-                        (state.isCreditSale || state.paidAmountBase + 0.01 >= state.total) &&
-                        (!state.isCreditSale || state.selectedPaymentTerm != null)
-            ) {
-                Text("Finalizar venta")
-            }
+            Text("Pagar")
+        }
+    }
+}
+
+@Composable
+private fun LabStepper(
+    current: LabCheckoutStep,
+    onStepSelected: (LabCheckoutStep) -> Unit
+) {
+    // Stepper simple para visualizar el flujo.
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        LabStepTile(
+            title = "Carrito",
+            isActive = current == LabCheckoutStep.Cart,
+            onClick = { onStepSelected(LabCheckoutStep.Cart) }
+        )
+        LabStepTile(
+            title = "Checkout",
+            isActive = current == LabCheckoutStep.Checkout,
+            onClick = { onStepSelected(LabCheckoutStep.Checkout) }
+        )
+    }
+}
+
+@Composable
+private fun LabStepTile(
+    title: String,
+    isActive: Boolean,
+    onClick: () -> Unit
+) {
+    val colors = MaterialTheme.colorScheme
+    val container = if (isActive) colors.primaryContainer else colors.surfaceVariant
+    val content = if (isActive) colors.onPrimaryContainer else colors.onSurfaceVariant
+    Card(
+        modifier = Modifier.weight(1f).clickable(onClick = onClick),
+        colors = CardDefaults.cardColors(containerColor = container)
+    ) {
+        Box(
+            modifier = Modifier.padding(vertical = 10.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(text = title, style = MaterialTheme.typography.labelMedium, color = content)
         }
     }
 }
@@ -2030,8 +2059,7 @@ private fun PaymentSection(
     onPaymentCurrencySelected: (String) -> Unit
 ) {
     val modeOptions = remember(paymentModes) { paymentModes.map { it.modeOfPayment }.distinct() }
-    val defaultMode = paymentModes.firstOrNull()?.modeOfPayment.orEmpty()
-    var selectedMode by remember(modeOptions, defaultMode) { mutableStateOf(defaultMode) }
+    var selectedMode by remember(modeOptions) { mutableStateOf("") }
     val selectedModeOption = paymentModes.firstOrNull { it.modeOfPayment == selectedMode }
     val requiresReference = remember(selectedModeOption) {
         requiresReference(selectedModeOption)
@@ -2047,10 +2075,6 @@ private fun PaymentSection(
     var rateInput by remember { mutableStateOf("1.0") }
     var referenceInput by remember { mutableStateOf("") }
     val successState = state as? BillingState.Success
-    val subtotalAmount = successState?.subtotal ?: 0.0
-    val taxesAmount = successState?.taxes ?: 0.0
-    val discountAmount = successState?.discount ?: 0.0
-    val shippingAmount = successState?.shippingAmount ?: 0.0
 
     LaunchedEffect(selectedMode, modeCurrency, baseCurrency) {
         selectedCurrency = modeCurrency?.trim()?.uppercase() ?: baseCurrency
@@ -2071,18 +2095,6 @@ private fun PaymentSection(
         referenceInput = ""
     }
     Column(modifier = Modifier.padding(end = 12.dp, start = 12.dp, bottom = 8.dp)) {
-        CompactTotalsCard(
-            baseCurrency = baseCurrency,
-            subtotal = subtotalAmount,
-            taxes = taxesAmount,
-            discount = discountAmount,
-            shipping = shippingAmount,
-            total = totalAmount,
-            balance = balanceDueBase,
-            change = changeDueBase
-        )
-
-        Spacer(Modifier.height(12.dp))
 
         /*if (isCreditSale) {
             Text(
@@ -2161,7 +2173,7 @@ private fun PaymentSection(
             Spacer(Modifier.height(8.dp))
         }
 
-        Text("Modo de pago", style = MaterialTheme.typography.bodyMedium)
+        Text("Método de pago", style = MaterialTheme.typography.bodyMedium)
         var modeExpanded by remember { mutableStateOf(false) }
         ExposedDropdownMenuBox(
             expanded = modeExpanded, onExpandedChange = { modeExpanded = it }) {
@@ -2169,8 +2181,8 @@ private fun PaymentSection(
                 value = selectedMode,
                 onValueChange = {},
                 modifier = Modifier.fillMaxWidth().menuAnchor(MenuAnchorType.PrimaryNotEditable),
-                label = "Selecciona metodo de pago",
-                placeholder = "Selecciona metodo de pago",
+                label = "Método de pago",
+                placeholder = "Selecciona el metodo de pago del cliente",
                 leadingIcon = { Icon(Icons.Default.Money, contentDescription = null) },
                 trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = modeExpanded) })
             ExposedDropdownMenu(
@@ -2196,6 +2208,12 @@ private fun PaymentSection(
         Text("Moneda de pago: $selectedCurrency", style = MaterialTheme.typography.bodyMedium)
         Spacer(Modifier.height(12.dp))
 
+        val rateValue = rateInput.toDoubleOrNull() ?: 0.0
+        val canAdd =
+            amountValue > 0.0 && rateValue > 0.0 && selectedMode.isNotBlank() &&
+                    (!requiresReference || referenceInput.isNotBlank()) &&
+                    (paidAmountBase < totalAmount)
+
         MoneyTextField(
             currencyCode = selectedCurrency,
             rawValue = amountInput,
@@ -2209,43 +2227,47 @@ private fun PaymentSection(
                     val base = amountValue * rate
                     Text("Base: ${formatAmount(baseCurrency.toCurrencySymbol(), base)}")
                 }
-            })/*OutlinedTextField(
-            value = amountInput,
-            onValueChange = { amountInput = it },
-            label = { Text("Monto") },
-            keyboardOptions = KeyboardOptions(
-                keyboardType = KeyboardType.Number, imeAction = ImeAction.Next
-            ),
-            modifier = Modifier.fillMaxWidth()
-        )*/
-
-        Spacer(Modifier.height(12.dp))
-        val rateValue = rateInput.toDoubleOrNull() ?: 0.0
-        val exactAmount = if (rateValue > 0.0) balanceDueBase / rateValue else balanceDueBase
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            OutlinedButton(
-                onClick = {
-                    val rounded = if (exactAmount > 0.0) exactAmount else 0.0
-                    amountInput = rounded.toString()
-                    amountValue = rounded
-                },
-                modifier = Modifier.weight(1f)
-            ) {
-                Text("Pago exacto")
+            },
+            trailingIcon = {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    IconButton(
+                        onClick = {
+                            amountInput = ""
+                            amountValue = 0.0
+                        },
+                        enabled = amountInput.isNotBlank()
+                    ) {
+                        Icon(Icons.Default.Delete, contentDescription = "Limpiar")
+                    }
+                    IconButton(
+                        onClick = {
+                            val rate = if (selectedCurrency == baseCurrency) 1.0 else rateValue
+                            onAddPaymentLine(
+                                PaymentLine(
+                                    modeOfPayment = selectedMode,
+                                    enteredAmount = amountValue,
+                                    currency = selectedCurrency,
+                                    exchangeRate = rate,
+                                    baseAmount = amountValue * rate,
+                                    referenceNumber = referenceInput.takeIf { it.isNotBlank() })
+                            )
+                            amountInput = ""
+                            amountValue = 0.0
+                            referenceInput = ""
+                            if (selectedCurrency == baseCurrency) {
+                                rateInput = "1.0"
+                            }
+                        },
+                        enabled = canAdd
+                    ) {
+                        Icon(Icons.Default.Add, contentDescription = "Agregar pago")
+                    }
+                }
             }
-            OutlinedButton(
-                onClick = {
-                    amountInput = ""
-                    amountValue = 0.0
-                },
-                modifier = Modifier.weight(1f)
-            ) {
-                Text("Limpiar")
-            }
-        }
+        )
 
         if (requiresReference) {
             AppTextField(
@@ -2266,46 +2288,6 @@ private fun PaymentSection(
             Spacer(Modifier.height(12.dp))
         }
 
-        Row(
-            modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            val canAdd =
-                amountValue > 0.0 && rateValue > 0.0 && selectedMode.isNotBlank() && (!requiresReference || referenceInput.isNotBlank()) && (paidAmountBase < totalAmount) // <- Para evitar sobre pago
-
-            Button(
-                onClick = {
-                    val rate = if (selectedCurrency == baseCurrency) 1.0 else rateValue
-                    onAddPaymentLine(
-                        PaymentLine(
-                            modeOfPayment = selectedMode,
-                            enteredAmount = amountValue,
-                            currency = selectedCurrency,
-                            exchangeRate = rate,
-                            baseAmount = amountValue * rate,
-                            referenceNumber = referenceInput.takeIf { it.isNotBlank() })
-                    )
-                    amountInput = ""
-                    amountValue = 0.0
-                    referenceInput = ""
-                    if (selectedCurrency == baseCurrency) {
-                        rateInput = "1.0"
-                    }
-                }, modifier = Modifier.weight(1f), enabled = canAdd
-            ) {
-                Text("Agregar pago")
-            }
-
-            OutlinedButton(
-                onClick = {
-                    if (paymentLines.isNotEmpty()) {
-                        onRemovePaymentLine(paymentLines.lastIndex)
-                    }
-                }, modifier = Modifier.weight(1f), enabled = paymentLines.isNotEmpty()
-            ) {
-                Text("Eliminar")
-            }
-        }
-
         if (!paymentErrorMessage.isNullOrBlank()) {
             Text(
                 text = paymentErrorMessage,
@@ -2313,12 +2295,6 @@ private fun PaymentSection(
                 color = MaterialTheme.colorScheme.error
             )
         }
-
-        Spacer(Modifier.height(12.dp))
-
-        SummaryRow("Pagado (base)", baseCurrency, paidAmountBase, bold = true)
-        SummaryRow("Balance pendiente", baseCurrency, balanceDueBase, bold = true)
-        SummaryRow("Cambio", baseCurrency, changeDueBase, bold = true)
     }
 }
 
@@ -2813,6 +2789,7 @@ fun MoneyTextField(
     label: String = "Monto",
     enabled: Boolean = true,
     isError: Boolean = false,
+    trailingIcon: (@Composable () -> Unit)? = null,
     supportingText: (@Composable () -> Unit)? = null,
     imeAction: ImeAction = ImeAction.Next,
     onAmountChanged: (Double) -> Unit = {}
@@ -2859,6 +2836,7 @@ fun MoneyTextField(
             )
             Spacer(Modifier.width(8.dp))
         },
+        trailingIcon = trailingIcon,
         singleLine = true,
         enabled = enabled,
         isError = isError,
