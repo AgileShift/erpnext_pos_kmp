@@ -94,7 +94,7 @@ class ReconciliationViewModel(
             startMillis = startMillis,
             endMillis = endMillis
         )
-        val posCurrency = normalizeCurrency(context.currency) ?: context.currency
+        val posCurrency = normalizeCurrency(context.currency)
         val rateCache = mutableMapOf<String, Double>()
         val paymentRows = salesInvoiceDao.getShiftPayments(
             profileId = context.profileName,

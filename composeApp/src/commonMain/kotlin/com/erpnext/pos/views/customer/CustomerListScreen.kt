@@ -1371,37 +1371,6 @@ private fun CustomerOutstandingInvoicesSheet(
                 Spacer(Modifier.height(12.dp))
             }
 
-            /*Text("Payment currency", style = MaterialTheme.typography.bodyMedium)
-            ExposedDropdownMenuBox(
-                expanded = currencyExpanded,
-                onExpandedChange = { currencyExpanded = it }
-            ) {
-                AppTextField(
-                    value = selectedCurrency,
-                    onValueChange = {},
-                    label = "Select currency",
-                    placeholder = "Select currency",
-                    modifier = Modifier.menuAnchor(MenuAnchorType.PrimaryNotEditable),
-                    trailingIcon = {
-                        ExposedDropdownMenuDefaults.TrailingIcon(expanded = currencyExpanded)
-                    }
-                )
-                ExposedDropdownMenu(
-                    expanded = currencyExpanded,
-                    onDismissRequest = { currencyExpanded = false }
-                ) {
-                    allowedCodes.forEach { currency ->
-                        DropdownMenuItem(
-                            text = { Text(currency) },
-                            onClick = {
-                                selectedCurrency = currency
-                                currencyExpanded = false
-                            }
-                        )
-                    }
-                }
-            }*/
-
             MoneyTextField(
                 currencyCode = selectedCurrency,
                 rawValue = amountRaw,

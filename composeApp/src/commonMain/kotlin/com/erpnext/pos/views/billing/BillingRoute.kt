@@ -31,7 +31,7 @@ fun BillingLabRoute(
     val action = rememberBillingActions(coordinator)
     val snackbar = koinInject<SnackbarController>()
 
-    BillingLabScreen(uiState, action, snackbar)
+    BillingScreen(uiState, action, snackbar)
 }
 
 @Composable
@@ -54,7 +54,6 @@ fun rememberBillingActions(coordinator: BillingCoordinator): BillingAction {
             onManualDiscountPercentChanged = coordinator::onManualDiscountPercentChanged,
             onDeliveryChargeSelected = coordinator::onDeliveryChargeSelected,
             onPaymentCurrencySelected = coordinator::onPaymentCurrencySelected,
-            onOpenLab = coordinator::onOpenLab,
             onClearSuccessMessage = coordinator::onClearSuccessMessage,
             onBack = coordinator::onBack,
             onLinkSource = coordinator::onLinkSource,

@@ -842,7 +842,6 @@ class BillingViewModel(
                 it.name.contains(q, ignoreCase = true) || it.itemCode.contains(q, ignoreCase = true)
             }
 
-
             _state.update {
                 current.copy(
                     selectedCustomer = null,
@@ -911,10 +910,6 @@ class BillingViewModel(
         navManager.navigateTo(NavRoute.NavigateUp)
     }
 
-    fun onOpenLab() {
-        navManager.navigateTo(NavRoute.BillingLab)
-    }
-
     private fun recalculateTotals(current: BillingState.Success): BillingState.Success {
         val totals = calculateTotals(current)
         return current.copy(
@@ -959,8 +954,9 @@ class BillingViewModel(
     ): Map<String, Double> {
         val base = baseCurrency.trim().uppercase()
         val map = mutableMapOf(base to 1.0)
-        val allCodes = allowed.mapNotNull { it.code.trim().uppercase().takeIf { c -> c.isNotBlank() } }
-            .toMutableSet()
+        val allCodes =
+            allowed.mapNotNull { it.code.trim().uppercase().takeIf { c -> c.isNotBlank() } }
+                .toMutableSet()
         allCodes += "USD" // asegurar USD siempre presente
 
         for (code in allCodes) {
@@ -968,7 +964,8 @@ class BillingViewModel(
             val direct = contextProvider.resolveExchangeRateBetween(code, base)
             val rate = when {
                 direct != null && direct > 0.0 -> direct
-                else -> contextProvider.resolveExchangeRateBetween(base, code)?.takeIf { it > 0.0 }?.let { 1.0 / it }
+                else -> contextProvider.resolveExchangeRateBetween(base, code)?.takeIf { it > 0.0 }
+                    ?.let { 1.0 / it }
             }
             if (rate != null && rate > 0.0) {
                 map[code] = rate

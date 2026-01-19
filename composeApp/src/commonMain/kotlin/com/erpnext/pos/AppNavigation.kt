@@ -26,6 +26,7 @@ import com.erpnext.pos.utils.view.SnackbarHost
 import com.erpnext.pos.utils.loading.LoadingIndicator
 import com.erpnext.pos.views.CashBoxManager
 import com.erpnext.pos.localSource.preferences.ThemePreferences
+import com.erpnext.pos.utils.view.SnackbarController
 import org.koin.compose.koinInject
 
 fun shouldShowBottomBar(currentRoute: String): Boolean {
@@ -37,7 +38,7 @@ fun shouldShowBottomBar(currentRoute: String): Boolean {
 fun AppNavigation() {
     val navController = rememberNavController()
     // SnackbarController global provisto por Koin para compartir mensajes entre pantallas.
-    val snackbarController = koinInject<com.erpnext.pos.utils.view.SnackbarController>()
+    val snackbarController = koinInject<SnackbarController>()
     val themePreferences = koinInject<ThemePreferences>()
     val appTheme by themePreferences.theme.collectAsState(initial = AppColorTheme.Noir)
     val appThemeMode by themePreferences.themeMode.collectAsState(initial = AppThemeMode.System)
@@ -53,7 +54,6 @@ fun AppNavigation() {
     val visibleEntries by navController.visibleEntries.collectAsState()
     val currentRoute = visibleEntries.lastOrNull()?.destination?.route ?: ""
     val isDesktop = getPlatformName() == "Desktop"
-//    val isLoading by LoadingIndicator.isLoading.collectAsState(initial = false)
 
     AppTheme(theme = appTheme, themeMode = appThemeMode) {
         ProvideAppStrings {
@@ -109,7 +109,7 @@ fun AppNavigation() {
                                 when (event) {
                                     is NavRoute.Login -> navController.navigate(NavRoute.Login.path)
                                     is NavRoute.Home -> navController.navigate(NavRoute.Home.path)
-                                    is NavRoute.Billing -> navController.navigate(NavRoute.Billing.path)
+                                    //is NavRoute.Billing -> navController.navigate(NavRoute.Billing.path)
                                     is NavRoute.BillingLab -> navController.navigate(NavRoute.BillingLab.path)
                                     is NavRoute.Credits -> navController.navigate(NavRoute.Credits.path)
                                     is NavRoute.Quotation -> navController.navigate(NavRoute.Quotation.path)

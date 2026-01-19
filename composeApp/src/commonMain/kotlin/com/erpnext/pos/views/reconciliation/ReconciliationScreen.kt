@@ -28,6 +28,7 @@ import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material.icons.filled.Warning
@@ -709,6 +710,39 @@ private fun OpeningBalanceCard(
     }
 }
 
+private const val EPS = 0.01
+
+private enum class BalanceState { DEFICIT, NEUTRAL, OK_OR_SURPLUS }
+
+private fun stateForCurrency(counted: Double, expected: Double): BalanceState {
+    val delta = counted - expected
+    return when {
+        delta < -EPS -> BalanceState.DEFICIT
+        abs(delta) <= EPS && (abs(counted) <= EPS || abs(expected) <= EPS) -> BalanceState.NEUTRAL
+        else -> BalanceState.OK_OR_SURPLUS
+    }
+}
+
+private fun overallState(
+    currencies: List<String>,
+    countedByCurrency: Map<String, Double>,
+    expectedByCurrency: Map<String, Double>
+): BalanceState {
+    var hasGreen = false
+
+    for (code in currencies) {
+        val counted = countedByCurrency[code] ?: 0.0
+        val expected = expectedByCurrency[code] ?: 0.0
+
+        when (stateForCurrency(counted, expected)) {
+            BalanceState.DEFICIT -> return BalanceState.DEFICIT
+            BalanceState.OK_OR_SURPLUS -> hasGreen = true
+            BalanceState.NEUTRAL -> Unit
+        }
+    }
+    return if (hasGreen) BalanceState.OK_OR_SURPLUS else BalanceState.NEUTRAL
+}
+
 @Composable
 private fun DifferenceAlertsByCurrency(
     expectedByCurrency: Map<String, Double>,
@@ -716,16 +750,53 @@ private fun DifferenceAlertsByCurrency(
     strings: ReconciliationStrings
 ) {
     if (expectedByCurrency.isEmpty()) return
-    val currencies =
-        (expectedByCurrency.keys + countedByCurrency.keys).map { it.uppercase() }.distinct()
-    val allBalanced = currencies.all { code ->
-        abs((countedByCurrency[code] ?: 0.0) - (expectedByCurrency[code] ?: 0.0)) < 0.01
+
+    // Normalizamos keys a uppercase para que coincidan al consultar los mapas.
+    val expectedUp = expectedByCurrency.mapKeys { it.key.uppercase() }
+    val countedUp = countedByCurrency.mapKeys { it.key.uppercase() }
+
+    val currencies = (expectedUp.keys + countedUp.keys).distinct()
+
+    val state = overallState(
+        currencies = currencies,
+        countedByCurrency = countedUp,
+        expectedByCurrency = expectedUp
+    )
+
+    val cardColors = when (state) {
+        BalanceState.DEFICIT ->
+            CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.error.copy(alpha = 0.12f))
+
+        BalanceState.NEUTRAL ->
+            // Azul/neutro: si tu theme no tiende a azul en secondary, cambia a surfaceVariant.
+            CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondary.copy(alpha = 0.12f))
+
+        BalanceState.OK_OR_SURPLUS ->
+            // Verde “conceptual”: en Material3 no siempre hay green. Si querés VERDE real,
+            // necesitás un color custom. Por ahora uso primary como “ok”.
+            CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.10f))
     }
-    val cardColors = if (allBalanced) {
-        CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f))
-    } else {
-        CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.error.copy(alpha = 0.12f))
+
+    val (icon, iconTint, title) = when (state) {
+        BalanceState.DEFICIT -> Triple(
+            Icons.Filled.Warning,
+            MaterialTheme.colorScheme.error,
+            strings.differenceTitle
+        )
+
+        BalanceState.NEUTRAL -> Triple(
+            Icons.Filled.Info,
+            MaterialTheme.colorScheme.secondary,
+            strings.differenceTitle // o un string tipo "Sin movimiento"
+        )
+
+        BalanceState.OK_OR_SURPLUS -> Triple(
+            Icons.Filled.CheckCircle,
+            MaterialTheme.colorScheme.primary,
+            strings.differenceBalancedTitle
+        )
     }
+
     Card(modifier = Modifier.fillMaxWidth(), colors = cardColors) {
         Column(
             modifier = Modifier.padding(14.dp),
@@ -736,27 +807,29 @@ private fun DifferenceAlertsByCurrency(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                val icon = if (allBalanced) Icons.Filled.CheckCircle else Icons.Filled.Warning
-                Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                Icon(icon, contentDescription = null, tint = iconTint)
                 Text(
-                    if (allBalanced) strings.differenceBalancedTitle else strings.differenceTitle,
+                    title,
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.SemiBold
                 )
             }
+
             val differenceSummary = currencies.joinToString(" / ") { code ->
-                val expected = expectedByCurrency[code] ?: 0.0
-                val counted = countedByCurrency[code] ?: 0.0
+                val expected = expectedUp[code] ?: 0.0
+                val counted = countedUp[code] ?: 0.0
                 val difference = counted - expected
 
                 val label = when {
-                    difference > 0.01 -> strings.differenceOverLabel
-                    difference < -0.01 -> strings.differenceShortLabel
+                    difference > EPS -> strings.differenceOverLabel
+                    difference < -EPS -> strings.differenceShortLabel
                     else -> ""
                 }
+
                 val amount = abs(difference).formatCurrencyWithCode(code)
                 if (label.isBlank()) amount else "$label $amount"
             }
+
             Text(
                 "${strings.differenceLabel}: $differenceSummary",
                 style = MaterialTheme.typography.bodySmall,

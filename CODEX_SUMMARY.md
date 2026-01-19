@@ -1,4 +1,5 @@
 ## Checklist de siguientes tareas (pendiente por completar)
+- [ ] Lo mas importante y primero, debemos de confirmar
 - [ ] Primero, antes que todo, necesitamos que si el token esta invalido manadr el refresh token en automatico y volver a autenticar, sin que de problemas antes de hacer cualquer peticion, deberiamos de hacer esto con el Ktor plugin de autenticacion, Hearbeath no funciona, igual el token expira y tenemos que volver a inciiar sesion
 - [ ] **Agregar una barra de carga mientras ejecuta cualquier proceso (guardado, lectura, actualizacion, eliminacion) en cualquiera de las vistas para darle contexto visual al usuario**
 - [ ] La barra superior del Home me gustaria que fuera fija para cualquier pantalla en la que estemos
