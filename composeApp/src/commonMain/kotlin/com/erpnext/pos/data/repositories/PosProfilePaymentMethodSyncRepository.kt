@@ -68,7 +68,7 @@ class PosProfilePaymentMethodSyncRepository(
         val paymentEntities = profile.payments.mapIndexed { index, payment ->
             PosProfilePaymentMethodEntity(
                 profileId = profile.profileName,
-                mopName = payment.modeOfPayment,
+                mopName = payment.name,
                 idx = index,
                 isDefault = payment.default,
                 allowInReturns = false,
