@@ -1,6 +1,5 @@
 package com.erpnext.pos.data
 
-import androidx.room.AutoMigration
 import androidx.room.ConstructedBy
 import androidx.room.Database
 import androidx.room.RoomDatabase
@@ -16,8 +15,10 @@ import com.erpnext.pos.localSource.dao.ModeOfPaymentDao
 import com.erpnext.pos.localSource.dao.PaymentTermDao
 import com.erpnext.pos.localSource.dao.POSClosingEntryDao
 import com.erpnext.pos.localSource.dao.POSOpeningEntryDao
+import com.erpnext.pos.localSource.dao.POSOpeningEntryLinkDao
 import com.erpnext.pos.localSource.dao.POSProfileDao
-import com.erpnext.pos.localSource.dao.PaymentModesDao
+import com.erpnext.pos.localSource.dao.PosProfileLocalDao
+import com.erpnext.pos.localSource.dao.PosProfilePaymentMethodDao
 import com.erpnext.pos.localSource.dao.SalesInvoiceDao
 import com.erpnext.pos.localSource.dao.UserDao
 import com.erpnext.pos.localSource.dao.v2.CatalogDao as CatalogDaoV2
@@ -44,8 +45,10 @@ import com.erpnext.pos.localSource.entities.ModeOfPaymentEntity
 import com.erpnext.pos.localSource.entities.POSClosingEntryEntity
 import com.erpnext.pos.localSource.entities.POSInvoicePaymentEntity
 import com.erpnext.pos.localSource.entities.POSOpeningEntryEntity
+import com.erpnext.pos.localSource.entities.POSOpeningEntryLinkEntity
 import com.erpnext.pos.localSource.entities.POSProfileEntity
-import com.erpnext.pos.localSource.entities.PaymentModesEntity
+import com.erpnext.pos.localSource.entities.PosProfileLocalEntity
+import com.erpnext.pos.localSource.entities.PosProfilePaymentMethodEntity
 import com.erpnext.pos.localSource.entities.PaymentTermEntity
 import com.erpnext.pos.localSource.entities.SalesInvoiceEntity
 import com.erpnext.pos.localSource.entities.SalesInvoiceItemEntity
@@ -91,7 +94,8 @@ import com.erpnext.pos.localSource.entities.v2.UserEntity as UserEntityV2
         UserEntity::class,
         ItemEntity::class,
         POSProfileEntity::class,
-        PaymentModesEntity::class,
+        PosProfileLocalEntity::class,
+        PosProfilePaymentMethodEntity::class,
         PaymentTermEntity::class,
         DeliveryChargeEntity::class,
         ExchangeRateEntity::class,
@@ -104,6 +108,7 @@ import com.erpnext.pos.localSource.entities.v2.UserEntity as UserEntityV2
         SalesInvoiceEntity::class,
         SalesInvoiceItemEntity::class,
         POSOpeningEntryEntity::class,
+        POSOpeningEntryLinkEntity::class,
         POSClosingEntryEntity::class,
         TaxDetailsEntity::class,
         UserEntityV2::class,
@@ -142,25 +147,23 @@ import com.erpnext.pos.localSource.entities.v2.UserEntity as UserEntityV2
         PaymentScheduleEntity::class,
         SyncStateEntity::class
     ],
-    version = 23,
-    exportSchema = true,
-    autoMigrations = [
-        AutoMigration(from = 21, to = 22),
-        AutoMigration(from = 22, to = 23)
-    ]
+    version = 26,
+    exportSchema = true
 )
 @ConstructedBy(AppDatabaseConstructor::class)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun userDao(): UserDao
     abstract fun itemDao(): ItemDao
     abstract fun posProfileDao(): POSProfileDao
-    abstract fun paymentModesDao(): PaymentModesDao
+    abstract fun posProfileLocalDao(): PosProfileLocalDao
+    abstract fun posProfilePaymentMethodDao(): PosProfilePaymentMethodDao
     abstract fun modeOfPaymentDao(): ModeOfPaymentDao
     abstract fun cashboxDao(): CashboxDao
     abstract fun customerDao(): CustomerDao
     abstract fun categoryDao(): CategoryDao
     abstract fun saleInvoiceDao(): SalesInvoiceDao
     abstract fun posOpeningDao(): POSOpeningEntryDao
+    abstract fun posOpeningEntryLinkDao(): POSOpeningEntryLinkDao
     abstract fun posClosingDao(): POSClosingEntryDao
     abstract fun exchangeRateDao(): ExchangeRateDao
     abstract fun catalogDaoV2(): CatalogDaoV2

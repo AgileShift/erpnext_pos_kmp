@@ -1,6 +1,7 @@
 package com.erpnext.pos.sync
 
 import com.erpnext.pos.data.repositories.ExchangeRateRepository
+import com.erpnext.pos.data.repositories.OpeningEntrySyncRepository
 import com.erpnext.pos.data.repositories.SalesInvoiceRepository
 import com.erpnext.pos.domain.models.CustomerBO
 import com.erpnext.pos.domain.sync.SyncContext
@@ -25,12 +26,16 @@ class LegacyPushSyncManager(
     private val modeOfPaymentDao: ModeOfPaymentDao,
     private val paymentEntryUseCase: CreatePaymentEntryUseCase,
     private val exchangeRateRepository: ExchangeRateRepository,
+    private val openingEntrySyncRepository: OpeningEntrySyncRepository,
     private val cashBoxManager: CashBoxManager
 ) : PushSyncRunner {
 
     override suspend fun runPushQueue(ctx: SyncContext, onDocType: (String) -> Unit): Boolean {
         return try {
             var hasChanges = false
+            onDocType("Aperturas pendientes")
+            val openingsSynced = openingEntrySyncRepository.pushPending()
+            hasChanges = hasChanges || openingsSynced
             onDocType("Facturas locales")
             val pending = invoiceRepository.getPendingSyncInvoices()
             if (pending.isNotEmpty()) {

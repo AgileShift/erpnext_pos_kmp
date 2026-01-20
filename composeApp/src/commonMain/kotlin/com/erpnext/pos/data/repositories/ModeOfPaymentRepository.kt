@@ -49,7 +49,6 @@ class ModeOfPaymentRepository(
                             modeOfPayment = detail.modeOfPayment,
                             company = company,
                             type = accountDetail?.accountType ?: detail.type ?: "Cash",
-                            isDefault = false,
                             enabled = detail.enabled,
                             currency = accountDetail?.accountCurrency,
                             account = account,

@@ -13,7 +13,7 @@ actual class DatabaseBuilder {
             name = dbPath.absolutePath
         ).setDriver(BundledSQLiteDriver())
             .setQueryCoroutineContext(Dispatchers.IO)
-            .fallbackToDestructiveMigration(false)
+            .fallbackToDestructiveMigration(true)
             .build()
     }
 }

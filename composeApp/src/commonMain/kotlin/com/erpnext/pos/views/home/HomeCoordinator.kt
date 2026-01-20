@@ -2,10 +2,7 @@ package com.erpnext.pos.views.home
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
-import com.erpnext.pos.domain.models.POSProfileBO
 import com.erpnext.pos.domain.models.POSProfileSimpleBO
-import com.erpnext.pos.remoteSource.dto.POSOpeningEntryDto
-import com.erpnext.pos.views.PaymentModeWithAmount
 import kotlinx.coroutines.flow.StateFlow
 import org.koin.compose.koinInject
 
@@ -16,6 +13,7 @@ class HomeCoordinator(
     val syncState = viewModel.syncState
     val syncSettings = viewModel.syncSettings
     val homeMetrics = viewModel.homeMetrics
+    val openingState = viewModel.openingState
 
     fun loadInitialData() {
         return viewModel.loadInitialData()
@@ -41,7 +39,11 @@ class HomeCoordinator(
         viewModel.onPosSelected(pos)
     }
 
-    fun openCashbox(entry: POSProfileSimpleBO, amounts: List<PaymentModeWithAmount>) {
+    fun loadOpeningProfile(profileId: String?) {
+        viewModel.loadOpeningProfile(profileId)
+    }
+
+    fun openCashbox(entry: POSProfileSimpleBO, amounts: List<com.erpnext.pos.views.PaymentModeWithAmount>) {
         viewModel.openCashbox(entry, amounts)
     }
 

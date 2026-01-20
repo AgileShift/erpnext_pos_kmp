@@ -13,6 +13,6 @@ actual class DatabaseBuilder(private val context: Context) {
             "app_database",
         ).setDriver(BundledSQLiteDriver())
             .setQueryCoroutineContext(Dispatchers.IO)
-            .fallbackToDestructiveMigration(false)
+            .fallbackToDestructiveMigration(true)
             .build()
 }

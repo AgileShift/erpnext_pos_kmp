@@ -131,6 +131,7 @@ fun HomeScreen(
     val syncState by actions.syncState.collectAsState()
     val syncSettings by actions.syncSettings.collectAsState()
     val homeMetrics by actions.homeMetrics.collectAsState()
+    val openingState by actions.openingState.collectAsState()
     val isCashboxOpen by actions.isCashboxOpen().collectAsState()
     val appStrings = LocalAppStrings.current
     val networkMonitor: NetworkMonitor = koinInject()
@@ -159,10 +160,10 @@ fun HomeScreen(
             uiState = uiState,
             profiles = currentProfiles,
             user = currentUser,
+            openingState = openingState,
+            onLoadOpeningProfile = actions.onLoadOpeningProfile,
+            onOpenCashbox = actions.onOpenCashbox,
             onSelectProfile = { actions.onPosSelected(it) },
-            onOpenCashbox = { pos, amounts ->
-                actions.openCashbox(pos, amounts)
-            },
             onDismiss = {
                 actions.initialState()
                 showOpeningView = false
