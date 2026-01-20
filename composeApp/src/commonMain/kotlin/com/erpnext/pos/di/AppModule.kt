@@ -14,6 +14,7 @@ import com.erpnext.pos.data.repositories.PaymentTermsRepository
 import com.erpnext.pos.data.repositories.POSProfileRepository
 import com.erpnext.pos.data.repositories.PaymentEntryRepository
 import com.erpnext.pos.data.repositories.SalesInvoiceRepository
+import com.erpnext.pos.data.repositories.PosOpeningRepository
 import com.erpnext.pos.data.repositories.UserRepository
 import com.erpnext.pos.data.repositories.ExchangeRateRepository
 import com.erpnext.pos.domain.repositories.IPOSRepository
@@ -64,6 +65,7 @@ import com.erpnext.pos.localSource.datasources.PaymentTermLocalSource
 import com.erpnext.pos.localSource.datasources.POSProfileLocalSource
 import com.erpnext.pos.localSource.preferences.ExchangeRatePreferences
 import com.erpnext.pos.localSource.preferences.LanguagePreferences
+import com.erpnext.pos.localSource.preferences.OpeningSessionPreferences
 import com.erpnext.pos.localSource.preferences.SyncPreferences
 import com.erpnext.pos.localSource.preferences.ThemePreferences
 import com.erpnext.pos.navigation.NavigationManager
@@ -276,12 +278,14 @@ val appModule = module {
     }
     single { ExchangeRatePreferences(get()) }
     single { LanguagePreferences(get()) }
+    single { OpeningSessionPreferences(get()) }
     single { SyncPreferences(get()) }
     single { ThemePreferences(get()) }
     single<DatePolicy> { DefaultPolicy(PolicyInput()) }
     single<CashBoxManager> {
         CashBoxManager(
             get(named("apiService")),
+            get(),
             get(),
             get(),
             get(),
@@ -409,6 +413,7 @@ val appModule = module {
     single { PaymentTermsRepository(get(named("apiService")), get()) }
     single { DeliveryChargesRepository(get(named("apiService")), get()) }
     single { ExchangeRateRepository(get(), get(named("apiService"))) }
+    single { PosOpeningRepository(get(named("apiService"))) }
     //endregion
 
     //region Quotation/Sales Order/Delivery Note

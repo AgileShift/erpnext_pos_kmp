@@ -23,6 +23,7 @@ import com.erpnext.pos.remoteSource.dto.POSOpeningEntryDto
 import com.erpnext.pos.remoteSource.mapper.toDto
 import com.erpnext.pos.remoteSource.mapper.toEntity
 import com.erpnext.pos.data.repositories.ExchangeRateRepository
+import com.erpnext.pos.data.repositories.PosOpeningRepository
 import com.erpnext.pos.domain.models.UserBO
 import com.erpnext.pos.localSource.dao.CompanyDao
 import com.erpnext.pos.utils.parseErpDateTimeToEpochMillis
@@ -31,7 +32,6 @@ import io.ktor.util.date.getTimeMillis
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.IO
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emitAll
@@ -68,6 +68,7 @@ data class POSContext(
 
 class CashBoxManager(
     private val api: APIService,
+    private val posOpeningRepository: PosOpeningRepository,
     private val profileDao: POSProfileDao,
     private val openingDao: POSOpeningEntryDao,
     private val closingDao: POSClosingEntryDao,
@@ -130,6 +131,10 @@ class CashBoxManager(
         amounts: List<PaymentModeWithAmount>
     ): POSContext? = withContext(Dispatchers.IO) {
         val user = userDao.getUserInfo() ?: return@withContext null
+        val existing = posOpeningRepository.getOpenSession(user.email, entry.name)
+        if (existing != null) {
+            error("Ya existe una apertura abierta (${existing.name}) para este perfil.")
+        }
         val newEntry = POSOpeningEntryDto(
             posProfile = entry.name,
             company = entry.company,
@@ -144,9 +149,11 @@ class CashBoxManager(
                     closingAmount = 0.0
                 )
             },
-            taxes = null
+            taxes = null,
+            docStatus = 0
         )
-        val poeId = api.openCashbox(newEntry)
+        val poeId = posOpeningRepository.createOpeningEntry(newEntry)
+        posOpeningRepository.submitOpeningEntry(poeId.name)
         val cashbox = CashboxEntity(
             localId = 0,
             posProfile = newEntry.posProfile,

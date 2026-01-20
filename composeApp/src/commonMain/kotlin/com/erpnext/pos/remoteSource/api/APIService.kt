@@ -21,10 +21,12 @@ import com.erpnext.pos.remoteSource.dto.POSClosingEntryDto
 import com.erpnext.pos.remoteSource.dto.POSClosingEntryResponse
 import com.erpnext.pos.remoteSource.dto.POSOpeningEntryDto
 import com.erpnext.pos.remoteSource.dto.POSOpeningEntryResponseDto
+import com.erpnext.pos.remoteSource.dto.POSOpeningEntrySummaryDto
 import com.erpnext.pos.remoteSource.dto.POSProfileDto
 import com.erpnext.pos.remoteSource.dto.POSProfileSimpleDto
 import com.erpnext.pos.remoteSource.dto.PaymentTermDto
 import com.erpnext.pos.remoteSource.dto.SalesInvoiceDto
+import com.erpnext.pos.remoteSource.dto.SubmitResponseDto
 import com.erpnext.pos.remoteSource.dto.TokenResponse
 import com.erpnext.pos.remoteSource.dto.UserDto
 import com.erpnext.pos.remoteSource.dto.WarehouseItemDto
@@ -44,8 +46,10 @@ import com.erpnext.pos.remoteSource.sdk.filters
 import com.erpnext.pos.remoteSource.sdk.getERPList
 import com.erpnext.pos.remoteSource.sdk.getERPSingle
 import com.erpnext.pos.remoteSource.sdk.getFields
+import com.erpnext.pos.remoteSource.sdk.json
 import com.erpnext.pos.remoteSource.sdk.postERP
 import com.erpnext.pos.remoteSource.sdk.putERP
+import com.erpnext.pos.remoteSource.sdk.withRetries
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.engine.HttpClientEngine
@@ -271,6 +275,82 @@ class APIService(
         return client.postERP(
             ERPDocType.POSOpeningEntry.path, pos, url
         )
+    }
+
+    suspend fun getOpenPOSOpeningEntries(
+        user: String,
+        posProfile: String
+    ): List<POSOpeningEntrySummaryDto> {
+        val url = authStore.getCurrentSite()
+        return client.getERPList(
+            ERPDocType.POSOpeningEntry.path,
+            fields = listOf(
+                "name",
+                "pos_profile",
+                "user",
+                "status",
+                "docstatus",
+                "period_start_date"
+            ),
+            baseUrl = url,
+            filters = filters {
+                // ASSUMPTION: POS Opening Entry uses status = "Open" for active sessions.
+                "pos_profile" eq posProfile
+                "user" eq user
+                "docstatus" eq 1
+                "status" eq "Open"
+            }
+        )
+    }
+
+    suspend fun submitPOSOpeningEntry(name: String): SubmitResponseDto {
+        val url = authStore.getCurrentSite()
+        if (url.isNullOrBlank()) throw Exception("URL Invalida")
+        val endpoint = url.trimEnd('/') + "/api/method/frappe.client.submit"
+        return try {
+            val response = withRetries {
+                client.post {
+                    url(endpoint)
+                    contentType(ContentType.Application.FormUrlEncoded)
+                    setBody(
+                        FormDataContent(
+                            Parameters.build {
+                                append("doctype", ERPDocType.POSOpeningEntry.path)
+                                append("name", name)
+                            }
+                        )
+                    )
+                }
+            }
+            val bodyText = response.bodyAsText()
+            if (!response.status.isSuccess()) {
+                try {
+                    val err = json.decodeFromString<FrappeErrorResponse>(bodyText)
+                    throw FrappeException(
+                        err.exception ?: "Error: ${response.status.value}",
+                        err
+                    )
+                } catch (e: Exception) {
+                    throw Exception(
+                        "Error en submitPOSOpeningEntry: ${response.status} - $bodyText",
+                        e
+                    )
+                }
+            }
+
+            val parsed = json.parseToJsonElement(bodyText).jsonObject
+            val messageElement = parsed["message"] ?: parsed["data"]
+            if (messageElement == null) {
+                throw FrappeException(
+                    "La respuesta no contiene 'message'. Respuesta: $bodyText"
+                )
+            }
+            json.decodeFromJsonElement(messageElement)
+        } catch (e: Exception) {
+            AppSentry.capture(e, "submitPOSOpeningEntry failed")
+            AppLogger.warn("submitPOSOpeningEntry failed", e)
+            throw e
+        }
     }
 
     suspend fun closeCashbox(entry: POSClosingEntryDto): POSClosingEntryResponse {

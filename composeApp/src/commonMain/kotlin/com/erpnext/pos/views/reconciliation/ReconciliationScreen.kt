@@ -17,9 +17,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Remove
-import androidx.compose.animation.core.animateIntAsState
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -38,17 +35,14 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LocalMinimumInteractiveComponentEnforcement
-import androidx.compose.material3.LocalMinimumInteractiveComponentSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
@@ -62,25 +56,14 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.erpnext.pos.localization.LocalAppStrings
 import com.erpnext.pos.localization.ReconciliationStrings
-import com.erpnext.pos.utils.DenominationCatalog
 import com.erpnext.pos.utils.DecimalFormatter
-import com.erpnext.pos.utils.normalizeCurrency
+import com.erpnext.pos.views.components.DenominationCounter
+import com.erpnext.pos.views.components.DenominationCounterLabels
+import com.erpnext.pos.views.components.DenominationUi
+import com.erpnext.pos.views.components.buildDenominationsForCurrency
 import kotlin.math.abs
-
-data class DenominationUi(
-    val value: Double,
-    val label: String,
-    val type: DenominationType,
-    val count: Int
-)
-
-enum class DenominationType {
-    Bill,
-    Coin
-}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -455,7 +438,13 @@ private fun ReconciliationContent(
                             onCountChange = onDenominationChange,
                             total = cashTotal,
                             formatAmount = formatCountAmount,
-                            strings = strings,
+                            labels = DenominationCounterLabels(
+                                title = strings.cashCountTitle,
+                                subtitle = strings.cashCountSubtitle,
+                                billsLabel = strings.billsLabel,
+                                coinsLabel = strings.coinsLabel,
+                                totalLabel = strings.totalCountedLabel
+                            ),
                             countCurrencies = countCurrencies,
                             selectedCountCurrency = selectedCountCurrency,
                             onCurrencyChange = onCurrencyChange
@@ -501,11 +490,6 @@ private fun ReconciliationContent(
                     },
                     strings = strings
                 )
-                CurrencySelector(
-                    currencies = countCurrencies,
-                    selected = selectedCountCurrency,
-                    onSelect = onCurrencyChange
-                )
                 DifferenceAlertsByCurrency(
                     expectedByCurrency = expectedCashByCurrency,
                     countedByCurrency = countedByCurrency,
@@ -517,7 +501,13 @@ private fun ReconciliationContent(
                         onCountChange = onDenominationChange,
                         total = cashTotal,
                         formatAmount = formatCountAmount,
-                        strings = strings,
+                        labels = DenominationCounterLabels(
+                            title = strings.cashCountTitle,
+                            subtitle = strings.cashCountSubtitle,
+                            billsLabel = strings.billsLabel,
+                            coinsLabel = strings.coinsLabel,
+                            totalLabel = strings.totalCountedLabel
+                        ),
                         countCurrencies = countCurrencies,
                         selectedCountCurrency = selectedCountCurrency,
                         onCurrencyChange = onCurrencyChange
@@ -840,227 +830,6 @@ private fun DifferenceAlertsByCurrency(
 }
 
 @Composable
-private fun CurrencySelector(
-    currencies: List<String>,
-    selected: String,
-    onSelect: (String) -> Unit
-) {
-    if (currencies.size <= 1) return
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.End
-    ) {
-        currencies.forEach { code ->
-            FilterChip(
-                selected = code == selected,
-                onClick = { onSelect(code) },
-                label = { Text(code) }
-            )
-        }
-    }
-}
-
-@Composable
-private fun DenominationCounter(
-    denominations: List<DenominationUi>,
-    onCountChange: (value: Double, count: Int) -> Unit,
-    total: Double,
-    formatAmount: (Double) -> String,
-    strings: ReconciliationStrings,
-    countCurrencies: List<String>,
-    selectedCountCurrency: String,
-    onCurrencyChange: (String) -> Unit,
-) {
-    var activeTab by remember { mutableStateOf(DenominationType.Bill) }
-    val bills = denominations.filter { it.type == DenominationType.Bill }
-    val coins = denominations.filter { it.type == DenominationType.Coin }
-    Card(
-        modifier = Modifier
-            .fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-    ) {
-        Column(
-            modifier = Modifier
-                .padding(20.dp)
-                .heightIn(max = 520.dp)
-                .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.Start
-            ) {
-                Text(
-                    strings.cashCountTitle,
-                    style = MaterialTheme.typography.titleMedium
-                )
-                Text(
-                    " (${strings.cashCountSubtitle})",
-                    style = MaterialTheme.typography.labelSmall,
-                    fontSize = 11.sp,
-                    color = Color.Gray
-                )
-                CurrencySelector(
-                    currencies = countCurrencies,
-                    selected = selectedCountCurrency,
-                    onSelect = onCurrencyChange
-                )
-            }
-
-            if (coins.isNotEmpty() && bills.isNotEmpty()) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    FilterChip(
-                        selected = activeTab == DenominationType.Bill,
-                        onClick = { activeTab = DenominationType.Bill },
-                        label = { Text(strings.billsLabel) }
-                    )
-                    FilterChip(
-                        selected = activeTab == DenominationType.Coin,
-                        onClick = { activeTab = DenominationType.Coin },
-                        label = { Text(strings.coinsLabel) }
-                    )
-                }
-            }
-
-            when (activeTab) {
-                DenominationType.Bill -> DenominationSection(
-                    title = strings.billsLabel,
-                    denominations = bills,
-                    onCountChange = onCountChange,
-                    formatAmount = formatAmount
-                )
-
-                DenominationType.Coin -> DenominationSection(
-                    title = strings.coinsLabel,
-                    denominations = coins,
-                    onCountChange = onCountChange,
-                    formatAmount = formatAmount
-                )
-            }
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(strings.totalCountedLabel, style = MaterialTheme.typography.titleSmall)
-                Text(
-                    formatAmount(total),
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.Bold
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun DenominationSection(
-    title: String,
-    denominations: List<DenominationUi>,
-    onCountChange: (value: Double, count: Int) -> Unit,
-    formatAmount: (Double) -> String
-) {
-    if (denominations.isEmpty()) return
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text(
-            title,
-            style = MaterialTheme.typography.labelLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            denominations.forEach { denom ->
-                DenominationRow(
-                    denom = denom,
-                    onCountChange = onCountChange,
-                    formatAmount = formatAmount
-                )
-            }
-        }
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun DenominationRow(
-    denom: DenominationUi,
-    onCountChange: (value: Double, count: Int) -> Unit,
-    formatAmount: (Double) -> String
-) {
-    val animatedCount by animateIntAsState(denom.count)
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(
-                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
-                shape = MaterialTheme.shapes.medium
-            )
-            .padding(horizontal = 12.dp, vertical = 10.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            Text(
-                denom.label,
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.SemiBold
-            )
-            Text(
-                formatAmount(denom.value * denom.count),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-        CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides 0.dp) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                IconButton(
-                    onClick = { onCountChange(denom.value, (denom.count - 1).coerceAtLeast(0)) },
-                    modifier = Modifier
-                        .size(22.dp)
-                        .background(
-                            MaterialTheme.colorScheme.surface,
-                            shape = MaterialTheme.shapes.small
-                        )
-                ) {
-                    Icon(
-                        Icons.Filled.Remove,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(14.dp)
-                    )
-                }
-                Text(
-                    animatedCount.toString(),
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold
-                )
-                IconButton(
-                    onClick = { onCountChange(denom.value, denom.count + 1) },
-                    modifier = Modifier
-                        .size(22.dp)
-                        .background(
-                            MaterialTheme.colorScheme.primary,
-                            shape = MaterialTheme.shapes.small
-                        )
-                ) {
-                    Icon(
-                        Icons.Filled.Add,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onPrimary,
-                        modifier = Modifier.size(14.dp)
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
 private fun NotesCard(strings: ReconciliationStrings) {
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -1267,26 +1036,6 @@ fun computeCreditAmounts(summary: ReconciliationSummaryUi): Pair<Double, Double>
     val creditPartial = computeCreditPartial(summary)
     val creditPending = summary.creditPendingTotal
     return creditPartial to creditPending
-}
-
-fun buildDenominationsForCurrency(
-    currencyCode: String,
-    symbol: String?,
-    formatter: DecimalFormatter
-): List<DenominationUi> {
-    val currency = currencyCode.uppercase()
-    val normalized = normalizeCurrency(currency)
-    val definitions = DenominationCatalog.forCurrency(normalized)
-    val rawDenoms: List<Pair<Double, DenominationType>> = buildList {
-        addAll(definitions.bills.map { it to DenominationType.Bill })
-        addAll(definitions.coins.map { it to DenominationType.Coin })
-    }
-    return rawDenoms.map { (value, type) ->
-        val decimals = if (value < 1.0) 2 else 0
-        val labelValue = formatter.format(value, decimals, includeSeparator = true)
-        val label = if (symbol != null) "$symbol$labelValue" else "$labelValue $currency"
-        DenominationUi(value = value, label = label, type = type, count = 0)
-    }
 }
 
 fun formatCurrency(

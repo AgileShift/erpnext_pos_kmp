@@ -154,10 +154,8 @@ class HomeViewModel(
         }, exceptionHandler = { it.printStackTrace() })
     }
 
-    fun openCashbox(entry: POSProfileSimpleBO, amounts: List<PaymentModeWithAmount>) {
-        viewModelScope.launch {
-            contextManager.openCashBox(entry, amounts)
-        }
+    suspend fun openCashbox(entry: POSProfileSimpleBO, amounts: List<PaymentModeWithAmount>) {
+        contextManager.openCashBox(entry, amounts)
     }
 
     fun closeCashbox() {

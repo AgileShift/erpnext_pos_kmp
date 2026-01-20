@@ -2,7 +2,6 @@
 
 package com.erpnext.pos.views.home
 
-import androidx.compose.animation.core.animateIntAsState
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -14,17 +13,12 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.Wallet
 import androidx.compose.material3.Button
@@ -41,8 +35,6 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Tab
-import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -58,13 +50,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.erpnext.pos.domain.models.DenominationCount
 import com.erpnext.pos.domain.models.POSProfileSimpleBO
 import com.erpnext.pos.domain.models.PaymentModesBO
 import com.erpnext.pos.domain.models.UserBO
-import com.erpnext.pos.utils.CashDenomination
+import com.erpnext.pos.domain.models.OpeningSessionDraft
+import com.erpnext.pos.localSource.preferences.OpeningSessionPreferences
 import com.erpnext.pos.utils.availableCurrencies
-import com.erpnext.pos.utils.currencyChoices
-import com.erpnext.pos.utils.denominationsFor
+import com.erpnext.pos.utils.DecimalFormatter
 import com.erpnext.pos.utils.formatDoubleToString
 import com.erpnext.pos.utils.normalizeCurrency
 import com.erpnext.pos.utils.toCurrencySymbol
@@ -73,7 +66,13 @@ import com.erpnext.pos.utils.view.SnackbarHost
 import com.erpnext.pos.utils.view.SnackbarPosition
 import com.erpnext.pos.utils.view.SnackbarType
 import com.erpnext.pos.views.PaymentModeWithAmount
+import com.erpnext.pos.views.components.DenominationCounter
+import com.erpnext.pos.views.components.DenominationCounterLabels
+import com.erpnext.pos.views.components.DenominationUi
+import com.erpnext.pos.views.components.buildDenominationsForCurrency
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.launch
 import kotlinx.datetime.DayOfWeek
 import kotlinx.datetime.TimeZone
@@ -90,15 +89,19 @@ fun CashboxOpeningScreen(
     profiles: List<POSProfileSimpleBO>,
     user: UserBO?,
     onSelectProfile: (POSProfileSimpleBO) -> Unit,
-    onOpenCashbox: (POSProfileSimpleBO, List<PaymentModeWithAmount>) -> Unit,
+    onOpenCashbox: suspend (POSProfileSimpleBO, List<PaymentModeWithAmount>) -> Unit,
     onDismiss: () -> Unit,
     snackbar: SnackbarController
 ) {
     var isSubmitting by remember { mutableStateOf(false) }
     var selectedProfile by remember { mutableStateOf<POSProfileSimpleBO?>(null) }
     var profileMenuExpanded by remember { mutableStateOf(false) }
-    var cashQuantities by remember { mutableStateOf<Map<String, Map<Double, Int>>>(emptyMap()) }
-    var modeCurrencies by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
+    var selectedCurrency by remember { mutableStateOf("") }
+    var lastDraftKey by remember { mutableStateOf<String?>(null) }
+    val denominationState = remember { androidx.compose.runtime.mutableStateMapOf<String, List<DenominationUi>>() }
+    val openingSessionPreferences: OpeningSessionPreferences = org.koin.compose.koinInject()
+    val openingDraft by openingSessionPreferences.draft.collectAsState(initial = null)
+    val formatter = remember { DecimalFormatter() }
     val scope = rememberCoroutineScope()
 
     LaunchedEffect(profiles) {
@@ -109,33 +112,107 @@ fun CashboxOpeningScreen(
         }
     }
 
+    LaunchedEffect(selectedProfile?.name) {
+        selectedCurrency = ""
+        denominationState.clear()
+        lastDraftKey = null
+    }
+
     val paymentModes = (uiState as? HomeState.POSInfoLoaded)?.info?.paymentModes.orEmpty()
     val baseCurrency = when (uiState) {
         is HomeState.POSInfoLoaded -> uiState.currency
         else -> profiles.firstOrNull()?.currency ?: "USD"
     }
     val normalizedBaseCurrency = normalizeCurrency(baseCurrency)
-    val currencySymbol = normalizedBaseCurrency.toCurrencySymbol()
     val availableCurrencies = availableCurrencies(normalizedBaseCurrency, paymentModes)
-
-    val categorized = paymentModes.groupBy { categorizePaymentMode(it) }
-    val cashModes = categorized[PaymentCategory.CASH].orEmpty()
-
-    val cashTotalsByMode: Map<String, Double> = cashModes.associate { mode ->
-        val currency = normalizeCurrency(modeCurrencies[mode.name] ?: baseCurrency)
-        val denoms = denominationsFor(currency)
-        val perMode = cashQuantities[mode.name].orEmpty()
-        val total = denoms.sumOf { denom -> denom.value * (perMode[denom.value] ?: 0) }
-        mode.name to total
+    val openingCurrencies = remember(normalizedBaseCurrency, availableCurrencies) {
+        resolveOpeningCurrencies(normalizedBaseCurrency, availableCurrencies)
     }
-    val totalsByCurrency: Map<String, Double> =
-        cashModes.groupBy { mode -> normalizeCurrency(modeCurrencies[mode.name] ?: baseCurrency) }
-            .mapValues { (cur, modes) ->
-                modes.sumOf { m -> cashTotalsByMode[m.name] ?: 0.0 }
+
+    val cashModesByCurrency = remember(paymentModes, openingCurrencies) {
+        resolveCashModesByCurrency(paymentModes, openingCurrencies)
+    }
+    val missingCashModes = cashModesByCurrency.filterValues { it == null }.keys.toList()
+
+    LaunchedEffect(openingDraft, profiles, user?.email) {
+        val userEmail = user?.email ?: return@LaunchedEffect
+        val draftProfileId = openingDraft?.takeIf { it.user == userEmail }?.posProfileId
+        if (draftProfileId != null && selectedProfile == null) {
+            profiles.firstOrNull { it.name == draftProfileId }?.let { profile ->
+                selectedProfile = profile
+                onSelectProfile(profile)
+                profileMenuExpanded = false
             }
-    val cashTotal = totalsByCurrency[normalizedBaseCurrency] ?: cashTotalsByMode.values.sum()
+        }
+    }
+
+    LaunchedEffect(openingCurrencies) {
+        if (openingCurrencies.isNotEmpty() && selectedCurrency !in openingCurrencies) {
+            selectedCurrency = openingCurrencies.first()
+        }
+        openingCurrencies.forEach { currency ->
+            if (!denominationState.containsKey(currency)) {
+                denominationState[currency] = buildDenominationsForCurrency(
+                    currency = currency,
+                    symbolOverride = currency.toCurrencySymbol(),
+                    formatter = formatter
+                )
+            }
+        }
+    }
+
+    LaunchedEffect(openingDraft, selectedProfile?.name, user?.email, openingCurrencies) {
+        val profileId = selectedProfile?.name ?: return@LaunchedEffect
+        val userEmail = user?.email ?: return@LaunchedEffect
+        val draft = openingDraft?.takeIf { it.posProfileId == profileId && it.user == userEmail }
+        val draftKey = draft?.let { "${it.posProfileId}-${it.user}" }
+        if (draft != null && draftKey != null && draftKey != lastDraftKey) {
+            openingCurrencies.forEach { currency ->
+                val baseDenoms = buildDenominationsForCurrency(
+                    currency = currency,
+                    symbolOverride = currency.toCurrencySymbol(),
+                    formatter = formatter
+                )
+                val updated = applyDraftCounts(
+                    baseDenoms,
+                    draft.denominationCounts[currency].orEmpty()
+                )
+                denominationState[currency] = updated
+            }
+            lastDraftKey = draftKey
+        }
+    }
+
+    LaunchedEffect(selectedProfile?.name, user?.email, openingCurrencies) {
+        val profileId = selectedProfile?.name ?: return@LaunchedEffect
+        val userEmail = user?.email ?: return@LaunchedEffect
+        kotlinx.coroutines.flow.snapshotFlow {
+            denominationState.toMap().mapValues { (_, denoms) -> denoms.map { it.copy() } }
+        }.debounce(500).collectLatest { current ->
+            if (current.isEmpty()) return@collectLatest
+            val totals = current.mapValues { entry ->
+                entry.value.sumOf { it.value * it.count }
+            }
+            val counts = current.mapValues { entry ->
+                entry.value.map { DenominationCount(value = it.value, count = it.count) }
+            }
+            openingSessionPreferences.saveDraft(
+                OpeningSessionDraft(
+                    posProfileId = profileId,
+                    user = userEmail,
+                    createdAtEpochMillis = Clock.System.now().toEpochMilliseconds(),
+                    openingCashByCurrency = totals,
+                    denominationCounts = counts
+                )
+            )
+        }
+    }
+
+    val totalsByCurrency: Map<String, Double> = openingCurrencies.associateWith { currency ->
+        denominationState[currency].orEmpty().sumOf { it.value * it.count }
+    }
     val canOpen =
-        selectedProfile != null && uiState is HomeState.POSInfoLoaded && cashModes.isNotEmpty()
+        selectedProfile != null && uiState is HomeState.POSInfoLoaded && missingCashModes.isEmpty()
 
     val handleOpen: () -> Unit = {
         val profile = selectedProfile
@@ -146,11 +223,11 @@ fun CashboxOpeningScreen(
                 )
             }
         } else {
+            val amountByMode = cashModesByCurrency.filterValues { it != null }.entries.associate {
+                it.value!!.name to (totalsByCurrency[it.key] ?: 0.0)
+            }
             val amounts = paymentModes.map { mode ->
-                val amount = when (categorizePaymentMode(mode)) {
-                    PaymentCategory.CASH -> cashTotalsByMode[mode.name] ?: 0.0
-                    PaymentCategory.OTHER -> 0.0
-                }
+                val amount = amountByMode[mode.name] ?: 0.0
                 PaymentModeWithAmount(mode = mode, amount = amount)
             }
             isSubmitting = true
@@ -158,14 +235,16 @@ fun CashboxOpeningScreen(
                 val totalsMsg = totalsByCurrency.entries.joinToString(" · ") { (cur, total) ->
                     "${cur.toCurrencySymbol()} ${formatMoney(total)}"
                 }
-                runCatching { onOpenCashbox(profile, amounts) }.onSuccess {
+                try {
+                    onOpenCashbox(profile, amounts)
+                    openingSessionPreferences.clearDraft()
                     snackbar.show(
                         "Caja abierta: $totalsMsg", SnackbarType.Success, SnackbarPosition.Top
                     )
                     onDismiss()
-                }.onFailure {
+                } catch (e: Exception) {
                     snackbar.show(
-                        it.message ?: "Error al abrir caja",
+                        e.message ?: "Error al abrir caja",
                         SnackbarType.Error,
                         SnackbarPosition.Top
                     )
@@ -201,34 +280,27 @@ fun CashboxOpeningScreen(
                             },
                             expanded = profileMenuExpanded,
                             onExpandedChange = { profileMenuExpanded = it },
-                            currencySymbol = currencySymbol,
                             totalsByCurrency = totalsByCurrency,
                             isLoading = isSubmitting || uiState is HomeState.POSInfoLoading,
                             canOpen = canOpen && !isSubmitting,
+                            missingCashModes = missingCashModes,
                             onOpen = handleOpen,
                             onCancel = onDismiss
                         )
 
-                        CashContent(
-                            baseCurrency = normalizedBaseCurrency,
-                            currencies = availableCurrencies,
-                            cashModes = cashModes,
-                            modeCurrencies = modeCurrencies,
-                            onCurrencyChange = { modeName, cur ->
-                                modeCurrencies =
-                                    modeCurrencies.toMutableMap().apply { this[modeName] = cur }
-                                cashQuantities = cashQuantities.toMutableMap()
-                                    .apply { this[modeName] = emptyMap() }
-                            },
-                            cashQuantities = cashQuantities,
-                            onDenominationChange = { modeName, value, quantity ->
-                                cashQuantities = cashQuantities.toMutableMap().apply {
-                                    val current = this[modeName].orEmpty()
-                                    this[modeName] = current + (value to max(0, quantity))
+                        val activeCurrency = selectedCurrency.ifBlank { normalizedBaseCurrency }
+                        OpeningCashContent(
+                            countCurrencies = openingCurrencies,
+                            selectedCurrency = activeCurrency,
+                            denominations = denominationState[activeCurrency].orEmpty(),
+                            onCurrencyChange = { selectedCurrency = it },
+                            onDenominationChange = { value, count ->
+                                val current = denominationState[activeCurrency].orEmpty()
+                                denominationState[activeCurrency] = current.map { denom ->
+                                    if (denom.value == value) denom.copy(count = max(0, count)) else denom
                                 }
                             },
-                            cashTotalsByMode = cashTotalsByMode,
-                            aggregateTotal = cashTotal
+                            totalsByCurrency = totalsByCurrency
                         )
                     }
                 } else {
@@ -252,10 +324,10 @@ fun CashboxOpeningScreen(
                                 },
                                 expanded = profileMenuExpanded,
                                 onExpandedChange = { profileMenuExpanded = it },
-                                currencySymbol = currencySymbol,
                                 totalsByCurrency = totalsByCurrency,
                                 isLoading = isSubmitting || uiState is HomeState.POSInfoLoading,
                                 canOpen = canOpen && !isSubmitting,
+                                missingCashModes = missingCashModes,
                                 onOpen = handleOpen,
                                 onCancel = onDismiss
                             )
@@ -265,26 +337,19 @@ fun CashboxOpeningScreen(
                             modifier = Modifier.weight(8f).fillMaxSize(),
                             verticalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
-                            CashContent(
-                                baseCurrency = normalizedBaseCurrency,
-                                currencies = availableCurrencies,
-                                cashModes = cashModes,
-                                modeCurrencies = modeCurrencies,
-                                onCurrencyChange = { modeName, cur ->
-                                    modeCurrencies =
-                                        modeCurrencies.toMutableMap().apply { this[modeName] = cur }
-                                    cashQuantities = cashQuantities.toMutableMap()
-                                        .apply { this[modeName] = emptyMap() }
-                                },
-                                cashQuantities = cashQuantities,
-                                onDenominationChange = { modeName, value, quantity ->
-                                    cashQuantities = cashQuantities.toMutableMap().apply {
-                                        val current = this[modeName].orEmpty()
-                                        this[modeName] = current + (value to max(0, quantity))
+                            val activeCurrency = selectedCurrency.ifBlank { normalizedBaseCurrency }
+                            OpeningCashContent(
+                                countCurrencies = openingCurrencies,
+                                selectedCurrency = activeCurrency,
+                                denominations = denominationState[activeCurrency].orEmpty(),
+                                onCurrencyChange = { selectedCurrency = it },
+                                onDenominationChange = { value, count ->
+                                    val current = denominationState[activeCurrency].orEmpty()
+                                    denominationState[activeCurrency] = current.map { denom ->
+                                        if (denom.value == value) denom.copy(count = max(0, count)) else denom
                                     }
                                 },
-                                cashTotalsByMode = cashTotalsByMode,
-                                aggregateTotal = cashTotal
+                                totalsByCurrency = totalsByCurrency
                             )
                         }
                     }
@@ -354,10 +419,10 @@ private fun OpeningFormSection(
     onSelectProfile: (POSProfileSimpleBO) -> Unit,
     expanded: Boolean,
     onExpandedChange: (Boolean) -> Unit,
-    currencySymbol: String,
     totalsByCurrency: Map<String, Double>,
     isLoading: Boolean,
     canOpen: Boolean,
+    missingCashModes: List<String>,
     onOpen: () -> Unit,
     onCancel: () -> Unit,
 ) {
@@ -510,6 +575,22 @@ private fun OpeningFormSection(
                 }
             }
 
+            if (missingCashModes.isNotEmpty()) {
+                Surface(
+                    color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.6f),
+                    shape = RoundedCornerShape(10.dp)
+                ) {
+                    Text(
+                        text = "Configura métodos de pago en efectivo para: ${
+                            missingCashModes.joinToString(", ")
+                        }",
+                        modifier = Modifier.padding(12.dp),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onErrorContainer
+                    )
+                }
+            }
+
             if (isLoading) {
                 Row(
                     modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center
@@ -560,81 +641,34 @@ private fun OpeningFormSection(
 }
 
 @Composable
-private fun CashContent(
-    baseCurrency: String,
-    currencies: List<String>,
-    cashModes: List<PaymentModesBO>,
-    modeCurrencies: Map<String, String>,
-    onCurrencyChange: (String, String) -> Unit,
-    cashQuantities: Map<String, Map<Double, Int>>,
-    onDenominationChange: (String, Double, Int) -> Unit,
-    cashTotalsByMode: Map<String, Double>,
-    aggregateTotal: Double,
+private fun OpeningCashContent(
+    countCurrencies: List<String>,
+    selectedCurrency: String,
+    denominations: List<DenominationUi>,
+    onCurrencyChange: (String) -> Unit,
+    onDenominationChange: (Double, Int) -> Unit,
+    totalsByCurrency: Map<String, Double>,
 ) {
-    SectionCard(title = "Desglose de efectivo") {
+    SectionCard(title = "Conteo de efectivo") {
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            cashModes.forEach { mode ->
-                val selectedCurrency = normalizeCurrency(modeCurrencies[mode.name] ?: baseCurrency)
-                val choices = currencyChoices(baseCurrency, currencies)
-                val denoms = denominationsFor(selectedCurrency)
-                val quantities = cashQuantities[mode.name].orEmpty()
-                val total = cashTotalsByMode[mode.name] ?: 0.0
-                SectionCard(title = mode.modeOfPayment) {
-                    if (choices.size > 1) {
-                        TabRow(
-                            selectedTabIndex = choices.indexOf(selectedCurrency).coerceAtLeast(0),
-                            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
-                            contentColor = MaterialTheme.colorScheme.onSurfaceVariant
-                        ) {
-                            choices.forEachIndexed { idx, cur ->
-                                Tab(
-                                    selected = cur == selectedCurrency,
-                                    onClick = { onCurrencyChange(mode.name, cur) },
-                                    text = {
-                                        Text(
-                                            cur,
-                                            style = MaterialTheme.typography.labelMedium.copy(
-                                                fontWeight = FontWeight.Bold
-                                            )
-                                        )
-                                    }
-                                )
-                            }
-                        }
-                        Spacer(Modifier.height(6.dp))
-                    }
-
-                    DenominationTableModern(
-                        modeName = mode.name,
-                        quantities = quantities,
-                        onQuantityChange = onDenominationChange,
-                        currencySymbol = selectedCurrency.toCurrencySymbol(),
-                        denoms = denoms
-                    )
-                    Surface(
-                        color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f),
-                        shape = RoundedCornerShape(8.dp)
-                    ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth().padding(12.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Text(
-                                text = "Total ${mode.modeOfPayment}",
-                                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
-                                color = MaterialTheme.colorScheme.onSecondaryContainer
-                            )
-                            Text(
-                                text = "${selectedCurrency.toCurrencySymbol()} ${formatMoney(total)}",
-                                style = MaterialTheme.typography.bodyMedium.copy(
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.onSecondaryContainer
-                                )
-                            )
-                        }
-                    }
-                }
-            }
+            DenominationCounter(
+                denominations = denominations,
+                onCountChange = onDenominationChange,
+                total = totalsByCurrency[selectedCurrency] ?: 0.0,
+                formatAmount = { amount ->
+                    "${selectedCurrency.toCurrencySymbol()} ${formatMoney(amount)}"
+                },
+                labels = DenominationCounterLabels(
+                    title = "Detalle por denominación",
+                    subtitle = "billetes y monedas",
+                    billsLabel = "Billetes",
+                    coinsLabel = "Monedas",
+                    totalLabel = "Total contado"
+                ),
+                countCurrencies = countCurrencies,
+                selectedCountCurrency = selectedCurrency,
+                onCurrencyChange = onCurrencyChange
+            )
 
             Surface(
                 color = MaterialTheme.colorScheme.primary.copy(alpha = 0.08f),
@@ -650,11 +684,6 @@ private fun CashContent(
                         color = MaterialTheme.colorScheme.onSurface
                     )
                     Spacer(Modifier.height(6.dp))
-                    val totalsByCurrency = cashTotalsByMode.entries.groupBy { modeName ->
-                        val mode = cashModes.firstOrNull { it.name == modeName.key }
-                        val cur = normalizeCurrency(modeCurrencies[mode?.name] ?: baseCurrency)
-                        cur
-                    }.mapValues { entry -> entry.value.sumOf { cashTotalsByMode[it.key] ?: 0.0 } }
 
                     totalsByCurrency.forEach { (cur, total) ->
                         Row(
@@ -741,112 +770,41 @@ private fun SummaryRow(
     }
 }
 
-@Composable
-private fun DenominationTableModern(
-    modeName: String,
-    quantities: Map<Double, Int>,
-    onQuantityChange: (String, Double, Int) -> Unit,
-    currencySymbol: String,
-    denoms: List<CashDenomination>,
-) {
-    val bills = denoms.filter { it.value >= 1.0 }
-    val coins = denoms.filter { it.value < 1.0 }
-
-    @Composable
-    fun renderGroup(title: String, items: List<CashDenomination>) {
-        if (items.isEmpty()) return
-        Text(
-            text = title,
-            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(start = 4.dp, bottom = 4.dp, top = 2.dp)
-        )
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            items.forEach { denom ->
-                val quantity = quantities[denom.value] ?: 0
-                val animated = animateIntAsState(quantity)
-                val subtotal = denom.value * quantity
-                Row(
-                    modifier = Modifier.fillMaxWidth().background(
-                        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
-                        RoundedCornerShape(10.dp)
-                    ).padding(horizontal = 12.dp, vertical = 10.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                        Text(
-                            text = "$currencySymbol${denom.label}",
-                            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold)
-                        )
-                        Text(
-                            text = "$currencySymbol ${formatDoubleToString(subtotal, 2)}",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        IconButton(
-                            onClick = {
-                                onQuantityChange(
-                                    modeName,
-                                    denom.value,
-                                    max(0, quantity - 1)
-                                )
-                            },
-                            modifier = Modifier.size(28.dp)
-                                .background(
-                                    MaterialTheme.colorScheme.surface,
-                                    RoundedCornerShape(8.dp)
-                                )
-                        ) {
-                            Icon(
-                                imageVector = Icons.Filled.Remove,
-                                contentDescription = "Disminuir",
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(12.dp)
-                            )
-                        }
-                        Text(
-                            text = animated.value.toString(),
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold
-                        )
-                        IconButton(
-                            onClick = { onQuantityChange(modeName, denom.value, quantity + 1) },
-                            modifier = Modifier.size(28.dp)
-                                .background(
-                                    MaterialTheme.colorScheme.primary,
-                                    RoundedCornerShape(8.dp)
-                                )
-                        ) {
-                            Icon(
-                                imageVector = Icons.Filled.Add,
-                                contentDescription = "Aumentar",
-                                tint = MaterialTheme.colorScheme.onPrimary,
-                                modifier = Modifier.size(12.dp)
-                            )
-                        }
-                    }
-                }
-            }
-        }
+private fun applyDraftCounts(
+    denominations: List<DenominationUi>,
+    counts: List<DenominationCount>
+): List<DenominationUi> {
+    if (counts.isEmpty()) return denominations
+    val countMap = counts.associate { it.value to it.count }
+    return denominations.map { denom ->
+        denom.copy(count = countMap[denom.value] ?: 0)
     }
+}
 
-    Column(
-        modifier = Modifier.fillMaxWidth().heightIn(max = 440.dp)
-            .verticalScroll(rememberScrollState()),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        renderGroup("Billetes", bills)
-        if (bills.isNotEmpty() && coins.isNotEmpty()) {
-            Divider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.35f))
-        }
-        renderGroup("Monedas", coins)
+private fun resolveOpeningCurrencies(
+    baseCurrency: String,
+    availableCurrencies: List<String>
+): List<String> {
+    val normalizedBase = normalizeCurrency(baseCurrency)
+    val merged = (availableCurrencies + normalizedBase).map { normalizeCurrency(it) }.distinct()
+    val ordered = listOf(normalizedBase) + merged.filterNot { it == normalizedBase }
+    return ordered.ifEmpty { listOf(normalizedBase) }
+}
+
+private fun resolveCashModesByCurrency(
+    paymentModes: List<PaymentModesBO>,
+    currencies: List<String>
+): Map<String, PaymentModesBO?> {
+    // ASSUMPTION: cash payment modes are configured per currency (e.g. CASH_NIO, CASH_USD).
+    val cashModes = paymentModes.filter { categorizePaymentMode(it) == PaymentCategory.CASH }
+    return currencies.associateWith { currency ->
+        cashModes.firstOrNull { modeMatchesCurrency(it, currency) }
     }
+}
+
+private fun modeMatchesCurrency(mode: PaymentModesBO, currency: String): Boolean {
+    val key = currency.uppercase()
+    return mode.name.uppercase().contains(key) || mode.modeOfPayment.uppercase().contains(key)
 }
 
 private fun formatMoney(amount: Double): String = formatDoubleToString(amount, 2)

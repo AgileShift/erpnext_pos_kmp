@@ -3,7 +3,6 @@ package com.erpnext.pos.views.home
 import com.erpnext.pos.domain.models.POSProfileBO
 import com.erpnext.pos.domain.models.POSProfileSimpleBO
 import com.erpnext.pos.domain.models.UserBO
-import com.erpnext.pos.remoteSource.dto.POSOpeningEntryDto
 import com.erpnext.pos.sync.SyncState
 import com.erpnext.pos.views.PaymentModeWithAmount
 import com.erpnext.pos.localSource.preferences.SyncSettings
@@ -30,7 +29,7 @@ data class HomeAction(
     val homeMetrics: StateFlow<HomeMetrics> = MutableStateFlow(HomeMetrics()),
     val loadInitialData: () -> Unit = {},
     val initialState: () -> Unit = {},
-    val openCashbox: (pos: POSProfileSimpleBO, amounts: List<PaymentModeWithAmount>) -> Unit = { _, _ -> },
+    val openCashbox: suspend (pos: POSProfileSimpleBO, amounts: List<PaymentModeWithAmount>) -> Unit = { _, _ -> },
     val onPosSelected: (pos: POSProfileSimpleBO) -> Unit = {},
     val closeCashbox: () -> Unit = {},
     val isCashboxOpen: () -> StateFlow<Boolean> = { MutableStateFlow(false) },
