@@ -55,8 +55,9 @@ import com.erpnext.pos.domain.models.POSProfileSimpleBO
 import com.erpnext.pos.domain.models.PaymentModesBO
 import com.erpnext.pos.domain.models.UserBO
 import com.erpnext.pos.domain.models.OpeningSessionDraft
+import com.erpnext.pos.localSource.dao.ModeOfPaymentDao
+import com.erpnext.pos.localSource.entities.ModeOfPaymentEntity
 import com.erpnext.pos.localSource.preferences.OpeningSessionPreferences
-import com.erpnext.pos.utils.availableCurrencies
 import com.erpnext.pos.utils.DecimalFormatter
 import com.erpnext.pos.utils.formatDoubleToString
 import com.erpnext.pos.utils.normalizeCurrency
@@ -100,6 +101,7 @@ fun CashboxOpeningScreen(
     var lastDraftKey by remember { mutableStateOf<String?>(null) }
     val denominationState = remember { androidx.compose.runtime.mutableStateMapOf<String, List<DenominationUi>>() }
     val openingSessionPreferences: OpeningSessionPreferences = org.koin.compose.koinInject()
+    val modeOfPaymentDao: ModeOfPaymentDao = org.koin.compose.koinInject()
     val openingDraft by openingSessionPreferences.draft.collectAsState(initial = null)
     val formatter = remember { DecimalFormatter() }
     val scope = rememberCoroutineScope()
@@ -124,15 +126,25 @@ fun CashboxOpeningScreen(
         else -> profiles.firstOrNull()?.currency ?: "USD"
     }
     val normalizedBaseCurrency = normalizeCurrency(baseCurrency)
-    val availableCurrencies = availableCurrencies(normalizedBaseCurrency, paymentModes)
-    val openingCurrencies = remember(normalizedBaseCurrency, availableCurrencies) {
-        resolveOpeningCurrencies(normalizedBaseCurrency, availableCurrencies)
+    var modeOfPaymentLookup by remember { mutableStateOf<Map<String, ModeOfPaymentEntity>>(emptyMap()) }
+
+    LaunchedEffect(selectedProfile?.company) {
+        val company = selectedProfile?.company ?: return@LaunchedEffect
+        modeOfPaymentLookup = modeOfPaymentDao.getAllModes(company).associateBy {
+            it.modeOfPayment.uppercase()
+        }
     }
 
-    val cashModesByCurrency = remember(paymentModes, openingCurrencies) {
-        resolveCashModesByCurrency(paymentModes, openingCurrencies)
+    val resolvedCashModes = remember(paymentModes, modeOfPaymentLookup, normalizedBaseCurrency) {
+        resolveCashModes(paymentModes, modeOfPaymentLookup, normalizedBaseCurrency)
     }
-    val missingCashModes = cashModesByCurrency.filterValues { it == null }.keys.toList()
+    val cashModesByCurrency = resolvedCashModes.groupBy { it.currency }
+    val cashModeByCurrency = cashModesByCurrency.mapValues { it.value.first() }
+    val duplicateCashCurrencies = cashModesByCurrency.filterValues { it.size > 1 }.keys.toList()
+    val cashModesMissingCurrency = resolvedCashModes.filter { it.entity?.currency.isNullOrBlank() }
+    val openingCurrencies = remember(resolvedCashModes, normalizedBaseCurrency) {
+        resolveOpeningCurrencies(resolvedCashModes, normalizedBaseCurrency)
+    }
 
     LaunchedEffect(openingDraft, profiles, user?.email) {
         val userEmail = user?.email ?: return@LaunchedEffect
@@ -212,7 +224,10 @@ fun CashboxOpeningScreen(
         denominationState[currency].orEmpty().sumOf { it.value * it.count }
     }
     val canOpen =
-        selectedProfile != null && uiState is HomeState.POSInfoLoaded && missingCashModes.isEmpty()
+        selectedProfile != null &&
+            uiState is HomeState.POSInfoLoaded &&
+            resolvedCashModes.isNotEmpty() &&
+            duplicateCashCurrencies.isEmpty()
 
     val handleOpen: () -> Unit = {
         val profile = selectedProfile
@@ -223,8 +238,8 @@ fun CashboxOpeningScreen(
                 )
             }
         } else {
-            val amountByMode = cashModesByCurrency.filterValues { it != null }.entries.associate {
-                it.value!!.name to (totalsByCurrency[it.key] ?: 0.0)
+            val amountByMode = cashModeByCurrency.entries.associate { (currency, resolved) ->
+                resolved.mode.name to (totalsByCurrency[currency] ?: 0.0)
             }
             val amounts = paymentModes.map { mode ->
                 val amount = amountByMode[mode.name] ?: 0.0
@@ -283,7 +298,8 @@ fun CashboxOpeningScreen(
                             totalsByCurrency = totalsByCurrency,
                             isLoading = isSubmitting || uiState is HomeState.POSInfoLoading,
                             canOpen = canOpen && !isSubmitting,
-                            missingCashModes = missingCashModes,
+                            duplicateCashCurrencies = duplicateCashCurrencies,
+                            cashModesMissingCurrency = cashModesMissingCurrency.map { it.mode.modeOfPayment },
                             onOpen = handleOpen,
                             onCancel = onDismiss
                         )
@@ -327,7 +343,8 @@ fun CashboxOpeningScreen(
                                 totalsByCurrency = totalsByCurrency,
                                 isLoading = isSubmitting || uiState is HomeState.POSInfoLoading,
                                 canOpen = canOpen && !isSubmitting,
-                                missingCashModes = missingCashModes,
+                                duplicateCashCurrencies = duplicateCashCurrencies,
+                                cashModesMissingCurrency = cashModesMissingCurrency.map { it.mode.modeOfPayment },
                                 onOpen = handleOpen,
                                 onCancel = onDismiss
                             )
@@ -422,7 +439,8 @@ private fun OpeningFormSection(
     totalsByCurrency: Map<String, Double>,
     isLoading: Boolean,
     canOpen: Boolean,
-    missingCashModes: List<String>,
+    duplicateCashCurrencies: List<String>,
+    cashModesMissingCurrency: List<String>,
     onOpen: () -> Unit,
     onCancel: () -> Unit,
 ) {
@@ -575,18 +593,34 @@ private fun OpeningFormSection(
                 }
             }
 
-            if (missingCashModes.isNotEmpty()) {
+            if (duplicateCashCurrencies.isNotEmpty()) {
                 Surface(
                     color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.6f),
                     shape = RoundedCornerShape(10.dp)
                 ) {
                     Text(
-                        text = "Configura métodos de pago en efectivo para: ${
-                            missingCashModes.joinToString(", ")
+                        text = "Multiple cash modes are configured for the same currency: ${
+                            duplicateCashCurrencies.joinToString(", ")
                         }",
                         modifier = Modifier.padding(12.dp),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onErrorContainer
+                    )
+                }
+            }
+
+            if (cashModesMissingCurrency.isNotEmpty()) {
+                Surface(
+                    color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.5f),
+                    shape = RoundedCornerShape(10.dp)
+                ) {
+                    Text(
+                        text = "ASSUMPTION: these cash modes have no currency configured and use the base currency: ${
+                            cashModesMissingCurrency.joinToString(", ")
+                        }",
+                        modifier = Modifier.padding(12.dp),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onTertiaryContainer
                     )
                 }
             }
@@ -781,30 +815,44 @@ private fun applyDraftCounts(
     }
 }
 
+private data class ResolvedCashMode(
+    val mode: PaymentModesBO,
+    val currency: String,
+    val entity: ModeOfPaymentEntity?
+)
+
 private fun resolveOpeningCurrencies(
-    baseCurrency: String,
-    availableCurrencies: List<String>
+    cashModes: List<ResolvedCashMode>,
+    baseCurrency: String
 ): List<String> {
     val normalizedBase = normalizeCurrency(baseCurrency)
-    val merged = (availableCurrencies + normalizedBase).map { normalizeCurrency(it) }.distinct()
-    val ordered = listOf(normalizedBase) + merged.filterNot { it == normalizedBase }
-    return ordered.ifEmpty { listOf(normalizedBase) }
+    val currencies = cashModes.map { it.currency }.distinct()
+    return if (currencies.isEmpty()) listOf(normalizedBase) else currencies
 }
 
-private fun resolveCashModesByCurrency(
+private fun resolveCashModes(
     paymentModes: List<PaymentModesBO>,
-    currencies: List<String>
-): Map<String, PaymentModesBO?> {
-    // ASSUMPTION: cash payment modes are configured per currency (e.g. CASH_NIO, CASH_USD).
-    val cashModes = paymentModes.filter { categorizePaymentMode(it) == PaymentCategory.CASH }
-    return currencies.associateWith { currency ->
-        cashModes.firstOrNull { modeMatchesCurrency(it, currency) }
+    modeOfPaymentLookup: Map<String, ModeOfPaymentEntity>,
+    baseCurrency: String
+): List<ResolvedCashMode> {
+    return paymentModes.mapNotNull { mode ->
+        val entity = resolveModeEntity(mode, modeOfPaymentLookup)
+        val isCash = entity?.type?.equals("Cash", ignoreCase = true)
+            ?: (categorizePaymentMode(mode) == PaymentCategory.CASH)
+        if (!isCash) return@mapNotNull null
+        // ASSUMPTION: when currency is missing on the Mode of Payment, use the POS base currency.
+        val currency = normalizeCurrency(entity?.currency ?: baseCurrency)
+        ResolvedCashMode(mode = mode, currency = currency, entity = entity)
     }
 }
 
-private fun modeMatchesCurrency(mode: PaymentModesBO, currency: String): Boolean {
-    val key = currency.uppercase()
-    return mode.name.uppercase().contains(key) || mode.modeOfPayment.uppercase().contains(key)
+private fun resolveModeEntity(
+    mode: PaymentModesBO,
+    modeOfPaymentLookup: Map<String, ModeOfPaymentEntity>
+): ModeOfPaymentEntity? {
+    val key = mode.modeOfPayment.uppercase()
+    return modeOfPaymentLookup[key]
+        ?: modeOfPaymentLookup[mode.name.uppercase()]
 }
 
 private fun formatMoney(amount: Double): String = formatDoubleToString(amount, 2)
