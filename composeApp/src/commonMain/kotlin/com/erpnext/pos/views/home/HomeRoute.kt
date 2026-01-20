@@ -25,6 +25,7 @@ fun rememberHomeActions(coordinator: HomeCoordinator): HomeAction {
             syncState = coordinator.syncState,
             syncSettings = coordinator.syncSettings,
             homeMetrics = coordinator.homeMetrics,
+            openingState = coordinator.openingState,
             initialState = coordinator::initialState,
             loadInitialData = coordinator::loadInitialData,
             onOpenSettings = coordinator::openSettings,
@@ -33,6 +34,8 @@ fun rememberHomeActions(coordinator: HomeCoordinator): HomeAction {
             onLogout = coordinator::logout,
             onError = coordinator::onError,
             onPosSelected = coordinator::onPosSelected,
+            onLoadOpeningProfile = coordinator::loadOpeningProfile,
+            onOpenCashbox = coordinator::openCashbox,
             closeCashbox = coordinator::closeCashbox,
             isCashboxOpen = coordinator::isCashboxOpen,
         )

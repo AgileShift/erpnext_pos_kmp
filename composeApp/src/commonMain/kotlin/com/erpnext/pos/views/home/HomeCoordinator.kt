@@ -13,6 +13,7 @@ class HomeCoordinator(
     val syncState = viewModel.syncState
     val syncSettings = viewModel.syncSettings
     val homeMetrics = viewModel.homeMetrics
+    val openingState = viewModel.openingState
 
     fun loadInitialData() {
         return viewModel.loadInitialData()
@@ -36,6 +37,14 @@ class HomeCoordinator(
 
     fun onPosSelected(pos: POSProfileSimpleBO) {
         viewModel.onPosSelected(pos)
+    }
+
+    fun loadOpeningProfile(profileId: String?) {
+        viewModel.loadOpeningProfile(profileId)
+    }
+
+    fun openCashbox(entry: POSProfileSimpleBO, amounts: List<com.erpnext.pos.views.PaymentModeWithAmount>) {
+        viewModel.openCashbox(entry, amounts)
     }
 
     fun closeCashbox() {

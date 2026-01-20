@@ -26,9 +26,14 @@ data class HomeAction(
         SyncSettings(autoSync = true, syncOnStartup = true, wifiOnly = false, lastSyncAt = null)
     ),
     val homeMetrics: StateFlow<HomeMetrics> = MutableStateFlow(HomeMetrics()),
+    val openingState: StateFlow<CashboxOpeningProfileState> =
+        MutableStateFlow(CashboxOpeningProfileState()),
     val loadInitialData: () -> Unit = {},
     val initialState: () -> Unit = {},
     val onPosSelected: (pos: POSProfileSimpleBO) -> Unit = {},
+    val onLoadOpeningProfile: (profileId: String?) -> Unit = {},
+    val onOpenCashbox: suspend (POSProfileSimpleBO, List<com.erpnext.pos.views.PaymentModeWithAmount>) -> Unit =
+        { _, _ -> },
     val closeCashbox: () -> Unit = {},
     val isCashboxOpen: () -> StateFlow<Boolean> = { MutableStateFlow(false) },
     val onOpenSettings: () -> Unit = {},

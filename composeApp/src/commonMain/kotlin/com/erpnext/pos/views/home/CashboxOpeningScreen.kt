@@ -84,6 +84,9 @@ fun CashboxOpeningScreen(
     uiState: HomeState,
     profiles: List<POSProfileSimpleBO>,
     user: UserBO?,
+    openingState: CashboxOpeningProfileState,
+    onLoadOpeningProfile: (String?) -> Unit,
+    onOpenCashbox: (POSProfileSimpleBO, List<PaymentModeWithAmount>) -> Unit,
     onSelectProfile: (POSProfileSimpleBO) -> Unit,
     onDismiss: () -> Unit,
     snackbar: SnackbarController
@@ -95,9 +98,7 @@ fun CashboxOpeningScreen(
     var lastDraftKey by remember { mutableStateOf<String?>(null) }
     val denominationState = remember { androidx.compose.runtime.mutableStateMapOf<String, List<DenominationUi>>() }
     val openingSessionPreferences: OpeningSessionPreferences = org.koin.compose.koinInject()
-    val openingViewModel: CashboxOpeningViewModel = org.koin.compose.koinInject()
     val openingDraft by openingSessionPreferences.draft.collectAsState(initial = null)
-    val openingState by openingViewModel.state.collectAsState()
     val formatter = remember { DecimalFormatter() }
     val scope = rememberCoroutineScope()
 
@@ -113,13 +114,13 @@ fun CashboxOpeningScreen(
         selectedCurrency = ""
         denominationState.clear()
         lastDraftKey = null
-        openingViewModel.loadProfile(selectedProfile?.name)
+        onLoadOpeningProfile(selectedProfile?.name)
     }
 
     val paymentModes = openingState.methods.map {
         com.erpnext.pos.domain.models.PaymentModesBO(
-            name = it.modeOfPaymentName,
-            modeOfPayment = it.modeOfPaymentLabel
+            name = it.mopName,
+            modeOfPayment = it.mopName
         )
     }
     val baseCurrency = openingState.baseCurrency.takeIf { it.isNotBlank() }
@@ -228,7 +229,7 @@ fun CashboxOpeningScreen(
             }
         } else {
             val amountByMode = cashMethodByCurrency.entries.associate { (currency, resolved) ->
-                resolved.modeOfPaymentName to (totalsByCurrency[currency] ?: 0.0)
+                resolved.mopName to (totalsByCurrency[currency] ?: 0.0)
             }
             val amounts = paymentModes.map { mode ->
                 val amount = amountByMode[mode.name] ?: 0.0
@@ -240,7 +241,7 @@ fun CashboxOpeningScreen(
                     "${cur.toCurrencySymbol()} ${formatMoney(total)}"
                 }
                 try {
-                    openingViewModel.openCashbox(profile, amounts)
+                    onOpenCashbox(profile, amounts)
                     openingSessionPreferences.clearDraft()
                     snackbar.show(
                         "Caja abierta: $totalsMsg", SnackbarType.Success, SnackbarPosition.Top
@@ -291,7 +292,7 @@ fun CashboxOpeningScreen(
                             canOpen = canOpen && !isSubmitting,
                             duplicateCashCurrencies = duplicateCashCurrencies,
                             cashModesMissingCurrency = cashMethodsMissingCurrency.map {
-                                it.modeOfPaymentLabel
+                                it.mopName
                             },
                             onOpen = handleOpen,
                             onCancel = onDismiss
@@ -340,7 +341,7 @@ fun CashboxOpeningScreen(
                                 canOpen = canOpen && !isSubmitting,
                                 duplicateCashCurrencies = duplicateCashCurrencies,
                                 cashModesMissingCurrency = cashMethodsMissingCurrency.map {
-                                    it.modeOfPaymentLabel
+                                    it.mopName
                                 },
                                 onOpen = handleOpen,
                                 onCancel = onDismiss

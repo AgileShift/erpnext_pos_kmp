@@ -105,7 +105,6 @@ import com.erpnext.pos.views.billing.BillingViewModel
 import com.erpnext.pos.views.customer.CustomerViewModel
 import com.erpnext.pos.views.deliverynote.DeliveryNoteViewModel
 import com.erpnext.pos.views.home.HomeViewModel
-import com.erpnext.pos.views.home.CashboxOpeningViewModel
 import com.erpnext.pos.views.home.POSProfileViewModel
 import com.erpnext.pos.views.inventory.InventoryViewModel
 import com.erpnext.pos.views.invoice.InvoiceViewModel
@@ -428,14 +427,16 @@ val appModule = module {
             logoutUseCase = get(),
             fetchPosProfileInfoUseCase = get(),
             contextManager = get(),
+            posProfileDao = get(),
+            paymentMethodLocalRepository = get(),
             syncManager = get(),
             syncPreferences = get(),
             navManager = get(),
             loadHomeMetricsUseCase = get(),
-            posProfileGate = get()
+            posProfileGate = get(),
+            openingGate = get()
         )
     }
-    single { CashboxOpeningViewModel(get(), get(), get(), get()) }
     single<IUserRepository> { UserRepository(get(), get()) }
     //endregion
 

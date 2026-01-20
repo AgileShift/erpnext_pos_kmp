@@ -10,6 +10,8 @@ import com.erpnext.pos.domain.usecases.FetchUserInfoUseCase
 import com.erpnext.pos.domain.usecases.HomeMetricInput
 import com.erpnext.pos.domain.usecases.LoadHomeMetricsUseCase
 import com.erpnext.pos.domain.usecases.LogoutUseCase
+import com.erpnext.pos.localSource.dao.POSProfileDao
+import com.erpnext.pos.data.repositories.PosProfilePaymentMethodLocalRepository
 import com.erpnext.pos.navigation.NavRoute
 import com.erpnext.pos.navigation.NavigationManager
 import com.erpnext.pos.localSource.preferences.SyncPreferences
@@ -18,7 +20,9 @@ import com.erpnext.pos.sync.SyncManager
 import com.erpnext.pos.sync.SyncState
 import com.erpnext.pos.sync.GateResult
 import com.erpnext.pos.sync.PosProfileGate
+import com.erpnext.pos.sync.OpeningGate
 import com.erpnext.pos.views.CashBoxManager
+import com.erpnext.pos.views.PaymentModeWithAmount
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -35,11 +39,14 @@ class HomeViewModel(
     private val logoutUseCase: LogoutUseCase,
     private val fetchPosProfileInfoLocalUseCase: FetchPosProfileInfoLocalUseCase,
     private val contextManager: CashBoxManager,
+    private val posProfileDao: POSProfileDao,
+    private val paymentMethodLocalRepository: PosProfilePaymentMethodLocalRepository,
     private val syncManager: SyncManager,
     private val syncPreferences: SyncPreferences,
     private val navManager: NavigationManager,
     private val loadHomeMetricsUseCase: LoadHomeMetricsUseCase,
-    private val posProfileGate: PosProfileGate
+    private val posProfileGate: PosProfileGate,
+    private val openingGate: OpeningGate
 ) : BaseViewModel() {
     private val _stateFlow: MutableStateFlow<HomeState> = MutableStateFlow(HomeState.Loading)
     val stateFlow = _stateFlow.asStateFlow()
@@ -51,6 +58,9 @@ class HomeViewModel(
     val syncSettings: StateFlow<SyncSettings> = _syncSettings.asStateFlow()
     private val _homeMetrics = MutableStateFlow(HomeMetrics())
     val homeMetrics: StateFlow<HomeMetrics> = _homeMetrics.asStateFlow()
+
+    private val _openingState = MutableStateFlow(CashboxOpeningProfileState())
+    val openingState: StateFlow<CashboxOpeningProfileState> = _openingState.asStateFlow()
 
     private var userInfo: UserBO = UserBO()
     private var posProfiles: List<POSProfileSimpleBO> = emptyList()
@@ -164,6 +174,52 @@ class HomeViewModel(
     fun closeCashbox() {
         viewModelScope.launch {
             contextManager.closeCashBox()
+        }
+    }
+
+    fun loadOpeningProfile(profileId: String?) {
+        if (profileId.isNullOrBlank()) {
+            _openingState.update {
+                it.copy(profileId = null, methods = emptyList(), cashMethodsByCurrency = emptyMap())
+            }
+            return
+        }
+        viewModelScope.launch {
+            _openingState.update { it.copy(isLoading = true, error = null) }
+            runCatching {
+                when (val gate = openingGate.ensureReady(profileId)) {
+                    is GateResult.Failed -> error(gate.reason)
+                    is GateResult.Pending -> error(gate.reason)
+                    GateResult.Ready -> Unit
+                }
+                val profile = posProfileDao.getPOSProfile(profileId)
+                val methods = paymentMethodLocalRepository.getMethodsForProfile(profileId)
+                val cashMethods = paymentMethodLocalRepository.getCashMethodsGroupedByCurrency(profileId)
+                _openingState.update {
+                    it.copy(
+                        profileId = profile.profileName,
+                        company = profile.company,
+                        baseCurrency = profile.currency,
+                        methods = methods,
+                        cashMethodsByCurrency = cashMethods,
+                        isLoading = false,
+                        error = null
+                    )
+                }
+            }.onFailure { error ->
+                _openingState.update {
+                    it.copy(
+                        isLoading = false,
+                        error = error.message ?: "Unable to load profile data"
+                    )
+                }
+            }
+        }
+    }
+
+    fun openCashbox(entry: POSProfileSimpleBO, amounts: List<PaymentModeWithAmount>) {
+        viewModelScope.launch {
+            contextManager.openCashBox(entry, amounts)
         }
     }
 }
