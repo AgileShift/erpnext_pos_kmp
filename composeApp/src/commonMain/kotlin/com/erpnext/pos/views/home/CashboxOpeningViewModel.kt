@@ -7,6 +7,8 @@ import com.erpnext.pos.domain.models.POSProfileSimpleBO
 import com.erpnext.pos.localSource.dao.POSProfileDao
 import com.erpnext.pos.localSource.dao.ResolvedPaymentMethod
 import com.erpnext.pos.utils.AppLogger
+import com.erpnext.pos.sync.GateResult
+import com.erpnext.pos.sync.OpeningGate
 import com.erpnext.pos.views.CashBoxManager
 import com.erpnext.pos.views.PaymentModeWithAmount
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -28,7 +30,8 @@ data class CashboxOpeningProfileState(
 class CashboxOpeningViewModel(
     private val posProfileDao: POSProfileDao,
     private val paymentMethodLocalRepository: PosProfilePaymentMethodLocalRepository,
-    private val cashBoxManager: CashBoxManager
+    private val cashBoxManager: CashBoxManager,
+    private val openingGate: OpeningGate
 ) : BaseViewModel() {
     private val _state = MutableStateFlow(CashboxOpeningProfileState())
     val state: StateFlow<CashboxOpeningProfileState> = _state.asStateFlow()
@@ -41,6 +44,11 @@ class CashboxOpeningViewModel(
         viewModelScope.launch {
             _state.update { it.copy(isLoading = true, error = null) }
             runCatching {
+                when (val gate = openingGate.ensureReady(profileId)) {
+                    is GateResult.Failed -> error(gate.reason)
+                    is GateResult.Pending -> error(gate.reason)
+                    GateResult.Ready -> Unit
+                }
                 val profile = posProfileDao.getPOSProfile(profileId)
                 val methods = paymentMethodLocalRepository.getMethodsForProfile(profileId)
                 val cashMethods = paymentMethodLocalRepository.getCashMethodsGroupedByCurrency(profileId)

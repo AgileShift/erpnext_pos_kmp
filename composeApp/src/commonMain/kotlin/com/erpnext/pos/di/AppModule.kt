@@ -91,6 +91,9 @@ import com.erpnext.pos.sync.LegacyPushSyncManager
 import com.erpnext.pos.sync.PushSyncRunner
 import com.erpnext.pos.sync.SyncContextProvider
 import com.erpnext.pos.sync.SyncManager
+import com.erpnext.pos.sync.SyncOrchestrator
+import com.erpnext.pos.sync.OpeningGate
+import com.erpnext.pos.sync.PosProfileGate
 import com.erpnext.pos.di.v2.appModulev2
 import com.erpnext.pos.utils.AppLogger
 import com.erpnext.pos.utils.AppSentry
@@ -298,7 +301,7 @@ val appModule = module {
             userDao = get(),
             exchangeRatePreferences = get(),
             exchangeRateRepository = get(),
-            modeOfPaymentDao = get(),
+            paymentMethodLocalRepository = get(),
             salesInvoiceDao = get()
         )
     }
@@ -364,13 +367,23 @@ val appModule = module {
     single { PosProfilePaymentMethodLocalRepository(get()) }
     single {
         PosProfilePaymentMethodSyncRepository(
-            get(named("apiService")),
-            get(),
-            get(),
-            get(),
-            get()
+            apiService = get(named("apiService")),
+            modeOfPaymentRemoteSource = get(),
+            posProfileDao = get(),
+            posProfileLocalDao = get(),
+            posProfilePaymentMethodDao = get(),
+            modeOfPaymentDao = get()
         )
     }
+    single {
+        SyncOrchestrator(
+            networkMonitor = get(),
+            sessionRefresher = get(),
+            posProfilePaymentMethodSyncRepository = get()
+        )
+    }
+    single { OpeningGate(get(), get()) }
+    single { PosProfileGate(get(), get()) }
     single {
         OpeningEntrySyncRepository(
             posOpeningRepository = get(),
@@ -383,7 +396,7 @@ val appModule = module {
 
     //region POS Profile
     single { POSProfileLocalSource(get(), get()) }
-    single { POSProfileRemoteSource(get(named("apiService")), get(), get()) }
+    single { POSProfileRemoteSource(get(named("apiService")), get()) }
     single<IPOSRepository> { POSProfileRepository(get(), get()) }
     single { POSProfileViewModel(get(), get(), get()) }
     //endregion
@@ -418,10 +431,11 @@ val appModule = module {
             syncManager = get(),
             syncPreferences = get(),
             navManager = get(),
-            loadHomeMetricsUseCase = get()
+            loadHomeMetricsUseCase = get(),
+            posProfileGate = get()
         )
     }
-    single { CashboxOpeningViewModel(get(), get(), get()) }
+    single { CashboxOpeningViewModel(get(), get(), get(), get()) }
     single<IUserRepository> { UserRepository(get(), get()) }
     //endregion
 

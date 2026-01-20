@@ -33,6 +33,7 @@ val desktopModule = module {
     single { get<AppDatabase>().itemDao() }
     single { get<AppDatabase>().userDao() }
     single { get<AppDatabase>().posProfileDao() }
+    single { get<AppDatabase>().posProfileLocalDao() }
     single { get<AppDatabase>().posProfilePaymentMethodDao() }
     single { get<AppDatabase>().modeOfPaymentDao() }
     single { get<AppDatabase>().paymentTermDao() }

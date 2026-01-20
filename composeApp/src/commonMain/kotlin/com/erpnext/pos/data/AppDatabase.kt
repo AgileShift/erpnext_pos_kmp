@@ -1,12 +1,9 @@
 package com.erpnext.pos.data
 
-import androidx.room.AutoMigration
 import androidx.room.ConstructedBy
 import androidx.room.Database
 import androidx.room.RoomDatabase
 import androidx.room.RoomDatabaseConstructor
-import androidx.room.migration.Migration
-import androidx.sqlite.db.SupportSQLiteDatabase
 import com.erpnext.pos.localSource.dao.CashboxDao
 import com.erpnext.pos.localSource.dao.CategoryDao
 import com.erpnext.pos.localSource.dao.CompanyDao
@@ -20,6 +17,7 @@ import com.erpnext.pos.localSource.dao.POSClosingEntryDao
 import com.erpnext.pos.localSource.dao.POSOpeningEntryDao
 import com.erpnext.pos.localSource.dao.POSOpeningEntryLinkDao
 import com.erpnext.pos.localSource.dao.POSProfileDao
+import com.erpnext.pos.localSource.dao.PosProfileLocalDao
 import com.erpnext.pos.localSource.dao.PosProfilePaymentMethodDao
 import com.erpnext.pos.localSource.dao.SalesInvoiceDao
 import com.erpnext.pos.localSource.dao.UserDao
@@ -49,6 +47,7 @@ import com.erpnext.pos.localSource.entities.POSInvoicePaymentEntity
 import com.erpnext.pos.localSource.entities.POSOpeningEntryEntity
 import com.erpnext.pos.localSource.entities.POSOpeningEntryLinkEntity
 import com.erpnext.pos.localSource.entities.POSProfileEntity
+import com.erpnext.pos.localSource.entities.PosProfileLocalEntity
 import com.erpnext.pos.localSource.entities.PosProfilePaymentMethodEntity
 import com.erpnext.pos.localSource.entities.PaymentTermEntity
 import com.erpnext.pos.localSource.entities.SalesInvoiceEntity
@@ -95,6 +94,7 @@ import com.erpnext.pos.localSource.entities.v2.UserEntity as UserEntityV2
         UserEntity::class,
         ItemEntity::class,
         POSProfileEntity::class,
+        PosProfileLocalEntity::class,
         PosProfilePaymentMethodEntity::class,
         PaymentTermEntity::class,
         DeliveryChargeEntity::class,
@@ -147,18 +147,15 @@ import com.erpnext.pos.localSource.entities.v2.UserEntity as UserEntityV2
         PaymentScheduleEntity::class,
         SyncStateEntity::class
     ],
-    version = 25,
-    exportSchema = true,
-    autoMigrations = [
-        AutoMigration(from = 21, to = 22),
-        AutoMigration(from = 22, to = 23)
-    ]
+    version = 26,
+    exportSchema = true
 )
 @ConstructedBy(AppDatabaseConstructor::class)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun userDao(): UserDao
     abstract fun itemDao(): ItemDao
     abstract fun posProfileDao(): POSProfileDao
+    abstract fun posProfileLocalDao(): PosProfileLocalDao
     abstract fun posProfilePaymentMethodDao(): PosProfilePaymentMethodDao
     abstract fun modeOfPaymentDao(): ModeOfPaymentDao
     abstract fun cashboxDao(): CashboxDao
@@ -195,80 +192,4 @@ expect object AppDatabaseConstructor : RoomDatabaseConstructor<AppDatabase> {
 
 expect class DatabaseBuilder {
     fun build(): AppDatabase
-}
-
-object AppDatabaseMigrations {
-    val MIGRATION_23_24 = object : Migration(23, 24) {
-        override fun migrate(db: SupportSQLiteDatabase) {
-            db.execSQL(
-                """
-                CREATE TABLE IF NOT EXISTS `tabPosProfilePaymentMethod` (
-                    `profile_id` TEXT NOT NULL,
-                    `mode_of_payment` TEXT NOT NULL,
-                    `company` TEXT NOT NULL,
-                    `is_default` INTEGER NOT NULL,
-                    `allow_in_returns` INTEGER NOT NULL,
-                    `idx` INTEGER NOT NULL,
-                    `enabled` INTEGER NOT NULL,
-                    PRIMARY KEY(`profile_id`, `mode_of_payment`)
-                )
-                """.trimIndent()
-            )
-            db.execSQL(
-                """
-                INSERT INTO `tabPosProfilePaymentMethod` (
-                    `profile_id`,
-                    `mode_of_payment`,
-                    `company`,
-                    `is_default`,
-                    `allow_in_returns`,
-                    `idx`,
-                    `enabled`
-                )
-                SELECT
-                    pm.profileId,
-                    pm.mode_of_payment,
-                    COALESCE(pp.company, ''),
-                    pm.`default`,
-                    0,
-                    0,
-                    1
-                FROM tabPaymentModes pm
-                LEFT JOIN tabPosProfile pp
-                  ON pp.profile_name = pm.profileId
-                """.trimIndent()
-            )
-            db.execSQL("DROP TABLE IF EXISTS tabPaymentModes")
-        }
-    }
-
-    val MIGRATION_24_25 = object : Migration(24, 25) {
-        override fun migrate(db: SupportSQLiteDatabase) {
-            db.execSQL(
-                """
-                CREATE TABLE IF NOT EXISTS `tab_pos_opening_entry_link` (
-                    `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
-                    `cashbox_id` INTEGER NOT NULL,
-                    `local_opening_entry_name` TEXT NOT NULL,
-                    `remote_opening_entry_name` TEXT,
-                    `pending_sync` INTEGER NOT NULL,
-                    FOREIGN KEY(`cashbox_id`) REFERENCES `tabCashbox`(`localId`) ON UPDATE NO ACTION ON DELETE CASCADE,
-                    FOREIGN KEY(`local_opening_entry_name`) REFERENCES `tab_pos_opening_entry`(`name`) ON UPDATE NO ACTION ON DELETE CASCADE
-                )
-                """.trimIndent()
-            )
-            db.execSQL(
-                """
-                CREATE UNIQUE INDEX IF NOT EXISTS `index_tab_pos_opening_entry_link_cashbox_id`
-                ON `tab_pos_opening_entry_link` (`cashbox_id`)
-                """.trimIndent()
-            )
-            db.execSQL(
-                """
-                CREATE INDEX IF NOT EXISTS `index_tab_pos_opening_entry_link_local_opening_entry_name`
-                ON `tab_pos_opening_entry_link` (`local_opening_entry_name`)
-                """.trimIndent()
-            )
-        }
-    }
 }

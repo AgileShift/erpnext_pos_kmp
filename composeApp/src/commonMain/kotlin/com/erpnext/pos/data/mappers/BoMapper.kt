@@ -18,6 +18,8 @@ import com.erpnext.pos.localSource.entities.CategoryEntity
 import com.erpnext.pos.localSource.entities.CustomerEntity
 import com.erpnext.pos.localSource.entities.ItemEntity
 import com.erpnext.pos.localSource.entities.POSInvoicePaymentEntity
+import com.erpnext.pos.localSource.entities.POSProfileEntity
+import com.erpnext.pos.localSource.entities.PosProfileLocalEntity
 import com.erpnext.pos.localSource.entities.SalesInvoiceEntity
 import com.erpnext.pos.localSource.entities.SalesInvoiceItemEntity
 import com.erpnext.pos.localSource.entities.SalesInvoiceWithItemsAndPayments
@@ -243,6 +245,34 @@ fun POSProfileSimpleDto.toBO(): POSProfileSimpleBO {
         name = this.profileName,
         company = this.company,
         currency = this.currency,
+        paymentModes = emptyList()
+    )
+}
+
+fun POSProfileEntity.toBO(): POSProfileBO {
+    return POSProfileBO(
+        name = profileName,
+        warehouse = warehouse,
+        country = country,
+        disabled = active != true,
+        company = company,
+        route = route,
+        incomeAccount = incomeAccount,
+        expenseAccount = expenseAccount,
+        costCenter = costCenter,
+        sellingPriceList = sellingPriceList,
+        applyDiscountOn = applyDiscountOn,
+        branch = branch,
+        currency = currency,
+        paymentModes = emptyList()
+    )
+}
+
+fun PosProfileLocalEntity.toSimpleBO(): POSProfileSimpleBO {
+    return POSProfileSimpleBO(
+        name = profileName,
+        company = company,
+        currency = currency,
         paymentModes = emptyList()
     )
 }

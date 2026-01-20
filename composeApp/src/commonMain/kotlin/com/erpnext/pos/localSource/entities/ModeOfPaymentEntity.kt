@@ -23,9 +23,6 @@ data class ModeOfPaymentEntity(
     @ColumnInfo(name = "type")
     var type: String = "Cash", // "Cash" | "Bank" | "Card" | "Wallet" etc.
 
-    @ColumnInfo(name = "is_default")
-    var isDefault: Boolean = false,
-
     @ColumnInfo(name = "enabled")
     var enabled: Boolean = true,
 
@@ -34,9 +31,6 @@ data class ModeOfPaymentEntity(
 
     @ColumnInfo(name = "account")
     var account: String? = null,  // GL Account in ERPNext
-
-    @ColumnInfo(name = "profileId")
-    var profileId: String? = null,
 
     @ColumnInfo(name = "last_synced_at", defaultValue = "0")
     override var lastSyncedAt: Long? = Clock.System.now().toEpochMilliseconds()

@@ -7,11 +7,13 @@ import com.erpnext.pos.data.repositories.DeliveryChargesRepository
 import com.erpnext.pos.data.repositories.ExchangeRateRepository
 import com.erpnext.pos.data.repositories.InventoryRepository
 import com.erpnext.pos.data.repositories.ModeOfPaymentRepository
+import com.erpnext.pos.data.repositories.PosProfilePaymentMethodSyncRepository
 import com.erpnext.pos.data.repositories.PaymentTermsRepository
 import com.erpnext.pos.data.repositories.SalesInvoiceRepository
 import com.erpnext.pos.sync.PushSyncRunner
 import com.erpnext.pos.sync.SyncContextProvider
 import com.erpnext.pos.views.CashBoxManager
+import com.erpnext.pos.localSource.dao.POSProfileDao
 import com.erpnext.pos.localSource.preferences.SyncPreferences
 import com.erpnext.pos.localSource.preferences.SyncSettings
 import com.erpnext.pos.utils.NetworkMonitor
@@ -45,12 +47,14 @@ class SyncManager(
     private val customerRepo: CustomerRepository,
     private val inventoryRepo: InventoryRepository,
     private val modeOfPaymentRepo: ModeOfPaymentRepository,
+    private val posProfilePaymentMethodSyncRepository: PosProfilePaymentMethodSyncRepository,
     private val paymentTermsRepo: PaymentTermsRepository,
     private val deliveryChargesRepo: DeliveryChargesRepository,
     private val exchangeRateRepo: ExchangeRateRepository,
     private val syncPreferences: SyncPreferences,
     private val companyInfoRepo: CompanyRepository,
     private val cashBoxManager: CashBoxManager,
+    private val posProfileDao: POSProfileDao,
     private val networkMonitor: NetworkMonitor,
     private val sessionRefresher: SessionRefresher,
     private val syncContextProvider: SyncContextProvider,
@@ -200,20 +204,32 @@ class SyncManager(
                         context?.let {
                             currencies.add(it.currency)
                             it.allowedCurrencies.mapTo(currencies) { option -> option.code }
-                        }
-                        currencies.filter { it.isNotBlank() }.map { it.uppercase() }.distinct()
-                            .forEach { currency ->
-                                runCatching {
-                                    exchangeRateRepo.getRate("USD", currency)
-                                }.getOrElse { error ->
-                                    AppSentry.capture(
-                                        error, "Sync: exchange rate failed for $currency"
-                                    )
-                                    AppLogger.warn(
-                                        "Sync: exchange rate failed for $currency", error
-                                    )
-                                }
                             }
+                            currencies.filter { it.isNotBlank() }.map { it.uppercase() }.distinct()
+                                .forEach { currency ->
+                                    runCatching {
+                                        exchangeRateRepo.getRate("USD", currency)
+                                    }.getOrElse { error ->
+                                        AppSentry.capture(
+                                            error, "Sync: exchange rate failed for $currency"
+                                        )
+                                        AppLogger.warn(
+                                            "Sync: exchange rate failed for $currency", error
+                                        )
+                                    }
+                                }
+                    }, async {
+                        _state.value = SyncState.SYNCING("POS Profile payments...")
+                        val profile = posProfileDao.getActiveProfile()
+                        if (profile != null) {
+                            runCatching {
+                                posProfilePaymentMethodSyncRepository.syncProfilePayments(profile.profileName)
+                            }.onFailure { error ->
+                                AppSentry.capture(error, "Sync: pos profile payments failed")
+                                AppLogger.warn("Sync: pos profile payments failed", error)
+                                throw error
+                            }
+                        }
                     })
                     jobs.awaitAll()
                     runPushQueue()

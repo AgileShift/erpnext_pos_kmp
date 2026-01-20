@@ -5,7 +5,6 @@ import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import com.erpnext.pos.localSource.entities.ModeOfPaymentEntity
-import com.erpnext.pos.localSource.entities.PaymentModesEntity
 
 @Dao
 interface ModeOfPaymentDao {

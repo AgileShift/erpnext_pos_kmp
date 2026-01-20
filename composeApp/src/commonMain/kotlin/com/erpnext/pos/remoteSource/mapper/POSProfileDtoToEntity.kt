@@ -6,9 +6,7 @@ import com.erpnext.pos.localSource.entities.ItemEntity
 import com.erpnext.pos.localSource.entities.POSClosingEntryEntity
 import com.erpnext.pos.localSource.entities.POSOpeningEntryEntity
 import com.erpnext.pos.localSource.entities.POSProfileEntity
-import com.erpnext.pos.localSource.entities.PaymentModesEntity
 import com.erpnext.pos.remoteSource.dto.POSProfileDto
-import com.erpnext.pos.remoteSource.dto.PaymentModesDto
 import kotlin.jvm.JvmName
 
 //TODO: Verificar si las propiedades son las correctas y estan todas mapeadas
@@ -32,20 +30,6 @@ fun POSProfileDto.toEntity(): POSProfileEntity {
         applyDiscountOn = this.applyDiscountOn,
         costCenter = this.costCenter,
         sellingPriceList = this.sellingPriceList,
-    )
-}
-
-@JvmName("ListPaymentModesDtoToEntity")
-fun List<PaymentModesDto>.toEntity(profileId: String): List<PaymentModesEntity> {
-    return this.map { it.toEntity(profileId) }
-}
-
-fun PaymentModesDto.toEntity(profileId: String): PaymentModesEntity {
-    return PaymentModesEntity(
-        name = this.name,
-        default = this.default,
-        modeOfPayment = this.modeOfPayment,
-        profileId = profileId
     )
 }
 

@@ -16,6 +16,8 @@ import com.erpnext.pos.localSource.preferences.SyncPreferences
 import com.erpnext.pos.localSource.preferences.SyncSettings
 import com.erpnext.pos.sync.SyncManager
 import com.erpnext.pos.sync.SyncState
+import com.erpnext.pos.sync.GateResult
+import com.erpnext.pos.sync.PosProfileGate
 import com.erpnext.pos.views.CashBoxManager
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -36,7 +38,8 @@ class HomeViewModel(
     private val syncManager: SyncManager,
     private val syncPreferences: SyncPreferences,
     private val navManager: NavigationManager,
-    private val loadHomeMetricsUseCase: LoadHomeMetricsUseCase
+    private val loadHomeMetricsUseCase: LoadHomeMetricsUseCase,
+    private val posProfileGate: PosProfileGate
 ) : BaseViewModel() {
     private val _stateFlow: MutableStateFlow<HomeState> = MutableStateFlow(HomeState.Loading)
     val stateFlow = _stateFlow.asStateFlow()
@@ -92,6 +95,11 @@ class HomeViewModel(
         _stateFlow.update { HomeState.Loading }
         executeUseCase(action = {
             userInfo = fetchUserInfoUseCase.invoke(null)
+            when (val gate = posProfileGate.ensureReady(userInfo.email)) {
+                is GateResult.Failed -> error(gate.reason)
+                is GateResult.Pending -> error(gate.reason)
+                GateResult.Ready -> Unit
+            }
             posProfiles = fetchPosProfileUseCase.invoke(userInfo.email)
             _homeMetrics.value =
                 loadHomeMetricsUseCase(HomeMetricInput(7, Clock.System.now().toEpochMilliseconds()))

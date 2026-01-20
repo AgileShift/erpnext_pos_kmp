@@ -6,7 +6,6 @@ import com.erpnext.pos.domain.models.POSPaymentModeOption
 import com.erpnext.pos.domain.models.POSProfileSimpleBO
 import com.erpnext.pos.domain.models.PaymentModesBO
 import com.erpnext.pos.localSource.dao.CashboxDao
-import com.erpnext.pos.localSource.dao.ModeOfPaymentDao
 import com.erpnext.pos.localSource.dao.POSClosingEntryDao
 import com.erpnext.pos.localSource.dao.POSOpeningEntryDao
 import com.erpnext.pos.localSource.dao.POSOpeningEntryLinkDao
@@ -25,6 +24,7 @@ import com.erpnext.pos.remoteSource.dto.POSClosingInvoiceDto
 import com.erpnext.pos.remoteSource.mapper.toDto
 import com.erpnext.pos.remoteSource.mapper.toEntity
 import com.erpnext.pos.data.repositories.ExchangeRateRepository
+import com.erpnext.pos.data.repositories.PosProfilePaymentMethodLocalRepository
 import com.erpnext.pos.domain.models.UserBO
 import com.erpnext.pos.localSource.dao.CompanyDao
 import com.erpnext.pos.utils.parseErpDateTimeToEpochMillis
@@ -77,7 +77,7 @@ class CashBoxManager(
     private val userDao: UserDao,
     private val exchangeRatePreferences: ExchangeRatePreferences,
     private val exchangeRateRepository: ExchangeRateRepository,
-    private val modeOfPaymentDao: ModeOfPaymentDao,
+    private val paymentMethodLocalRepository: PosProfilePaymentMethodLocalRepository,
     private val salesInvoiceDao: SalesInvoiceDao
 ) {
 
@@ -96,8 +96,8 @@ class CashBoxManager(
         val activeCashbox = cashboxDao.getActiveEntry(user.email, profile.profileName)
             .firstOrNull()
         val exchangeRate = resolveExchangeRate(profile.currency)
-        val allowedCurrencies = resolveSupportedCurrencies(profile.currency, profile.company)
-        val paymentModes = resolvePaymentModes(profile.profileName, profile.company)
+        val allowedCurrencies = resolveSupportedCurrencies(profile.profileName, profile.currency)
+        val paymentModes = resolvePaymentModes(profile.profileName)
 
         _cashboxState.update { activeCashbox != null }
 
@@ -183,8 +183,8 @@ class CashBoxManager(
         _cashboxState.update { true }
 
         val exchangeRate = resolveExchangeRate(profile.currency)
-        val allowedCurrencies = resolveSupportedCurrencies(profile.currency, profile.company)
-        val paymentModes = resolvePaymentModes(profile.profileName, profile.company)
+        val allowedCurrencies = resolveSupportedCurrencies(profile.profileName, profile.currency)
+        val paymentModes = resolvePaymentModes(profile.profileName)
         currentContext = POSContext(
             username = user.username ?: user.name,
             profileName = entry.name,
@@ -300,10 +300,11 @@ class CashBoxManager(
 
     //TODO: Sincronizar las monedas existentes y activas en el ERP
     private suspend fun resolveSupportedCurrencies(
-        baseCurrency: String,
-        company: String
+        profileName: String,
+        baseCurrency: String
     ): List<POSCurrencyOption> {
-        val modes = runCatching { modeOfPaymentDao.getAll(company) }.getOrElse { emptyList() }
+        val modes = runCatching { paymentMethodLocalRepository.getMethodsForProfile(profileName) }
+            .getOrElse { emptyList() }
         val mapped = modes.mapNotNull { mode ->
             mode.currency?.takeIf { it.isNotBlank() }?.let { currency ->
                 POSCurrencyOption(
@@ -339,19 +340,15 @@ class CashBoxManager(
     }
 
     private suspend fun resolvePaymentModes(
-        profileName: String,
-        company: String
+        profileName: String
     ): List<POSPaymentModeOption> {
-        val storedModes = runCatching { modeOfPaymentDao.getAllModes(company) }
+        return runCatching { paymentMethodLocalRepository.getMethodsForProfile(profileName) }
             .getOrElse { emptyList() }
-        val modeTypes = storedModes.associateBy { it.modeOfPayment }
-        return runCatching { modeOfPaymentDao.getAll(company) }
-            .getOrElse { emptyList() }
-            .map { mode ->
+            .map { method ->
                 POSPaymentModeOption(
-                    name = mode.name,
-                    modeOfPayment = mode.modeOfPayment,
-                    type = modeTypes[mode.modeOfPayment]?.type,
+                    name = method.mopName,
+                    modeOfPayment = method.mopName,
+                    type = method.type,
                 )
             }
     }
