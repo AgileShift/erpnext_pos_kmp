@@ -14,10 +14,11 @@ import kotlinx.coroutines.flow.Flow
 @Dao
 interface CashboxDao {
     @Transaction
-    suspend fun insert(cashbox: CashboxEntity, details: List<BalanceDetailsEntity>) {
+    suspend fun insert(cashbox: CashboxEntity, details: List<BalanceDetailsEntity>): Long {
         val insertId = insertEntry(cashbox)
         details.forEach { it.cashboxId = insertId }
         insertDetails(details)
+        return insertId
     }
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
@@ -61,4 +62,7 @@ interface CashboxDao {
     // Marcar como synced
     @Query("UPDATE tabCashbox SET posProfile = :erpName, pendingSync = 0 WHERE localId = :localId")
     suspend fun markAsSynced(localId: Long, erpName: String)
+
+    @Query("UPDATE tabCashbox SET openingEntryId = :openingEntryId WHERE localId = :localId")
+    suspend fun updateOpeningEntryId(localId: Long, openingEntryId: String)
 }

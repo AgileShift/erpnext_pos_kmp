@@ -32,7 +32,6 @@ fun rememberHomeActions(coordinator: HomeCoordinator): HomeAction {
             onCloseCashbox = coordinator::openCloseCashbox,
             onLogout = coordinator::logout,
             onError = coordinator::onError,
-            openCashbox = coordinator::openCashbox,
             onPosSelected = coordinator::onPosSelected,
             closeCashbox = coordinator::closeCashbox,
             isCashboxOpen = coordinator::isCashboxOpen,

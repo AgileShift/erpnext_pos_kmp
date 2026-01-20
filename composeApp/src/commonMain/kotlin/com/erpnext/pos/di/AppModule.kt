@@ -10,6 +10,9 @@ import com.erpnext.pos.data.repositories.CustomerRepository
 import com.erpnext.pos.data.repositories.DeliveryChargesRepository
 import com.erpnext.pos.data.repositories.InventoryRepository
 import com.erpnext.pos.data.repositories.ModeOfPaymentRepository
+import com.erpnext.pos.data.repositories.PosProfilePaymentMethodLocalRepository
+import com.erpnext.pos.data.repositories.OpeningEntrySyncRepository
+import com.erpnext.pos.data.repositories.PosProfilePaymentMethodSyncRepository
 import com.erpnext.pos.data.repositories.PaymentTermsRepository
 import com.erpnext.pos.data.repositories.POSProfileRepository
 import com.erpnext.pos.data.repositories.PaymentEntryRepository
@@ -42,7 +45,7 @@ import com.erpnext.pos.domain.usecases.FetchSalesInvoiceLocalUseCase
 import com.erpnext.pos.domain.usecases.FetchSalesInvoiceRemoteUseCase
 import com.erpnext.pos.domain.usecases.SyncSalesInvoiceFromRemoteUseCase
 import com.erpnext.pos.domain.usecases.FetchPaymentTermsUseCase
-import com.erpnext.pos.domain.usecases.FetchPosProfileInfoUseCase
+import com.erpnext.pos.domain.usecases.FetchPosProfileInfoLocalUseCase
 import com.erpnext.pos.domain.usecases.FetchPosProfileUseCase
 import com.erpnext.pos.domain.usecases.FetchUserInfoUseCase
 import com.erpnext.pos.domain.usecases.LoadHomeMetricsUseCase
@@ -99,6 +102,7 @@ import com.erpnext.pos.views.billing.BillingViewModel
 import com.erpnext.pos.views.customer.CustomerViewModel
 import com.erpnext.pos.views.deliverynote.DeliveryNoteViewModel
 import com.erpnext.pos.views.home.HomeViewModel
+import com.erpnext.pos.views.home.CashboxOpeningViewModel
 import com.erpnext.pos.views.home.POSProfileViewModel
 import com.erpnext.pos.views.inventory.InventoryViewModel
 import com.erpnext.pos.views.invoice.InvoiceViewModel
@@ -284,18 +288,18 @@ val appModule = module {
     single<DatePolicy> { DefaultPolicy(PolicyInput()) }
     single<CashBoxManager> {
         CashBoxManager(
-            get(named("apiService")),
-            get(),
-            get(),
-            get(),
-            get(),
-            get(),
-            get(),
-            get(),
-            get(),
-            get(),
-            get(),
-            get()
+            api = get(named("apiService")),
+            profileDao = get(),
+            openingDao = get(),
+            openingEntryLinkDao = get(),
+            closingDao = get(),
+            companyDao = get(),
+            cashboxDao = get(),
+            userDao = get(),
+            exchangeRatePreferences = get(),
+            exchangeRateRepository = get(),
+            modeOfPaymentDao = get(),
+            salesInvoiceDao = get()
         )
     }
     single(named("apiServiceV2")) { APIServiceV2(get(), get(), get()) }
@@ -307,6 +311,7 @@ val appModule = module {
             modeOfPaymentDao = get(),
             paymentEntryUseCase = get(),
             exchangeRateRepository = get(),
+            openingEntrySyncRepository = get(),
             cashBoxManager = get()
         )
     }
@@ -317,12 +322,14 @@ val appModule = module {
             customerRepo = get(),
             inventoryRepo = get(),
             modeOfPaymentRepo = get(),
+            posProfilePaymentMethodSyncRepository = get(),
             paymentTermsRepo = get(),
             deliveryChargesRepo = get(),
             exchangeRateRepo = get(),
             syncPreferences = get(),
             companyInfoRepo = get(),
             cashBoxManager = get(),
+            posProfileDao = get(),
             networkMonitor = get(),
             sessionRefresher = get(),
             syncContextProvider = get(),
@@ -354,6 +361,24 @@ val appModule = module {
     single { ModeOfPaymentRemoteSource(get(named("apiService"))) }
     single { ModeOfPaymentLocalSource(get()) }
     single { ModeOfPaymentRepository(get(), get(), get()) }
+    single { PosProfilePaymentMethodLocalRepository(get()) }
+    single {
+        PosProfilePaymentMethodSyncRepository(
+            get(named("apiService")),
+            get(),
+            get(),
+            get(),
+            get()
+        )
+    }
+    single {
+        OpeningEntrySyncRepository(
+            posOpeningRepository = get(),
+            openingEntryDao = get(),
+            openingEntryLinkDao = get(),
+            cashboxDao = get()
+        )
+    }
     //endregion
 
     //region POS Profile
@@ -396,6 +421,7 @@ val appModule = module {
             loadHomeMetricsUseCase = get()
         )
     }
+    single { CashboxOpeningViewModel(get(), get(), get()) }
     single<IUserRepository> { UserRepository(get(), get()) }
     //endregion
 

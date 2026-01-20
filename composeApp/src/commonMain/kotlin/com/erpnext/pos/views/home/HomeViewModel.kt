@@ -4,7 +4,7 @@ import androidx.lifecycle.viewModelScope
 import com.erpnext.pos.base.BaseViewModel
 import com.erpnext.pos.domain.models.POSProfileSimpleBO
 import com.erpnext.pos.domain.models.UserBO
-import com.erpnext.pos.domain.usecases.FetchPosProfileInfoUseCase
+import com.erpnext.pos.domain.usecases.FetchPosProfileInfoLocalUseCase
 import com.erpnext.pos.domain.usecases.FetchPosProfileUseCase
 import com.erpnext.pos.domain.usecases.FetchUserInfoUseCase
 import com.erpnext.pos.domain.usecases.HomeMetricInput
@@ -17,7 +17,6 @@ import com.erpnext.pos.localSource.preferences.SyncSettings
 import com.erpnext.pos.sync.SyncManager
 import com.erpnext.pos.sync.SyncState
 import com.erpnext.pos.views.CashBoxManager
-import com.erpnext.pos.views.PaymentModeWithAmount
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -32,7 +31,7 @@ class HomeViewModel(
     private val fetchUserInfoUseCase: FetchUserInfoUseCase,
     private val fetchPosProfileUseCase: FetchPosProfileUseCase,
     private val logoutUseCase: LogoutUseCase,
-    private val fetchPosProfileInfoUseCase: FetchPosProfileInfoUseCase,
+    private val fetchPosProfileInfoLocalUseCase: FetchPosProfileInfoLocalUseCase,
     private val contextManager: CashBoxManager,
     private val syncManager: SyncManager,
     private val syncPreferences: SyncPreferences,
@@ -149,13 +148,9 @@ class HomeViewModel(
     fun onPosSelected(pos: POSProfileSimpleBO) {
         _stateFlow.update { HomeState.POSInfoLoading }
         executeUseCase(action = {
-            val posProfileInfo = fetchPosProfileInfoUseCase(pos.name)
+            val posProfileInfo = fetchPosProfileInfoLocalUseCase(pos.name)
             _stateFlow.update { HomeState.POSInfoLoaded(posProfileInfo, posProfileInfo.currency) }
         }, exceptionHandler = { it.printStackTrace() })
-    }
-
-    suspend fun openCashbox(entry: POSProfileSimpleBO, amounts: List<PaymentModeWithAmount>) {
-        contextManager.openCashBox(entry, amounts)
     }
 
     fun closeCashbox() {

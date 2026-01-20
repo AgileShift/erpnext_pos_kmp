@@ -3,7 +3,6 @@ package com.erpnext.pos.views.home
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import com.erpnext.pos.domain.models.POSProfileSimpleBO
-import com.erpnext.pos.views.PaymentModeWithAmount
 import kotlinx.coroutines.flow.StateFlow
 import org.koin.compose.koinInject
 
@@ -37,10 +36,6 @@ class HomeCoordinator(
 
     fun onPosSelected(pos: POSProfileSimpleBO) {
         viewModel.onPosSelected(pos)
-    }
-
-    suspend fun openCashbox(entry: POSProfileSimpleBO, amounts: List<PaymentModeWithAmount>) {
-        viewModel.openCashbox(entry, amounts)
     }
 
     fun closeCashbox() {

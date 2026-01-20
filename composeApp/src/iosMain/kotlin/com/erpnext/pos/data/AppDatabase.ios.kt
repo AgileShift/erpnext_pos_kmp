@@ -15,6 +15,8 @@ actual class DatabaseBuilder {
         return Room.databaseBuilder<AppDatabase>(
             name = dbPath,
         ).setDriver(BundledSQLiteDriver())
+            .addMigrations(AppDatabaseMigrations.MIGRATION_23_24)
+            .addMigrations(AppDatabaseMigrations.MIGRATION_24_25)
             .setQueryCoroutineContext(Dispatchers.IO)
             .fallbackToDestructiveMigration(false)
             .build()

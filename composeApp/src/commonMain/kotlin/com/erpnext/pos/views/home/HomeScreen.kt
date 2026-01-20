@@ -160,9 +160,6 @@ fun HomeScreen(
             profiles = currentProfiles,
             user = currentUser,
             onSelectProfile = { actions.onPosSelected(it) },
-            onOpenCashbox = { pos, amounts ->
-                actions.openCashbox(pos, amounts)
-            },
             onDismiss = {
                 actions.initialState()
                 showOpeningView = false
