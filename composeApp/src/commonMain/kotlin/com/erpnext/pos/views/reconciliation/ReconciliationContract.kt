@@ -44,7 +44,9 @@ data class ReconciliationSummaryUi(
     val creditPartialByCurrency: Map<String, Double> = emptyMap(),
     // Desglose por moneda de créditos pendientes.
     val creditPendingByCurrency: Map<String, Double> = emptyMap(),
-    val expensesByCurrency: Map<String, Double> = emptyMap()
+    val expensesByCurrency: Map<String, Double> = emptyMap(),
+    val cashCurrencies: List<String> = emptyList(),
+    val cashModeCurrency: Map<String, String> = emptyMap()
 )
 
 const val UNASSIGNED_PAYMENT_MODE = "__UNASSIGNED__"

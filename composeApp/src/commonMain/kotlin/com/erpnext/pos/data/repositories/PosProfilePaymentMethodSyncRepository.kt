@@ -68,7 +68,7 @@ class PosProfilePaymentMethodSyncRepository(
         val paymentEntities = profile.payments.mapIndexed { index, payment ->
             PosProfilePaymentMethodEntity(
                 profileId = profile.profileName,
-                mopName = payment.name,
+                mopName = payment.modeOfPayment,
                 idx = index,
                 isDefault = payment.default,
                 allowInReturns = false,
@@ -97,7 +97,7 @@ class PosProfilePaymentMethodSyncRepository(
     ) {
         val company = profile.company
         val uniqueMops = mopNames.distinct()
-        val existing = modeOfPaymentDao.getByNames(uniqueMops).associateBy { it.name }
+        val existing = modeOfPaymentDao.getByNames(uniqueMops).associateBy { it.modeOfPayment }
         val missing = uniqueMops.filter { mopName ->
             val stored = existing[mopName]
             stored == null || stored.currency.isNullOrBlank() || stored.account.isNullOrBlank()

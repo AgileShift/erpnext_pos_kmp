@@ -194,7 +194,10 @@ class HomeViewModel(
                 }
                 val profile = posProfileDao.getPOSProfile(profileId)
                 val methods = paymentMethodLocalRepository.getMethodsForProfile(profileId)
-                val cashMethods = paymentMethodLocalRepository.getCashMethodsGroupedByCurrency(profileId)
+                val cashMethods = paymentMethodLocalRepository.getCashMethodsGroupedByCurrency(
+                    profileId,
+                    profile.currency
+                )
                 _openingState.update {
                     it.copy(
                         profileId = profile.profileName,

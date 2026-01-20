@@ -2,6 +2,7 @@ package com.erpnext.pos.views.reconciliation
 
 import androidx.lifecycle.viewModelScope
 import com.erpnext.pos.base.BaseViewModel
+import com.erpnext.pos.data.repositories.PosProfilePaymentMethodLocalRepository
 import com.erpnext.pos.localSource.dao.SalesInvoiceDao
 import com.erpnext.pos.localSource.dao.ShiftPaymentRow
 import com.erpnext.pos.views.CashBoxManager
@@ -20,7 +21,8 @@ import kotlinx.coroutines.launch
 @OptIn(ExperimentalTime::class)
 class ReconciliationViewModel(
     private val cashBoxManager: CashBoxManager,
-    private val salesInvoiceDao: SalesInvoiceDao
+    private val salesInvoiceDao: SalesInvoiceDao,
+    private val paymentMethodLocalRepository: PosProfilePaymentMethodLocalRepository
 ) : BaseViewModel() {
     private val _stateFlow = MutableStateFlow<ReconciliationState>(ReconciliationState.Loading)
     val stateFlow: StateFlow<ReconciliationState> = _stateFlow.asStateFlow()
@@ -101,6 +103,15 @@ class ReconciliationViewModel(
             startMillis = startMillis,
             endMillis = endMillis
         )
+        val cashMethodsByCurrency =
+            paymentMethodLocalRepository.getCashMethodsGroupedByCurrency(
+                context.profileName,
+                context.currency
+            )
+        val cashModeCurrency = cashMethodsByCurrency.flatMap { (currency, methods) ->
+            methods.map { it.mopName to currency }
+        }.toMap()
+        val cashCurrencies = cashMethodsByCurrency.keys.map { it.uppercase() }.distinct().sorted()
         val paymentsByMode = aggregatePaymentsByMode(invoices, paymentRows, posCurrency, rateCache)
         val totalPaymentsAll = paymentsByMode.values.sum()
         val cashModes = resolveCashModes(context, openingByMode)
@@ -163,7 +174,9 @@ class ReconciliationViewModel(
             creditPendingTotal = creditTotals.pendingTotal,
             creditPartialByCurrency = creditTotals.partialByCurrency,
             creditPendingByCurrency = creditTotals.pendingByCurrency,
-            expensesByCurrency = expensesByCurrency
+            expensesByCurrency = expensesByCurrency,
+            cashCurrencies = cashCurrencies,
+            cashModeCurrency = cashModeCurrency
         )
     }
 

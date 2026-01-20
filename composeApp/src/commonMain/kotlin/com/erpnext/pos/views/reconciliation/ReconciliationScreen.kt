@@ -59,6 +59,7 @@ import androidx.compose.ui.unit.dp
 import com.erpnext.pos.localization.LocalAppStrings
 import com.erpnext.pos.localization.ReconciliationStrings
 import com.erpnext.pos.utils.DecimalFormatter
+import com.erpnext.pos.utils.toCurrencySymbol
 import com.erpnext.pos.views.components.DenominationCounter
 import com.erpnext.pos.views.components.DenominationCounterLabels
 import com.erpnext.pos.views.components.DenominationUi
@@ -77,16 +78,21 @@ fun ReconciliationScreen(
     val strings = appStrings.reconciliation
     val summary = (state as? ReconciliationState.Success)?.summary
     val formatter = remember { DecimalFormatter() }
-    // Conteo por moneda (POS + soportar USD/NIO si difieren)
-    val countCurrencies = remember(summary?.currency) {
-        buildList {
-            summary?.currency?.uppercase()?.let { add(it) }
-            add("USD")
-            add("NIO")
-        }.distinct()
+    // Conteo por moneda (usa monedas de métodos de efectivo si están configuradas)
+    val countCurrencies = remember(summary?.currency, summary?.cashCurrencies) {
+        val fromProfile = summary?.cashCurrencies?.map { it.uppercase() }?.distinct().orEmpty()
+        if (fromProfile.isNotEmpty()) {
+            fromProfile.sorted()
+        } else {
+            buildList {
+                summary?.currency?.uppercase()?.let { add(it) }
+                add("USD")
+                add("NIO")
+            }.distinct()
+        }
     }
-    var selectedCountCurrency by remember(summary?.currency) {
-        mutableStateOf(summary?.currency?.uppercase() ?: "USD")
+    var selectedCountCurrency by remember(summary?.currency, countCurrencies) {
+        mutableStateOf(countCurrencies.firstOrNull() ?: summary?.currency?.uppercase() ?: "USD")
     }
     val countState =
         remember(summary?.openingEntryId) { mutableStateMapOf<String, List<DenominationUi>>() }
@@ -95,9 +101,7 @@ fun ReconciliationScreen(
         if (!countState.containsKey(currency)) {
             val symbol = when {
                 currency.equals(summary?.currency, ignoreCase = true) -> summary?.currencySymbol
-                currency == "USD" -> "$"
-                currency == "NIO" -> "C$"
-                else -> null
+                else -> currency.toCurrencySymbol().ifBlank { null }
             }
             countState[currency] = buildDenominationsForCurrency(currency, symbol, formatter)
         }
@@ -134,23 +138,16 @@ fun ReconciliationScreen(
     // Mapear conteos a modos de pago según moneda en el nombre del modo
     val countedByMode = run {
         val cashModes = summary?.cashModes?.ifEmpty { expectedCashByMode.keys } ?: emptySet()
-        val totalPos = cashTotalsByCurrency[summary?.currency?.uppercase()]
-            ?: cashTotalsByCurrency.values.sum()
-        val totalUsd = cashTotalsByCurrency["USD"] ?: 0.0
-        val totalNio = cashTotalsByCurrency["NIO"] ?: 0.0
+        val fallbackCurrency = summary?.currency?.uppercase()
+            ?: countCurrencies.firstOrNull()
+            ?: "USD"
+        val cashModeCurrency = summary?.cashModeCurrency.orEmpty()
         cashModes.associateWith { mode ->
-            when {
-                mode.contains("USD", ignoreCase = true) || mode.contains("$") -> totalUsd
-                mode.contains("NIO", ignoreCase = true) || mode.contains(
-                    "C$",
-                    ignoreCase = true
-                ) -> totalNio
-
-                else -> totalPos
-            }
+            val mapped = cashModeCurrency[mode]?.uppercase() ?: fallbackCurrency
+            cashTotalsByCurrency[mapped] ?: 0.0
         }
     }
-    val fallbackCurrency = summary?.currency?.uppercase() ?: "USD"
+    val fallbackCurrency = summary?.currency?.uppercase() ?: countCurrencies.firstOrNull() ?: "USD"
     val countedByCurrency = cashTotalsByCurrency.ifEmpty {
         mapOf(fallbackCurrency to 0.0)
     }

@@ -1,4 +1,4 @@
-@file:OptIn(ExperimentalMaterial3Api::class, ExperimentalTime::class)
+@file:OptIn(ExperimentalMaterial3Api::class, ExperimentalTime::class, FlowPreview::class)
 
 package com.erpnext.pos.views.home
 
@@ -45,6 +45,7 @@ import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -68,6 +69,7 @@ import com.erpnext.pos.views.components.DenominationCounter
 import com.erpnext.pos.views.components.DenominationCounterLabels
 import com.erpnext.pos.views.components.DenominationUi
 import com.erpnext.pos.views.components.buildDenominationsForCurrency
+import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.debounce
@@ -86,7 +88,7 @@ fun CashboxOpeningScreen(
     user: UserBO?,
     openingState: CashboxOpeningProfileState,
     onLoadOpeningProfile: (String?) -> Unit,
-    onOpenCashbox: (POSProfileSimpleBO, List<PaymentModeWithAmount>) -> Unit,
+    onOpenCashbox: suspend (POSProfileSimpleBO, List<PaymentModeWithAmount>) -> Unit,
     onSelectProfile: (POSProfileSimpleBO) -> Unit,
     onDismiss: () -> Unit,
     snackbar: SnackbarController
@@ -131,7 +133,18 @@ fun CashboxOpeningScreen(
     val cashMethodsByCurrency = openingState.cashMethodsByCurrency
     val cashMethodByCurrency = cashMethodsByCurrency.mapValues { it.value.first() }
     val duplicateCashCurrencies = cashMethodsByCurrency.filterValues { it.size > 1 }.keys.toList()
-    val cashMethodsMissingCurrency = openingState.methods.filter { it.currency.isNullOrBlank() }
+    val cashMethodsMissingCurrency = openingState.methods.filter { method ->
+        method.currency.isNullOrBlank() &&
+            method.type?.equals("Cash", ignoreCase = true) == true &&
+            method.enabled && method.enabledInProfile
+    }
+    val cashDisabledOrNotInProfile = openingState.methods.filter { method ->
+        method.type?.equals("Cash", ignoreCase = true) == true &&
+            (!method.enabled || !method.enabledInProfile)
+    }
+    val nonCashMethods = openingState.methods.filter { method ->
+        method.type?.equals("Cash", ignoreCase = true) != true
+    }
     val openingCurrencies = remember(cashMethodsByCurrency) {
         cashMethodsByCurrency.keys.sorted()
     }
@@ -188,7 +201,7 @@ fun CashboxOpeningScreen(
     LaunchedEffect(selectedProfile?.name, user?.email, openingCurrencies) {
         val profileId = selectedProfile?.name ?: return@LaunchedEffect
         val userEmail = user?.email ?: return@LaunchedEffect
-        kotlinx.coroutines.flow.snapshotFlow {
+        snapshotFlow {
             denominationState.toMap().mapValues { (_, denoms) -> denoms.map { it.copy() } }
         }.debounce(500).collectLatest { current ->
             if (current.isEmpty()) return@collectLatest
@@ -290,9 +303,13 @@ fun CashboxOpeningScreen(
                                 uiState is HomeState.POSInfoLoading,
                             canOpen = canOpen && !isSubmitting,
                             duplicateCashCurrencies = duplicateCashCurrencies,
-                            cashModesMissingCurrency = cashMethodsMissingCurrency.map {
-                                it.mopName
-                            },
+                            cashModesMissingCurrency = cashMethodsMissingCurrency.map { it.mopName },
+                            debugInfo = buildDebugInfo(
+                                cashMethodsByCurrency = cashMethodsByCurrency,
+                                cashMethodsMissingCurrency = cashMethodsMissingCurrency,
+                                cashDisabledOrNotInProfile = cashDisabledOrNotInProfile,
+                                nonCashMethods = nonCashMethods
+                            ),
                             onOpen = handleOpen,
                             onCancel = onDismiss
                         )
@@ -339,9 +356,13 @@ fun CashboxOpeningScreen(
                                     uiState is HomeState.POSInfoLoading,
                                 canOpen = canOpen && !isSubmitting,
                                 duplicateCashCurrencies = duplicateCashCurrencies,
-                                cashModesMissingCurrency = cashMethodsMissingCurrency.map {
-                                    it.mopName
-                                },
+                                cashModesMissingCurrency = cashMethodsMissingCurrency.map { it.mopName },
+                                debugInfo = buildDebugInfo(
+                                    cashMethodsByCurrency = cashMethodsByCurrency,
+                                    cashMethodsMissingCurrency = cashMethodsMissingCurrency,
+                                    cashDisabledOrNotInProfile = cashDisabledOrNotInProfile,
+                                    nonCashMethods = nonCashMethods
+                                ),
                                 onOpen = handleOpen,
                                 onCancel = onDismiss
                             )
@@ -438,6 +459,7 @@ private fun OpeningFormSection(
     canOpen: Boolean,
     duplicateCashCurrencies: List<String>,
     cashModesMissingCurrency: List<String>,
+    debugInfo: String,
     onOpen: () -> Unit,
     onCancel: () -> Unit,
 ) {
@@ -622,6 +644,21 @@ private fun OpeningFormSection(
                 }
             }
 
+            if (debugInfo.isNotBlank()) {
+                Surface(
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f),
+                    shape = RoundedCornerShape(10.dp),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                ) {
+                    Text(
+                        text = debugInfo,
+                        modifier = Modifier.padding(12.dp),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+
             if (isLoading) {
                 Row(
                     modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center
@@ -775,6 +812,44 @@ private fun SectionCard(
             }
         }
     }
+}
+
+private fun buildDebugInfo(
+    cashMethodsByCurrency: Map<String, List<com.erpnext.pos.localSource.dao.ResolvedPaymentMethod>>,
+    cashMethodsMissingCurrency: List<com.erpnext.pos.localSource.dao.ResolvedPaymentMethod>,
+    cashDisabledOrNotInProfile: List<com.erpnext.pos.localSource.dao.ResolvedPaymentMethod>,
+    nonCashMethods: List<com.erpnext.pos.localSource.dao.ResolvedPaymentMethod>
+): String {
+    if (cashMethodsByCurrency.isEmpty() &&
+        cashMethodsMissingCurrency.isEmpty() &&
+        cashDisabledOrNotInProfile.isEmpty() &&
+        nonCashMethods.isEmpty()
+    ) {
+        return ""
+    }
+    val lines = mutableListOf<String>()
+    if (cashMethodsByCurrency.isNotEmpty()) {
+        val byCurrency = cashMethodsByCurrency.entries.joinToString("; ") { (currency, methods) ->
+            val names = methods.joinToString(", ") { it.mopName }
+            "$currency: $names"
+        }
+        lines.add("DEBUG cash grouped -> $byCurrency")
+    } else {
+        lines.add("DEBUG cash grouped -> (empty)")
+    }
+    if (cashMethodsMissingCurrency.isNotEmpty()) {
+        val names = cashMethodsMissingCurrency.joinToString(", ") { it.mopName }
+        lines.add("DEBUG cash missing currency -> $names")
+    }
+    if (cashDisabledOrNotInProfile.isNotEmpty()) {
+        val names = cashDisabledOrNotInProfile.joinToString(", ") { it.mopName }
+        lines.add("DEBUG cash disabled/not-in-profile -> $names")
+    }
+    if (nonCashMethods.isNotEmpty()) {
+        val names = nonCashMethods.joinToString(", ") { it.mopName }
+        lines.add("DEBUG non-cash -> $names")
+    }
+    return lines.joinToString("\n")
 }
 
 @Composable

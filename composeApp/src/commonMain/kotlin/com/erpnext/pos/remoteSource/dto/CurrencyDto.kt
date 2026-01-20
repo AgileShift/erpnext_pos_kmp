@@ -34,7 +34,8 @@ data class ModeOfPaymentDetailDto(
 @Serializable
 data class ModeOfPaymentAccountDto(
     val company: String,
-    @SerialName("default_account") val defaultAccount: String? = null
+    @SerialName("default_account")
+    val defaultAccount: String? = null
 )
 
 @Serializable

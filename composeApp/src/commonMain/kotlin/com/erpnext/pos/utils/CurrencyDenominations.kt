@@ -26,8 +26,10 @@ object DenominationCatalog {
 }
 
 fun normalizeCurrency(code: String): String = when (code.uppercase()) {
-    "C$" -> "NIO"
-    "$" -> "USD"
+    "C$", "CORDOBA", "CORDOBAS", "NIO" -> "NIO"
+    "$", "USD", "DOLAR", "DOLARES" -> "USD"
+    "EUR", "EURO", "EUROS" -> "EUR"
+    "GBP", "LIBRA", "LIBRAS" -> "GBP"
     else -> code.uppercase()
 }
 
@@ -61,4 +63,3 @@ fun availableCurrencies(baseCurrency: String, paymentModes: List<PaymentModesBO>
     }
     return (listOf(base) + fromModes).map { normalizeCurrency(it) }.distinct()
 }
-

@@ -1,9 +1,10 @@
+@file:OptIn(ExperimentalTime::class)
+
 package com.erpnext.pos.di
 
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import com.erpnext.pos.data.AppDatabase
 import com.erpnext.pos.data.DatabaseBuilder
-import com.erpnext.pos.data.adapters.local.SalesInvoiceLocalAdapter
 import com.erpnext.pos.data.repositories.CheckoutRepository
 import com.erpnext.pos.data.repositories.CompanyRepository
 import com.erpnext.pos.data.repositories.CustomerRepository
@@ -45,7 +46,6 @@ import com.erpnext.pos.domain.usecases.FetchSalesInvoiceLocalUseCase
 import com.erpnext.pos.domain.usecases.FetchSalesInvoiceRemoteUseCase
 import com.erpnext.pos.domain.usecases.SyncSalesInvoiceFromRemoteUseCase
 import com.erpnext.pos.domain.usecases.FetchPaymentTermsUseCase
-import com.erpnext.pos.domain.usecases.FetchPosProfileInfoLocalUseCase
 import com.erpnext.pos.domain.usecases.FetchPosProfileUseCase
 import com.erpnext.pos.domain.usecases.FetchUserInfoUseCase
 import com.erpnext.pos.domain.usecases.LoadHomeMetricsUseCase
@@ -84,7 +84,6 @@ import com.erpnext.pos.remoteSource.datasources.SalesInvoiceRemoteSource
 import com.erpnext.pos.remoteSource.datasources.UserRemoteSource
 import com.erpnext.pos.remoteSource.oauth.AuthInfoStore
 import com.erpnext.pos.remoteSource.oauth.TokenStore
-import com.erpnext.pos.remoteSource.oauth.refreshAuthToken
 import com.erpnext.pos.remoteSource.oauth.toBearerToken
 import com.erpnext.pos.auth.SessionRefresher
 import com.erpnext.pos.sync.LegacyPushSyncManager
@@ -119,6 +118,8 @@ import com.erpnext.pos.views.payment.PaymentHandler
 import com.erpnext.pos.views.reconciliation.ReconciliationViewModel
 import com.erpnext.pos.auth.TokenHeartbeat
 import com.erpnext.pos.data.repositories.v2.SourceDocumentRepository
+import com.erpnext.pos.domain.usecases.FetchPosProfileInfoLocalUseCase
+import com.erpnext.pos.domain.usecases.FetchPosProfileInfoUseCase
 import com.erpnext.pos.domain.usecases.v2.LoadSourceDocumentsUseCase
 import io.ktor.client.HttpClient
 import io.ktor.client.plugins.HttpTimeout
@@ -143,6 +144,7 @@ import org.koin.core.qualifier.named
 import org.koin.dsl.KoinAppDeclaration
 import org.koin.dsl.module
 import kotlin.time.Clock
+import kotlin.time.ExperimentalTime
 
 val appModule = module {
 
@@ -420,12 +422,14 @@ val appModule = module {
 
     //region Home
     single { UserRemoteSource(get(named("apiService")), get()) }
+    single { FetchPosProfileInfoUseCase(get()) }
+    single { FetchPosProfileInfoLocalUseCase(get()) }
     single {
         HomeViewModel(
             fetchUserInfoUseCase = get(),
             fetchPosProfileUseCase = get(),
             logoutUseCase = get(),
-            fetchPosProfileInfoUseCase = get(),
+            fetchPosProfileInfoLocalUseCase = get(),
             contextManager = get(),
             posProfileDao = get(),
             paymentMethodLocalRepository = get(),
@@ -465,7 +469,7 @@ val appModule = module {
     //endregion
 
     //region Reconciliation
-    single { ReconciliationViewModel(get(), get()) }
+    single { ReconciliationViewModel(get(), get(), get()) }
     //endregion
 
     //region Checkout
@@ -530,7 +534,6 @@ val appModule = module {
     single { FetchCategoriesUseCase(get()) }
     single { FetchClosingEntriesUseCase(get()) }
     single { FetchPosProfileUseCase(get()) }
-    single { FetchPosProfileInfoUseCase(get()) }
     single { FetchUserInfoUseCase(get()) }
     single { RegisterInvoicePaymentUseCase(get()) }
     single { CreatePaymentEntryUseCase(get()) }

@@ -70,6 +70,7 @@ import kotlinx.serialization.json.decodeFromJsonElement
 import kotlinx.serialization.json.jsonObject
 import com.erpnext.pos.utils.AppLogger
 import com.erpnext.pos.utils.AppSentry
+import io.ktor.http.takeFrom
 
 class APIService(
     private val client: HttpClient,
@@ -240,7 +241,9 @@ class APIService(
     suspend fun getModeOfPaymentDetail(name: String): ModeOfPaymentDetailDto? {
         val url = authStore.getCurrentSite() ?: return null
         return client.getERPSingle(
-            doctype = ERPDocType.ModeOfPayment.path, name = name.encodeURLParameter(), baseUrl = url
+            doctype = ERPDocType.ModeOfPayment.path,
+            name = name.encodeURLParameter(),
+            baseUrl = url
         )
     }
 
@@ -310,7 +313,7 @@ class APIService(
         return try {
             val response = withRetries {
                 client.post {
-                    url(endpoint)
+                    url { takeFrom(endpoint) }
                     contentType(ContentType.Application.FormUrlEncoded)
                     setBody(
                         FormDataContent(

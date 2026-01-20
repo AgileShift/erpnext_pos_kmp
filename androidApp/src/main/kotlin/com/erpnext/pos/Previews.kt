@@ -5,6 +5,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import com.erpnext.pos.domain.models.POSProfileSimpleBO
 import com.erpnext.pos.domain.models.UserBO
 import com.erpnext.pos.utils.view.SnackbarController
+import com.erpnext.pos.views.home.CashboxOpeningProfileState
 import com.erpnext.pos.views.home.CashboxOpeningScreen
 import com.erpnext.pos.views.home.HomeState
 
@@ -43,10 +44,12 @@ fun CashboxOpeningScreenPreview() {
             "es",
             true
         ),
-        {},
-        { p, l -> },
-        {},
-        SnackbarController()
+        onDismiss = {},
+        snackbar = SnackbarController(),
+        onSelectProfile = { _ -> },
+        openingState = CashboxOpeningProfileState(),
+        onLoadOpeningProfile = { _ -> },
+        onOpenCashbox = { _, _ -> },
     )
 }
 
