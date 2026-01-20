@@ -132,9 +132,8 @@ fun CashboxOpeningScreen(
     val cashMethodByCurrency = cashMethodsByCurrency.mapValues { it.value.first() }
     val duplicateCashCurrencies = cashMethodsByCurrency.filterValues { it.size > 1 }.keys.toList()
     val cashMethodsMissingCurrency = openingState.methods.filter { it.currency.isNullOrBlank() }
-    val openingCurrencies = remember(cashMethodsByCurrency, normalizedBaseCurrency) {
-        if (cashMethodsByCurrency.isEmpty()) listOf(normalizedBaseCurrency)
-        else cashMethodsByCurrency.keys.sorted()
+    val openingCurrencies = remember(cashMethodsByCurrency) {
+        cashMethodsByCurrency.keys.sorted()
     }
 
     LaunchedEffect(openingDraft, profiles, user?.email) {
@@ -682,6 +681,14 @@ private fun OpeningCashContent(
     totalsByCurrency: Map<String, Double>,
 ) {
     SectionCard(title = "Conteo de efectivo") {
+        if (countCurrencies.isEmpty()) {
+            Text(
+                text = "No cash payment methods are configured for this POS profile.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.error
+            )
+            return@SectionCard
+        }
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
             DenominationCounter(
                 denominations = denominations,

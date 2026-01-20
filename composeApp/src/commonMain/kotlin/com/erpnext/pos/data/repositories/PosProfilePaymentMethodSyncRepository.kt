@@ -96,7 +96,6 @@ class PosProfilePaymentMethodSyncRepository(
         now: Long
     ) {
         val company = profile.company
-        val profileCurrency = profile.currency
         val uniqueMops = mopNames.distinct()
         val existing = modeOfPaymentDao.getByNames(uniqueMops).associateBy { it.name }
         val missing = uniqueMops.filter { mopName ->
@@ -111,8 +110,6 @@ class PosProfilePaymentMethodSyncRepository(
                 ?: detail.accounts.firstOrNull()?.defaultAccount
             val accountDetail = account?.let { modeOfPaymentRemoteSource.getAccountDetail(it) }
             val currency = accountDetail?.accountCurrency?.takeIf { it.isNotBlank() }
-                ?: profileCurrency
-            // ASSUMPTION: When account currency is missing, fallback to the POS Profile currency.
             ModeOfPaymentEntity(
                 name = detail.name,
                 modeOfPayment = detail.modeOfPayment,

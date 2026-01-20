@@ -19,8 +19,9 @@ class PosProfilePaymentMethodLocalRepository(
                 method.enabled && method.enabledInProfile &&
                     method.type?.equals("Cash", ignoreCase = true) == true
             }
+            .filter { method -> !method.currency.isNullOrBlank() }
             .groupBy { method ->
-                method.currency?.takeIf { it.isNotBlank() } ?: "UNKNOWN"
+                method.currency ?: ""
             }
     }
 
