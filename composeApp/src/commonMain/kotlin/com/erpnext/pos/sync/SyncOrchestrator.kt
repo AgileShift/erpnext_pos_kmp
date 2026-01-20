@@ -105,7 +105,7 @@ class SyncOrchestrator(
             }
             return@withLock listOf(
                 runJob("SyncPosProfiles", setOf(SyncPrerequisite.NEED_AUTH)) {
-                    posProfilePaymentMethodSyncRepository.syncProfiles(assignedTo)
+                    posProfilePaymentMethodSyncRepository.syncProfilesWithPayments(assignedTo)
                 }
             )
         }

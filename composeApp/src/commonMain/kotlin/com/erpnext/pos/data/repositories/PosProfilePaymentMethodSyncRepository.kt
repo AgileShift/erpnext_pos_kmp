@@ -40,6 +40,15 @@ class PosProfilePaymentMethodSyncRepository(
         return local
     }
 
+    suspend fun syncProfilesWithPayments(assignedTo: String?): List<PosProfileLocalEntity> {
+        RepoTrace.breadcrumb("PosProfilePaymentMethodSyncRepository", "syncProfilesWithPayments")
+        val profiles = syncProfiles(assignedTo)
+        profiles.forEach { profile ->
+            syncProfilePayments(profile.profileName)
+        }
+        return profiles
+    }
+
     suspend fun syncProfilePayments(profileId: String): POSProfileDto {
         RepoTrace.breadcrumb("PosProfilePaymentMethodSyncRepository", "syncProfilePayments", profileId)
         val now = Clock.System.now().toEpochMilliseconds()
@@ -89,7 +98,14 @@ class PosProfilePaymentMethodSyncRepository(
         val company = profile.company
         val profileCurrency = profile.currency
         val uniqueMops = mopNames.distinct()
-        val resolved = uniqueMops.mapNotNull { mopName ->
+        val existing = modeOfPaymentDao.getByNames(uniqueMops).associateBy { it.name }
+        val missing = uniqueMops.filter { mopName ->
+            val stored = existing[mopName]
+            stored == null || stored.currency.isNullOrBlank() || stored.account.isNullOrBlank()
+        }
+        if (missing.isEmpty()) return
+
+        val resolved = missing.mapNotNull { mopName ->
             val detail = modeOfPaymentRemoteSource.getModeDetail(mopName) ?: return@mapNotNull null
             val account = detail.accounts.firstOrNull { it.company == company }?.defaultAccount
                 ?: detail.accounts.firstOrNull()?.defaultAccount

@@ -23,6 +23,9 @@ interface ModeOfPaymentDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAllModes(items: List<ModeOfPaymentEntity>)
 
+    @Query("SELECT * FROM tabModeOfPayment WHERE name IN (:names)")
+    suspend fun getByNames(names: List<String>): List<ModeOfPaymentEntity>
+
     @Query("SELECT MAX(last_synced_at) FROM tabModeOfPayment WHERE company = :company")
     suspend fun getLastSyncedAt(company: String): Long?
 }
