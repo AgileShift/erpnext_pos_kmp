@@ -57,6 +57,9 @@ interface PosProfilePaymentMethodDao {
     @Query("SELECT COUNT(*) FROM tabPOSProfilePaymentMethod WHERE profile_id = :profileId")
     suspend fun countRelationsForProfile(profileId: String): Int
 
+    @Query("SELECT COUNT(*) FROM tabPOSProfilePaymentMethod")
+    suspend fun countAllRelations(): Int
+
     @Query(
         """
         DELETE FROM tabPOSProfilePaymentMethod

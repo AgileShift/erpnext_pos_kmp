@@ -1,15 +1,18 @@
 package com.erpnext.pos.sync
 
 import com.erpnext.pos.localSource.dao.PosProfileLocalDao
+import com.erpnext.pos.localSource.dao.PosProfilePaymentMethodDao
 import com.erpnext.pos.utils.AppLogger
 
 class PosProfileGate(
     private val syncOrchestrator: SyncOrchestrator,
-    private val posProfileLocalDao: PosProfileLocalDao
+    private val posProfileLocalDao: PosProfileLocalDao,
+    private val posProfilePaymentMethodDao: PosProfilePaymentMethodDao
 ) {
     suspend fun ensureReady(assignedTo: String?): GateResult {
-        val existing = posProfileLocalDao.countAll()
-        if (existing > 0) return GateResult.Ready
+        val existingProfiles = posProfileLocalDao.countAll()
+        val existingRelations = posProfilePaymentMethodDao.countAllRelations()
+        if (existingProfiles > 0 && existingRelations > 0) return GateResult.Ready
 
         AppLogger.info("PosProfileGate: cache miss, bootstrapping profiles")
         val results = syncOrchestrator.bootstrapProfiles(assignedTo)

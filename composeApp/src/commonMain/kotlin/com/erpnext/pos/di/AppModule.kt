@@ -382,7 +382,7 @@ val appModule = module {
         )
     }
     single { OpeningGate(get(), get()) }
-    single { PosProfileGate(get(), get()) }
+    single { PosProfileGate(get(), get(), get()) }
     single {
         OpeningEntrySyncRepository(
             posOpeningRepository = get(),
