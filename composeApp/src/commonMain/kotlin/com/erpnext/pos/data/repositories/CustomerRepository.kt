@@ -14,6 +14,7 @@ import com.erpnext.pos.remoteSource.mapper.toEntities
 import com.erpnext.pos.remoteSource.mapper.toEntity
 import com.erpnext.pos.sync.SyncTTL
 import com.erpnext.pos.utils.RepoTrace
+import com.erpnext.pos.utils.roundToCurrency
 import com.erpnext.pos.views.CashBoxManager
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -81,7 +82,7 @@ class CustomerRepository(
                 }.awaitAll()
                 localSource.insertAll(entities)
                 entities.map { it.name }.distinct().forEach { customerId ->
-                    localSource.refreshCustomerSummary(customerId)
+                    refreshCustomerSummaryWithRates(customerId)
                 }
             }
         }, shouldFetch = { localData ->
@@ -143,10 +144,58 @@ class CustomerRepository(
                     }
                 }.awaitAll()
                 localSource.insertAll(entities)
+                entities.map { it.name }.distinct().forEach { customerId ->
+                    refreshCustomerSummaryWithRates(customerId)
+                }
             }
         }, onFetchFailed = {
             RepoTrace.capture("CustomerRepository", "sync", it)
             it.printStackTrace()
         })
+    }
+
+    private suspend fun refreshCustomerSummaryWithRates(customerId: String) {
+        val invoices = localSource.getOutstandingInvoicesForCustomer(customerId)
+        if (invoices.isEmpty()) {
+            localSource.updateSummary(
+                customerId = customerId,
+                totalPendingAmount = 0.0,
+                pendingInvoicesCount = 0,
+                currentBalance = 0.0,
+                availableCredit = null,
+                state = "Sin Pendientes"
+            )
+            return
+        }
+        val ctx = context.getContext()
+        val baseCurrency = ctx?.partyAccountCurrency ?: ctx?.currency ?: "NIO"
+        var totalPending = 0.0
+        invoices.forEach { wrapper ->
+            val invoice = wrapper.invoice
+            val currency = invoice.partyAccountCurrency ?: invoice.currency
+            val outstanding = invoice.outstandingAmount.coerceAtLeast(0.0)
+            val rate = when {
+                currency.equals(baseCurrency, ignoreCase = true) -> 1.0
+                invoice.conversionRate != null && invoice.conversionRate!! > 0.0 ->
+                    invoice.conversionRate!!
+                invoice.customExchangeRate != null && invoice.customExchangeRate!! > 0.0 ->
+                    invoice.customExchangeRate!!
+                else -> context.resolveExchangeRateBetween(currency, baseCurrency) ?: 1.0
+            }
+            totalPending += (outstanding * rate)
+        }
+        val pendingCount = invoices.count { it.invoice.outstandingAmount > 0.0 }
+        val customer = localSource.getByName(customerId)
+        val creditLimit = customer?.creditLimit
+        val availableCredit = creditLimit?.let { it - totalPending }
+        val state = if (totalPending > 0.0) "Pendientes" else "Sin Pendientes"
+        localSource.updateSummary(
+            customerId = customerId,
+            totalPendingAmount = roundToCurrency(totalPending),
+            pendingInvoicesCount = pendingCount,
+            currentBalance = roundToCurrency(totalPending),
+            availableCredit = availableCredit?.let { roundToCurrency(it) },
+            state = state
+        )
     }
 }

@@ -1,6 +1,7 @@
 package com.erpnext.pos.sync
 
 import com.erpnext.pos.data.repositories.ExchangeRateRepository
+import com.erpnext.pos.data.repositories.ClosingEntrySyncRepository
 import com.erpnext.pos.data.repositories.OpeningEntrySyncRepository
 import com.erpnext.pos.data.repositories.SalesInvoiceRepository
 import com.erpnext.pos.domain.models.CustomerBO
@@ -27,6 +28,7 @@ class LegacyPushSyncManager(
     private val paymentEntryUseCase: CreatePaymentEntryUseCase,
     private val exchangeRateRepository: ExchangeRateRepository,
     private val openingEntrySyncRepository: OpeningEntrySyncRepository,
+    private val closingEntrySyncRepository: ClosingEntrySyncRepository,
     private val cashBoxManager: CashBoxManager
 ) : PushSyncRunner {
 
@@ -44,7 +46,10 @@ class LegacyPushSyncManager(
             }
             onDocType("Pagos pendientes")
             val paymentsSynced = pushPendingPayments()
-            hasChanges || paymentsSynced
+            hasChanges = hasChanges || paymentsSynced
+            onDocType("Cierres pendientes")
+            val closingsSynced = closingEntrySyncRepository.pushPending()
+            hasChanges || closingsSynced
         } catch (e: Throwable) {
             AppSentry.capture(e, "LegacyPushSyncManager: invoices push failed")
             AppLogger.warn("LegacyPushSyncManager: invoices push failed", e)

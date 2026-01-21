@@ -24,7 +24,7 @@ fun POSOpeningEntryDto.toEntity(name: String): POSOpeningEntryEntity {
     )
 }
 
-fun POSClosingEntryDto.toEntity(name: String): POSClosingEntryEntity {
+fun POSClosingEntryDto.toEntity(name: String, pendingSync: Boolean = true): POSClosingEntryEntity {
     val totalClosing = balanceDetails.sumOf { it.closingAmount ?: 0.0 }
     return POSClosingEntryEntity(
         name = name,
@@ -34,7 +34,7 @@ fun POSClosingEntryDto.toEntity(name: String): POSClosingEntryEntity {
         periodStartDate = this.periodStartDate,
         periodEndDate = this.periodEndDate,
         closingAmount = totalClosing,
-        pendingSync = true
+        pendingSync = pendingSync
     )
 }
 

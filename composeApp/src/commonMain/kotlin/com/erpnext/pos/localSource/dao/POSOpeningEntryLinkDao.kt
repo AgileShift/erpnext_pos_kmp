@@ -17,6 +17,9 @@ interface POSOpeningEntryLinkDao {
     @Query("SELECT * FROM tab_pos_opening_entry_link WHERE pending_sync = 1")
     suspend fun getPendingSync(): List<PendingOpeningEntrySync>
 
+    @Query("SELECT * FROM tab_pos_opening_entry_link WHERE cashbox_id = :cashboxId LIMIT 1")
+    suspend fun getByCashboxId(cashboxId: Long): POSOpeningEntryLinkEntity?
+
     @Query(
         """
         SELECT remote_opening_entry_name
@@ -36,4 +39,13 @@ interface POSOpeningEntryLinkDao {
         """
     )
     suspend fun markSynced(id: Long, remoteName: String)
+
+    @Query(
+        """
+        UPDATE tab_pos_opening_entry_link
+           SET remote_opening_entry_name = :remoteName
+         WHERE id = :id
+        """
+    )
+    suspend fun updateRemoteName(id: Long, remoteName: String)
 }

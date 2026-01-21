@@ -12,6 +12,7 @@ import com.erpnext.pos.data.repositories.DeliveryChargesRepository
 import com.erpnext.pos.data.repositories.InventoryRepository
 import com.erpnext.pos.data.repositories.ModeOfPaymentRepository
 import com.erpnext.pos.data.repositories.PosProfilePaymentMethodLocalRepository
+import com.erpnext.pos.data.repositories.ClosingEntrySyncRepository
 import com.erpnext.pos.data.repositories.OpeningEntrySyncRepository
 import com.erpnext.pos.data.repositories.PosProfilePaymentMethodSyncRepository
 import com.erpnext.pos.data.repositories.PaymentTermsRepository
@@ -302,6 +303,7 @@ val appModule = module {
             userDao = get(),
             exchangeRatePreferences = get(),
             exchangeRateRepository = get(),
+            openingEntrySyncRepository = get(),
             paymentMethodLocalRepository = get(),
             salesInvoiceDao = get()
         )
@@ -316,9 +318,16 @@ val appModule = module {
             paymentEntryUseCase = get(),
             exchangeRateRepository = get(),
             openingEntrySyncRepository = get(),
+            closingEntrySyncRepository = get(),
             cashBoxManager = get()
         )
     }
+
+    //region Reconciliation
+    single { ReconciliationViewModel(get(), get(), get(), get(), get(), get()) }
+    //endregion
+
+
     single { SyncContextProvider(get(), get()) }
     single<SyncManager> {
         SyncManager(
@@ -390,7 +399,18 @@ val appModule = module {
             posOpeningRepository = get(),
             openingEntryDao = get(),
             openingEntryLinkDao = get(),
-            cashboxDao = get()
+            cashboxDao = get(),
+            salesInvoiceDao = get()
+        )
+    }
+    single {
+        ClosingEntrySyncRepository(
+            api = get(named("apiService")),
+            cashboxDao = get(),
+            openingEntryLinkDao = get(),
+            openingEntryDao = get(),
+            closingDao = get(),
+            salesInvoiceDao = get()
         )
     }
     //endregion
@@ -447,7 +467,7 @@ val appModule = module {
     //region Invoices
     single { SalesInvoiceRemoteSource(get(named("apiService")), get()) }
     single { InvoiceViewModel(get(), get()) }
-    single { SalesInvoiceRepository(get(), get(), get()) }
+    single { SalesInvoiceRepository(get(), get(), get(), get(), get()) }
     single { CreateSalesInvoiceUseCase(get()) }
     //endregion
 
@@ -466,10 +486,6 @@ val appModule = module {
     single { SalesOrderViewModel(get()) }
     single { DeliveryNoteViewModel(get()) }
     single { PaymentEntryViewModel(get(), get()) }
-    //endregion
-
-    //region Reconciliation
-    single { ReconciliationViewModel(get(), get(), get()) }
     //endregion
 
     //region Checkout

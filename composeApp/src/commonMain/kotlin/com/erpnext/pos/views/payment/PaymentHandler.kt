@@ -96,7 +96,8 @@ class PaymentHandler(
         customer: CustomerBO,
         exchangeRateByCurrency: Map<String, Double>,
         paymentModeDetails: Map<String, ModeOfPaymentEntity>,
-        baseAmountCurrency: String?
+        baseAmountCurrency: String?,
+        posOpeningEntry: String?
     ): PaymentRegistrationResult {
         if (paymentLines.isEmpty()) {
             return PaymentRegistrationResult(
@@ -243,7 +244,12 @@ class PaymentHandler(
             line.copy(baseAmount = allocated)
         }
 
-        val localPayments = buildLocalPayments(invoiceNameForLocal, postingDate, adjustedLines)
+        val localPayments = buildLocalPayments(
+            invoiceNameForLocal,
+            postingDate,
+            adjustedLines,
+            posOpeningEntry
+        )
         saveInvoicePaymentsUseCase(
             SaveInvoicePaymentsInput(
                 invoiceName = invoiceNameForLocal,

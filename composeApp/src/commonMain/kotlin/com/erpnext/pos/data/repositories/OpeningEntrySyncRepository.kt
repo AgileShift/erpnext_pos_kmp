@@ -4,15 +4,18 @@ import com.erpnext.pos.data.mappers.buildOpeningEntryDto
 import com.erpnext.pos.localSource.dao.CashboxDao
 import com.erpnext.pos.localSource.dao.POSOpeningEntryDao
 import com.erpnext.pos.localSource.dao.POSOpeningEntryLinkDao
+import com.erpnext.pos.localSource.dao.SalesInvoiceDao
 import com.erpnext.pos.utils.AppLogger
 
 class OpeningEntrySyncRepository(
     private val posOpeningRepository: PosOpeningRepository,
     private val openingEntryDao: POSOpeningEntryDao,
     private val openingEntryLinkDao: POSOpeningEntryLinkDao,
-    private val cashboxDao: CashboxDao
+    private val cashboxDao: CashboxDao,
+    private val salesInvoiceDao: SalesInvoiceDao
 ) {
     suspend fun pushPending(): Boolean {
+        repairActiveOpenings()
         val pending = openingEntryLinkDao.getPendingSync()
         if (pending.isEmpty()) return false
         var hasChanges = false
@@ -20,11 +23,18 @@ class OpeningEntrySyncRepository(
         pending.forEach { candidate ->
             val dto = buildOpeningEntryDto(candidate.openingEntry, candidate.balanceDetails)
             runCatching {
-                val response = posOpeningRepository.createOpeningEntry(dto)
-                posOpeningRepository.submitOpeningEntry(response.name)
-                openingEntryLinkDao.markSynced(candidate.link.id, response.name)
+                val remoteName = candidate.link.remoteOpeningEntryName ?: run {
+                    val response = posOpeningRepository.createOpeningEntry(dto)
+                    openingEntryLinkDao.updateRemoteName(candidate.link.id, response.name)
+                    cashboxDao.updateOpeningEntryId(candidate.cashbox.localId, response.name)
+                    response.name
+                }
+                updateOpeningEntryRefs(candidate.openingEntry.name, remoteName)
+                ensureRemoteOpeningEntry(remoteName, candidate.openingEntry)
+                posOpeningRepository.submitOpeningEntry(remoteName)
+                openingEntryLinkDao.markSynced(candidate.link.id, remoteName)
                 openingEntryDao.update(candidate.openingEntry.copy(pendingSync = false))
-                cashboxDao.updateOpeningEntryId(candidate.cashbox.localId, response.name)
+                cashboxDao.updatePendingSync(candidate.cashbox.localId, false)
                 hasChanges = true
             }.onFailure { error ->
                 AppLogger.warn("OpeningEntrySyncRepository pushPending failed", error)
@@ -32,5 +42,76 @@ class OpeningEntrySyncRepository(
         }
 
         return hasChanges
+    }
+
+    suspend fun repairActiveOpenings() {
+        val activeCashboxes = cashboxDao.getActiveCashboxes()
+        activeCashboxes.forEach { wrapper ->
+            val cashbox = wrapper.cashbox
+            val link = openingEntryLinkDao.getByCashboxId(cashbox.localId)
+            val localOpeningName = wrapper.details.firstOrNull()?.posOpeningEntry
+                ?: cashbox.openingEntryId?.takeIf { it.startsWith("LOCAL-", ignoreCase = true) }
+            if (localOpeningName.isNullOrBlank()) return@forEach
+
+            val openingEntry = openingEntryDao.getByName(localOpeningName)
+            if (openingEntry == null) {
+                AppLogger.warn(
+                    "OpeningEntrySyncRepository: missing opening entry for cashbox ${cashbox.localId}"
+                )
+                return@forEach
+            }
+
+            val cashboxRemote = cashbox.openingEntryId
+                ?.takeIf { !it.startsWith("LOCAL-", ignoreCase = true) }
+            val linkRemote = link?.remoteOpeningEntryName
+            val remoteName = cashboxRemote ?: linkRemote
+
+            if (link == null) {
+                val pendingSync = remoteName.isNullOrBlank() || openingEntry.pendingSync ||
+                    cashbox.pendingSync
+                openingEntryLinkDao.insert(
+                    com.erpnext.pos.localSource.entities.POSOpeningEntryLinkEntity(
+                        cashboxId = cashbox.localId,
+                        localOpeningEntryName = openingEntry.name,
+                        remoteOpeningEntryName = remoteName,
+                        pendingSync = pendingSync
+                    )
+                )
+            }
+
+            if (!remoteName.isNullOrBlank()) {
+                updateOpeningEntryRefs(openingEntry.name, remoteName)
+                ensureRemoteOpeningEntry(remoteName, openingEntry)
+                if (cashbox.openingEntryId != remoteName) {
+                    cashboxDao.updateOpeningEntryId(cashbox.localId, remoteName)
+                }
+                if (openingEntry.pendingSync) {
+                    openingEntryDao.update(openingEntry.copy(pendingSync = false))
+                }
+                if (cashbox.pendingSync) {
+                    cashboxDao.updatePendingSync(cashbox.localId, false)
+                }
+                if (link != null && link.pendingSync) {
+                    openingEntryLinkDao.markSynced(link.id, remoteName)
+                }
+            }
+        }
+    }
+
+    private suspend fun ensureRemoteOpeningEntry(
+        remoteName: String,
+        local: com.erpnext.pos.localSource.entities.POSOpeningEntryEntity
+    ) {
+        val existing = openingEntryDao.getByName(remoteName)
+        if (existing != null) return
+        openingEntryDao.insert(
+            local.copy(name = remoteName, pendingSync = false)
+        )
+    }
+
+    private suspend fun updateOpeningEntryRefs(localName: String, remoteName: String) {
+        if (localName == remoteName) return
+        salesInvoiceDao.updateInvoicesOpeningEntry(localName, remoteName)
+        salesInvoiceDao.updatePaymentsOpeningEntry(localName, remoteName)
     }
 }

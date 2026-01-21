@@ -133,6 +133,7 @@ class InvoiceLocalSource(
         modeOfPayment: String?,
         debitTo: String?,
         remarks: String?,
+        posOpeningEntry: String?,
         syncStatus: String,
         modifiedAt: Long
     ) {
@@ -157,6 +158,7 @@ class InvoiceLocalSource(
             modeOfPayment = modeOfPayment,
             debitTo = debitTo,
             remarks = remarks,
+            posOpeningEntry = posOpeningEntry,
             syncStatus = syncStatus,
             modifiedAt = modifiedAt
         )

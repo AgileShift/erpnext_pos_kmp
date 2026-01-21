@@ -1,5 +1,6 @@
 package com.erpnext.pos.remoteSource.dto
 
+import kotlinx.serialization.EncodeDefault
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
@@ -28,8 +29,9 @@ data class POSClosingEntryDto(
     val balanceDetails: List<BalanceDetailsDto>,
     @SerialName("pos_transactions")
     val posTransactions: List<POSClosingInvoiceDto> = emptyList(),
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
     @SerialName("docstatus")
-    val docStatus: Int? = 1
+    val docStatus: Int? = null
 )
 
 @Serializable

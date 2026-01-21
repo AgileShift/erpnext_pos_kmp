@@ -9,7 +9,10 @@ class PaymentEntryRepository(
 ) {
     suspend fun createPaymentEntry(entry: PaymentEntryCreateDto) {
         RepoTrace.breadcrumb("PaymentEntryRepository", "createPaymentEntry")
-        runCatching { api.createPaymentEntry(entry) }
+        runCatching {
+            val created = api.createPaymentEntry(entry)
+            api.submitPaymentEntry(created.name)
+        }
             .getOrElse {
                 RepoTrace.capture("PaymentEntryRepository", "createPaymentEntry", it)
                 throw it

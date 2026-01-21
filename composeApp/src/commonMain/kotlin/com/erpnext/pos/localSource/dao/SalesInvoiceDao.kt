@@ -322,6 +322,7 @@ interface SalesInvoiceDao {
         SELECT * FROM tabSalesInvoice
         WHERE customer = :customerName
           AND outstanding_amount > 0
+          AND docstatus != 2
         ORDER BY posting_date DESC
         """
     )
@@ -394,6 +395,30 @@ interface SalesInvoiceDao {
 
     @Query(
         """
+        UPDATE tabSalesInvoice
+        SET pos_opening_entry = :remoteOpeningEntry
+        WHERE pos_opening_entry = :localOpeningEntry
+        """
+    )
+    suspend fun updateInvoicesOpeningEntry(
+        localOpeningEntry: String,
+        remoteOpeningEntry: String
+    )
+
+    @Query(
+        """
+        UPDATE tabSalesInvoicePayment
+        SET pos_opening_entry = :remoteOpeningEntry
+        WHERE pos_opening_entry = :localOpeningEntry
+        """
+    )
+    suspend fun updatePaymentsOpeningEntry(
+        localOpeningEntry: String,
+        remoteOpeningEntry: String
+    )
+
+    @Query(
+        """
         UPDATE customers
         SET totalPendingAmount = COALESCE(
                 (SELECT SUM(outstanding_amount)
@@ -452,7 +477,7 @@ interface SalesInvoiceDao {
         SELECT * FROM tabSalesInvoice
         WHERE profile_id = :profileId
           AND created_at BETWEEN :startMillis AND :endMillis
-          AND docstatus = 1
+          AND docstatus != 2
           AND is_return = 0
         ORDER BY created_at DESC
         """
@@ -462,6 +487,17 @@ interface SalesInvoiceDao {
         startMillis: Long,
         endMillis: Long
     ): List<SalesInvoiceEntity>
+
+    @Query(
+        """
+        SELECT * FROM tabSalesInvoice
+        WHERE pos_opening_entry = :openingEntryId
+          AND docstatus != 2
+          AND is_return = 0
+        ORDER BY created_at DESC
+        """
+    )
+    suspend fun getInvoicesForOpeningEntry(openingEntryId: String): List<SalesInvoiceEntity>
 
     @Query(
         """
@@ -477,7 +513,7 @@ interface SalesInvoiceDao {
         INNER JOIN tabSalesInvoice i ON i.invoice_name = p.parent_invoice
         WHERE i.profile_id = :profileId
           AND i.created_at BETWEEN :startMillis AND :endMillis
-          AND i.docstatus = 1
+          AND i.docstatus != 2
           AND i.is_return = 0
         """
     )
@@ -486,6 +522,25 @@ interface SalesInvoiceDao {
         startMillis: Long,
         endMillis: Long
     ): List<ShiftPaymentRow>
+
+    @Query(
+        """
+        SELECT p.parent_invoice AS invoiceName,
+               p.mode_of_payment AS modeOfPayment,
+               p.amount AS amount,
+               p.entered_amount AS enteredAmount,
+               p.payment_currency AS paymentCurrency,
+               p.exchange_rate AS exchangeRate,
+               i.currency AS invoiceCurrency,
+               i.party_account_currency AS partyAccountCurrency
+        FROM tabSalesInvoicePayment p
+        INNER JOIN tabSalesInvoice i ON i.invoice_name = p.parent_invoice
+        WHERE i.pos_opening_entry = :openingEntryId
+          AND i.docstatus != 2
+          AND i.is_return = 0
+        """
+    )
+    suspend fun getPaymentsForOpeningEntry(openingEntryId: String): List<ShiftPaymentRow>
 
     @Query("DELETE FROM tabSalesInvoice WHERE invoice_name =:invoiceId")
     suspend fun deleteByInvoiceId(invoiceId: String)
@@ -515,6 +570,7 @@ interface SalesInvoiceDao {
             mode_of_payment = :modeOfPayment,
             debit_to = :debitTo,
             remarks = :remarks,
+            pos_opening_entry = :posOpeningEntry,
             sync_status = :syncStatus,
             modified_at = :modifiedAt
         WHERE invoice_name = :oldName
@@ -541,6 +597,7 @@ interface SalesInvoiceDao {
         modeOfPayment: String?,
         debitTo: String?,
         remarks: String?,
+        posOpeningEntry: String?,
         syncStatus: String,
         modifiedAt: Long
     )

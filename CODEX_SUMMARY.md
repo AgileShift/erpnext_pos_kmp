@@ -16,4 +16,4 @@
 - [ ] Refactorizar profundamente todo el codigo, aplicando principios KISS y SOLID
 - [ ] Tenemos que crear politicas de sincronizacion, en cuantoa  tiempo los Customer, Items y Invoices deben de sincronizarse mas seguido que la tasa de cambio, informacion de empresa, etc
 
-codex resume 019ba8ce-bdba-7200-97ae-4230e0ddccef
+codex resume 019bdcfd-47f4-7320-9065-c94a53eefef4

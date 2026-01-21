@@ -28,6 +28,7 @@ data class ReconciliationSummaryUi(
     val paymentsTotal: Double,
     val expensesTotal: Double,
     val expectedTotal: Double,
+    val pendingSubmitCount: Int = 0,
     val currency: String,
     val currencySymbol: String?,
     val invoiceCount: Int,

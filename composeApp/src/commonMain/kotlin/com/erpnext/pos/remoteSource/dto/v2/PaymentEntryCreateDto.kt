@@ -1,5 +1,6 @@
 package com.erpnext.pos.remoteSource.dto.v2
 
+import kotlinx.serialization.EncodeDefault
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
@@ -38,7 +39,8 @@ data class PaymentEntryCreateDto(
     @SerialName("references")
     val references: List<PaymentEntryReferenceCreateDto> = emptyList(),
     @SerialName("docstatus")
-    val docStatus: Int
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    val docStatus: Int? = null
 )
 
 @Serializable

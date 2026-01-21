@@ -1,6 +1,7 @@
 package com.erpnext.pos.remoteSource.dto
 
 import io.ktor.util.date.GMTDate
+import kotlinx.serialization.EncodeDefault
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
@@ -36,8 +37,9 @@ data class POSOpeningEntryDto(
     @SerialName("balance_details")
     val balanceDetails: List<BalanceDetailsDto>,
     val taxes: List<TaxDetailDto>? = null,
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
     @SerialName("docstatus")
-    val docStatus: Int = 1
+    val docStatus: Int? = null
 )
 
 @Serializable

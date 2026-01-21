@@ -49,6 +49,8 @@ data class POSInvoicePaymentEntity(
     var paymentReference: String? = null, // No. de recibo o transacción
     @ColumnInfo(name = "payment_date")
     var paymentDate: String? = null,
+    @ColumnInfo(name = "pos_opening_entry")
+    var posOpeningEntry: String? = null,
     @ColumnInfo(name = "sync_status", defaultValue = "Pending")
     var syncStatus: String = "Pending",
 

@@ -67,6 +67,9 @@ class HomeViewModel(
 
     init {
         viewModelScope.launch {
+            contextManager.initializeContext()
+        }
+        viewModelScope.launch {
             syncPreferences.settings.collectLatest { settings ->
                 _syncSettings.value = settings
             }

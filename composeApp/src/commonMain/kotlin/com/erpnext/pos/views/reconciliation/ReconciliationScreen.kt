@@ -389,7 +389,18 @@ private fun ReconciliationContent(
                     OpeningBalanceCard(
                         summary = summary,
                         formatAmount = formatAmount,
-                        //openingTotalsByCurrency = openingTotalsByCurrency,
+                        formatAmountFor = { value, code ->
+                            formatCurrency(
+                                value,
+                                currencyCode = code,
+                                currencySymbol = when (code.uppercase()) {
+                                    "USD" -> "$"
+                                    "NIO" -> "C$"
+                                    else -> code
+                                },
+                                formatter = formatter
+                            )
+                        },
                         strings = strings
                     )
                     val (creditPartial, creditPending) = computeCreditAmounts(summary)
@@ -460,7 +471,18 @@ private fun ReconciliationContent(
                 OpeningBalanceCard(
                     summary = summary,
                     formatAmount = formatAmount,
-                    //openingTotalsByCurrency = openingTotalsByCurrency,
+                    formatAmountFor = { value, code ->
+                        formatCurrency(
+                            value,
+                            currencyCode = code,
+                            currencySymbol = when (code.uppercase()) {
+                                "USD" -> "$"
+                                "NIO" -> "C$"
+                                else -> code
+                            },
+                            formatter = formatter
+                        )
+                    },
                     strings = strings
                 )
                 val (creditPartial, creditPending) = computeCreditAmounts(summary)
@@ -587,6 +609,13 @@ private fun SystemSummaryCardMultiCurrency(
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.primary
                     )
+                    if (summary.pendingSubmitCount > 0) {
+                        Text(
+                            "${strings.pendingSubmitLabel}: ${summary.pendingSubmitCount}",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.error
+                        )
+                    }
                 }
             }
             Column(
@@ -637,6 +666,7 @@ private fun SystemSummaryCardMultiCurrency(
 private fun OpeningBalanceCard(
     summary: ReconciliationSummaryUi,
     formatAmount: (Double) -> String,
+    formatAmountFor: (Double, String) -> String,
     strings: ReconciliationStrings
 ) {
     val gradient = Brush.linearGradient(
@@ -660,12 +690,28 @@ private fun OpeningBalanceCard(
                 color = MaterialTheme.colorScheme.onPrimary,
                 style = MaterialTheme.typography.bodyMedium
             )
-            Text(
-                formatAmount(summary.openingAmount),
-                color = MaterialTheme.colorScheme.onPrimary,
-                style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.Bold
-            )
+            if (summary.openingCashByCurrency.isNotEmpty()) {
+                val openingLines = summary.openingCashByCurrency
+                    .toList()
+                    .sortedBy { it.first.uppercase() }
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    openingLines.forEach { (code, amount) ->
+                        Text(
+                            formatAmountFor(amount, code),
+                            color = MaterialTheme.colorScheme.onPrimary,
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+            } else {
+                Text(
+                    formatAmount(summary.openingAmount),
+                    color = MaterialTheme.colorScheme.onPrimary,
+                    style = MaterialTheme.typography.headlineMedium,
+                    fontWeight = FontWeight.Bold
+                )
+            }
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween

@@ -32,6 +32,26 @@ interface CustomerDao {
     @Query("SELECT * FROM customers WHERE customerName = :name")
     suspend fun getByName(name: String): CustomerEntity?
 
+    @Query(
+        """
+        UPDATE customers
+        SET totalPendingAmount = :totalPendingAmount,
+            pendingInvoicesCount = :pendingInvoicesCount,
+            currentBalance = :currentBalance,
+            availableCredit = COALESCE(:availableCredit, availableCredit),
+            state = :state
+        WHERE id = :customerId
+        """
+    )
+    suspend fun updateSummary(
+        customerId: String,
+        totalPendingAmount: Double,
+        pendingInvoicesCount: Int,
+        currentBalance: Double,
+        availableCredit: Double?,
+        state: String
+    )
+
     @Query("SELECT COUNT(*) FROM customers")
     suspend fun count(): Int
 

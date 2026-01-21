@@ -29,7 +29,8 @@ import kotlin.time.ExperimentalTime
         Index(value = ["profile_id"]),
         Index(value = ["customer"]),
         Index(value = ["status"]),
-        Index(value = ["posting_date"])
+        Index(value = ["posting_date"]),
+        Index(value = ["pos_opening_entry"])
     ]
 )
 data class SalesInvoiceEntity(
@@ -89,6 +90,8 @@ data class SalesInvoiceEntity(
     // 📦 Contabilidad
     @ColumnInfo(name = "price_list")
     var priceList: String? = null,
+    @ColumnInfo(name = "pos_opening_entry")
+    var posOpeningEntry: String? = null,
 
     // ⚙️ Estado y sincronización
     var status: String = "Submitted", // Draft, Submitted, Paid, Cancelled

@@ -740,6 +740,11 @@ class BillingViewModel(
                 context = context
             )
 
+            val activeCashbox = runCatching {
+                contextProvider.getActiveCashboxWithDetails()?.cashbox
+            }.getOrNull()
+            val openingEntryId = activeCashbox?.openingEntryId
+
             val invoiceDto = buildSalesInvoiceDto(
                 current = current,
                 customer = customer,
@@ -766,11 +771,14 @@ class BillingViewModel(
                 )
             )
 
-            val created = runCatching {
+            val createdResult = runCatching {
                 createSalesInvoiceRemoteOnlyUseCase(
                     CreateSalesInvoiceRemoteOnlyInput(invoiceDto.copy(name = null))
                 )
-            }.getOrNull()
+            }
+            val created = createdResult.getOrNull()
+            val remoteErrorMessage = createdResult.exceptionOrNull()
+                ?.toUserMessage("No se pudo sincronizar la factura.")
 
             var invoiceNameForLocal = localInvoiceName
             if (created?.name != null) {
@@ -796,7 +804,8 @@ class BillingViewModel(
                 customer = customer,
                 exchangeRateByCurrency = current.exchangeRateByCurrency,
                 paymentModeDetails = paymentModeDetails,
-                baseAmountCurrency = baseCurrency
+                baseAmountCurrency = baseCurrency,
+                posOpeningEntry = openingEntryId
             )
             invoiceNameForLocal = paymentResult.invoiceNameForLocal
             val remotePaymentsSucceeded = paymentResult.remotePaymentsSucceeded
@@ -869,7 +878,11 @@ class BillingViewModel(
                     cartErrorMessage = null,
                     successMessage = when {
                         created == null -> {
-                            "Factura $localInvoiceName guardada localmente (pendiente de sincronizacion)."
+                            if (remoteErrorMessage.isNullOrBlank()) {
+                                "Factura $localInvoiceName guardada localmente (pendiente de sincronizacion)."
+                            } else {
+                                "Factura $localInvoiceName guardada localmente (pendiente de sincronizacion). $remoteErrorMessage"
+                            }
                         }
 
                         paymentLines.isNotEmpty() -> {
@@ -1090,11 +1103,25 @@ class BillingViewModel(
         // Esto asegura paid_amount/outstanding_amount correctos desde el inicio.
         val payments = if (paymentLines.isNotEmpty()) {
             paymentLines.map { line ->
-                SalesInvoicePaymentDto(line.modeOfPayment, line.baseAmount)
+                val account = paymentModeDetails[line.modeOfPayment]?.account
+                val amount = line.enteredAmount.takeIf { it > 0.0 } ?: line.baseAmount
+                SalesInvoicePaymentDto(
+                    modeOfPayment = line.modeOfPayment,
+                    amount = amount,
+                    account = account,
+                    paymentReference = line.referenceNumber?.takeIf { it.isNotBlank() }
+                )
             }
         } else {
             // En crédito sin pagos, enviamos una línea vacía para mantener compatibilidad.
-            listOf(SalesInvoicePaymentDto(paymentMode, 0.0))
+            val account = paymentModeDetails[paymentMode]?.account
+            listOf(
+                SalesInvoicePaymentDto(
+                    modeOfPayment = paymentMode,
+                    amount = 0.0,
+                    account = account
+                )
+            )
         }
 
         return SalesInvoiceDto(
@@ -1121,7 +1148,7 @@ class BillingViewModel(
             remarks = paymentMetadata,
             customExchangeRate = conversionRate?.takeIf { it > 0.0 },
             updateStock = true,
-            docStatus = 1
+            docStatus = 0
         )
     }
 

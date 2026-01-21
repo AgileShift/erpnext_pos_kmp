@@ -18,6 +18,15 @@ interface ICustomerLocalSource {
     suspend fun getOldestCustomer(): CustomerEntity?
     suspend fun saveInvoices(invoices: List<SalesInvoiceWithItemsAndPayments>)
     suspend fun refreshCustomerSummary(customerId: String)
+    suspend fun getOutstandingInvoicesForCustomer(customerName: String): List<SalesInvoiceWithItemsAndPayments>
+    suspend fun updateSummary(
+        customerId: String,
+        totalPendingAmount: Double,
+        pendingInvoicesCount: Int,
+        currentBalance: Double,
+        availableCredit: Double?,
+        state: String
+    )
 }
 
 class CustomerLocalSource(private val dao: CustomerDao, private val invoiceDao: SalesInvoiceDao) :
@@ -52,5 +61,29 @@ class CustomerLocalSource(private val dao: CustomerDao, private val invoiceDao: 
 
     override suspend fun refreshCustomerSummary(customerId: String) {
         invoiceDao.refreshCustomerSummary(customerId)
+    }
+
+    override suspend fun getOutstandingInvoicesForCustomer(
+        customerName: String
+    ): List<SalesInvoiceWithItemsAndPayments> {
+        return invoiceDao.getOutstandingInvoicesForCustomer(customerName)
+    }
+
+    override suspend fun updateSummary(
+        customerId: String,
+        totalPendingAmount: Double,
+        pendingInvoicesCount: Int,
+        currentBalance: Double,
+        availableCredit: Double?,
+        state: String
+    ) {
+        dao.updateSummary(
+            customerId = customerId,
+            totalPendingAmount = totalPendingAmount,
+            pendingInvoicesCount = pendingInvoicesCount,
+            currentBalance = currentBalance,
+            availableCredit = availableCredit,
+            state = state
+        )
     }
 }

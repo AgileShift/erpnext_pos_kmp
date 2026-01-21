@@ -1,5 +1,9 @@
 package com.erpnext.pos
 
+import androidx.compose.material.Icon
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.PointOfSale
+import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
@@ -21,6 +25,9 @@ fun main() = application {
     )
 
     Window(
+        undecorated = false,
+        transparent = false,
+        icon = rememberVectorPainter(Icons.Default.PointOfSale),
         onCloseRequest = ::exitApplication,
         title = "ERPNext POS",
         state = state,

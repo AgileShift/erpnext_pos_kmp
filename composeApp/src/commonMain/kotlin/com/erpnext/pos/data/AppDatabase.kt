@@ -147,7 +147,7 @@ import com.erpnext.pos.localSource.entities.v2.UserEntity as UserEntityV2
         PaymentScheduleEntity::class,
         SyncStateEntity::class
     ],
-    version = 26,
+    version = 27,
     exportSchema = true
 )
 @ConstructedBy(AppDatabaseConstructor::class)

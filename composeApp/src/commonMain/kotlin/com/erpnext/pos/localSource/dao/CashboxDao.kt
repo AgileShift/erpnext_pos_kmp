@@ -59,10 +59,25 @@ interface CashboxDao {
     @Query("SELECT * FROM tabCashbox WHERE user = :user AND status = 1 AND posProfile = :posProfile LIMIT 1")
     fun getActiveEntry(user: String, posProfile: String): Flow<CashboxWithDetails?>
 
+    @Transaction
+    @Query("SELECT * FROM tabCashbox WHERE user = :user AND status = 1 ORDER BY localId DESC LIMIT 1")
+    suspend fun getActiveEntryForUser(user: String): CashboxWithDetails?
+
+    @Transaction
+    @Query("SELECT * FROM tabCashbox WHERE status = 1")
+    suspend fun getActiveCashboxes(): List<CashboxWithDetails>
+
+    @Transaction
+    @Query("SELECT * FROM tabCashbox WHERE status = 0 AND pendingSync = 1")
+    suspend fun getClosedPendingSync(): List<CashboxWithDetails>
+
     // Marcar como synced
     @Query("UPDATE tabCashbox SET posProfile = :erpName, pendingSync = 0 WHERE localId = :localId")
     suspend fun markAsSynced(localId: Long, erpName: String)
 
     @Query("UPDATE tabCashbox SET openingEntryId = :openingEntryId WHERE localId = :localId")
     suspend fun updateOpeningEntryId(localId: Long, openingEntryId: String)
+
+    @Query("UPDATE tabCashbox SET pendingSync = :pendingSync WHERE localId = :localId")
+    suspend fun updatePendingSync(localId: Long, pendingSync: Boolean)
 }

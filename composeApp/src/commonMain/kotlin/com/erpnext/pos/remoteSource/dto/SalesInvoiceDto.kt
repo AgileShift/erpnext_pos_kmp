@@ -1,5 +1,6 @@
 package com.erpnext.pos.remoteSource.dto
 
+import kotlinx.serialization.EncodeDefault
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
@@ -72,10 +73,12 @@ data class SalesInvoiceDto(
     val conversionRate: Double? = null,
     @SerialName("party_account_currency")
     val partyAccountCurrency: String? = null,
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
     @SerialName("debit_to")
     val debitTo: String? = null,
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
     @SerialName("docstatus")
-    val docStatus: Int,
+    val docStatus: Int? = null,
 
     // Response
     @SerialName("base_grand_total")
@@ -109,6 +112,7 @@ data class SalesInvoiceItemDto(
     @SerialName("discount_percentage")
     val discountPercentage: Double? = null,
     val warehouse: String? = null,
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
     @SerialName("income_account")
     val incomeAccount: String? = null,
     @SerialName("sales_order")
@@ -136,6 +140,7 @@ data class SalesInvoicePaymentDto(
     @SerialName("mode_of_payment")
     val modeOfPayment: String,
     val amount: Double,
+    val account: String? = null,
     @SerialName("payment_reference")
     val paymentReference: String? = null,
     val type: String? = "Receive"

@@ -9,7 +9,9 @@ import com.erpnext.pos.data.mappers.toPagingBO
 import com.erpnext.pos.domain.models.SalesInvoiceBO
 import com.erpnext.pos.domain.repositories.ISaleInvoiceRepository
 import com.erpnext.pos.domain.usecases.PendingInvoiceInput
+import com.erpnext.pos.localSource.dao.ModeOfPaymentDao
 import com.erpnext.pos.localSource.datasources.InvoiceLocalSource
+import com.erpnext.pos.localSource.dao.CustomerDao
 import com.erpnext.pos.localSource.entities.*
 import com.erpnext.pos.remoteSource.datasources.SalesInvoiceRemoteSource
 import com.erpnext.pos.remoteSource.dto.SalesInvoiceDto
@@ -18,6 +20,7 @@ import com.erpnext.pos.remoteSource.mapper.toEntities
 import com.erpnext.pos.remoteSource.mapper.toEntity
 import com.erpnext.pos.utils.RepoTrace
 import com.erpnext.pos.utils.AppLogger
+import com.erpnext.pos.utils.buildPaymentModeDetailMap
 import com.erpnext.pos.utils.roundToCurrency
 import com.erpnext.pos.views.CashBoxManager
 import kotlinx.coroutines.flow.Flow
@@ -29,7 +32,9 @@ import kotlin.time.ExperimentalTime
 class SalesInvoiceRepository(
     private val remoteSource: SalesInvoiceRemoteSource,
     private val localSource: InvoiceLocalSource,
-    private val context: CashBoxManager
+    private val context: CashBoxManager,
+    private val modeOfPaymentDao: ModeOfPaymentDao,
+    private val customerDao: CustomerDao
 ) : ISaleInvoiceRepository {
     override suspend fun getPendingInvoices(info: PendingInvoiceInput): Flow<PagingData<SalesInvoiceBO>> {
         RepoTrace.breadcrumb("SalesInvoiceRepository", "getPendingInvoices")
@@ -66,7 +71,7 @@ class SalesInvoiceRepository(
             return
         }
         localSource.saveInvoiceLocally(invoice, items, payments)
-        localSource.refreshCustomerSummary(invoice.customer)
+        refreshCustomerSummaryWithRates(invoice.customer)
     }
 
     suspend fun saveInvoiceLocallyPending(
@@ -75,11 +80,14 @@ class SalesInvoiceRepository(
     ) {
         val entity = dto.toEntity()
         val now = Clock.System.now().toEpochMilliseconds()
+        val openingEntryId = context.getActiveCashboxWithDetails()?.cashbox?.openingEntryId
 
         entity.invoice.invoiceName = localInvoiceName
         entity.invoice.syncStatus = "Pending"
         entity.invoice.status = dto.status ?: entity.invoice.status
         entity.invoice.modifiedAt = now
+        entity.invoice.posOpeningEntry = openingEntryId
+        entity.payments.forEach { it.posOpeningEntry = openingEntryId }
         val invoiceCurrency = dto.currency?.trim()?.uppercase()
         val receivableCurrency = dto.partyAccountCurrency?.trim()?.uppercase()
         val providedRate = dto.conversionRate
@@ -170,7 +178,7 @@ class SalesInvoiceRepository(
         uniquePayments.lastOrNull()?.modeOfPayment?.let { invoice.modeOfPayment = it }
 
         localSource.applyPayments(invoice, uniquePayments)
-        localSource.refreshCustomerSummary(invoice.customer)
+        refreshCustomerSummaryWithRates(invoice.customer)
     }
 
     override suspend fun markAsSynced(invoiceName: String) {
@@ -244,18 +252,21 @@ class SalesInvoiceRepository(
             paidAmount = resolvedPaidAmount,
             outstandingAmount = resolvedOutstandingAmount,
             status = resolvedStatus,
-            docstatus = remote.docStatus,
+            docstatus = remote.docStatus ?: 0,
             modeOfPayment = remote.payments.firstOrNull()?.modeOfPayment,
             debitTo = remote.debitTo,
             remarks = remote.remarks,
+            posOpeningEntry = localInvoice?.posOpeningEntry,
             syncStatus = "Synced",
             modifiedAt = now
         )
-        localSource.refreshCustomerSummary(remote.customer)
+        refreshCustomerSummaryWithRates(remote.customer)
     }
 
     override suspend fun createRemoteInvoice(invoice: SalesInvoiceDto): SalesInvoiceDto {
-        val created = remoteSource.createInvoice(invoice)
+        val draft = ensureDraftDocStatus(enrichPaymentsWithAccount(invoice))
+        val created = remoteSource.createInvoice(draft)
+        submitSalesInvoice(created.name!!)
         return remoteSource.fetchInvoice(created.name!!)!!
     }
 
@@ -275,19 +286,96 @@ class SalesInvoiceRepository(
         val pending = getPendingSyncInvoices()
         pending.forEach { invoice ->
             try {
-                val dto = invoice.toDto()
-                val created = createRemoteInvoice(dto)
                 val localName = invoice.invoice.invoiceName ?: ""
-                if (created.name != null && created.name != localName) {
-                    updateLocalInvoiceFromRemote(localName, created)
-                } else {
-                    markAsSynced(localName)
+                if (localName.isNotBlank() && !localName.startsWith("LOCAL-", ignoreCase = true)) {
+                    submitSalesInvoice(localName)
+                    val remote = remoteSource.fetchInvoice(localName) ?: return@forEach
+                    updateLocalInvoiceFromRemote(localName, remote)
+                    return@forEach
                 }
+                val dto = ensureDraftDocStatus(enrichPaymentsWithAccount(invoice.toDto()))
+                val created = remoteSource.createInvoice(dto)
+                if (created.name.isNullOrBlank()) return@forEach
+                updateLocalInvoiceFromRemote(localName, created)
+                submitSalesInvoice(created.name!!)
+                val remote = remoteSource.fetchInvoice(created.name!!) ?: return@forEach
+                updateLocalInvoiceFromRemote(created.name!!, remote)
             } catch (e: Exception) {
                 RepoTrace.capture("SalesInvoiceRepository", "syncPendingInvoices", e)
                 markAsFailed(invoice.invoice.invoiceName ?: "")
             }
         }
+    }
+
+    private suspend fun submitSalesInvoice(name: String) {
+        remoteSource.submitInvoice(name)
+    }
+
+    private suspend fun refreshCustomerSummaryWithRates(customerId: String) {
+        val invoices = localSource.getOutstandingInvoicesForCustomer(customerId)
+        if (invoices.isEmpty()) {
+            customerDao.updateSummary(
+                customerId = customerId,
+                totalPendingAmount = 0.0,
+                pendingInvoicesCount = 0,
+                currentBalance = 0.0,
+                availableCredit = null,
+                state = "Sin Pendientes"
+            )
+            return
+        }
+        val ctx = context.getContext()
+        val baseCurrency = ctx?.partyAccountCurrency ?: ctx?.currency ?: "NIO"
+        var totalPending = 0.0
+        invoices.forEach { wrapper ->
+            val invoice = wrapper.invoice
+            val currency = invoice.partyAccountCurrency ?: invoice.currency
+            val outstanding = invoice.outstandingAmount.coerceAtLeast(0.0)
+            val rate = when {
+                currency.equals(baseCurrency, ignoreCase = true) -> 1.0
+                invoice.conversionRate != null && invoice.conversionRate!! > 0.0 ->
+                    invoice.conversionRate!!
+                invoice.customExchangeRate != null && invoice.customExchangeRate!! > 0.0 ->
+                    invoice.customExchangeRate!!
+                else -> context.resolveExchangeRateBetween(currency, baseCurrency) ?: 1.0
+            }
+            totalPending += (outstanding * rate)
+        }
+        val pendingCount = invoices.count { it.invoice.outstandingAmount > 0.0 }
+        val customer = customerDao.getByName(customerId)
+        val creditLimit = customer?.creditLimit
+        val availableCredit = creditLimit?.let { it - totalPending }
+        val state = if (totalPending > 0.0) "Pendientes" else "Sin Pendientes"
+        customerDao.updateSummary(
+            customerId = customerId,
+            totalPendingAmount = roundToCurrency(totalPending),
+            pendingInvoicesCount = pendingCount,
+            currentBalance = roundToCurrency(totalPending),
+            availableCredit = availableCredit?.let { roundToCurrency(it) },
+            state = state
+        )
+    }
+
+    private suspend fun enrichPaymentsWithAccount(dto: SalesInvoiceDto): SalesInvoiceDto {
+        if (dto.payments.isEmpty()) return dto
+        val ctx = context.requireContext()
+        val definitions = runCatching { modeOfPaymentDao.getAllModes(ctx.company) }
+            .getOrElse { emptyList() }
+        if (definitions.isEmpty()) return dto
+        val details = buildPaymentModeDetailMap(definitions)
+        val updated = dto.payments.map { payment ->
+            val account = details[payment.modeOfPayment]?.account
+            if (payment.account.isNullOrBlank() && !account.isNullOrBlank()) {
+                payment.copy(account = account)
+            } else {
+                payment
+            }
+        }
+        return dto.copy(payments = updated)
+    }
+
+    private fun ensureDraftDocStatus(dto: SalesInvoiceDto): SalesInvoiceDto {
+        return if (dto.docStatus == null || dto.docStatus == 0) dto else dto.copy(docStatus = 0)
     }
 
     override suspend fun sync(): Flow<Resource<List<SalesInvoiceBO>>> {

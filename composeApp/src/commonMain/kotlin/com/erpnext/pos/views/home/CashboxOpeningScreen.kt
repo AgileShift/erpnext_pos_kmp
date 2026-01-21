@@ -30,6 +30,7 @@ import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedCard
@@ -138,13 +139,6 @@ fun CashboxOpeningScreen(
             method.type?.equals("Cash", ignoreCase = true) == true &&
             method.enabled && method.enabledInProfile
     }
-    val cashDisabledOrNotInProfile = openingState.methods.filter { method ->
-        method.type?.equals("Cash", ignoreCase = true) == true &&
-            (!method.enabled || !method.enabledInProfile)
-    }
-    val nonCashMethods = openingState.methods.filter { method ->
-        method.type?.equals("Cash", ignoreCase = true) != true
-    }
     val openingCurrencies = remember(cashMethodsByCurrency) {
         cashMethodsByCurrency.keys.sorted()
     }
@@ -228,8 +222,7 @@ fun CashboxOpeningScreen(
     }
     val canOpen =
         selectedProfile != null &&
-            cashMethodsByCurrency.isNotEmpty() &&
-            duplicateCashCurrencies.isEmpty()
+            cashMethodsByCurrency.isNotEmpty()
 
     val handleOpen: () -> Unit = {
         val profile = selectedProfile
@@ -302,14 +295,7 @@ fun CashboxOpeningScreen(
                                 openingState.isLoading ||
                                 uiState is HomeState.POSInfoLoading,
                             canOpen = canOpen && !isSubmitting,
-                            duplicateCashCurrencies = duplicateCashCurrencies,
                             cashModesMissingCurrency = cashMethodsMissingCurrency.map { it.mopName },
-                            debugInfo = buildDebugInfo(
-                                cashMethodsByCurrency = cashMethodsByCurrency,
-                                cashMethodsMissingCurrency = cashMethodsMissingCurrency,
-                                cashDisabledOrNotInProfile = cashDisabledOrNotInProfile,
-                                nonCashMethods = nonCashMethods
-                            ),
                             onOpen = handleOpen,
                             onCancel = onDismiss
                         )
@@ -355,14 +341,7 @@ fun CashboxOpeningScreen(
                                     openingState.isLoading ||
                                     uiState is HomeState.POSInfoLoading,
                                 canOpen = canOpen && !isSubmitting,
-                                duplicateCashCurrencies = duplicateCashCurrencies,
                                 cashModesMissingCurrency = cashMethodsMissingCurrency.map { it.mopName },
-                                debugInfo = buildDebugInfo(
-                                    cashMethodsByCurrency = cashMethodsByCurrency,
-                                    cashMethodsMissingCurrency = cashMethodsMissingCurrency,
-                                    cashDisabledOrNotInProfile = cashDisabledOrNotInProfile,
-                                    nonCashMethods = nonCashMethods
-                                ),
                                 onOpen = handleOpen,
                                 onCancel = onDismiss
                             )
@@ -457,9 +436,7 @@ private fun OpeningFormSection(
     totalsByCurrency: Map<String, Double>,
     isLoading: Boolean,
     canOpen: Boolean,
-    duplicateCashCurrencies: List<String>,
     cashModesMissingCurrency: List<String>,
-    debugInfo: String,
     onOpen: () -> Unit,
     onCancel: () -> Unit,
 ) {
@@ -478,6 +455,19 @@ private fun OpeningFormSection(
             user?.lastName?.takeIf { !it.isNullOrBlank() }
         ).joinToString(" ").ifBlank { user?.name ?: "" }
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            if (isLoading) {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    LinearProgressIndicator(
+                        modifier = Modifier.fillMaxWidth(),
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Text(
+                        text = "Cargando información del POS...",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
             Surface(
                 color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.8f),
                 shape = RoundedCornerShape(10.dp),
@@ -612,22 +602,6 @@ private fun OpeningFormSection(
                 }
             }
 
-            if (duplicateCashCurrencies.isNotEmpty()) {
-                Surface(
-                    color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.6f),
-                    shape = RoundedCornerShape(10.dp)
-                ) {
-                    Text(
-                        text = "Multiple cash modes are configured for the same currency: ${
-                            duplicateCashCurrencies.joinToString(", ")
-                        }",
-                        modifier = Modifier.padding(12.dp),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onErrorContainer
-                    )
-                }
-            }
-
             if (cashModesMissingCurrency.isNotEmpty()) {
                 Surface(
                     color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.5f),
@@ -640,33 +614,6 @@ private fun OpeningFormSection(
                         modifier = Modifier.padding(12.dp),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onTertiaryContainer
-                    )
-                }
-            }
-
-            if (debugInfo.isNotBlank()) {
-                Surface(
-                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f),
-                    shape = RoundedCornerShape(10.dp),
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
-                ) {
-                    Text(
-                        text = debugInfo,
-                        modifier = Modifier.padding(12.dp),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-
-            if (isLoading) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center
-                ) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(24.dp),
-                        color = MaterialTheme.colorScheme.primary,
-                        strokeWidth = 2.dp
                     )
                 }
             }
@@ -814,43 +761,6 @@ private fun SectionCard(
     }
 }
 
-private fun buildDebugInfo(
-    cashMethodsByCurrency: Map<String, List<com.erpnext.pos.localSource.dao.ResolvedPaymentMethod>>,
-    cashMethodsMissingCurrency: List<com.erpnext.pos.localSource.dao.ResolvedPaymentMethod>,
-    cashDisabledOrNotInProfile: List<com.erpnext.pos.localSource.dao.ResolvedPaymentMethod>,
-    nonCashMethods: List<com.erpnext.pos.localSource.dao.ResolvedPaymentMethod>
-): String {
-    if (cashMethodsByCurrency.isEmpty() &&
-        cashMethodsMissingCurrency.isEmpty() &&
-        cashDisabledOrNotInProfile.isEmpty() &&
-        nonCashMethods.isEmpty()
-    ) {
-        return ""
-    }
-    val lines = mutableListOf<String>()
-    if (cashMethodsByCurrency.isNotEmpty()) {
-        val byCurrency = cashMethodsByCurrency.entries.joinToString("; ") { (currency, methods) ->
-            val names = methods.joinToString(", ") { it.mopName }
-            "$currency: $names"
-        }
-        lines.add("DEBUG cash grouped -> $byCurrency")
-    } else {
-        lines.add("DEBUG cash grouped -> (empty)")
-    }
-    if (cashMethodsMissingCurrency.isNotEmpty()) {
-        val names = cashMethodsMissingCurrency.joinToString(", ") { it.mopName }
-        lines.add("DEBUG cash missing currency -> $names")
-    }
-    if (cashDisabledOrNotInProfile.isNotEmpty()) {
-        val names = cashDisabledOrNotInProfile.joinToString(", ") { it.mopName }
-        lines.add("DEBUG cash disabled/not-in-profile -> $names")
-    }
-    if (nonCashMethods.isNotEmpty()) {
-        val names = nonCashMethods.joinToString(", ") { it.mopName }
-        lines.add("DEBUG non-cash -> $names")
-    }
-    return lines.joinToString("\n")
-}
 
 @Composable
 private fun SummaryRow(

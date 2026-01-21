@@ -66,11 +66,19 @@ import io.ktor.http.encodeURLParameter
 import io.ktor.http.formUrlEncode
 import io.ktor.http.isSuccess
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.decodeFromJsonElement
 import kotlinx.serialization.json.jsonObject
 import com.erpnext.pos.utils.AppLogger
 import com.erpnext.pos.utils.AppSentry
+import io.ktor.client.request.HttpRequestBuilder
+import io.ktor.client.request.invoke
+import io.ktor.client.request.url
+import io.ktor.client.statement.HttpResponse
 import io.ktor.http.takeFrom
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.put
 
 class APIService(
     private val client: HttpClient,
@@ -88,7 +96,7 @@ class APIService(
         )
     }
 
-    suspend fun createPaymentEntry(entry: PaymentEntryCreateDto) {
+    suspend fun createPaymentEntry(entry: PaymentEntryCreateDto): SubmitResponseDto {
         val url = authStore.getCurrentSite()
         return client.postERP(
             ERPDocType.PaymentEntry.path, payload = entry, baseUrl = url
@@ -307,25 +315,67 @@ class APIService(
     }
 
     suspend fun submitPOSOpeningEntry(name: String): SubmitResponseDto {
+        return submitDoc(ERPDocType.POSOpeningEntry.path, name, "submitPOSOpeningEntry")
+    }
+
+    suspend fun submitPOSClosingEntry(name: String): SubmitResponseDto {
+        return submitDoc(ERPDocType.POSClosingEntry.path, name, "submitPOSClosingEntry")
+    }
+
+    suspend fun submitSalesInvoice(name: String): SubmitResponseDto {
+        return submitDoc(ERPDocType.SalesInvoice.path, name, "submitSalesInvoice")
+    }
+
+    suspend fun submitPaymentEntry(name: String): SubmitResponseDto {
+        return submitDoc(ERPDocType.PaymentEntry.path, name, "submitPaymentEntry")
+    }
+
+    private suspend fun submitDoc(
+        doctype: String,
+        name: String,
+        logContext: String
+    ): SubmitResponseDto {
         val url = authStore.getCurrentSite()
         if (url.isNullOrBlank()) throw Exception("URL Invalida")
         val endpoint = url.trimEnd('/') + "/api/method/frappe.client.submit"
+        suspend fun fetchSubmitDoc(): JsonObject {
+            val doc = client.getERPSingle<JsonObject>(
+                doctype = doctype,
+                name = name.encodeURLParameter(),
+                baseUrl = url,
+                fields = emptyList()
+            )
+            return buildJsonObject {
+                put("doctype", doctype)
+                doc.forEach { (key, value) -> put(key, value) }
+            }
+        }
         return try {
-            val response = withRetries {
-                client.post {
-                    url { takeFrom(endpoint) }
-                    contentType(ContentType.Application.FormUrlEncoded)
-                    setBody(
-                        FormDataContent(
-                            Parameters.build {
-                                append("doctype", ERPDocType.POSOpeningEntry.path)
-                                append("name", name)
-                            }
+            suspend fun submitWithDoc(doc: JsonObject): HttpResponse {
+                return withRetries {
+                    client.post {
+                        url { takeFrom(endpoint) }
+                        contentType(ContentType.Application.FormUrlEncoded)
+                        setBody(
+                            FormDataContent(
+                                Parameters.build {
+                                    val docJson = json.encodeToString(doc)
+                                    append("doc", docJson)
+                                }
+                            )
                         )
-                    )
+                    }
                 }
             }
-            val bodyText = response.bodyAsText()
+
+            var doc = fetchSubmitDoc()
+            var response = submitWithDoc(doc)
+            var bodyText = response.bodyAsText()
+            if (!response.status.isSuccess() && bodyText.contains("TimestampMismatchError")) {
+                doc = fetchSubmitDoc()
+                response = submitWithDoc(doc)
+                bodyText = response.bodyAsText()
+            }
             if (!response.status.isSuccess()) {
                 try {
                     val err = json.decodeFromString<FrappeErrorResponse>(bodyText)
@@ -335,7 +385,7 @@ class APIService(
                     )
                 } catch (e: Exception) {
                     throw Exception(
-                        "Error en submitPOSOpeningEntry: ${response.status} - $bodyText",
+                        "Error en $logContext: ${response.status} - $bodyText",
                         e
                     )
                 }
@@ -350,8 +400,8 @@ class APIService(
             }
             json.decodeFromJsonElement(messageElement)
         } catch (e: Exception) {
-            AppSentry.capture(e, "submitPOSOpeningEntry failed")
-            AppLogger.warn("submitPOSOpeningEntry failed", e)
+            AppSentry.capture(e, "$logContext failed")
+            AppLogger.warn("$logContext failed", e)
             throw e
         }
     }

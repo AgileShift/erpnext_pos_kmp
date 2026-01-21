@@ -220,6 +220,7 @@ fun BillingScreen(
     val uiSnackbar = snackbar.snackbar.collectAsState().value
     val colors = MaterialTheme.colorScheme
     var step by rememberSaveable { mutableStateOf(LabCheckoutStep.Cart) }
+    val successMessage = (state as? BillingState.Success)?.successMessage
 
     LaunchedEffect(state) {
         if (state is BillingState.Success) {
@@ -232,6 +233,13 @@ fun BillingScreen(
     LaunchedEffect(state) {
         if (state !is BillingState.Success) {
             step = LabCheckoutStep.Cart
+        }
+    }
+
+    LaunchedEffect(successMessage) {
+        if (!successMessage.isNullOrBlank()) {
+            snackbar.show(successMessage, SnackbarType.Success, SnackbarPosition.Top)
+            action.onClearSuccessMessage()
         }
     }
 

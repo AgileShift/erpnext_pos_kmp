@@ -357,7 +357,9 @@ class CustomerViewModel(
                     customer = customer,
                     exchangeRateByCurrency = updatedCache,
                     paymentModeDetails = paymentModeDetails,
-                    baseAmountCurrency = invoiceCurrency
+                    baseAmountCurrency = invoiceCurrency,
+                    posOpeningEntry = cashboxManager.getActiveCashboxWithDetails()
+                        ?.cashbox?.openingEntryId
                 )
 
                 val invoiceCurrencyResolved = normalizeCurrency(invoice.currency)

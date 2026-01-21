@@ -198,7 +198,8 @@ fun buildCurrencySpecs(): Map<String, CurrencySpec> {
 fun buildLocalPayments(
     invoiceId: String,
     postingDate: String,
-    paymentLines: List<PaymentLine>
+    paymentLines: List<PaymentLine>,
+    posOpeningEntry: String?
 ): List<POSInvoicePaymentEntity> {
     return paymentLines.map { line ->
         POSInvoicePaymentEntity(
@@ -209,7 +210,8 @@ fun buildLocalPayments(
             paymentCurrency = line.currency,
             exchangeRate = line.exchangeRate,
             paymentReference = line.referenceNumber?.takeIf { it.isNotBlank() },
-            paymentDate = postingDate
+            paymentDate = postingDate,
+            posOpeningEntry = posOpeningEntry
         )
     }
 }
@@ -377,7 +379,7 @@ suspend fun buildPaymentEntryDto(
             postingDate = postingDate,
             paymentType = "Receive",
             partyType = "Customer",
-            docStatus = 1,
+            docStatus = 0,
             partyId = customer.name,
             modeOfPayment = line.modeOfPayment,
             paidAmount = allocated.toDouble(rcSpec.minorUnits),
@@ -442,7 +444,7 @@ suspend fun buildPaymentEntryDto(
         postingDate = postingDate,
         paymentType = "Receive",
         partyType = "Customer",
-        docStatus = 1,
+        docStatus = 0,
         partyId = customer.name,
         modeOfPayment = line.modeOfPayment,
         paidAmount = allocatedRc.toDouble(rcSpec.minorUnits),
@@ -551,7 +553,7 @@ suspend fun buildPaymentEntryDtoWithRateResolver(
             postingDate = postingDate,
             paymentType = "Receive",
             partyType = "Customer",
-            docStatus = 1,
+            docStatus = 0,
             partyId = customer.name,
             modeOfPayment = line.modeOfPayment,
             paidAmount = allocated.toDouble(rcSpec.minorUnits),
@@ -623,7 +625,7 @@ suspend fun buildPaymentEntryDtoWithRateResolver(
         postingDate = postingDate,
         paymentType = "Receive",
         partyType = "Customer",
-        docStatus = 1,
+        docStatus = 0,
         partyId = customer.name,
         modeOfPayment = line.modeOfPayment,
         paidAmount = allocatedRc.toDouble(rcSpec.minorUnits),
