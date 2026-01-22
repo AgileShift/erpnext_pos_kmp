@@ -389,9 +389,10 @@ class SalesInvoiceRepository(
                 first == null || SyncTTL.isExpired(first.lastSyncedAt)*/
             },
             saveFetchResult = { it ->
-                it.toEntities().map {
-                    localSource.saveInvoiceLocally(it.invoice, it.items, it.payments)
+                it.toEntities().forEach { payload ->
+                    localSource.saveInvoiceLocally(payload.invoice, payload.items, payload.payments)
                 }
+                reconcileOutstandingWithRemote(it)
             },
             onFetchFailed = { e ->
                 RepoTrace.capture("SalesInvoiceRepository", "sync", e)
@@ -419,5 +420,25 @@ class SalesInvoiceRepository(
 
     suspend fun getOutstandingInvoicesForCustomerLocal(customerName: String): List<SalesInvoiceBO> {
         return localSource.getOutstandingInvoicesForCustomer(customerName).toBO()
+    }
+
+    private suspend fun reconcileOutstandingWithRemote(remoteInvoices: List<SalesInvoiceDto>) {
+        val ctx = context.getContext() ?: return
+        val profileId = ctx.profileName
+        val localOutstandingNames = localSource.getOutstandingInvoiceNamesForProfile(profileId)
+        if (localOutstandingNames.isEmpty()) return
+
+        val remoteNames = remoteInvoices.mapNotNull { it.name }.toSet()
+        val missing = localOutstandingNames.filterNot { remoteNames.contains(it) }
+        if (missing.isEmpty()) return
+
+        missing.forEach { invoiceName ->
+            val remote = runCatching { remoteSource.fetchInvoice(invoiceName) }.getOrNull()
+            if (remote != null) {
+                updateLocalInvoiceFromRemote(invoiceName, remote)
+            } else {
+                AppLogger.warn("reconcileOutstandingWithRemote: invoice not found $invoiceName")
+            }
+        }
     }
 }

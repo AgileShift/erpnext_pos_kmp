@@ -52,6 +52,8 @@ androidGradlePlugin = "9.0.0"
 material3 = "1.4.0"
 
 [libraries]
+androidx-ui-tooling = { module = "androidx.compose.ui:ui-tooling" }
+androidx-ui-tooling-preview = { module = "androidx.compose.ui:ui-tooling-preview" }
 bignum = { module = "com.ionspin.kotlin:bignum", version.ref = "bignum" }
 firebase-bom = { group = "com.google.firebase", name = "firebase-bom", version.ref = "firebase-bom" }
 firebase-analytics = { group = "com.google.firebase", name = "firebase-analytics", version.ref = "firebase-analytics" }
@@ -131,6 +133,8 @@ security-crypto = { module = "androidx.security:security-crypto", version.ref = 
 android-tink = { module = "com.google.crypto.tink:tink-android", version = "1.20.0" }
 androidx-work-runtime-ktx = { group = "androidx.work", name = "work-runtime-ktx", version.ref = "workRuntimeKtx" }
 androidx-material3 = { group = "androidx.compose.material3", name = "material3", version.ref = "material3" }
+ui-tooling = { module = "androidx.compose.ui:ui-tooling" }
+ui-tooling-preview = { module = "androidx.compose.ui:ui-tooling-preview" }
 
 
 [plugins]

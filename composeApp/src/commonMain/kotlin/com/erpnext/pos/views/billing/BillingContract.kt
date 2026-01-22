@@ -71,6 +71,8 @@ sealed interface BillingState {
         val paymentErrorMessage: String? = null,
         val cartErrorMessage: String? = null,
         val successMessage: String? = null,
+        val successDialogMessage: String? = null,
+        val successDialogInvoice: String? = null,
         val isFinalizingSale: Boolean = false
     ) : BillingState {
         fun recalculatePaymentTotals(): Success {

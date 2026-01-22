@@ -35,6 +35,7 @@ interface IInvoiceLocalSource {
     suspend fun updatePaymentSyncStatus(paymentId: Int, status: String, syncedAt: Long)
     suspend fun getPaymentsForInvoice(invoiceName: String): List<POSInvoicePaymentEntity>
     suspend fun refreshCustomerSummary(customerId: String)
+    suspend fun getOutstandingInvoiceNamesForProfile(profileId: String): List<String>
 
     suspend fun getOutstandingInvoicesForCustomer(
         customerName: String
@@ -166,6 +167,10 @@ class InvoiceLocalSource(
 
     override suspend fun refreshCustomerSummary(customerId: String) {
         salesInvoiceDao.refreshCustomerSummary(customerId)
+    }
+
+    override suspend fun getOutstandingInvoiceNamesForProfile(profileId: String): List<String> {
+        return salesInvoiceDao.getOutstandingInvoiceNamesForProfile(profileId)
     }
 
     override suspend fun getOutstandingInvoicesForCustomer(

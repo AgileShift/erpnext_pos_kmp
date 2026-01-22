@@ -40,6 +40,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ConfirmationNumber
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Money
@@ -77,7 +78,10 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.lerp
 import androidx.compose.ui.util.lerp
+import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.PopupProperties
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import coil3.compose.LocalPlatformContext
 import coil3.compose.SubcomposeAsyncImage
 import coil3.request.ImageRequest
@@ -221,13 +225,9 @@ fun BillingScreen(
     val colors = MaterialTheme.colorScheme
     var step by rememberSaveable { mutableStateOf(LabCheckoutStep.Cart) }
     val successMessage = (state as? BillingState.Success)?.successMessage
-
-    LaunchedEffect(state) {
-        if (state is BillingState.Success) {
-            if (state.isFinalizingSale)
-                step = LabCheckoutStep.Cart
-        }
-    }
+    val successDialogInvoice = (state as? BillingState.Success)?.successDialogInvoice
+    var popupMessage by rememberSaveable { mutableStateOf<String?>(null) }
+    var popupInvoice by rememberSaveable { mutableStateOf<String?>(null) }
 
     // Si salimos de Success, regresamos al primer paso.
     LaunchedEffect(state) {
@@ -236,10 +236,16 @@ fun BillingScreen(
         }
     }
 
-    LaunchedEffect(successMessage) {
-        if (!successMessage.isNullOrBlank()) {
-            snackbar.show(successMessage, SnackbarType.Success, SnackbarPosition.Top)
-            action.onClearSuccessMessage()
+    LaunchedEffect(successMessage, successDialogInvoice) {
+        val message = successMessage?.takeIf { it.isNotBlank() } ?: return@LaunchedEffect
+        popupMessage = message
+        popupInvoice = successDialogInvoice
+        delay(3000)
+        popupMessage = null
+        popupInvoice = null
+        action.onClearSuccessMessage()
+        if (step == LabCheckoutStep.Checkout) {
+            step = LabCheckoutStep.Cart
         }
     }
 
@@ -344,38 +350,94 @@ fun BillingScreen(
                 }
 
                 is BillingState.Success -> {
-                    when (step) {
-                        LabCheckoutStep.Cart -> BillingLabContent(
-                            state = state,
-                            action = action,
-                            onCheckout = {
-                                if (state.selectedCustomer == null)
-                                    snackbar.show(
-                                        "Seleccione primero al cliente.",
-                                        SnackbarType.Error,
-                                        SnackbarPosition.Top
-                                    )
-                                else if (state.cartItems.isEmpty()) {
-                                    snackbar.show(
-                                        "Seleccione el(los) productos del cliente.",
-                                        SnackbarType.Error,
-                                        SnackbarPosition.Top
-                                    )
-                                } else
-                                    step = LabCheckoutStep.Checkout
-                            },
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .padding(top = paddingValues.calculateTopPadding())
-                        )
+                    AnimatedContent(
+                        targetState = step,
+                        transitionSpec = {
+                            fadeIn(tween(180)) + slideInVertically(
+                                animationSpec = tween(180),
+                                initialOffsetY = { it / 6 }
+                            ) togetherWith fadeOut(tween(160)) + slideOutVertically(
+                                animationSpec = tween(160),
+                                targetOffsetY = { -it / 8 }
+                            )
+                        },
+                        label = "billing_step_transition"
+                    ) { targetStep ->
+                        when (targetStep) {
+                            LabCheckoutStep.Cart -> BillingLabContent(
+                                state = state,
+                                action = action,
+                                onCheckout = {
+                                    if (state.selectedCustomer == null)
+                                        snackbar.show(
+                                            "Seleccione primero al cliente.",
+                                            SnackbarType.Error,
+                                            SnackbarPosition.Top
+                                        )
+                                    else if (state.cartItems.isEmpty()) {
+                                        snackbar.show(
+                                            "Seleccione el(los) productos del cliente.",
+                                            SnackbarType.Error,
+                                            SnackbarPosition.Top
+                                        )
+                                    } else
+                                        step = LabCheckoutStep.Checkout
+                                },
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(top = paddingValues.calculateTopPadding())
+                            )
 
-                        LabCheckoutStep.Checkout -> BillingLabCheckoutStep(
-                            state = state,
-                            action = action,
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .padding(top = paddingValues.calculateTopPadding())
+                            LabCheckoutStep.Checkout -> BillingLabCheckoutStep(
+                                state = state,
+                                action = action,
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(top = paddingValues.calculateTopPadding())
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        if (!popupMessage.isNullOrBlank()) {
+            Dialog(
+                onDismissRequest = {},
+                properties = DialogProperties(dismissOnClickOutside = false)
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(20.dp),
+                    color = colors.surface,
+                    tonalElevation = 8.dp,
+                    shadowElevation = 10.dp,
+                    modifier = Modifier.widthIn(min = 420.dp)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(horizontal = 36.dp, vertical = 30.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.CheckCircle,
+                            contentDescription = null,
+                            tint = colors.primary,
+                            modifier = Modifier.size(56.dp)
                         )
+                        Text(
+                            text = popupMessage ?: "Exito",
+                            color = colors.onSurface,
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 20.sp,
+                            textAlign = TextAlign.Center
+                        )
+                        popupInvoice?.let { invoice ->
+                            Text(
+                                text = "Referencia: $invoice",
+                                color = colors.onSurface.copy(alpha = 0.75f),
+                                fontSize = 14.sp
+                            )
+                        }
                     }
                 }
             }

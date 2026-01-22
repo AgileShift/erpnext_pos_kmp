@@ -1,12 +1,13 @@
 package com.erpnext.pos.auth
 
+import com.erpnext.pos.auth.AppLifecycleObserver
 import com.erpnext.pos.utils.NetworkMonitor
 import com.erpnext.pos.remoteSource.oauth.TokenStore
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.launch
 
 /**
  * Ejecuta un chequeo periódico de sesión para refrescar tokens antes de que expiren.
@@ -16,14 +17,28 @@ class TokenHeartbeat(
     private val scope: CoroutineScope,
     private val sessionRefresher: SessionRefresher,
     private val networkMonitor: NetworkMonitor,
-    private val tokenStore: TokenStore
+    private val tokenStore: TokenStore,
+    private val lifecycleObserver: AppLifecycleObserver
 ) {
     fun start(intervalMinutes: Long = 5) {
         scope.launch {
+            val isOnline = networkMonitor.isConnected.first()
+            if (isOnline) {
+                sessionRefresher.ensureValidSession()
+            }
             while (true) {
                 delay(intervalMinutes * 60 * 1000)
-                val isOnline = networkMonitor.isConnected.first()
-                if (isOnline) {
+                val currentlyOnline = networkMonitor.isConnected.first()
+                if (currentlyOnline) {
+                    sessionRefresher.ensureValidSession()
+                }
+            }
+        }
+
+        scope.launch {
+            lifecycleObserver.onResume.collectLatest {
+                val currentlyOnline = networkMonitor.isConnected.first()
+                if (currentlyOnline) {
                     sessionRefresher.ensureValidSession()
                 }
             }

@@ -542,6 +542,20 @@ interface SalesInvoiceDao {
     )
     suspend fun getPaymentsForOpeningEntry(openingEntryId: String): List<ShiftPaymentRow>
 
+    @Query(
+        """
+        SELECT invoice_name
+        FROM tabSalesInvoice
+        WHERE profile_id = :profileId
+          AND outstanding_amount > 0
+          AND docstatus != 2
+          AND is_return = 0
+          AND invoice_name IS NOT NULL
+          AND invoice_name NOT LIKE 'LOCAL-%'
+        """
+    )
+    suspend fun getOutstandingInvoiceNamesForProfile(profileId: String): List<String>
+
     @Query("DELETE FROM tabSalesInvoice WHERE invoice_name =:invoiceId")
     suspend fun deleteByInvoiceId(invoiceId: String)
 

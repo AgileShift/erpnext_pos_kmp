@@ -225,7 +225,15 @@ class HomeViewModel(
 
     fun openCashbox(entry: POSProfileSimpleBO, amounts: List<PaymentModeWithAmount>) {
         viewModelScope.launch {
-            contextManager.openCashBox(entry, amounts)
+            val ctx = contextManager.openCashBox(entry, amounts)
+            if (ctx == null) {
+                _openingState.update {
+                    it.copy(
+                        isLoading = false,
+                        error = "Sesion expirada. Inicia sesion nuevamente."
+                    )
+                }
+            }
         }
     }
 }

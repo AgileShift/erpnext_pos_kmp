@@ -30,6 +30,8 @@ import com.erpnext.pos.utils.AppLogger
 import com.erpnext.pos.utils.parseErpDateTimeToEpochMillis
 import com.erpnext.pos.utils.toErpDateTime
 import io.ktor.util.date.getTimeMillis
+import com.erpnext.pos.auth.SessionRefresher
+import com.erpnext.pos.utils.NetworkMonitor
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.IO
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -81,7 +83,9 @@ class CashBoxManager(
     private val exchangeRateRepository: ExchangeRateRepository,
     private val openingEntrySyncRepository: OpeningEntrySyncRepository,
     private val paymentMethodLocalRepository: PosProfilePaymentMethodLocalRepository,
-    private val salesInvoiceDao: SalesInvoiceDao
+    private val salesInvoiceDao: SalesInvoiceDao,
+    private val sessionRefresher: SessionRefresher,
+    private val networkMonitor: NetworkMonitor
 ) {
 
     //Contexto actual del POS cargado en memoria
@@ -143,6 +147,11 @@ class CashBoxManager(
         entry: POSProfileSimpleBO,
         amounts: List<PaymentModeWithAmount>
     ): POSContext? = withContext(Dispatchers.IO) {
+        val isOnline = networkMonitor.isConnected.firstOrNull() == true
+        if (isOnline && !sessionRefresher.ensureValidSession()) {
+            AppLogger.warn("openCashBox: invalid session, aborting")
+            return@withContext null
+        }
         val user = userDao.getUserInfo() ?: return@withContext null
         val existing = cashboxDao.getActiveEntry(user.email, entry.name).firstOrNull()
         if (existing != null) {
@@ -264,6 +273,11 @@ class CashBoxManager(
 
     //TODO Armar y enviar el POSClosingEntry
     suspend fun closeCashBox(): POSContext? = withContext(Dispatchers.IO) {
+        val isOnline = networkMonitor.isConnected.firstOrNull() == true
+        if (isOnline && !sessionRefresher.ensureValidSession()) {
+            AppLogger.warn("closeCashBox: invalid session, aborting")
+            return@withContext null
+        }
         val ctx = currentContext ?: initializeContext()
         if (ctx == null) return@withContext null
         val user = userDao.getUserInfo() ?: return@withContext null

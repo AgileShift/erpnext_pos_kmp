@@ -117,6 +117,7 @@ import com.erpnext.pos.views.paymententry.PaymentEntryViewModel
 import com.erpnext.pos.views.salesflow.SalesFlowContextStore
 import com.erpnext.pos.views.payment.PaymentHandler
 import com.erpnext.pos.views.reconciliation.ReconciliationViewModel
+import com.erpnext.pos.auth.AppLifecycleObserver
 import com.erpnext.pos.auth.TokenHeartbeat
 import com.erpnext.pos.data.repositories.v2.SourceDocumentRepository
 import com.erpnext.pos.domain.usecases.FetchPosProfileInfoLocalUseCase
@@ -263,12 +264,14 @@ val appModule = module {
             networkMonitor = get()
         )
     }
+    single { AppLifecycleObserver() }
     single {
         TokenHeartbeat(
             scope = get(),
             sessionRefresher = get(),
             networkMonitor = get(),
-            tokenStore = get()
+            tokenStore = get(),
+            lifecycleObserver = get()
         ).apply { start(intervalMinutes = 1) }
     }
     single {
@@ -305,7 +308,9 @@ val appModule = module {
             exchangeRateRepository = get(),
             openingEntrySyncRepository = get(),
             paymentMethodLocalRepository = get(),
-            salesInvoiceDao = get()
+            salesInvoiceDao = get(),
+            sessionRefresher = get(),
+            networkMonitor = get()
         )
     }
     single(named("apiServiceV2")) { APIServiceV2(get(), get(), get()) }

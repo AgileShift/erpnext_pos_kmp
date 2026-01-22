@@ -16,12 +16,6 @@ val sentryEnv = properties["buildkonfig.flavor"]?.toString() ?: "staging"
 
 compose.desktop {
     application {
-        jvmArgs(
-            "--add-modules", "jdk.unsupported",
-            "--add-opens", "java.base/jdk.internal.misc=ALL-UNNAMED",
-            "--add-opens", "java.base/java.lang=ALL-UNNAMED",
-            "--add-opens", "java.base/java.nio=ALL-UNNAMED"
-        )
         nativeDistributions {
             packageName = "ERP POS"
             packageVersion = "1.0.0"
@@ -69,6 +63,10 @@ sentry {
 kotlin {
     compilerOptions {
         freeCompilerArgs.add("-Xexpect-actual-classes")
+    }
+
+    room {
+        schemaDirectory("$projectDir/schemas")
     }
 
     androidLibrary {
@@ -145,8 +143,8 @@ kotlin {
             implementation(libs.kotlin.test)
         }
         androidMain.dependencies {
-            implementation("androidx.compose.ui:ui-tooling")
-            implementation("androidx.compose.ui:ui-tooling-preview")
+            implementation(libs.androidx.ui.tooling)
+            implementation(libs.androidx.ui.tooling.preview)
             implementation(libs.sqldelight.android)
             implementation(compose.preview)
             implementation(libs.androidx.activity.compose)
@@ -245,10 +243,6 @@ buildkonfig {
         buildConfigField(STRING, "SENTRY_DSN", sentryDsn)
         buildConfigField(STRING, "SENTRY_ENV", sentryEnv)
     }
-}
-
-room {
-    schemaDirectory("$projectDir/schemas")
 }
 
 compose.desktop {

@@ -688,8 +688,14 @@ class BillingViewModel(
 
     fun onClearSuccessMessage() {
         val current = requireSuccessState() ?: return
-        if (current.successMessage == null) return
-        _state.update { current.copy(successMessage = null) }
+        if (current.successMessage == null && current.successDialogMessage == null) return
+        _state.update {
+            current.copy(
+                successMessage = null,
+                successDialogMessage = null,
+                successDialogInvoice = null
+            )
+        }
     }
 
 
@@ -895,6 +901,13 @@ class BillingViewModel(
                             "Factura $label creada correctamente."
                         }
                     },
+                    successDialogMessage = when {
+                        created == null -> "Venta guardada localmente."
+                        paymentLines.isNotEmpty() -> "Tu pago se ha realizado con exito"
+                        current.isCreditSale -> "Venta a credito registrada"
+                        else -> "Venta registrada correctamente"
+                    },
+                    successDialogInvoice = created?.name ?: localInvoiceName,
                     sourceDocument = null,
                     isSourceDocumentApplied = false
                 )
@@ -1099,30 +1112,17 @@ class BillingViewModel(
             ?: current.paymentModes.firstOrNull()?.modeOfPayment
             ?: error("No hay modo de pago disponible para crear la factura.")
 
-        // Si ya conocemos los pagos (offline-first), los enviamos con sus montos reales.
-        // Esto asegura paid_amount/outstanding_amount correctos desde el inicio.
-        val payments = if (paymentLines.isNotEmpty()) {
-            paymentLines.map { line ->
-                val account = paymentModeDetails[line.modeOfPayment]?.account
-                val amount = line.enteredAmount.takeIf { it > 0.0 } ?: line.baseAmount
-                SalesInvoicePaymentDto(
-                    modeOfPayment = line.modeOfPayment,
-                    amount = amount,
-                    account = account,
-                    paymentReference = line.referenceNumber?.takeIf { it.isNotBlank() }
-                )
-            }
-        } else {
-            // En crédito sin pagos, enviamos una línea vacía para mantener compatibilidad.
-            val account = paymentModeDetails[paymentMode]?.account
-            listOf(
-                SalesInvoicePaymentDto(
-                    modeOfPayment = paymentMode,
-                    amount = 0.0,
-                    account = account
-                )
+        // Para POS ERPNext exige al menos un modo de pago en la factura (aunque sea 0.0).
+        // Los montos reales se registran por Payment Entry.
+        val account = paymentModeDetails[paymentMode]?.account
+        val payments = listOf(
+            SalesInvoicePaymentDto(
+                modeOfPayment = paymentMode,
+                amount = 0.0,
+                account = account
             )
-        }
+        )
+        val resolvedStatus = "Unpaid"
 
         return SalesInvoiceDto(
             customer = customer.name,
@@ -1134,12 +1134,12 @@ class BillingViewModel(
             conversionRate = conversionRate?.takeIf { it > 0.0 },
             partyAccountCurrency = context.partyAccountCurrency,
             dueDate = dueDate,
-            status = status,
+            status = resolvedStatus,
             grandTotal = totals.total,
-            outstandingAmount = outstandingAmount,
+            outstandingAmount = totals.total,
             totalTaxesAndCharges = totals.taxes,
             netTotal = totals.total,
-            paidAmount = paidAmount,
+            paidAmount = 0.0,
             items = items,
             payments = payments,
             paymentSchedule = paymentSchedule,

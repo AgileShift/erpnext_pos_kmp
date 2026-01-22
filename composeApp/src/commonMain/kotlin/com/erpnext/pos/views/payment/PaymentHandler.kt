@@ -108,12 +108,12 @@ class PaymentHandler(
         }
 
         val currencySpecs = buildCurrencySpecs()
-        val resolvedReceivableCurrency = normalizeCurrency(createdInvoice?.partyAccountCurrency)
+        var resolvedReceivableCurrency = normalizeCurrency(createdInvoice?.partyAccountCurrency)
             ?: normalizeCurrency(context.partyAccountCurrency)
             ?: normalizeCurrency(createdInvoice?.currency)
             ?: normalizeCurrency(context.currency)
             ?: "USD"
-        val resolvedInvoiceCurrency = normalizeCurrency(createdInvoice?.currency)
+        var resolvedInvoiceCurrency = normalizeCurrency(createdInvoice?.currency)
             ?: normalizeCurrency(context.currency)
             ?: "USD"
 
@@ -132,29 +132,34 @@ class PaymentHandler(
             )
         }?.takeIf { it > 0.0 }
 
-        val receivableAmounts = createdInvoice?.let {
+        var receivableAmounts: InvoiceReceivableAmounts? = createdInvoice?.let {
             val invoiceTotalInv = it.grandTotal
-            val invoiceOutstandingRc = it.outstandingAmount
-            if (rateInvToRc != null) {
-                val totalRc = when {
-                    it.baseGrandTotal != null && it.baseGrandTotal > 0.0 -> it.baseGrandTotal
-                    resolvedInvoiceCurrency.equals(resolvedReceivableCurrency, ignoreCase = true) ->
-                        invoiceTotalInv
-                    else -> invoiceTotalInv * rateInvToRc
-                }
-                InvoiceReceivableAmounts(
-                    receivableCurrency = resolvedReceivableCurrency,
-                    totalRc = totalRc,
-                    outstandingRc = invoiceOutstandingRc ?: totalRc
-                )
-            } else {
-                val total = invoiceOutstandingRc ?: invoiceTotalInv
-                InvoiceReceivableAmounts(
-                    receivableCurrency = resolvedReceivableCurrency,
-                    totalRc = total,
-                    outstandingRc = invoiceOutstandingRc ?: total
-                )
+            val invoiceOutstandingInv = it.outstandingAmount
+            val totalRc = when {
+                resolvedInvoiceCurrency.equals(resolvedReceivableCurrency, ignoreCase = true) ->
+                    invoiceTotalInv
+                it.baseGrandTotal != null && it.baseGrandTotal > 0.0 -> it.baseGrandTotal
+                rateInvToRc != null -> invoiceTotalInv * rateInvToRc
+                else -> invoiceTotalInv
             }
+            val outstandingRc = when {
+                resolvedInvoiceCurrency.equals(resolvedReceivableCurrency, ignoreCase = true) ->
+                    invoiceOutstandingInv ?: totalRc
+                it.baseGrandTotal != null -> {
+                    val basePaid = it.basePaidAmount ?: 0.0
+                    (it.baseGrandTotal - basePaid).coerceAtLeast(0.0)
+                }
+                rateInvToRc != null -> {
+                    val invOutstanding = invoiceOutstandingInv ?: invoiceTotalInv
+                    (invOutstanding * rateInvToRc).coerceAtLeast(0.0)
+                }
+                else -> invoiceOutstandingInv ?: totalRc
+            }
+            InvoiceReceivableAmounts(
+                receivableCurrency = resolvedReceivableCurrency,
+                totalRc = totalRc,
+                outstandingRc = outstandingRc
+            )
         }
         var remotePaymentsSucceeded = false
         var remainingOutstandingRc: Double? = receivableAmounts?.outstandingRc
@@ -163,7 +168,66 @@ class PaymentHandler(
         val isOnline = networkMonitor.isConnected.first()
 
         if (createdInvoice != null && isOnline) {
-            val paidFrom = createdInvoice.debitTo
+            val resolvedInvoice = if (createdInvoice.debitTo.isNullOrBlank() &&
+                !createdInvoice.name.isNullOrBlank()
+            ) {
+                runCatching { api.getSalesInvoiceByName(createdInvoice.name!!) }
+                    .getOrElse { createdInvoice }
+            } else {
+                createdInvoice
+            }
+            resolvedInvoiceCurrency = normalizeCurrency(resolvedInvoice.currency)
+                ?: resolvedInvoiceCurrency
+            resolvedReceivableCurrency = normalizeCurrency(resolvedInvoice.partyAccountCurrency)
+                ?: resolvedReceivableCurrency
+
+            val rateInvToRcResolved = when {
+                resolvedInvoiceCurrency.equals(resolvedReceivableCurrency, ignoreCase = true) -> 1.0
+                resolvedInvoice.conversionRate != null && resolvedInvoice.conversionRate > 0.0 ->
+                    resolvedInvoice.conversionRate
+                resolvedInvoice.customExchangeRate != null && resolvedInvoice.customExchangeRate > 0.0 ->
+                    resolvedInvoice.customExchangeRate
+                resolvedInvoice.baseGrandTotal != null && resolvedInvoice.grandTotal > 0.0 ->
+                    resolvedInvoice.baseGrandTotal / resolvedInvoice.grandTotal
+                else -> resolveRateBetweenCurrencies(
+                    fromCurrency = resolvedInvoiceCurrency,
+                    toCurrency = resolvedReceivableCurrency,
+                    context = context
+                )
+            }?.takeIf { it > 0.0 }
+
+            val totalRcResolved = when {
+                resolvedReceivableCurrency.equals(resolvedInvoiceCurrency, ignoreCase = true) ->
+                    resolvedInvoice.grandTotal
+                resolvedInvoice.baseGrandTotal != null && resolvedInvoice.baseGrandTotal > 0.0 ->
+                    resolvedInvoice.baseGrandTotal
+                rateInvToRcResolved != null -> resolvedInvoice.grandTotal * rateInvToRcResolved
+                else -> resolvedInvoice.grandTotal
+            }
+
+            val outstandingRcResolved = when {
+                resolvedReceivableCurrency.equals(resolvedInvoiceCurrency, ignoreCase = true) ->
+                    resolvedInvoice.outstandingAmount ?: resolvedInvoice.grandTotal
+                resolvedInvoice.baseGrandTotal != null -> {
+                    val basePaid = resolvedInvoice.basePaidAmount ?: 0.0
+                    (resolvedInvoice.baseGrandTotal - basePaid).coerceAtLeast(0.0)
+                }
+                rateInvToRcResolved != null -> {
+                    val invOutstanding =
+                        resolvedInvoice.outstandingAmount ?: resolvedInvoice.grandTotal
+                    (invOutstanding * rateInvToRcResolved).coerceAtLeast(0.0)
+                }
+                else -> resolvedInvoice.outstandingAmount ?: resolvedInvoice.grandTotal
+            }
+
+            receivableAmounts = InvoiceReceivableAmounts(
+                receivableCurrency = resolvedReceivableCurrency,
+                totalRc = totalRcResolved,
+                outstandingRc = outstandingRcResolved
+            )
+            remainingOutstandingRc = receivableAmounts?.outstandingRc
+
+            val paidFrom = resolvedInvoice.debitTo
             var remotePaymentFailed = false
             val cacheForReceivable = if (resolvedInvoiceCurrency.equals(
                     resolvedReceivableCurrency,
@@ -198,13 +262,13 @@ class PaymentHandler(
                     context = context,
                     customer = customer,
                     postingDate = postingDate,
-                    invoiceId = createdInvoice.name ?: invoiceNameForLocal,
-                    invoiceTotalRc = receivableAmounts?.totalRc ?: createdInvoice.grandTotal,
-                    outstandingRc = remainingOutstandingRc ?: createdInvoice.grandTotal,
+                    invoiceId = resolvedInvoice.name ?: invoiceNameForLocal,
+                    invoiceTotalRc = receivableAmounts?.totalRc ?: resolvedInvoice.grandTotal,
+                    outstandingRc = remainingOutstandingRc ?: resolvedInvoice.grandTotal,
                     paidFromAccount = paidFrom,
                     partyAccountCurrency = resolvedReceivableCurrency,
                     invoiceCurrency = resolvedInvoiceCurrency,
-                    invoiceToReceivableRate = rateInvToRc,
+                    invoiceToReceivableRate = rateInvToRcResolved,
                     exchangeRateByCurrency = cacheForReceivable,
                     currencySpecs = currencySpecs,
                     paymentModeDetails = paymentModeDetails

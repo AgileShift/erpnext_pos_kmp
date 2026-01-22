@@ -21,6 +21,19 @@ import kotlin.time.ExperimentalTime
 
 fun SalesInvoiceWithItemsAndPayments.toDto(): SalesInvoiceDto {
     val invoiceName = invoice.invoiceName?.takeUnless { it.startsWith("LOCAL-") }
+    val fallbackPayments = if (payments.isEmpty() && !invoice.modeOfPayment.isNullOrBlank()) {
+        listOf(
+            SalesInvoicePaymentDto(
+                modeOfPayment = invoice.modeOfPayment!!,
+                amount = 0.0,
+                paymentReference = null,
+                type = "Receive"
+            )
+        )
+    } else {
+        emptyList()
+    }
+
     return SalesInvoiceDto(
         name = invoiceName,
         customer = invoice.customer,
@@ -35,7 +48,7 @@ fun SalesInvoiceWithItemsAndPayments.toDto(): SalesInvoiceDto {
         outstandingAmount = invoice.outstandingAmount,
         totalTaxesAndCharges = invoice.taxTotal,
         items = items.map { it.toDto(invoice) },
-        payments = payments.map { it.toDto() },
+        payments = fallbackPayments,
         remarks = invoice.remarks,
         isPos = true,
         doctype = "Sales Invoice",
