@@ -161,6 +161,7 @@ kotlin {
             implementation(libs.android.tink)
 
             implementation(libs.androidx.room.paging)
+            implementation(libs.androidx.lifecycle.process)
         }
         desktopMain.dependencies {
             implementation(compose.desktop.currentOs)

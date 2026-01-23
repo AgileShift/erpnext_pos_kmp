@@ -6,7 +6,10 @@ import androidx.paging.cachedIn
 import androidx.paging.filter
 import com.erpnext.pos.base.BaseViewModel
 import com.erpnext.pos.domain.models.SalesInvoiceBO
+import com.erpnext.pos.domain.usecases.CancelSalesInvoiceInput
+import com.erpnext.pos.domain.usecases.CancelSalesInvoiceUseCase
 import com.erpnext.pos.domain.usecases.FetchPendingInvoiceUseCase
+import com.erpnext.pos.domain.usecases.InvoiceCancellationAction
 import com.erpnext.pos.domain.usecases.PendingInvoiceInput
 import com.erpnext.pos.navigation.NavRoute
 import com.erpnext.pos.navigation.NavigationManager
@@ -14,14 +17,17 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.launch
 
 @OptIn(FlowPreview::class, ExperimentalCoroutinesApi::class)
 class InvoiceViewModel(
     private val fetchPendingInvoiceUseCase: FetchPendingInvoiceUseCase,
+    private val cancelSalesInvoiceUseCase: CancelSalesInvoiceUseCase,
     private val navManager: NavigationManager
 ) : BaseViewModel() {
 
@@ -44,6 +50,9 @@ class InvoiceViewModel(
         }
         .cachedIn(viewModelScope)
 
+    private val _feedbackMessage = MutableStateFlow<String?>(null)
+    val feedbackMessage: StateFlow<String?> = _feedbackMessage
+
 
     fun onSearchQueryChanged(text: String) {
         searchQuery.value = text
@@ -59,6 +68,44 @@ class InvoiceViewModel(
 
     fun onInvoiceSelected(invoiceId: String) {
         navManager.navigateTo(NavRoute.PaymentEntry(invoiceId))
+    }
+
+    fun onInvoiceCancelRequested(
+        invoiceId: String,
+        action: InvoiceCancellationAction,
+        reason: String?
+    ) {
+        viewModelScope.launch {
+            _feedbackMessage.value = null
+            val result = runCatching {
+                cancelSalesInvoiceUseCase(
+                    CancelSalesInvoiceInput(
+                        invoiceName = invoiceId,
+                        action = action,
+                        reason = reason
+                    )
+                )
+            }
+            result.onSuccess {
+                _feedbackMessage.value = when (action) {
+                    InvoiceCancellationAction.CANCEL -> "Factura $invoiceId cancelada."
+                    InvoiceCancellationAction.RETURN ->
+                        if (!it.creditNoteName.isNullOrBlank()) {
+                            "Retorno registrado como ${it.creditNoteName}."
+                        } else {
+                            "Retorno registrado."
+                        }
+                }
+            }
+            result.onFailure {
+                _feedbackMessage.value =
+                    "No se pudo procesar la acción: ${it.message ?: "error desconocido."}"
+            }
+        }
+    }
+
+    fun clearFeedbackMessage() {
+        _feedbackMessage.value = null
     }
 
     private fun PendingInvoiceInput.applyLocalSearch(

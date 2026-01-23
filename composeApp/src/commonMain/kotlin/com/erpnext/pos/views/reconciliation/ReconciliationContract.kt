@@ -66,6 +66,8 @@ enum class ReconciliationMode(val value: String) {
 data class CloseCashboxState(
     val isClosing: Boolean = false,
     val isClosed: Boolean = false,
+    val isSyncing: Boolean = false,
+    val syncMessage: String? = null,
     val errorMessage: String? = null
 )
 

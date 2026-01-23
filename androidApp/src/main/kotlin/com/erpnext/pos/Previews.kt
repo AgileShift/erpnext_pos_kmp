@@ -3,14 +3,26 @@ package com.erpnext.pos
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.tooling.preview.Preview
 import com.erpnext.pos.domain.models.POSProfileSimpleBO
+import com.erpnext.pos.domain.models.SalesInvoiceBO
 import com.erpnext.pos.domain.models.UserBO
 import com.erpnext.pos.utils.view.SnackbarController
 import com.erpnext.pos.views.home.CashboxOpeningProfileState
 import com.erpnext.pos.views.home.CashboxOpeningScreen
 import com.erpnext.pos.views.home.HomeState
+import com.erpnext.pos.views.invoice.InvoiceAction
+import com.erpnext.pos.views.invoice.InvoiceListScreen
+import kotlinx.coroutines.flow.flowOf
 
 
 @Preview
+@Composable
+fun InvoiceListScreenPreview() {
+    InvoiceListScreen(
+        InvoiceAction()
+    )
+}
+
+/*@Preview
 @Composable
 fun CashboxOpeningScreenPreview() {
     CashboxOpeningScreen(
@@ -51,7 +63,7 @@ fun CashboxOpeningScreenPreview() {
         onLoadOpeningProfile = { _ -> },
         onOpenCashbox = { _, _ -> },
     )
-}
+}*/
 
 /*
 

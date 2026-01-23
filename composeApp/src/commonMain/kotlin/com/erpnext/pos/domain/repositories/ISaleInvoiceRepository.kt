@@ -29,6 +29,7 @@ interface ISaleInvoiceRepository {
         invoice: SalesInvoiceEntity,
         payments: List<POSInvoicePaymentEntity>
     )
+    suspend fun cancelInvoice(invoiceName: String, isReturn: Boolean = false)
 
     suspend fun markAsSynced(invoiceName: String)
     suspend fun markAsFailed(invoiceName: String)

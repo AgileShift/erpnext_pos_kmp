@@ -330,6 +330,10 @@ class APIService(
         return submitDoc(ERPDocType.PaymentEntry.path, name, "submitPaymentEntry")
     }
 
+    suspend fun cancelSalesInvoice(name: String): SubmitResponseDto {
+        return cancelDoc(ERPDocType.SalesInvoice.path, name, "cancelSalesInvoice")
+    }
+
     private suspend fun submitDoc(
         doctype: String,
         name: String,
@@ -388,6 +392,62 @@ class APIService(
                         "Error en $logContext: ${response.status} - $bodyText",
                         e
                     )
+                }
+            }
+
+            val parsed = json.parseToJsonElement(bodyText).jsonObject
+            val messageElement = parsed["message"] ?: parsed["data"]
+            if (messageElement == null) {
+                throw FrappeException(
+                    "La respuesta no contiene 'message'. Respuesta: $bodyText"
+                )
+            }
+            json.decodeFromJsonElement(messageElement)
+        } catch (e: Exception) {
+            AppSentry.capture(e, "$logContext failed")
+            AppLogger.warn("$logContext failed", e)
+            throw e
+        }
+    }
+
+    private suspend fun cancelDoc(
+        doctype: String,
+        name: String,
+        logContext: String
+    ): SubmitResponseDto {
+        val url = authStore.getCurrentSite()
+        if (url.isNullOrBlank()) throw Exception("URL Invalida")
+        val endpoint = url.trimEnd('/') + "/api/method/frappe.client.cancel"
+        val payload = buildJsonObject {
+            put("doctype", doctype)
+            put("name", name)
+        }
+
+        return try {
+            val response = withRetries {
+                client.post {
+                    url { takeFrom(endpoint) }
+                    contentType(ContentType.Application.FormUrlEncoded)
+                    setBody(
+                        FormDataContent(
+                            Parameters.build {
+                                append("doc", json.encodeToString(payload))
+                            }
+                        )
+                    )
+                }
+            }
+
+            val bodyText = response.bodyAsText()
+            if (!response.status.isSuccess()) {
+                try {
+                    val err = json.decodeFromString<FrappeErrorResponse>(bodyText)
+                    throw FrappeException(
+                        err.exception ?: "Error: ${response.status.value}",
+                        err
+                    )
+                } catch (e: Exception) {
+                    throw Exception("Error en $logContext: ${response.status} - $bodyText", e)
                 }
             }
 
@@ -705,6 +765,24 @@ class APIService(
             invoice.outstandingAmount ?: (invoice.grandTotal - invoice.paidAmount)
         }
         return OutstandingInfo(totalOutstanding, invoices)
+    }
+
+    suspend fun fetchCustomerInvoicesForPeriod(
+        customer: String,
+        startDate: String,
+        endDate: String
+    ): List<SalesInvoiceDto> {
+        val url = authStore.getCurrentSite()
+        return client.getERPList(
+            ERPDocType.SalesInvoice.path,
+            ERPDocType.SalesInvoice.getFields(),
+            baseUrl = url,
+            orderBy = "posting_date desc",
+            filters = filters {
+                "customer" eq customer
+                "posting_date" gte startDate
+                "posting_date" lte endDate
+            })
     }
 
     suspend fun getCustomerContact(customerId: String): ContactChildDto? {

@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -16,6 +17,8 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -27,7 +30,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -40,6 +46,7 @@ import androidx.paging.LoadState
 import androidx.paging.compose.collectAsLazyPagingItems
 import androidx.paging.compose.itemKey
 import com.erpnext.pos.domain.models.SalesInvoiceBO
+import com.erpnext.pos.domain.usecases.InvoiceCancellationAction
 import com.erpnext.pos.views.invoice.components.EmptyState
 import com.erpnext.pos.views.invoice.components.ErrorState
 import com.erpnext.pos.views.invoice.components.LoadingState
@@ -48,6 +55,9 @@ import com.erpnext.pos.views.invoice.components.LoadingState
 fun InvoiceListScreen(action: InvoiceAction) {
     var searchQuery by remember { mutableStateOf("") }
     val lazyPagingItems = action.getInvoices().collectAsLazyPagingItems()
+    val feedback by action.feedbackMessage.collectAsState("")
+    var pendingDialog by remember { mutableStateOf<InvoiceCancelDialogState?>(null) }
+    var dialogReason by remember { mutableStateOf("") }
 
     Scaffold(
         floatingActionButton = {
@@ -90,6 +100,19 @@ fun InvoiceListScreen(action: InvoiceAction) {
 
             HorizontalDivider()
 
+            if (!feedback.isNullOrBlank()) {
+                LaunchedEffect(feedback) {
+                    action.onFeedbackCleared()
+                }
+                Text(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp),
+                    text = feedback!!,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
+
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
                 horizontalAlignment = Alignment.CenterHorizontally
@@ -125,7 +148,17 @@ fun InvoiceListScreen(action: InvoiceAction) {
                 ) { index ->
                     val item = lazyPagingItems[index]
                     if (item != null) {
-                        InvoiceItem(item, onClick = { action.onItemClick(it.invoiceId) })
+                        InvoiceItem(
+                            invoice = item,
+                            onClick = { action.onItemClick(it.invoiceId) },
+                            onCancelClick = { invoiceId, actionType ->
+                                pendingDialog = InvoiceCancelDialogState(
+                                    invoiceId = invoiceId,
+                                    action = actionType
+                                )
+                                dialogReason = ""
+                            }
+                        )
                     }
                 }
 
@@ -137,11 +170,76 @@ fun InvoiceListScreen(action: InvoiceAction) {
                 }
             }
         }
+
+        pendingDialog?.let { dialogState ->
+            AlertDialog(
+                onDismissRequest = {
+                    pendingDialog = null
+                    dialogReason = ""
+                },
+                title = {
+                    Text(
+                        text = if (dialogState.action == InvoiceCancellationAction.RETURN)
+                            "Registrar retorno"
+                        else
+                            "Cancelar factura"
+                    )
+                },
+                text = {
+                    Column {
+                        Text(
+                            text = if (dialogState.action == InvoiceCancellationAction.RETURN)
+                                "Se creará una nota de crédito vinculada a esta factura."
+                            else
+                                "La factura quedará cancelada y se excluye del cierre."
+                        )
+                        if (dialogState.action == InvoiceCancellationAction.RETURN) {
+                            Spacer(Modifier.height(8.dp))
+                            OutlinedTextField(
+                                value = dialogReason,
+                                onValueChange = { dialogReason = it },
+                                label = { Text("Motivo (opcional)") },
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
+                    }
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            action.onInvoiceCancelRequested(
+                                dialogState.invoiceId,
+                                dialogState.action,
+                                dialogReason.takeIf { it.isNotBlank() }
+                            )
+                            pendingDialog = null
+                            dialogReason = ""
+                        }
+                    ) {
+                        Text("Confirmar")
+                    }
+                },
+                dismissButton = {
+                    TextButton(
+                        onClick = {
+                            pendingDialog = null
+                            dialogReason = ""
+                        }
+                    ) {
+                        Text("Cancelar")
+                    }
+                }
+            )
+        }
     }
 }
 
 @Composable
-fun InvoiceItem(invoice: SalesInvoiceBO, onClick: (SalesInvoiceBO) -> Unit) {
+ fun InvoiceItem(
+     invoice: SalesInvoiceBO,
+     onClick: (SalesInvoiceBO) -> Unit,
+     onCancelClick: (String, InvoiceCancellationAction) -> Unit
+ ) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -166,7 +264,36 @@ fun InvoiceItem(invoice: SalesInvoiceBO, onClick: (SalesInvoiceBO) -> Unit) {
             Spacer(Modifier.height(8.dp))
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                 Text("Total: ${invoice.total}", fontWeight = FontWeight.Medium)
+                Spacer(Modifier.width(8.dp))
+                val normalizedStatus = invoice.status?.lowercase()
+                val canCancel =
+                    normalizedStatus == "unpaid" || normalizedStatus == "partly paid"
+                val canReturn = normalizedStatus == "paid"
+                if (canCancel || canReturn) {
+                    val actionType =
+                        if (canReturn) InvoiceCancellationAction.RETURN else InvoiceCancellationAction.CANCEL
+                    TextButton(
+                        onClick = {
+                            onCancelClick(invoice.invoiceId, actionType)
+                        },
+                        colors = ButtonDefaults.textButtonColors(
+                            contentColor = MaterialTheme.colorScheme.secondary
+                        )
+                    ) {
+                        Text(
+                            text = if (actionType == InvoiceCancellationAction.CANCEL)
+                                "Cancelar"
+                            else
+                                "Registrar retorno"
+                        )
+                    }
+                }
             }
         }
     }
 }
+
+private data class InvoiceCancelDialogState(
+    val invoiceId: String,
+    val action: InvoiceCancellationAction
+)

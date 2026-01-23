@@ -4,7 +4,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.paging.PagingData
 import com.erpnext.pos.domain.models.SalesInvoiceBO
+import com.erpnext.pos.domain.usecases.InvoiceCancellationAction
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.StateFlow
 import org.koin.compose.viewmodel.koinViewModel
 
 class InvoiceCoordinator(
@@ -19,6 +21,13 @@ class InvoiceCoordinator(
 
     fun onRefresh() {}
     fun onPrint() {}
+    fun onInvoiceCancelRequested(
+        invoiceId: String,
+        action: InvoiceCancellationAction,
+        reason: String?
+    ) = viewModel.onInvoiceCancelRequested(invoiceId, action, reason)
+    fun feedbackMessage(): StateFlow<String?> = viewModel.feedbackMessage
+    fun clearFeedbackMessage() = viewModel.clearFeedbackMessage()
 }
 
 @Composable

@@ -4,8 +4,11 @@ import androidx.lifecycle.viewModelScope
 import com.erpnext.pos.base.BaseViewModel
 import com.erpnext.pos.data.repositories.PosProfilePaymentMethodLocalRepository
 import com.erpnext.pos.localSource.dao.SalesInvoiceDao
+import com.erpnext.pos.localSource.datasources.InvoiceLocalSource
 import com.erpnext.pos.sync.LegacyPushSyncManager
 import com.erpnext.pos.sync.SyncContextProvider
+import com.erpnext.pos.sync.SyncManager
+import com.erpnext.pos.sync.SyncState
 import com.erpnext.pos.utils.NetworkMonitor
 import com.erpnext.pos.localSource.dao.ShiftPaymentRow
 import com.erpnext.pos.sync.PushSyncRunner
@@ -20,6 +23,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
@@ -27,9 +31,11 @@ import kotlinx.coroutines.launch
 class ReconciliationViewModel(
     private val cashBoxManager: CashBoxManager,
     private val salesInvoiceDao: SalesInvoiceDao,
+    private val invoiceLocalSource: InvoiceLocalSource,
     private val paymentMethodLocalRepository: PosProfilePaymentMethodLocalRepository,
     private val legacyPushSyncManager: PushSyncRunner,
     private val syncContextProvider: SyncContextProvider,
+    private val syncManager: SyncManager,
     private val networkMonitor: NetworkMonitor
 ) : BaseViewModel() {
     private val _stateFlow = MutableStateFlow<ReconciliationState>(ReconciliationState.Loading)
@@ -70,31 +76,8 @@ class ReconciliationViewModel(
         _closeState.update { it.copy(isClosing = true, errorMessage = null) }
         executeUseCase(
             action = {
-                val isOnline = networkMonitor.isConnected.first()
-                if (isOnline) {
-                    val ctx = syncContextProvider.buildContext()
-                    if (ctx == null) {
-                        _closeState.update {
-                            it.copy(
-                                isClosing = false,
-                                errorMessage = "No se pudo preparar la sincronización antes del cierre."
-                            )
-                        }
-                        return@executeUseCase
-                    }
-                    val syncResult = runCatching {
-                        legacyPushSyncManager.runPushQueue(ctx) { }
-                    }
-                    if (syncResult.isFailure) {
-                        _closeState.update {
-                            it.copy(
-                                isClosing = false,
-                                errorMessage = "No se pudieron sincronizar facturas/pagos antes del cierre."
-                            )
-                        }
-                        return@executeUseCase
-                    }
-                }
+                val syncPrepared = prepareForClose()
+                if (!syncPrepared) return@executeUseCase
                 val summary = runCatching { buildShiftSummary() }.getOrNull()
                 if (summary != null) {
                     updateClosingAmounts(summary, countedByMode)
@@ -112,6 +95,70 @@ class ReconciliationViewModel(
                 }
             }
         )
+    }
+
+    private suspend fun prepareForClose(): Boolean {
+        val isOnline = networkMonitor.isConnected.first()
+        if (!isOnline) {
+            _closeState.update {
+                it.copy(
+                    isSyncing = false,
+                    syncMessage = "No hay conexión para sincronizar antes del cierre.",
+                    isClosing = false,
+                    errorMessage = "Necesitas conexión para cerrar la caja."
+                )
+            }
+            return false
+        }
+        _closeState.update {
+            it.copy(
+                isSyncing = true,
+                syncMessage = "Sincronizando facturas y pagos...",
+                errorMessage = null
+            )
+        }
+        val syncSuccess = waitForSyncCompletion()
+        _closeState.update {
+            it.copy(isSyncing = false, syncMessage = null)
+        }
+        if (!syncSuccess) {
+            _closeState.update {
+                it.copy(
+                    isClosing = false,
+                    errorMessage = "No se pudo sincronizar completamente con el servidor."
+                )
+            }
+            return false
+        }
+        val pending = hasPendingLocalDocs()
+        if (pending) {
+            _closeState.update {
+                it.copy(
+                    isClosing = false,
+                    errorMessage = "Aún hay facturas o pagos locales pendientes de sincronizar."
+                )
+            }
+            return false
+        }
+        return true
+    }
+
+    private suspend fun waitForSyncCompletion(): Boolean {
+        val currentState = syncManager.state.value
+        if (currentState !is SyncState.SYNCING) {
+            syncManager.fullSync()
+        }
+        val finalState = syncManager.state
+            .filter { it !is SyncState.SYNCING }
+            .first()
+        return finalState is SyncState.SUCCESS
+    }
+
+    private suspend fun hasPendingLocalDocs(): Boolean {
+        val pendingInvoices = salesInvoiceDao.getPendingSyncInvoices()
+        if (pendingInvoices.isNotEmpty()) return true
+        val pendingPayments = invoiceLocalSource.getPendingPayments()
+        return pendingPayments.isNotEmpty()
     }
 
     private suspend fun buildShiftSummary(): ReconciliationSummaryUi? {

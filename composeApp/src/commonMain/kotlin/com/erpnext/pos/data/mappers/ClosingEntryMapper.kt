@@ -15,18 +15,7 @@ fun buildClosingEntryDto(
     balanceDetails: List<BalanceDetailsEntity>,
     invoices: List<SalesInvoiceEntity>
 ): POSClosingEntryDto {
-    val invoiceDetails = invoices.mapNotNull { invoice ->
-        val name = invoice.invoiceName?.takeIf { it.isNotBlank() } ?: return@mapNotNull null
-        POSClosingInvoiceDto(
-            salesInvoice = name,
-            postingDate = invoice.postingDate,
-            customer = invoice.customer,
-            grandTotal = invoice.grandTotal,
-            paidAmount = invoice.paidAmount,
-            outstandingAmount = invoice.outstandingAmount,
-            isReturn = invoice.isReturn
-        )
-    }
+    val invoiceDetails = buildClosingInvoiceRows(invoices)
     return POSClosingEntryDto(
         posProfile = cashbox.posProfile,
         posOpeningEntry = openingEntryId,
@@ -36,6 +25,35 @@ fun buildClosingEntryDto(
         periodStartDate = cashbox.periodStartDate,
         periodEndDate = periodEndDate,
         balanceDetails = balanceDetails.toDto(),
-        posTransactions = invoiceDetails
+        posTransactions = invoiceDetails,
+        docStatus = 0
     )
+}
+
+private fun buildClosingInvoiceRows(
+    invoices: List<SalesInvoiceEntity>
+): List<POSClosingInvoiceDto> {
+    val seen = mutableSetOf<String>()
+    return invoices.mapNotNull { invoice ->
+        val rawName = invoice.invoiceName?.trim() ?: return@mapNotNull null
+        if (!isRemoteInvoiceName(rawName)) return@mapNotNull null
+        if (invoice.docstatus != 1) return@mapNotNull null
+        if (!seen.add(rawName)) return@mapNotNull null
+        POSClosingInvoiceDto(
+            salesInvoice = rawName,
+            postingDate = invoice.postingDate,
+            customer = invoice.customer,
+            grandTotal = invoice.grandTotal,
+            paidAmount = invoice.paidAmount,
+            outstandingAmount = invoice.outstandingAmount,
+            isReturn = invoice.isReturn
+        )
+    }
+}
+
+private fun isRemoteInvoiceName(name: String): Boolean {
+    if (name.isBlank()) return false
+    if (name.startsWith("LOCAL-", ignoreCase = true)) return false
+    if (name.equals("none", ignoreCase = true)) return false
+    return true
 }

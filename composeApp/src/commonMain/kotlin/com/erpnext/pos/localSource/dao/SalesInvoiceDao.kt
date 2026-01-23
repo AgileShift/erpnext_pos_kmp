@@ -585,6 +585,7 @@ interface SalesInvoiceDao {
             debit_to = :debitTo,
             remarks = :remarks,
             pos_opening_entry = :posOpeningEntry,
+            is_return = :isReturn,
             sync_status = :syncStatus,
             modified_at = :modifiedAt
         WHERE invoice_name = :oldName
@@ -612,6 +613,7 @@ interface SalesInvoiceDao {
         debitTo: String?,
         remarks: String?,
         posOpeningEntry: String?,
+        isReturn: Boolean,
         syncStatus: String,
         modifiedAt: Long
     )

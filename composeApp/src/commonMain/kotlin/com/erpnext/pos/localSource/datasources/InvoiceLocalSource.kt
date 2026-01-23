@@ -20,6 +20,7 @@ interface IInvoiceLocalSource {
         items: List<SalesInvoiceItemEntity>,
         payments: List<POSInvoicePaymentEntity> = emptyList()
     )
+    suspend fun updateInvoice(invoice: SalesInvoiceEntity)
 
     suspend fun markAsSynced(invoiceName: String)
     suspend fun markAsFailed(invoiceName: String)
@@ -74,6 +75,10 @@ class InvoiceLocalSource(
         salesInvoiceDao.insertFullInvoice(
             invoice, items, payments
         )
+    }
+
+    override suspend fun updateInvoice(invoice: SalesInvoiceEntity) {
+        salesInvoiceDao.updateInvoice(invoice)
     }
 
     override suspend fun markAsSynced(invoiceName: String) {
@@ -135,6 +140,7 @@ class InvoiceLocalSource(
         debitTo: String?,
         remarks: String?,
         posOpeningEntry: String?,
+        isReturn: Boolean,
         syncStatus: String,
         modifiedAt: Long
     ) {
@@ -160,6 +166,7 @@ class InvoiceLocalSource(
             debitTo = debitTo,
             remarks = remarks,
             posOpeningEntry = posOpeningEntry,
+            isReturn = isReturn,
             syncStatus = syncStatus,
             modifiedAt = modifiedAt
         )

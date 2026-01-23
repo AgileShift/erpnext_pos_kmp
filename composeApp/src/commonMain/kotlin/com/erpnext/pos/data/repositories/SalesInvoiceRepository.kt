@@ -181,6 +181,16 @@ class SalesInvoiceRepository(
         refreshCustomerSummaryWithRates(invoice.customer)
     }
 
+    override suspend fun cancelInvoice(invoiceName: String, isReturn: Boolean) {
+        val current = localSource.getInvoiceByName(invoiceName)?.invoice ?: return
+        current.status = if (isReturn) "Return" else "Cancelled"
+        current.docstatus = 2
+        current.isReturn = isReturn
+        current.syncStatus = "Pending"
+        current.modifiedAt = Clock.System.now().toEpochMilliseconds()
+        localSource.updateInvoice(current)
+    }
+
     override suspend fun markAsSynced(invoiceName: String) {
         localSource.markAsSynced(invoiceName)
     }
@@ -252,11 +262,12 @@ class SalesInvoiceRepository(
             paidAmount = resolvedPaidAmount,
             outstandingAmount = resolvedOutstandingAmount,
             status = resolvedStatus,
-            docstatus = remote.docStatus ?: 0,
+            docstatus = remote.docStatus ?: resolveDocStatus(remote.status, null),
             modeOfPayment = remote.payments.firstOrNull()?.modeOfPayment,
             debitTo = remote.debitTo,
             remarks = remote.remarks,
-            posOpeningEntry = localInvoice?.posOpeningEntry,
+            posOpeningEntry = remote.posOpeningEntry ?: localInvoice?.posOpeningEntry,
+            isReturn = remote.isReturn == 1,
             syncStatus = "Synced",
             modifiedAt = now
         )
@@ -281,25 +292,25 @@ class SalesInvoiceRepository(
         localSource.deleteByInvoiceId(invoiceId)
     }
 
+    suspend fun cancelRemoteInvoice(invoiceName: String): SalesInvoiceDto? {
+        remoteSource.cancelInvoice(invoiceName)
+        val remote = remoteSource.fetchInvoice(invoiceName)
+        if (remote != null) {
+            updateLocalInvoiceFromRemote(invoiceName, remote)
+        }
+        return remote
+    }
+
     override suspend fun syncPendingInvoices() {
         RepoTrace.breadcrumb("SalesInvoiceRepository", "syncPendingInvoices")
         val pending = getPendingSyncInvoices()
         pending.forEach { invoice ->
             try {
-                val localName = invoice.invoice.invoiceName ?: ""
-                if (localName.isNotBlank() && !localName.startsWith("LOCAL-", ignoreCase = true)) {
-                    submitSalesInvoice(localName)
-                    val remote = remoteSource.fetchInvoice(localName) ?: return@forEach
-                    updateLocalInvoiceFromRemote(localName, remote)
-                    return@forEach
+                when {
+                    invoice.invoice.docstatus == 2 -> handleCancelledInvoice(invoice)
+                    invoice.invoice.invoiceName?.startsWith("LOCAL-", ignoreCase = true) == true -> handleLocalInvoice(invoice)
+                    else -> handleRemoteInvoice(invoice)
                 }
-                val dto = ensureDraftDocStatus(enrichPaymentsWithAccount(invoice.toDto()))
-                val created = remoteSource.createInvoice(dto)
-                if (created.name.isNullOrBlank()) return@forEach
-                updateLocalInvoiceFromRemote(localName, created)
-                submitSalesInvoice(created.name!!)
-                val remote = remoteSource.fetchInvoice(created.name!!) ?: return@forEach
-                updateLocalInvoiceFromRemote(created.name!!, remote)
             } catch (e: Exception) {
                 RepoTrace.capture("SalesInvoiceRepository", "syncPendingInvoices", e)
                 markAsFailed(invoice.invoice.invoiceName ?: "")
@@ -307,8 +318,50 @@ class SalesInvoiceRepository(
         }
     }
 
+    private suspend fun handleRemoteInvoice(invoice: SalesInvoiceWithItemsAndPayments) {
+        val localName = invoice.invoice.invoiceName ?: return
+        submitSalesInvoice(localName)
+        val remote = remoteSource.fetchInvoice(localName) ?: return
+        updateLocalInvoiceFromRemote(localName, remote)
+    }
+
+    private suspend fun handleLocalInvoice(invoice: SalesInvoiceWithItemsAndPayments) {
+        val localName = invoice.invoice.invoiceName ?: return
+        val dto = ensureDraftDocStatus(enrichPaymentsWithAccount(invoice.toDto()))
+        val created = remoteSource.createInvoice(dto)
+        val createdName = created.name ?: return
+        updateLocalInvoiceFromRemote(localName, created)
+        submitSalesInvoice(createdName)
+        val remote = remoteSource.fetchInvoice(createdName) ?: return
+        updateLocalInvoiceFromRemote(createdName, remote)
+    }
+
+    private suspend fun handleCancelledInvoice(invoice: SalesInvoiceWithItemsAndPayments) {
+        val localName = invoice.invoice.invoiceName ?: return
+        if (localName.startsWith("LOCAL-", ignoreCase = true)) {
+            localSource.deleteByInvoiceId(localName)
+            return
+        }
+        remoteSource.cancelInvoice(localName)
+        val remote = remoteSource.fetchInvoice(localName)
+        if (remote != null) {
+            updateLocalInvoiceFromRemote(localName, remote)
+        } else {
+            localSource.deleteByInvoiceId(localName)
+        }
+    }
+
     private suspend fun submitSalesInvoice(name: String) {
         remoteSource.submitInvoice(name)
+    }
+
+    private fun resolveDocStatus(status: String?, docStatus: Int?): Int {
+        val normalized = status?.lowercase()?.trim()
+        return docStatus?.coerceIn(0, 2) ?: when (normalized) {
+            "paid", "submitted" -> 1
+            "cancelled", "return" -> 2
+            else -> 0
+        }
     }
 
     private suspend fun refreshCustomerSummaryWithRates(customerId: String) {

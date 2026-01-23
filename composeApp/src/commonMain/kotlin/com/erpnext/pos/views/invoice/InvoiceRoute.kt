@@ -25,7 +25,10 @@ fun rememberInvoiceActions(coordinator: InvoiceCoordinator): InvoiceAction {
             onRefresh = coordinator::onRefresh,
             onPrint = coordinator::onPrint,
             onDateSelected = coordinator::onDateSelected,
-            getInvoices = coordinator::getInvoices
+            getInvoices = coordinator::getInvoices,
+            onInvoiceCancelRequested = coordinator::onInvoiceCancelRequested,
+            feedbackMessage = coordinator.feedbackMessage(),
+            onFeedbackCleared = coordinator::clearFeedbackMessage
         )
     }
 }

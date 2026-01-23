@@ -73,12 +73,18 @@ data class SalesInvoiceDto(
     val conversionRate: Double? = null,
     @SerialName("party_account_currency")
     val partyAccountCurrency: String? = null,
+    @SerialName("return_against")
+    val returnAgainst: String? = null,
+    @SerialName("pos_opening_entry")
+    val posOpeningEntry: String? = null,
     @EncodeDefault(EncodeDefault.Mode.NEVER)
     @SerialName("debit_to")
     val debitTo: String? = null,
     @EncodeDefault(EncodeDefault.Mode.NEVER)
     @SerialName("docstatus")
     val docStatus: Int? = null,
+    @SerialName("is_return")
+    val isReturn: Int = 0,
 
     // Response
     @SerialName("base_grand_total")

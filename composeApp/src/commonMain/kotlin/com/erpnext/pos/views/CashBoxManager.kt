@@ -29,6 +29,7 @@ import com.erpnext.pos.localSource.dao.CompanyDao
 import com.erpnext.pos.utils.AppLogger
 import com.erpnext.pos.utils.parseErpDateTimeToEpochMillis
 import com.erpnext.pos.utils.toErpDateTime
+import com.erpnext.pos.localSource.entities.SalesInvoiceEntity
 import io.ktor.util.date.getTimeMillis
 import com.erpnext.pos.auth.SessionRefresher
 import com.erpnext.pos.utils.NetworkMonitor

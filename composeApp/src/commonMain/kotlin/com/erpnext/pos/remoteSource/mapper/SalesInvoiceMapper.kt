@@ -129,11 +129,13 @@ fun SalesInvoiceDto.toEntity(): SalesInvoiceWithItemsAndPayments {
         paidAmount = paidAmount,
         status = status ?: "Draft",
         syncStatus = "Synced",
-        docstatus = if (status == "Submitted" || status == "Paid") 1 else 0,
+        docstatus = resolveDocStatus(status, docStatus),
+        isReturn = isReturn == 1,
         modeOfPayment = payments.firstOrNull()?.modeOfPayment,
         createdAt = now,
         modifiedAt = now,
-        remarks = remarks
+        remarks = remarks,
+        posOpeningEntry = posOpeningEntry
     )
 
     val itemsEntity = items.map { dto ->
@@ -202,4 +204,13 @@ fun SalesInvoiceEntity.toDto(): SalesInvoiceDto {
         debitTo = debitTo,
         docStatus = docstatus,
     )
+}
+
+private fun resolveDocStatus(status: String?, docStatus: Int?): Int {
+    val normalized = status?.lowercase()?.trim()
+    return docStatus?.coerceIn(0, 2) ?: when (normalized) {
+        "paid", "submitted" -> 1
+        "cancelled", "return" -> 2
+        else -> 0
+    }
 }

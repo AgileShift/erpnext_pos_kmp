@@ -120,6 +120,7 @@ import com.erpnext.pos.views.reconciliation.ReconciliationViewModel
 import com.erpnext.pos.auth.AppLifecycleObserver
 import com.erpnext.pos.auth.TokenHeartbeat
 import com.erpnext.pos.data.repositories.v2.SourceDocumentRepository
+import com.erpnext.pos.domain.usecases.CancelSalesInvoiceUseCase
 import com.erpnext.pos.domain.usecases.FetchPosProfileInfoLocalUseCase
 import com.erpnext.pos.domain.usecases.FetchPosProfileInfoUseCase
 import com.erpnext.pos.domain.usecases.v2.LoadSourceDocumentsUseCase
@@ -195,14 +196,12 @@ val appModule = module {
                                 return@loadTokens currentTokens.toBearerToken()
                             }
                             val refreshToken = currentTokens.refresh_token
-                            if (refreshToken == null) {
-                                return@loadTokens if (TokenUtils.isValid(currentTokens.id_token)) {
+                                ?: return@loadTokens if (TokenUtils.isValid(currentTokens.id_token)) {
                                     currentTokens.toBearerToken()
                                 } else {
                                     tokenStore.clear()
                                     null
                                 }
-                            }
                             val refreshed = runCatching {
                                 refreshAuthToken(tokenRefreshClient, authInfoStore, refreshToken)
                             }.getOrElse { throwable ->
@@ -329,7 +328,18 @@ val appModule = module {
     }
 
     //region Reconciliation
-    single { ReconciliationViewModel(get(), get(), get(), get(), get(), get()) }
+    single {
+        ReconciliationViewModel(
+            get(),
+            get(),
+            get(),
+            get(),
+            get(),
+            get(),
+            get(),
+            get()
+        )
+    }
     //endregion
 
 
@@ -471,9 +481,10 @@ val appModule = module {
 
     //region Invoices
     single { SalesInvoiceRemoteSource(get(named("apiService")), get()) }
-    single { InvoiceViewModel(get(), get()) }
+    single { InvoiceViewModel(get(), get(), get()) }
     single { SalesInvoiceRepository(get(), get(), get(), get(), get()) }
     single { CreateSalesInvoiceUseCase(get()) }
+    single { CancelSalesInvoiceUseCase(get(), get(), get(), get()) }
     //endregion
 
     //region Payment Terms

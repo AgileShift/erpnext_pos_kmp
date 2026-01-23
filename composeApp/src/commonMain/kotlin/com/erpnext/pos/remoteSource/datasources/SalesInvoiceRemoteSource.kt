@@ -39,6 +39,9 @@ class SalesInvoiceRemoteSource(
     suspend fun submitInvoice(name: String) =
         apiService.submitSalesInvoice(name)
 
+    suspend fun cancelInvoice(name: String) =
+        apiService.cancelSalesInvoice(name)
+
     suspend fun deleteInvoice(name: String) = null
     //apiService.delete(name, baseUrl, headers)
 
