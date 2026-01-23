@@ -69,7 +69,7 @@ class CustomerRepository(
                             invoice.outstandingAmount ?: (invoice.grandTotal - invoice.paidAmount)
                         }
                         val resolvedLimit = dto.creditLimitForCompany(contextCompany)
-                        val creditLimit = resolvedLimit?.creditLimit
+                        val creditLimit = resolvedLimit.creditLimit
                         val availableCredit = creditLimit?.let { it - totalOutstanding }
 
                         dto.toEntity(

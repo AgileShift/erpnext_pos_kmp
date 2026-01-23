@@ -7,7 +7,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import com.erpnext.pos.navigation.NavRoute
 import com.erpnext.pos.navigation.NavigationManager
-import com.erpnext.pos.views.customer.CustomerInvoiceHistoryState
 import com.erpnext.pos.views.salesflow.SalesFlowContext
 import com.erpnext.pos.views.salesflow.SalesFlowContextStore
 import com.erpnext.pos.views.salesflow.SalesFlowSource
@@ -103,6 +102,16 @@ fun rememberCustomerActions(
             clearInvoiceHistoryMessages = coordinator::clearInvoiceHistoryMessages,
             onInvoiceHistoryAction = { invoiceId, action, reason ->
                 coordinator.performInvoiceHistoryAction(invoiceId, action, reason)
+            },
+            loadInvoiceLocal = { invoiceId -> coordinator.loadInvoiceLocal(invoiceId) },
+            onInvoicePartialReturn = { invoiceId, reason, refundMode, refundReference, items ->
+                coordinator.submitPartialReturn(
+                    invoiceId,
+                    reason,
+                    refundMode,
+                    refundReference,
+                    items
+                )
             }
         )
     }

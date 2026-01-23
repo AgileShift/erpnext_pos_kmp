@@ -122,6 +122,8 @@ import com.erpnext.pos.auth.AppLifecycleObserver
 import com.erpnext.pos.auth.TokenHeartbeat
 import com.erpnext.pos.data.repositories.v2.SourceDocumentRepository
 import com.erpnext.pos.domain.usecases.CancelSalesInvoiceUseCase
+import com.erpnext.pos.domain.usecases.FetchSalesInvoiceWithItemsUseCase
+import com.erpnext.pos.domain.usecases.PartialReturnUseCase
 import com.erpnext.pos.domain.usecases.FetchPosProfileInfoLocalUseCase
 import com.erpnext.pos.domain.usecases.FetchPosProfileInfoUseCase
 import com.erpnext.pos.domain.usecases.v2.LoadSourceDocumentsUseCase
@@ -452,9 +454,12 @@ val appModule = module {
             fetchOutstandingInvoicesUseCase = get(),
             fetchCustomerInvoicesForPeriodUseCase = get(),
             fetchSalesInvoiceLocalUseCase = get(),
+            fetchSalesInvoiceWithItemsUseCase = get(),
             modeOfPaymentDao = get(),
             paymentHandler = get(),
             cancelSalesInvoiceUseCase = get(),
+            partialReturnUseCase = get(),
+            syncSalesInvoiceFromRemoteUseCase = get(),
             networkMonitor = get()
         )
     }
@@ -555,6 +560,7 @@ val appModule = module {
     single { FetchOutstandingInvoicesLocalForCustomerUseCase(get()) }
     single { FetchSalesInvoiceRemoteUseCase(get()) }
     single { FetchSalesInvoiceLocalUseCase(get()) }
+    single { FetchSalesInvoiceWithItemsUseCase(get()) }
     single { SyncSalesInvoiceFromRemoteUseCase(get()) }
     single { CreateSalesInvoiceLocalUseCase(get()) }
     single { CreateSalesInvoiceRemoteOnlyUseCase(get()) }
@@ -574,6 +580,7 @@ val appModule = module {
     single { FetchUserInfoUseCase(get()) }
     single { RegisterInvoicePaymentUseCase(get()) }
     single { CreatePaymentEntryUseCase(get()) }
+    single { PartialReturnUseCase(get(), get(), get(), get()) }
     single { LoadHomeMetricsUseCase(get()) }
     single { GetCompanyInfoUseCase(get()) }
     //endregion

@@ -17,9 +17,14 @@ import com.erpnext.pos.domain.usecases.FetchCustomerInvoicesForPeriodUseCase
 import com.erpnext.pos.domain.usecases.FetchCustomersLocalWithStateUseCase
 import com.erpnext.pos.domain.usecases.FetchOutstandingInvoicesLocalForCustomerUseCase
 import com.erpnext.pos.domain.usecases.FetchSalesInvoiceLocalUseCase
+import com.erpnext.pos.domain.usecases.FetchSalesInvoiceWithItemsUseCase
 import com.erpnext.pos.domain.usecases.InvoiceCancellationAction
+import com.erpnext.pos.domain.usecases.PartialReturnInput
+import com.erpnext.pos.domain.usecases.PartialReturnUseCase
+import com.erpnext.pos.domain.usecases.SyncSalesInvoiceFromRemoteUseCase
 import com.erpnext.pos.localSource.dao.ModeOfPaymentDao
 import com.erpnext.pos.localSource.entities.ModeOfPaymentEntity
+import com.erpnext.pos.localSource.entities.SalesInvoiceWithItemsAndPayments
 import com.erpnext.pos.remoteSource.mapper.toDto
 import com.erpnext.pos.utils.NetworkMonitor
 import com.erpnext.pos.utils.buildPaymentModeDetailMap
@@ -34,6 +39,7 @@ import com.erpnext.pos.views.billing.PaymentLine
 import com.erpnext.pos.views.payment.PaymentHandler
 import com.erpnext.pos.domain.utils.UUIDGenerator
 import com.erpnext.pos.utils.toErpDate
+import kotlinx.datetime.toLocalDateTime
 import io.ktor.util.date.getTimeMillis
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.delay
@@ -49,8 +55,13 @@ import kotlinx.coroutines.launch
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.days
 import kotlin.time.ExperimentalTime
+import kotlinx.datetime.DatePeriod
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.minus
+import kotlinx.datetime.toLocalDateTime
 
-@OptIn(FlowPreview::class)
+@OptIn(FlowPreview::class, ExperimentalTime::class)
 /**
  * Customer view consumes local-only sources:
  * - Customers from CustomerLocalSource via FetchCustomersLocalWithStateUseCase.
@@ -64,9 +75,12 @@ class CustomerViewModel(
     private val fetchOutstandingInvoicesUseCase: FetchOutstandingInvoicesLocalForCustomerUseCase,
     private val fetchCustomerInvoicesForPeriodUseCase: FetchCustomerInvoicesForPeriodUseCase,
     private val fetchSalesInvoiceLocalUseCase: FetchSalesInvoiceLocalUseCase,
+    private val fetchSalesInvoiceWithItemsUseCase: FetchSalesInvoiceWithItemsUseCase,
     private val modeOfPaymentDao: ModeOfPaymentDao,
     private val paymentHandler: PaymentHandler,
     private val cancelSalesInvoiceUseCase: CancelSalesInvoiceUseCase,
+    private val partialReturnUseCase: PartialReturnUseCase,
+    private val syncSalesInvoiceFromRemoteUseCase: SyncSalesInvoiceFromRemoteUseCase,
     private val networkMonitor: NetworkMonitor
 ) : BaseViewModel() {
 
@@ -442,6 +456,20 @@ class CustomerViewModel(
         )
     }
 
+    suspend fun loadInvoiceLocal(invoiceId: String): SalesInvoiceWithItemsAndPayments? {
+        val local = fetchSalesInvoiceWithItemsUseCase(invoiceId)
+        if (local != null) return local
+        return syncInvoiceFromRemote(invoiceId)
+    }
+
+    private suspend fun syncInvoiceFromRemote(invoiceId: String): SalesInvoiceWithItemsAndPayments? {
+        val synced = runCatching {
+            syncSalesInvoiceFromRemoteUseCase(invoiceId)
+        }.getOrNull()
+        if (synced != null) return synced
+        return fetchSalesInvoiceWithItemsUseCase(invoiceId)
+    }
+
     private suspend fun refreshPaymentModeDetails() {
         if (paymentModeDetails.isNotEmpty()) return
         val company = cashboxManager.requireContext().company
@@ -478,7 +506,10 @@ class CustomerViewModel(
                         endDate = now.toEpochMilliseconds().toErpDate()
                     )
                 )
-                _historyState.value = CustomerInvoiceHistoryState.Success(invoices)
+                val filteredInvoices = invoices.filter { invoice ->
+                    invoice.docStatus != 2 && isWithinDays(invoice.postingDate, 30)
+                }
+                _historyState.value = CustomerInvoiceHistoryState.Success(filteredInvoices)
             } catch (e: Exception) {
                 _historyState.value = CustomerInvoiceHistoryState.Error(
                     e.message ?: "No se pudo obtener el historial de facturas."
@@ -486,6 +517,21 @@ class CustomerViewModel(
             }
         }
     }
+
+    private fun isWithinDays(postingDate: String?, days: Int): Boolean {
+        val invoiceDate = parsePostingDate(postingDate) ?: return false
+        val threshold = currentLocalDate().minus(DatePeriod(days = days))
+        return invoiceDate >= threshold
+    }
+
+    private fun parsePostingDate(value: String?): LocalDate? {
+        val raw = value?.substringBefore('T')?.substringBefore(' ')?.trim()
+        if (raw.isNullOrBlank()) return null
+        return runCatching { LocalDate.parse(raw) }.getOrNull()
+    }
+
+    private fun currentLocalDate(): LocalDate =
+        Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault()).date
 
     fun clearInvoiceHistory() {
         historyCustomerId = null
@@ -495,6 +541,42 @@ class CustomerViewModel(
 
     fun clearHistoryMessage() {
         _historyMessage.value = null
+    }
+
+    fun submitPartialReturn(
+        invoiceId: String,
+        reason: String?,
+        refundModeOfPayment: String?,
+        refundReferenceNo: String?,
+        itemsToReturnByCode: Map<String, Double>
+    ) {
+        viewModelScope.launch {
+            _historyActionBusy.value = true
+            try {
+                val filtered = itemsToReturnByCode.filterValues { it > 0.0 }
+                if (filtered.isEmpty()) {
+                    throw IllegalArgumentException("Selecciona al menos un artículo para devolver.")
+                }
+                val result = partialReturnUseCase(
+                    PartialReturnInput(
+                        invoiceName = invoiceId,
+                        itemsToReturnByCode = filtered,
+                        reason = reason,
+                        refundModeOfPayment = refundModeOfPayment,
+                        refundReferenceNo = refundReferenceNo
+                    )
+                )
+                _historyMessage.value = result.creditNoteName?.let {
+                    "Retorno registrado como $it."
+                } ?: "Retorno parcial registrado."
+            } catch (e: Exception) {
+                _historyMessage.value =
+                    "No se pudo registrar el retorno parcial: ${e.message ?: "error desconocido."}"
+            } finally {
+                _historyActionBusy.value = false
+                historyCustomerId?.let { loadInvoiceHistory(it) }
+            }
+        }
     }
 
     @OptIn(ExperimentalTime::class)

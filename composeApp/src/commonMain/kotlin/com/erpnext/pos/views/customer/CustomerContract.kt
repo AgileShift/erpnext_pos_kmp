@@ -6,6 +6,7 @@ import com.erpnext.pos.domain.models.POSPaymentModeOption
 import com.erpnext.pos.domain.models.SalesInvoiceBO
 import com.erpnext.pos.domain.usecases.InvoiceCancellationAction
 import com.erpnext.pos.localSource.entities.ModeOfPaymentEntity
+import com.erpnext.pos.localSource.entities.SalesInvoiceWithItemsAndPayments
 
 sealed class CustomerState {
     object Loading : CustomerState()
@@ -64,11 +65,13 @@ data class CustomerAction(
     val clearPaymentMessages: () -> Unit = {},
     val clearInvoiceHistory: () -> Unit = {},
     val clearInvoiceHistoryMessages: () -> Unit = {},
+
     val onInvoiceHistoryAction: (
         invoiceId: String,
         action: InvoiceCancellationAction,
         reason: String?
     ) -> Unit = { _, _, _ -> },
+
     val registerPayment: (
         customerId: String,
         invoiceId: String,
@@ -76,5 +79,17 @@ data class CustomerAction(
         enteredAmount: Double,
         enteredCurrency: String,
         referenceNumber: String,
-    ) -> Unit = { _, _, _, _, _, _ -> }
+    ) -> Unit = { _, _, _, _, _, _ -> },
+
+    // --- NUEVO: para retorno parcial offline-first (leer local) ---
+    val loadInvoiceLocal: suspend (invoiceId: String) -> SalesInvoiceWithItemsAndPayments? = { _ -> null },
+
+    // --- NUEVO: submit retorno parcial (ViewModel lo implementa) ---
+    val onInvoicePartialReturn: (
+        invoiceId: String,
+        reason: String?,
+        refundModeOfPayment: String?,
+        refundReferenceNo: String?,
+        itemsToReturnByCode: Map<String, Double>
+    ) -> Unit = { _, _, _, _, _ -> }
 )

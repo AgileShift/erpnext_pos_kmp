@@ -3,6 +3,7 @@ package com.erpnext.pos.views.customer
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import com.erpnext.pos.domain.usecases.InvoiceCancellationAction
+import com.erpnext.pos.localSource.entities.SalesInvoiceWithItemsAndPayments
 import org.koin.compose.viewmodel.koinViewModel
 
 class CustomerCoordinator(
@@ -55,6 +56,23 @@ class CustomerCoordinator(
         action: InvoiceCancellationAction,
         reason: String?
     ) = viewModel.performInvoiceHistoryAction(invoiceId, action, reason)
+
+    suspend fun loadInvoiceLocal(invoiceId: String): SalesInvoiceWithItemsAndPayments? =
+        viewModel.loadInvoiceLocal(invoiceId)
+
+    fun submitPartialReturn(
+        invoiceId: String,
+        reason: String?,
+        refundModeOfPayment: String?,
+        refundReferenceNo: String?,
+        itemsToReturnByCode: Map<String, Double>
+    ) = viewModel.submitPartialReturn(
+        invoiceId,
+        reason,
+        refundModeOfPayment,
+        refundReferenceNo,
+        itemsToReturnByCode
+    )
 }
 
 @Composable

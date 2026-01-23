@@ -1,3 +1,5 @@
+@file:OptIn(ExperimentalTime::class)
+
 package com.erpnext.pos.utils
 
 import kotlinx.datetime.LocalDate
