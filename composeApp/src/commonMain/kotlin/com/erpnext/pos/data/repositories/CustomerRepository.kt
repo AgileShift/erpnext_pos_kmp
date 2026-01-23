@@ -4,6 +4,7 @@ import com.erpnext.pos.base.Resource
 import com.erpnext.pos.base.networkBoundResource
 import com.erpnext.pos.data.mappers.toBO
 import com.erpnext.pos.domain.models.CustomerBO
+import com.erpnext.pos.domain.models.SalesInvoiceBO
 import com.erpnext.pos.domain.repositories.ICustomerRepository
 import com.erpnext.pos.localSource.datasources.CustomerLocalSource
 import com.erpnext.pos.remoteSource.datasources.CustomerRemoteSource
@@ -197,5 +198,20 @@ class CustomerRepository(
             availableCredit = availableCredit?.let { roundToCurrency(it) },
             state = state
         )
+    }
+
+    suspend fun fetchInvoicesForCustomerPeriod(
+        customerId: String,
+        startDate: String,
+        endDate: String
+    ): List<SalesInvoiceBO> {
+        val invoices = remoteSource.fetchInvoicesForCustomerPeriod(customerId, startDate, endDate)
+        if (invoices.isEmpty()) return emptyList()
+        return invoices.mapNotNull { dto ->
+            runCatching {
+                val entity = dto.toEntity()
+                entity.toBO()
+            }.getOrNull()
+        }
     }
 }

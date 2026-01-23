@@ -13,6 +13,7 @@ import com.erpnext.pos.utils.NetworkMonitor
 import com.erpnext.pos.utils.toErpDate
 import com.erpnext.pos.utils.toErpDateTime
 import kotlinx.coroutines.flow.firstOrNull
+import kotlin.math.abs
 import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
 
@@ -24,7 +25,9 @@ enum class InvoiceCancellationAction {
 data class CancelSalesInvoiceInput(
     val invoiceName: String,
     val action: InvoiceCancellationAction = InvoiceCancellationAction.CANCEL,
-    val reason: String? = null
+    val reason: String? = null,
+    val refundModeOfPayment: String? = null,
+    val refundReferenceNo: String? = null
 )
 
 data class CancelSalesInvoiceResult(
@@ -46,7 +49,13 @@ class CancelSalesInvoiceUseCase(
         val isOnline = networkMonitor.isConnected.firstOrNull() == true
         return when (input.action) {
             InvoiceCancellationAction.CANCEL -> handleCancel(invoice, isOnline)
-            InvoiceCancellationAction.RETURN -> handleReturn(invoice, input.reason, isOnline)
+            InvoiceCancellationAction.RETURN -> handleReturn(
+                invoice = invoice,
+                reason = input.reason,
+                isOnline = isOnline,
+                refundModeOfPayment = input.refundModeOfPayment,
+                refundReferenceNo = input.refundReferenceNo
+            )
         }
     }
 
@@ -65,7 +74,9 @@ class CancelSalesInvoiceUseCase(
     private suspend fun handleReturn(
         invoice: SalesInvoiceWithItemsAndPayments,
         reason: String?,
-        isOnline: Boolean
+        isOnline: Boolean,
+        refundModeOfPayment: String?,
+        refundReferenceNo: String?
     ): CancelSalesInvoiceResult {
         if (!isOnline) {
             throw IllegalStateException("Se requiere conexión a internet para registrar un retorno.")
@@ -79,7 +90,12 @@ class CancelSalesInvoiceUseCase(
             items = entity.items,
             payments = entity.payments
         )
-        createReturnPaymentEntries(invoice, created)
+        createReturnPaymentEntries(
+            invoice = invoice,
+            creditNote = created,
+            refundModeOfPayment = refundModeOfPayment,
+            refundReferenceNo = refundReferenceNo
+        )
         invoiceRepository.refreshInvoiceFromRemote(created.name ?: originalName)
         return CancelSalesInvoiceResult(creditNoteName = created.name, cancelled = true)
     }
@@ -90,6 +106,15 @@ class CancelSalesInvoiceUseCase(
     ): SalesInvoiceDto {
         val parent = invoice.invoice
         val now = Clock.System.now().toEpochMilliseconds()
+
+        val returnItems = invoice.items.map { item ->
+            val dto = item.toDto(parent)
+            dto.copy(
+                qty = -abs(dto.qty),
+                amount = -abs(dto.amount)
+            )
+        }
+
         return SalesInvoiceDto(
             customer = parent.customer,
             customerName = parent.customerName ?: "",
@@ -99,11 +124,11 @@ class CancelSalesInvoiceUseCase(
             dueDate = now.toErpDate(),
             status = "Draft",
             grandTotal = parent.grandTotal,
-            outstandingAmount = parent.outstandingAmount,
+            outstandingAmount = 0.0,
             totalTaxesAndCharges = parent.taxTotal,
             netTotal = parent.netTotal,
-            paidAmount = parent.paidAmount,
-            items = invoice.items.map { it.toDto(parent) },
+            paidAmount = 0.0,
+            items = returnItems,
             payments = emptyList(),
             remarks = reason ?: parent.remarks,
             isPos = true,
@@ -122,7 +147,9 @@ class CancelSalesInvoiceUseCase(
 
     private suspend fun createReturnPaymentEntries(
         invoice: SalesInvoiceWithItemsAndPayments,
-        creditNote: SalesInvoiceDto
+        creditNote: SalesInvoiceDto,
+        refundModeOfPayment: String?,
+        refundReferenceNo: String?
     ) {
         val company = invoice.invoice.company
         val creditName = creditNote.name ?: return
@@ -131,36 +158,41 @@ class CancelSalesInvoiceUseCase(
         val receivableAccount = invoice.invoice.debitTo
         val currency = invoice.invoice.currency
 
-        invoice.payments.filter { it.amount > 0.0 }.forEach { payment ->
-            val entry = PaymentEntryCreateDto(
-                company = company,
-                postingDate = postingDate,
-                paymentType = "Pay",
-                partyType = "Customer",
-                modeOfPayment = payment.modeOfPayment,
-                paidAmount = payment.amount,
-                receivedAmount = payment.amount,
-                paidFrom = resolveAccount(payment.modeOfPayment, modes, receivableAccount),
-                paidTo = resolveAccount(payment.modeOfPayment, modes, receivableAccount),
-                paidToAccountCurrency = payment.paymentCurrency ?: currency,
-                referenceNo = payment.paymentReference,
-                referenceDate = payment.paymentDate,
-                references = listOf(
-                    PaymentEntryReferenceCreateDto(
-                        referenceDoctype = "Sales Invoice",
-                        referenceName = creditName,
-                        totalAmount = creditNote.grandTotal,
-                        outstandingAmount = creditNote.outstandingAmount ?: 0.0,
-                        allocatedAmount = payment.amount
-                    )
-                ),
-                partyId =  invoice.invoice.customer,
-                sourceExchangeRate = null,
-                targetExchangeRate = null,
-                docStatus = 0
-            )
-            paymentEntryUseCase(CreatePaymentEntryInput(entry))
-        }
+        invoice.payments
+            .filter { it.amount > 0.0 }
+            .forEach { payment ->
+                val resolvedMode = refundModeOfPayment?.takeIf { it.isNotBlank() }
+                    ?: payment.modeOfPayment
+
+                val entry = PaymentEntryCreateDto(
+                    company = company,
+                    postingDate = postingDate,
+                    paymentType = "Pay",
+                    partyType = "Customer",
+                    modeOfPayment = resolvedMode,
+                    paidAmount = payment.amount,
+                    receivedAmount = payment.amount,
+                    paidFrom = resolveAccount(resolvedMode, modes, receivableAccount),
+                    paidTo = resolveAccount(resolvedMode, modes, receivableAccount),
+                    paidToAccountCurrency = payment.paymentCurrency ?: currency,
+                    referenceNo = refundReferenceNo?.takeIf { it.isNotBlank() } ?: payment.paymentReference,
+                    referenceDate = payment.paymentDate,
+                    references = listOf(
+                        PaymentEntryReferenceCreateDto(
+                            referenceDoctype = "Sales Invoice",
+                            referenceName = creditName,
+                            totalAmount = creditNote.grandTotal,
+                            outstandingAmount = creditNote.outstandingAmount ?: 0.0,
+                            allocatedAmount = payment.amount
+                        )
+                    ),
+                    partyId = invoice.invoice.customer,
+                    sourceExchangeRate = null,
+                    targetExchangeRate = null,
+                    docStatus = 0
+                )
+                paymentEntryUseCase(CreatePaymentEntryInput(entry))
+            }
     }
 
     private fun resolveAccount(

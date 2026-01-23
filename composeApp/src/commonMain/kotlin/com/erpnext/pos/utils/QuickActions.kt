@@ -2,6 +2,7 @@ package com.erpnext.pos.utils
 
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.LocalShipping
 import androidx.compose.material.icons.filled.Payments
 import androidx.compose.material.icons.filled.PointOfSale
@@ -16,6 +17,11 @@ object QuickActions {
             type = CustomerQuickActionType.PendingInvoices,
             label = "Ver facturas pendientes",
             icon = Icons.Filled.ReceiptLong
+        ),
+        CustomerQuickAction(
+            type = CustomerQuickActionType.InvoiceHistory,
+            label = "Historial de facturas",
+            icon = Icons.Filled.History
         ),
         CustomerQuickAction(
             type = CustomerQuickActionType.CreateQuotation,

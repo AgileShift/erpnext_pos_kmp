@@ -4,6 +4,7 @@ import com.erpnext.pos.domain.models.CustomerBO
 import com.erpnext.pos.domain.models.POSCurrencyOption
 import com.erpnext.pos.domain.models.POSPaymentModeOption
 import com.erpnext.pos.domain.models.SalesInvoiceBO
+import com.erpnext.pos.domain.usecases.InvoiceCancellationAction
 import com.erpnext.pos.localSource.entities.ModeOfPaymentEntity
 
 sealed class CustomerState {
@@ -25,6 +26,13 @@ sealed class CustomerInvoicesState {
     data class Error(val message: String) : CustomerInvoicesState()
 }
 
+sealed class CustomerInvoiceHistoryState {
+    object Idle : CustomerInvoiceHistoryState()
+    object Loading : CustomerInvoiceHistoryState()
+    data class Success(val invoices: List<SalesInvoiceBO>) : CustomerInvoiceHistoryState()
+    data class Error(val message: String) : CustomerInvoiceHistoryState()
+}
+
 data class CustomerPaymentState(
     val isSubmitting: Boolean = false,
     val errorMessage: String? = null,
@@ -44,8 +52,8 @@ data class CustomerAction(
     val onRefresh: () -> Unit = {},
     val checkCredit: (String, Double, (Boolean, String) -> Unit) -> Unit = { _, _, _ -> },
     val fetchAll: () -> Unit = {},
-    val toDetails: (String) -> Unit = {},
     val onViewPendingInvoices: (CustomerBO) -> Unit = {},
+    val onViewInvoiceHistory: (CustomerBO) -> Unit = {},
     val onCreateQuotation: (CustomerBO) -> Unit = {},
     val onCreateSalesOrder: (CustomerBO) -> Unit = {},
     val onCreateDeliveryNote: (CustomerBO) -> Unit = {},
@@ -54,6 +62,13 @@ data class CustomerAction(
     val loadOutstandingInvoices: (CustomerBO) -> Unit = {},
     val clearOutstandingInvoices: () -> Unit = {},
     val clearPaymentMessages: () -> Unit = {},
+    val clearInvoiceHistory: () -> Unit = {},
+    val clearInvoiceHistoryMessages: () -> Unit = {},
+    val onInvoiceHistoryAction: (
+        invoiceId: String,
+        action: InvoiceCancellationAction,
+        reason: String?
+    ) -> Unit = { _, _, _ -> },
     val registerPayment: (
         customerId: String,
         invoiceId: String,

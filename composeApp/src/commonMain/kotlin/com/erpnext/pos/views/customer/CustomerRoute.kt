@@ -7,6 +7,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import com.erpnext.pos.navigation.NavRoute
 import com.erpnext.pos.navigation.NavigationManager
+import com.erpnext.pos.views.customer.CustomerInvoiceHistoryState
 import com.erpnext.pos.views.salesflow.SalesFlowContext
 import com.erpnext.pos.views.salesflow.SalesFlowContextStore
 import com.erpnext.pos.views.salesflow.SalesFlowSource
@@ -20,11 +21,22 @@ fun CustomerRoute(
     val uiState by coordinator.screenStateFlow.collectAsState(CustomerState.Loading)
     val invoicesState by coordinator.invoicesState.collectAsState()
     val paymentState by coordinator.paymentState.collectAsState()
+    val historyState by coordinator.historyState.collectAsState(CustomerInvoiceHistoryState.Idle)
+    val historyMessage by coordinator.historyMessage.collectAsState(null)
+    val historyBusy by coordinator.historyActionBusy.collectAsState(false)
     val navManager: NavigationManager = koinInject()
     val salesFlowStore: SalesFlowContextStore = koinInject()
     val actions = rememberCustomerActions(coordinator, navManager, salesFlowStore)
 
-    CustomerListScreen(uiState, invoicesState, paymentState, actions)
+    CustomerListScreen(
+        state = uiState,
+        invoicesState = invoicesState,
+        paymentState = paymentState,
+        historyState = historyState,
+        historyMessage = historyMessage,
+        historyBusy = historyBusy,
+        actions = actions
+    )
 }
 
 @Composable
@@ -36,12 +48,12 @@ fun rememberCustomerActions(
     return remember(coordinator, navManager, salesFlowStore) {
         CustomerAction(
             fetchAll = coordinator::fetchAll,
-            toDetails = coordinator::toDetails,
             onStateSelected = coordinator::onTerritorySelected,
             checkCredit = coordinator::checkCredit,
             onRefresh = coordinator::onRefresh,
             onSearchQueryChanged = coordinator::onSearchQueryChanged,
             onViewPendingInvoices = { coordinator.loadOutstandingInvoices(it.name) },
+            onViewInvoiceHistory = { coordinator.loadInvoiceHistory(it.name) },
             onCreateQuotation = { customer ->
                 salesFlowStore.set(
                     SalesFlowContext(
@@ -86,7 +98,12 @@ fun rememberCustomerActions(
             loadOutstandingInvoices = { coordinator.loadOutstandingInvoices(it.name) },
             clearOutstandingInvoices = coordinator::clearOutstandingInvoices,
             registerPayment = coordinator::registerPayment,
-            clearPaymentMessages = coordinator::clearPaymentMessages
+            clearPaymentMessages = coordinator::clearPaymentMessages,
+            clearInvoiceHistory = coordinator::clearInvoiceHistory,
+            clearInvoiceHistoryMessages = coordinator::clearInvoiceHistoryMessages,
+            onInvoiceHistoryAction = { invoiceId, action, reason ->
+                coordinator.performInvoiceHistoryAction(invoiceId, action, reason)
+            }
         )
     }
 }

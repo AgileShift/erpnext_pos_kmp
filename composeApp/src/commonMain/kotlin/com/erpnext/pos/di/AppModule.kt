@@ -103,6 +103,7 @@ import com.erpnext.pos.utils.view.SnackbarController
 import com.erpnext.pos.views.CashBoxManager
 import com.erpnext.pos.views.billing.BillingViewModel
 import com.erpnext.pos.views.customer.CustomerViewModel
+import com.erpnext.pos.domain.usecases.FetchCustomerInvoicesForPeriodUseCase
 import com.erpnext.pos.views.deliverynote.DeliveryNoteViewModel
 import com.erpnext.pos.views.home.HomeViewModel
 import com.erpnext.pos.views.home.POSProfileViewModel
@@ -441,6 +442,7 @@ val appModule = module {
     single { CustomerRemoteSource(get(named("apiService"))) }
     single { CustomerLocalSource(get(), get()) }
     single { CustomerRepository(get(), get(), get()) }
+    single { FetchCustomerInvoicesForPeriodUseCase(get()) }
     single {
         CustomerViewModel(
             cashboxManager = get(),
@@ -448,9 +450,12 @@ val appModule = module {
             checkCustomerCreditUseCase = get(),
             fetchCustomerDetailUseCase = get(),
             fetchOutstandingInvoicesUseCase = get(),
+            fetchCustomerInvoicesForPeriodUseCase = get(),
             fetchSalesInvoiceLocalUseCase = get(),
             modeOfPaymentDao = get(),
-            paymentHandler = get()
+            paymentHandler = get(),
+            cancelSalesInvoiceUseCase = get(),
+            networkMonitor = get()
         )
     }
     //endregion

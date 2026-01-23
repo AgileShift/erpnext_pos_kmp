@@ -278,7 +278,7 @@ class SalesInvoiceRepository(
         val draft = ensureDraftDocStatus(enrichPaymentsWithAccount(invoice))
         val created = remoteSource.createInvoice(draft)
         submitSalesInvoice(created.name!!)
-        return remoteSource.fetchInvoice(created.name!!)!!
+        return remoteSource.fetchInvoice(created.name)!!
     }
 
     override suspend fun updateRemoteInvoice(

@@ -9,13 +9,19 @@ import com.erpnext.pos.domain.models.CustomerBO
 import com.erpnext.pos.domain.usecases.CheckCustomerCreditUseCase
 import com.erpnext.pos.domain.usecases.CustomerCreditInput
 import com.erpnext.pos.domain.usecases.CustomerQueryInput
+import com.erpnext.pos.domain.usecases.CancelSalesInvoiceInput
+import com.erpnext.pos.domain.usecases.CancelSalesInvoiceUseCase
+import com.erpnext.pos.domain.usecases.CustomerInvoiceHistoryInput
 import com.erpnext.pos.domain.usecases.FetchCustomerDetailUseCase
+import com.erpnext.pos.domain.usecases.FetchCustomerInvoicesForPeriodUseCase
 import com.erpnext.pos.domain.usecases.FetchCustomersLocalWithStateUseCase
 import com.erpnext.pos.domain.usecases.FetchOutstandingInvoicesLocalForCustomerUseCase
 import com.erpnext.pos.domain.usecases.FetchSalesInvoiceLocalUseCase
+import com.erpnext.pos.domain.usecases.InvoiceCancellationAction
 import com.erpnext.pos.localSource.dao.ModeOfPaymentDao
 import com.erpnext.pos.localSource.entities.ModeOfPaymentEntity
 import com.erpnext.pos.remoteSource.mapper.toDto
+import com.erpnext.pos.utils.NetworkMonitor
 import com.erpnext.pos.utils.buildPaymentModeDetailMap
 import com.erpnext.pos.utils.formatDoubleToString
 import com.erpnext.pos.utils.normalizeCurrency
@@ -27,6 +33,7 @@ import com.erpnext.pos.views.CashBoxManager
 import com.erpnext.pos.views.billing.PaymentLine
 import com.erpnext.pos.views.payment.PaymentHandler
 import com.erpnext.pos.domain.utils.UUIDGenerator
+import com.erpnext.pos.utils.toErpDate
 import io.ktor.util.date.getTimeMillis
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.delay
@@ -34,9 +41,14 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlin.time.Clock
+import kotlin.time.Duration.Companion.days
+import kotlin.time.ExperimentalTime
 
 @OptIn(FlowPreview::class)
 /**
@@ -50,9 +62,12 @@ class CustomerViewModel(
     private val checkCustomerCreditUseCase: CheckCustomerCreditUseCase,
     private val fetchCustomerDetailUseCase: FetchCustomerDetailUseCase,
     private val fetchOutstandingInvoicesUseCase: FetchOutstandingInvoicesLocalForCustomerUseCase,
+    private val fetchCustomerInvoicesForPeriodUseCase: FetchCustomerInvoicesForPeriodUseCase,
     private val fetchSalesInvoiceLocalUseCase: FetchSalesInvoiceLocalUseCase,
     private val modeOfPaymentDao: ModeOfPaymentDao,
-    private val paymentHandler: PaymentHandler
+    private val paymentHandler: PaymentHandler,
+    private val cancelSalesInvoiceUseCase: CancelSalesInvoiceUseCase,
+    private val networkMonitor: NetworkMonitor
 ) : BaseViewModel() {
 
     private val _stateFlow: MutableStateFlow<CustomerState> =
@@ -64,6 +79,18 @@ class CustomerViewModel(
 
     private val _paymentState = MutableStateFlow(CustomerPaymentState())
     val paymentState = _paymentState
+
+    private val _historyState =
+        MutableStateFlow<CustomerInvoiceHistoryState>(CustomerInvoiceHistoryState.Idle)
+    val historyState = _historyState
+
+    private val _historyMessage = MutableStateFlow<String?>(null)
+    val historyMessage = _historyMessage
+
+    private val _historyActionBusy = MutableStateFlow(false)
+    val historyActionBusy = _historyActionBusy.asStateFlow()
+
+    private var historyCustomerId: String? = null
 
     private var paymentModeDetails: Map<String, ModeOfPaymentEntity> = emptyMap()
     private var customersJob: kotlinx.coroutines.Job? = null
@@ -110,7 +137,6 @@ class CustomerViewModel(
 
     private fun preloadPaymentState() {
         viewModelScope.launch {
-            val context = cashboxManager.getContext() ?: return@launch
             _paymentState.value = buildPaymentState(
                 modeTypes = paymentModeDetails,
                 modeDetails = emptyMap()
@@ -150,8 +176,6 @@ class CustomerViewModel(
         searchFilter = query
         searchFlow.value = query
     }
-
-    fun toDetails(customerId: String) {}
 
     fun onStateSelected(state: String?) {
         selectedState = state
@@ -294,15 +318,16 @@ class CustomerViewModel(
                 val postingDate = getTimeMillis().toErpDateTime()
 
                 val invoiceCurrency = normalizeCurrency(invoice.currency)
-                    ?: normalizeCurrency(context.currency)
-                    ?: "USD"
                 val receivableCurrency = normalizeCurrency(invoice.partyAccountCurrency)
                     ?: normalizeCurrency(context.partyAccountCurrency)
-                    ?: normalizeCurrency(invoice.currency)
-                    ?: "USD"
 
-                val normalizedInvoiceCurrency = normalizeCurrency(invoiceCurrency) ?: "USD"
-                if (!normalizedInvoiceCurrency.equals(paymentRateCacheCurrency, ignoreCase = true)) {
+
+                val normalizedInvoiceCurrency = normalizeCurrency(invoiceCurrency)
+                if (!normalizedInvoiceCurrency.equals(
+                        paymentRateCacheCurrency,
+                        ignoreCase = true
+                    )
+                ) {
                     paymentRateCacheCurrency = normalizedInvoiceCurrency
                     paymentRateCache = mutableMapOf(normalizedInvoiceCurrency to 1.0)
                 }
@@ -327,8 +352,7 @@ class CustomerViewModel(
 
                 val line = PaymentLine(
                     modeOfPayment = modeOfPayment,
-                    currency = normalizeCurrency(enteredCurrency)
-                        ?: normalizeCurrency(context.currency) ?: "USD",
+                    currency = normalizeCurrency(enteredCurrency),
                     enteredAmount = enteredAmount,
                     baseAmount = 0.0,
                     referenceNumber = resolvedReference,
@@ -363,14 +387,15 @@ class CustomerViewModel(
                 )
 
                 val invoiceCurrencyResolved = normalizeCurrency(invoice.currency)
-                    ?: normalizeCurrency(context.currency)
-                    ?: receivableCurrency
                 val invoiceToReceivableRate = when {
                     invoiceCurrencyResolved.equals(receivableCurrency, ignoreCase = true) -> 1.0
                     invoice.conversionRate != null && (invoice.customExchangeRate ?: 0.0) > 0.0 ->
                         invoice.conversionRate
-                    invoice.customExchangeRate != null && (invoice.customExchangeRate ?: 0.0) > 0.0 ->
+
+                    invoice.customExchangeRate != null && (invoice.customExchangeRate
+                        ?: 0.0) > 0.0 ->
                         invoice.customExchangeRate
+
                     else -> null
                 }
 
@@ -391,9 +416,9 @@ class CustomerViewModel(
                 }
 
                 val baseCurrencyForChange = normalizeCurrency(enteredCurrency)
-                    ?: normalizeCurrency(context.currency) ?: "USD"
                 val changeText = changeInPaymentCurrency?.takeIf { it > 0.0 }?.let { change ->
-                    val symbol = baseCurrencyForChange.toCurrencySymbol().ifBlank { baseCurrencyForChange }
+                    val symbol =
+                        baseCurrencyForChange.toCurrencySymbol().ifBlank { baseCurrencyForChange }
                     "Cambio: $symbol ${formatDoubleToString(change, 2)}"
                 }
 
@@ -430,5 +455,83 @@ class CustomerViewModel(
             errorMessage = null,
             successMessage = null
         )
+    }
+
+    @OptIn(ExperimentalTime::class)
+    fun loadInvoiceHistory(customerId: String) {
+        historyCustomerId = customerId
+        viewModelScope.launch {
+            val isOnline = networkMonitor.isConnected.first()
+            if (!isOnline) {
+                _historyState.value =
+                    CustomerInvoiceHistoryState.Error("Sin conexión a internet.")
+                return@launch
+            }
+            _historyState.value = CustomerInvoiceHistoryState.Loading
+            try {
+                val now = Clock.System.now()
+                val start = now - 30.days
+                val invoices = fetchCustomerInvoicesForPeriodUseCase(
+                    CustomerInvoiceHistoryInput(
+                        customerId = customerId,
+                        startDate = start.toEpochMilliseconds().toErpDate(),
+                        endDate = now.toEpochMilliseconds().toErpDate()
+                    )
+                )
+                _historyState.value = CustomerInvoiceHistoryState.Success(invoices)
+            } catch (e: Exception) {
+                _historyState.value = CustomerInvoiceHistoryState.Error(
+                    e.message ?: "No se pudo obtener el historial de facturas."
+                )
+            }
+        }
+    }
+
+    fun clearInvoiceHistory() {
+        historyCustomerId = null
+        _historyState.value = CustomerInvoiceHistoryState.Idle
+        _historyMessage.value = null
+    }
+
+    fun clearHistoryMessage() {
+        _historyMessage.value = null
+    }
+
+    @OptIn(ExperimentalTime::class)
+    fun performInvoiceHistoryAction(
+        invoiceId: String,
+        action: InvoiceCancellationAction,
+        reason: String?
+    ) {
+        viewModelScope.launch {
+            val isOnline = networkMonitor.isConnected.first()
+            if (!isOnline) {
+                _historyMessage.value = "Se requiere conexión para completar esta acción."
+                return@launch
+            }
+            _historyActionBusy.value = true
+            try {
+                val trimmedReason = reason?.takeIf { it.isNotBlank() }
+                val result = cancelSalesInvoiceUseCase(
+                    CancelSalesInvoiceInput(
+                        invoiceName = invoiceId,
+                        action = action,
+                        reason = trimmedReason
+                    )
+                )
+                _historyMessage.value = when (action) {
+                    InvoiceCancellationAction.CANCEL -> "Factura $invoiceId cancelada."
+                    InvoiceCancellationAction.RETURN -> result.creditNoteName?.let {
+                        "Retorno registrado como $it."
+                    } ?: "Retorno registrado."
+                }
+            } catch (e: Exception) {
+                _historyMessage.value =
+                    "No se pudo completar la acción: ${e.message ?: "error desconocido."}"
+            } finally {
+                _historyActionBusy.value = false
+                historyCustomerId?.let { loadInvoiceHistory(it) }
+            }
+        }
     }
 }

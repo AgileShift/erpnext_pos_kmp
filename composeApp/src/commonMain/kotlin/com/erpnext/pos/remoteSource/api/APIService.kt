@@ -418,10 +418,6 @@ class APIService(
         val url = authStore.getCurrentSite()
         if (url.isNullOrBlank()) throw Exception("URL Invalida")
         val endpoint = url.trimEnd('/') + "/api/method/frappe.client.cancel"
-        val payload = buildJsonObject {
-            put("doctype", doctype)
-            put("name", name)
-        }
 
         return try {
             val response = withRetries {
@@ -431,7 +427,8 @@ class APIService(
                     setBody(
                         FormDataContent(
                             Parameters.build {
-                                append("doc", json.encodeToString(payload))
+                                append("doctype", doctype)
+                                append("name", name)
                             }
                         )
                     )
@@ -700,7 +697,7 @@ class APIService(
         return details.copy(
             itemCode = details.itemCode ?: itemCode,
             price = details.price,
-            name = details.name ?: "",
+            name = details.name,
             barcode = processedBarcode,
             discount = 0.0,
             isStocked = processedIsStocked,

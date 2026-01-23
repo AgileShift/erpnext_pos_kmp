@@ -55,8 +55,8 @@ import com.erpnext.pos.domain.models.CustomerCounts
 import com.erpnext.pos.domain.models.CustomerQuickActionType
 import com.erpnext.pos.domain.models.POSPaymentModeOption
 import com.erpnext.pos.domain.models.SalesInvoiceBO
+import com.erpnext.pos.domain.usecases.InvoiceCancellationAction
 import com.erpnext.pos.localization.LocalAppStrings
-import com.erpnext.pos.views.CashBoxManager
 import com.erpnext.pos.utils.QuickActions.customerQuickActions
 import com.erpnext.pos.utils.formatDoubleToString
 import com.erpnext.pos.utils.normalizeCurrency
@@ -69,6 +69,8 @@ import com.erpnext.pos.utils.oauth.bd
 import com.erpnext.pos.utils.oauth.moneyScale
 import com.erpnext.pos.utils.oauth.toDouble
 import com.erpnext.pos.utils.view.SnackbarPosition
+import com.erpnext.pos.views.CashBoxManager
+import com.erpnext.pos.views.customer.CustomerInvoiceHistoryState
 import com.erpnext.pos.views.billing.AppTextField
 import com.erpnext.pos.views.billing.MoneyTextField
 import org.koin.compose.koinInject
@@ -79,6 +81,9 @@ fun CustomerListScreen(
     state: CustomerState,
     invoicesState: CustomerInvoicesState,
     paymentState: CustomerPaymentState,
+    historyState: CustomerInvoiceHistoryState,
+    historyMessage: String?,
+    historyBusy: Boolean,
     actions: CustomerAction
 ) {
     val topAppBarScrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(
@@ -89,6 +94,8 @@ fun CustomerListScreen(
     var selectedState by remember { mutableStateOf("Todos") }
     var quickActionsCustomer by remember { mutableStateOf<CustomerBO?>(null) }
     var outstandingCustomer by remember { mutableStateOf<CustomerBO?>(null) }
+    var historyCustomer by remember { mutableStateOf<CustomerBO?>(null) }
+    var historyReason by remember { mutableStateOf("") }
 
     val snackbar: SnackbarController = koinInject()
     val cashboxManager: CashBoxManager = koinInject()
@@ -136,6 +143,18 @@ fun CustomerListScreen(
         paymentState.errorMessage?.takeIf { it.isNotBlank() }?.let { message ->
             snackbar.show(message, SnackbarType.Error, position = SnackbarPosition.Top)
             actions.clearPaymentMessages()
+        }
+    }
+
+    LaunchedEffect(historyCustomer?.name) {
+        historyCustomer?.let { actions.onViewInvoiceHistory(it) }
+        historyReason = ""
+    }
+
+    LaunchedEffect(historyMessage) {
+        historyMessage?.takeIf { it.isNotBlank() }?.let { message ->
+            snackbar.show(message, SnackbarType.Success, position = SnackbarPosition.Top)
+            actions.clearInvoiceHistoryMessages()
         }
     }
 
@@ -234,7 +253,8 @@ fun CustomerListScreen(
                                 )
                             } else {
                                 val posCurrency = normalizeCurrency(posContext?.currency) ?: "USD"
-                                val partyCurrency = normalizeCurrency(paymentState.partyAccountCurrency)
+                                val partyCurrency =
+                                    normalizeCurrency(paymentState.partyAccountCurrency)
 
                                 CustomerListContent(
                                     customers = filtered,
@@ -254,6 +274,10 @@ fun CustomerListScreen(
                                                 outstandingCustomer = customer
                                             }
 
+                                            CustomerQuickActionType.InvoiceHistory -> {
+                                                historyCustomer = customer
+                                            }
+
                                             else -> handleQuickAction(actions, customer, actionType)
                                         }
                                     }
@@ -271,12 +295,16 @@ fun CustomerListScreen(
             customer = customer,
             invoicesState = invoicesState,
             paymentState = paymentState,
-            onDismiss = {  },
+            onDismiss = { },
             onActionSelected = { actionType ->
                 when (actionType) {
                     CustomerQuickActionType.PendingInvoices,
                     CustomerQuickActionType.RegisterPayment -> {
                         outstandingCustomer = customer
+                    }
+
+                    CustomerQuickActionType.InvoiceHistory -> {
+                        historyCustomer = customer
                     }
 
                     else -> handleQuickAction(actions, customer, actionType)
@@ -303,6 +331,29 @@ fun CustomerListScreen(
                     enteredCurrency,
                     referenceNumber
                 )
+            }
+        )
+    }
+
+    historyCustomer?.let { customer ->
+        CustomerInvoiceHistorySheet(
+            customer = customer,
+            historyState = historyState,
+            historyMessage = historyMessage,
+            historyReason = historyReason,
+            historyBusy = historyBusy,
+            onReasonChange = { historyReason = it },
+            onAction = { invoiceId, action ->
+                actions.onInvoiceHistoryAction(
+                    invoiceId,
+                    action,
+                    historyReason.takeIf { it.isNotBlank() }
+                )
+            },
+            onDismiss = {
+                historyCustomer = null
+                historyReason = ""
+                actions.clearInvoiceHistory()
             }
         )
     }
@@ -511,7 +562,7 @@ private fun CustomerListContent(
                     partyAccountCurrency = partyAccountCurrency,
                     posExchangeRate = posExchangeRate,
                     isDesktop = isDesktop,
-                    onClick = { actions.toDetails(customer.name) },
+                    //onClick = { actions.toDetails(customer.name) },
                     onOpenQuickActions = { onOpenQuickActions(customer) },
                     onQuickAction = { actionType -> onQuickAction(customer, actionType) },
                     cashboxManager = cashboxManager
@@ -531,7 +582,7 @@ private fun CustomerListContent(
                     partyAccountCurrency = partyAccountCurrency,
                     posExchangeRate = posExchangeRate,
                     isDesktop = isDesktop,
-                    onClick = { actions.toDetails(customer.name) },
+                    //onClick = { actions.toDetails(customer.name) },
                     onOpenQuickActions = { onOpenQuickActions(customer) },
                     onQuickAction = { actionType -> onQuickAction(customer, actionType) },
                     cashboxManager = cashboxManager
@@ -549,7 +600,7 @@ fun CustomerItem(
     posExchangeRate: Double,
     cashboxManager: CashBoxManager,
     isDesktop: Boolean,
-    onClick: () -> Unit,
+    //onClick: () -> Unit,
     onOpenQuickActions: () -> Unit,
     onQuickAction: (CustomerQuickActionType) -> Unit
 ) {
@@ -613,8 +664,8 @@ fun CustomerItem(
                         }
                     )
                 }
-            }
-            .clickable { onClick() },
+            },
+            //.clickable { onClick() },
         // elevation = CardDefaults.cardElevation(defaultElevation = cardElevation),
         shape = cardShape,
         border = BorderStroke(1.2.dp, statusColor.copy(alpha = 0.35f)),
@@ -1006,9 +1057,11 @@ private fun CustomerOutstandingInvoicesSheet(
         invoiceBaseCurrency.equals(receivableCurrency, ignoreCase = true) -> 1.0
         selectedInvoice?.conversionRate != null && (selectedInvoice?.conversionRate ?: 0.0) > 0.0 ->
             selectedInvoice?.conversionRate
+
         selectedInvoice?.customExchangeRate != null &&
-            (selectedInvoice?.customExchangeRate ?: 0.0) > 0.0 ->
+                (selectedInvoice?.customExchangeRate ?: 0.0) > 0.0 ->
             selectedInvoice?.customExchangeRate
+
         else -> null
     }
     val paymentModes = paymentState.paymentModes
@@ -1178,7 +1231,8 @@ private fun CustomerOutstandingInvoicesSheet(
                                 val posLabel = rateBaseToPos?.let { rate ->
                                     "$posSymbol ${formatAmount(invoice.outstandingAmount * rate)}"
                                 } ?: "$posSymbol --"
-                                val baseLabel = "$baseSymbol ${formatAmount(invoice.outstandingAmount)}"
+                                val baseLabel =
+                                    "$baseSymbol ${formatAmount(invoice.outstandingAmount)}"
 
                                 Card(
                                     modifier = Modifier.fillMaxWidth(),
@@ -1267,9 +1321,10 @@ private fun CustomerOutstandingInvoicesSheet(
                                                                 baseCurrency = posBaseCurrency,
                                                                 baseRates = invoicesState.exchangeRateByCurrency
                                                             )
-                                                        val amountToUse = rateBaseToSelected?.let { rate ->
-                                                            invoice.outstandingAmount * rate
-                                                        } ?: invoice.outstandingAmount
+                                                        val amountToUse =
+                                                            rateBaseToSelected?.let { rate ->
+                                                                invoice.outstandingAmount * rate
+                                                            } ?: invoice.outstandingAmount
                                                         amountRaw = amountToUse.toString()
                                                     }
                                                 )
@@ -1442,6 +1497,164 @@ private fun CustomerOutstandingInvoicesSheet(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun CustomerInvoiceHistorySheet(
+    customer: CustomerBO,
+    historyState: CustomerInvoiceHistoryState,
+    historyMessage: String?,
+    historyReason: String,
+    historyBusy: Boolean,
+    onReasonChange: (String) -> Unit,
+    onAction: (String, InvoiceCancellationAction) -> Unit,
+    onDismiss: () -> Unit
+) {
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        dragHandle = { BottomSheetDefaults.DragHandle() }
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 24.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Text(
+                text = "Historial de ${customer.customerName}",
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.SemiBold
+            )
+            if (!historyMessage.isNullOrBlank()) {
+                Text(
+                    text = historyMessage,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
+            when (historyState) {
+                CustomerInvoiceHistoryState.Idle -> {
+                    Text("Abre la vista para cargar las facturas del último mes.")
+                }
+
+                CustomerInvoiceHistoryState.Loading -> {
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        CircularProgressIndicator(modifier = Modifier.size(40.dp))
+                        Spacer(Modifier.height(8.dp))
+                        Text("Cargando historial...")
+                    }
+                }
+
+                is CustomerInvoiceHistoryState.Error -> {
+                    Text(
+                        historyState.message,
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
+
+                is CustomerInvoiceHistoryState.Success -> {
+                    val invoices = historyState.invoices
+                    if (invoices.isEmpty()) {
+                        Text("No se encontraron facturas en los últimos 30 días.")
+                    } else {
+                        LazyColumn(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(max = 320.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                            contentPadding = PaddingValues(bottom = 16.dp)
+                        ) {
+                            items(
+                                items = invoices,
+                                key = { it.invoiceId }
+                            ) { invoice ->
+                                InvoiceHistoryRow(
+                                    invoice = invoice,
+                                    isBusy = historyBusy,
+                                    onAction = onAction
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+            OutlinedTextField(
+                value = historyReason,
+                onValueChange = onReasonChange,
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("Motivo (opcional)") },
+                singleLine = true
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+        }
+    }
+}
+
+@Composable
+private fun InvoiceHistoryRow(
+    invoice: SalesInvoiceBO,
+    isBusy: Boolean,
+    onAction: (String, InvoiceCancellationAction) -> Unit
+) {
+    val currency = invoice.currency ?: invoice.partyAccountCurrency ?: "USD"
+    val formattedTotal = formatDoubleToString(invoice.total, 2)
+    val formattedOutstanding = formatDoubleToString(invoice.outstandingAmount, 2)
+    val statusLabel = invoice.status ?: "Sin estado"
+    val allowReturn = invoice.status?.equals("Paid", true) == true ||
+            invoice.outstandingAmount <= 0.0
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(10.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    ) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(invoice.invoiceId, fontWeight = FontWeight.SemiBold)
+                Text(statusLabel, color = MaterialTheme.colorScheme.secondary)
+            }
+            Spacer(Modifier.height(4.dp))
+            Text("Total: $currency $formattedTotal")
+            Text("Pendiente: $currency $formattedOutstanding")
+            Spacer(Modifier.height(8.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Button(
+                    onClick = { onAction(invoice.invoiceId, InvoiceCancellationAction.CANCEL) },
+                    enabled = !isBusy,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    if (isBusy) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(16.dp),
+                            strokeWidth = 2.dp,
+                            color = Color.White
+                        )
+                    } else {
+                        Text("Cancelar")
+                    }
+                }
+                if (allowReturn) {
+                    OutlinedButton(
+                        onClick = { onAction(invoice.invoiceId, InvoiceCancellationAction.RETURN) },
+                        enabled = !isBusy,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text("Registrar retorno")
+                    }
+                }
+            }
+        }
+    }
+}
+
 fun requiresReference(option: POSPaymentModeOption?): Boolean {
     val type = option?.type?.trim().orEmpty()
     return type.equals("Bank", ignoreCase = true) || type.equals(
@@ -1557,6 +1770,7 @@ private fun handleQuickAction(
         CustomerQuickActionType.CreateDeliveryNote -> actions.onCreateDeliveryNote(customer)
         CustomerQuickActionType.CreateInvoice -> actions.onCreateInvoice(customer)
         CustomerQuickActionType.RegisterPayment -> actions.onRegisterPayment(customer)
+        else -> {}
     }
 }
 

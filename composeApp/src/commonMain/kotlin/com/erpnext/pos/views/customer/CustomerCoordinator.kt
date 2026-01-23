@@ -2,6 +2,7 @@ package com.erpnext.pos.views.customer
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
+import com.erpnext.pos.domain.usecases.InvoiceCancellationAction
 import org.koin.compose.viewmodel.koinViewModel
 
 class CustomerCoordinator(
@@ -10,10 +11,11 @@ class CustomerCoordinator(
     val screenStateFlow = viewModel.stateFlow
     val invoicesState = viewModel.invoicesState
     val paymentState = viewModel.paymentState
+    val historyState = viewModel.historyState
+    val historyMessage = viewModel.historyMessage
+    val historyActionBusy = viewModel.historyActionBusy
 
     fun fetchAll() = viewModel.fetchAllCustomers()
-
-    fun toDetails(customerId: String) = viewModel.toDetails(customerId)
 
     fun onSearchQueryChanged(input: String) = viewModel.onSearchQueryChanged(input)
 
@@ -45,6 +47,14 @@ class CustomerCoordinator(
     )
 
     fun clearPaymentMessages() = viewModel.clearPaymentMessages()
+    fun loadInvoiceHistory(customerId: String) = viewModel.loadInvoiceHistory(customerId)
+    fun clearInvoiceHistory() = viewModel.clearInvoiceHistory()
+    fun clearInvoiceHistoryMessages() = viewModel.clearHistoryMessage()
+    fun performInvoiceHistoryAction(
+        invoiceId: String,
+        action: InvoiceCancellationAction,
+        reason: String?
+    ) = viewModel.performInvoiceHistoryAction(invoiceId, action, reason)
 }
 
 @Composable

@@ -39,4 +39,12 @@ class CustomerRemoteSource(
     suspend fun fetchAllOutstandingInvoices(): List<SalesInvoiceDto> {
         return api.getAllOutstandingInvoices()
     }
+
+    suspend fun fetchInvoicesForCustomerPeriod(
+        customerId: String,
+        startDate: String,
+        endDate: String
+    ): List<SalesInvoiceDto> {
+        return api.fetchCustomerInvoicesForPeriod(customerId, startDate, endDate)
+    }
 }
