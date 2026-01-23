@@ -26,7 +26,8 @@ data class PartialReturnInput(
     val itemsToReturnByCode: Map<String, Double>,
     val reason: String? = null,
     val refundModeOfPayment: String? = null,
-    val refundReferenceNo: String? = null
+    val refundReferenceNo: String? = null,
+    val applyRefund: Boolean = false
 )
 
 data class PartialReturnResult(
@@ -68,14 +69,18 @@ class PartialReturnUseCase(
 
         invoice.invoice.invoiceName?.let { repository.refreshInvoiceFromRemote(it) }
 
-        val refundCreated = input.refundModeOfPayment?.takeIf { it.isNotBlank() }?.let { mode ->
-            createRefundPayment(
-                invoice = invoice,
-                creditNote = created,
-                refundModeOfPayment = mode,
-                refundReferenceNo = input.refundReferenceNo
-            )
-        } ?: false
+        val refundCreated = if (input.applyRefund) {
+            input.refundModeOfPayment?.takeIf { it.isNotBlank() }?.let { mode ->
+                createRefundPayment(
+                    invoice = invoice,
+                    creditNote = created,
+                    refundModeOfPayment = mode,
+                    refundReferenceNo = input.refundReferenceNo
+                )
+            } ?: false
+        } else {
+            false
+        }
 
         return PartialReturnResult(
             creditNoteName = created.name,

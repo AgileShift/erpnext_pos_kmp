@@ -1516,8 +1516,9 @@ private fun CustomerInvoiceHistorySheet(
         reason: String?,
         refundModeOfPayment: String?,
         refundReferenceNo: String?,
+        applyRefund: Boolean,
         itemsToReturnByCode: Map<String, Double>
-    ) -> Unit = { _, _, _, _, _ -> }
+    ) -> Unit = { _, _, _, _, _, _ -> }
 ) {
     val scope = rememberCoroutineScope()
 
@@ -1530,6 +1531,7 @@ private fun CustomerInvoiceHistorySheet(
     var refundMode by remember { mutableStateOf<String?>(null) }
     var refundReference by remember { mutableStateOf("") }
     var qtyByItemCode by remember { mutableStateOf<Map<String, Double>>(emptyMap()) }
+    var returnDestination by remember { mutableStateOf(ReturnDestination.RETURN) }
 
     fun canConfirmReturn(): Boolean = qtyByItemCode.values.any { it > 0.0 }
 
@@ -1541,6 +1543,7 @@ private fun CustomerInvoiceHistorySheet(
         refundMode = null
         refundReference = ""
         qtyByItemCode = emptyMap()
+        returnDestination = ReturnDestination.RETURN
 
         scope.launch {
             returnLoading = true
@@ -1551,7 +1554,7 @@ private fun CustomerInvoiceHistorySheet(
                 } else {
                     returnInvoiceLocal = local
                     qtyByItemCode = local.items.associate { it.itemCode to 0.0 }
-                    refundMode = refundMode ?: paymentState.paymentModes.firstOrNull()?.modeOfPayment
+                    refundMode = paymentState.paymentModes.firstOrNull()?.modeOfPayment
                 }
             } catch (e: Exception) {
                 returnError = e.message ?: "No se pudo cargar la factura."
@@ -1600,9 +1603,36 @@ private fun CustomerInvoiceHistorySheet(
                     }
 
                     val refundOptions = remember(paymentState.paymentModes) {
-                        paymentState.paymentModes.mapNotNull { it.modeOfPayment.ifBlank { null } }.distinct()
+                        paymentState.paymentModes.mapNotNull { it.modeOfPayment.ifBlank { null } }
+                            .distinct()
                     }
                     var refundModeExpanded by remember { mutableStateOf(false) }
+                    val selectedMode = paymentState.paymentModes.firstOrNull {
+                        it.modeOfPayment.equals(refundMode, true)
+                    }
+                    val needsReference =
+                        returnDestination == ReturnDestination.RETURN &&
+                                selectedMode?.type?.equals("Bank", true) == true
+
+                    Text(
+                        text = "Destino del monto devuelto",
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        ReturnDestination.entries.forEach { destination ->
+                            FilterChip(
+                                selected = returnDestination == destination,
+                                onClick = { returnDestination = destination },
+                                label = { Text(destination.label) }
+                            )
+                        }
+                    }
+                    Spacer(Modifier.height(6.dp))
+
                     if (refundOptions.isNotEmpty()) {
                         ExposedDropdownMenuBox(
                             expanded = refundModeExpanded,
@@ -1621,16 +1651,13 @@ private fun CustomerInvoiceHistorySheet(
                                     )
                                 },
                                 leadingIcon = {
-                                    Icon(
-                                        Icons.Default.Sell,
-                                        contentDescription = null
-                                    )
+                                    Icon(Icons.Default.Sell, contentDescription = null)
                                 },
                                 readOnly = true,
                                 singleLine = true,
                                 enabled = !historyBusy,
                                 supportingText = {
-                                    Text("Vacío = se genera solo la nota de crédito.")
+                                    Text("Vacío = solo nota de crédito.")
                                 }
                             )
                             ExposedDropdownMenu(
@@ -1648,26 +1675,18 @@ private fun CustomerInvoiceHistorySheet(
                                 }
                             }
                         }
-                    } else {
+                    }
+
+                    if (needsReference) {
                         OutlinedTextField(
-                            value = refundMode.orEmpty(),
-                            onValueChange = { refundMode = it },
+                            value = refundReference,
+                            onValueChange = { refundReference = it },
                             modifier = Modifier.fillMaxWidth(),
-                            label = { Text("Modo de reembolso (opcional)") },
-                            supportingText = { Text("Vacío = usar el/los modos originales.") },
+                            label = { Text("Referencia (requerida)") },
                             singleLine = true,
                             enabled = !historyBusy
                         )
                     }
-
-                    OutlinedTextField(
-                        value = refundReference,
-                        onValueChange = { refundReference = it },
-                        modifier = Modifier.fillMaxWidth(),
-                        label = { Text("Referencia (opcional)") },
-                        singleLine = true,
-                        enabled = !historyBusy
-                    )
 
                     Text(
                         "El retorno genera una nota de crédito aplicable contra la factura original.",
@@ -1681,70 +1700,92 @@ private fun CustomerInvoiceHistorySheet(
                         fontWeight = FontWeight.SemiBold
                     )
 
-                    val local = returnInvoiceLocal
-                    if (local != null) {
-                        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                            local.items.forEach { item ->
+                    returnInvoiceLocal?.let { local ->
+                        LazyColumn(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(max = 260.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp),
+                            contentPadding = PaddingValues(vertical = 4.dp)
+                        ) {
+                            items(local.items, key = { it.itemCode }) { item ->
                                 val soldQty = item.qty
                                 val current = qtyByItemCode[item.itemCode] ?: 0.0
-
                                 Card(
                                     modifier = Modifier.fillMaxWidth(),
                                     colors = CardDefaults.cardColors(
-                                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(
-                                            alpha = 0.45f
-                                        )
-                                    )
+                                        containerColor = MaterialTheme.colorScheme.surfaceVariant
+                                            .copy(alpha = 0.45f)
+                                    ),
+                                    shape = RoundedCornerShape(10.dp)
                                 ) {
-                                    Column(modifier = Modifier.padding(12.dp)) {
-                                        Text(
-                                            item.itemName ?: item.itemCode,
-                                            fontWeight = FontWeight.SemiBold
-                                        )
-                                        Text(
-                                            "Vendido: ${formatDoubleToString(soldQty, 2)}",
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                        Spacer(Modifier.height(8.dp))
-                                        Row(
-                                            modifier = Modifier.fillMaxWidth(),
-                                            horizontalArrangement = Arrangement.SpaceBetween,
-                                            verticalAlignment = Alignment.CenterVertically
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(10.dp),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Column(
+                                            verticalArrangement = Arrangement.spacedBy(2.dp)
                                         ) {
-                                            OutlinedButton(
+                                            Text(
+                                                text = item.itemName ?: item.itemCode,
+                                                fontWeight = FontWeight.SemiBold,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis
+                                            )
+                                            Text(
+                                                text = "Vendidos: ${
+                                                    formatDoubleToString(
+                                                        soldQty,
+                                                        2
+                                                    )
+                                                }",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                        ) {
+                                            IconButton(
                                                 onClick = {
-                                                    val next = (current - 1.0).coerceAtLeast(0.0)
+                                                    val next =
+                                                        (current - 1.0).coerceAtLeast(0.0)
                                                     qtyByItemCode =
                                                         qtyByItemCode.toMutableMap().apply {
                                                             put(item.itemCode, next)
                                                         }
                                                 },
                                                 enabled = !historyBusy && current > 0.0
-                                            ) { Text("-") }
-
+                                            ) {
+                                                Icon(Icons.Default.Remove, null)
+                                            }
                                             Text(
                                                 text = formatDoubleToString(current, 2),
-                                                style = MaterialTheme.typography.titleMedium,
-                                                fontWeight = FontWeight.Bold
+                                                fontWeight = FontWeight.Bold,
+                                                fontSize = 16.sp
                                             )
-
-                                            Button(
+                                            IconButton(
                                                 onClick = {
-                                                    val next = (current + 1.0).coerceAtMost(soldQty)
+                                                    val next =
+                                                        (current + 1.0).coerceAtMost(soldQty)
                                                     qtyByItemCode =
                                                         qtyByItemCode.toMutableMap().apply {
                                                             put(item.itemCode, next)
                                                         }
                                                 },
                                                 enabled = !historyBusy && current < soldQty
-                                            ) { Text("+") }
+                                            ) {
+                                                Icon(Icons.Default.Add, null)
+                                            }
                                         }
                                     }
                                 }
                             }
                         }
-
                         if (!canConfirmReturn()) {
                             Text(
                                 "Debes seleccionar al menos 1 artículo.",
@@ -1767,24 +1808,25 @@ private fun CustomerInvoiceHistorySheet(
                 Button(
                     enabled = !historyBusy && !returnLoading && returnInvoiceLocal != null && canConfirmReturn(),
                     onClick = {
-                    val invoiceId = returnInvoiceId ?: return@Button
-                    onSubmitPartialReturn(
-                        invoiceId,
-                        historyReason.takeIf { it.isNotBlank() },
-                        refundMode?.takeIf { it.isNotBlank() },
-                        refundReference.takeIf { it.isNotBlank() },
-                        qtyByItemCode.filterValues { it > 0.0 }
-                    )
-                    closeReturnDialog()
-                }
-            ) { Text("Confirmar retorno") }
-        },
-        dismissButton = {
-            OutlinedButton(
-                enabled = !historyBusy,
-                onClick = { closeReturnDialog() }
-            ) { Text("Cerrar") }
-        }
+                        val invoiceId = returnInvoiceId ?: return@Button
+                        onSubmitPartialReturn(
+                            invoiceId,
+                            historyReason.takeIf { it.isNotBlank() },
+                            refundMode?.takeIf { it.isNotBlank() },
+                            refundReference.takeIf { it.isNotBlank() },
+                            returnDestination == ReturnDestination.RETURN,
+                            qtyByItemCode.filterValues { it > 0.0 }
+                        )
+                        closeReturnDialog()
+                    }
+                ) { Text("Confirmar retorno") }
+            },
+            dismissButton = {
+                OutlinedButton(
+                    enabled = !historyBusy,
+                    onClick = { closeReturnDialog() }
+                ) { Text("Cerrar") }
+            }
         )
     }
 
@@ -1950,6 +1992,11 @@ fun requiresReference(option: POSPaymentModeOption?): Boolean {
     ) || option?.modeOfPayment?.contains(
         "bank", ignoreCase = true
     ) == true || option?.modeOfPayment?.contains("card", ignoreCase = true) == true
+}
+
+private enum class ReturnDestination(val label: String) {
+    RETURN("Reembolso"),
+    CREDIT("Crédito a favor")
 }
 
 @Composable

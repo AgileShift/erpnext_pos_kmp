@@ -104,12 +104,13 @@ fun rememberCustomerActions(
                 coordinator.performInvoiceHistoryAction(invoiceId, action, reason)
             },
             loadInvoiceLocal = { invoiceId -> coordinator.loadInvoiceLocal(invoiceId) },
-            onInvoicePartialReturn = { invoiceId, reason, refundMode, refundReference, items ->
+            onInvoicePartialReturn = { invoiceId, reason, refundMode, refundReference, applyRefund, items ->
                 coordinator.submitPartialReturn(
                     invoiceId,
                     reason,
                     refundMode,
                     refundReference,
+                    applyRefund,
                     items
                 )
             }

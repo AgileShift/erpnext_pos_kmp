@@ -65,12 +65,14 @@ class CustomerCoordinator(
         reason: String?,
         refundModeOfPayment: String?,
         refundReferenceNo: String?,
+        applyRefund: Boolean,
         itemsToReturnByCode: Map<String, Double>
     ) = viewModel.submitPartialReturn(
         invoiceId,
         reason,
         refundModeOfPayment,
         refundReferenceNo,
+        applyRefund,
         itemsToReturnByCode
     )
 }

@@ -90,6 +90,7 @@ data class CustomerAction(
         reason: String?,
         refundModeOfPayment: String?,
         refundReferenceNo: String?,
+        applyRefund: Boolean,
         itemsToReturnByCode: Map<String, Double>
-    ) -> Unit = { _, _, _, _, _ -> }
+    ) -> Unit = { _, _, _, _, _, _ -> }
 )

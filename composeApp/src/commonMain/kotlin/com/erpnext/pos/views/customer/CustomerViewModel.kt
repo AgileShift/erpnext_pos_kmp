@@ -548,6 +548,7 @@ class CustomerViewModel(
         reason: String?,
         refundModeOfPayment: String?,
         refundReferenceNo: String?,
+        applyRefund: Boolean,
         itemsToReturnByCode: Map<String, Double>
     ) {
         viewModelScope.launch {
@@ -563,7 +564,8 @@ class CustomerViewModel(
                         itemsToReturnByCode = filtered,
                         reason = reason,
                         refundModeOfPayment = refundModeOfPayment,
-                        refundReferenceNo = refundReferenceNo
+                        refundReferenceNo = refundReferenceNo,
+                        applyRefund = applyRefund
                     )
                 )
                 _historyMessage.value = result.creditNoteName?.let {
