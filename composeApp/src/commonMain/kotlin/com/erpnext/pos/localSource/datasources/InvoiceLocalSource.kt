@@ -97,7 +97,8 @@ class InvoiceLocalSource(
 
     override suspend fun countAllPendingSync(): Int = salesInvoiceDao.countAllSyncPending()
 
-    override suspend fun deleteByInvoiceId(name: String) = salesInvoiceDao.deleteByInvoiceId(name)
+    override suspend fun deleteByInvoiceId(name: String) =
+        salesInvoiceDao.deleteInvoiceWithChildren(name)
 
     override suspend fun applyPayments(
         invoice: SalesInvoiceEntity,
@@ -141,6 +142,7 @@ class InvoiceLocalSource(
         remarks: String?,
         posOpeningEntry: String?,
         isReturn: Boolean,
+        isPos: Boolean,
         syncStatus: String,
         modifiedAt: Long
     ) {
@@ -167,6 +169,7 @@ class InvoiceLocalSource(
             remarks = remarks,
             posOpeningEntry = posOpeningEntry,
             isReturn = isReturn,
+            isPos = isPos,
             syncStatus = syncStatus,
             modifiedAt = modifiedAt
         )

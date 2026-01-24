@@ -71,4 +71,10 @@ interface PosProfilePaymentMethodDao {
 
     @Query("DELETE FROM tabPOSProfilePaymentMethod WHERE profile_id = :profileId")
     suspend fun deleteAllForProfile(profileId: String)
+
+    @Query("DELETE FROM tabPOSProfilePaymentMethod WHERE profile_id NOT IN (:profileIds)")
+    suspend fun deleteForProfilesNotIn(profileIds: List<String>)
+
+    @Query("DELETE FROM tabPOSProfilePaymentMethod")
+    suspend fun deleteAllRelations()
 }

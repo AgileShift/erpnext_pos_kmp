@@ -28,4 +28,10 @@ interface ModeOfPaymentDao {
 
     @Query("SELECT MAX(last_synced_at) FROM tabModeOfPayment WHERE company = :company")
     suspend fun getLastSyncedAt(company: String): Long?
+
+    @Query("DELETE FROM tabModeOfPayment WHERE company = :company AND name NOT IN (:names)")
+    suspend fun deleteNotIn(company: String, names: List<String>)
+
+    @Query("DELETE FROM tabModeOfPayment WHERE company = :company")
+    suspend fun deleteAllForCompany(company: String)
 }

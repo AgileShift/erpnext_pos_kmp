@@ -585,7 +585,10 @@ class CustomerViewModel(
     fun performInvoiceHistoryAction(
         invoiceId: String,
         action: InvoiceCancellationAction,
-        reason: String?
+        reason: String?,
+        refundModeOfPayment: String?,
+        refundReferenceNo: String?,
+        applyRefund: Boolean
     ) {
         viewModelScope.launch {
             val isOnline = networkMonitor.isConnected.first()
@@ -600,7 +603,10 @@ class CustomerViewModel(
                     CancelSalesInvoiceInput(
                         invoiceName = invoiceId,
                         action = action,
-                        reason = trimmedReason
+                        reason = trimmedReason,
+                        refundModeOfPayment = refundModeOfPayment,
+                        refundReferenceNo = refundReferenceNo,
+                        applyRefund = applyRefund
                     )
                 )
                 _historyMessage.value = when (action) {

@@ -265,23 +265,6 @@ private fun ReconciliationHeader(
     backLabel: String
 ) {
     if (state !is ReconciliationState.Success) {
-        Surface(shadowElevation = 2.dp) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                IconButton(onClick = onBack) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Default.ArrowBack,
-                        contentDescription = backLabel
-                    )
-                }
-                Text(strings.title, style = MaterialTheme.typography.titleMedium)
-            }
-        }
         return
     }
 
@@ -328,24 +311,6 @@ private fun ReconciliationHeader(
                         "${summary.openingEntryId.ifBlank { summary.posProfile }} • ${summary.periodStart}",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-            Column(horizontalAlignment = Alignment.End) {
-                Text(
-                    summary.cashierName,
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.SemiBold
-                )
-                Surface(
-                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
-                    shape = MaterialTheme.shapes.small
-                ) {
-                    Text(
-                        strings.onlineLabel,
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.primary
                     )
                 }
             }

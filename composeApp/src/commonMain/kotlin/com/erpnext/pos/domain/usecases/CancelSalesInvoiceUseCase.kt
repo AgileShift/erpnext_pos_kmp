@@ -27,7 +27,8 @@ data class CancelSalesInvoiceInput(
     val action: InvoiceCancellationAction = InvoiceCancellationAction.CANCEL,
     val reason: String? = null,
     val refundModeOfPayment: String? = null,
-    val refundReferenceNo: String? = null
+    val refundReferenceNo: String? = null,
+    val applyRefund: Boolean = true
 )
 
 data class CancelSalesInvoiceResult(
@@ -54,7 +55,8 @@ class CancelSalesInvoiceUseCase(
                 reason = input.reason,
                 isOnline = isOnline,
                 refundModeOfPayment = input.refundModeOfPayment,
-                refundReferenceNo = input.refundReferenceNo
+                refundReferenceNo = input.refundReferenceNo,
+                applyRefund = input.applyRefund
             )
         }
     }
@@ -63,6 +65,12 @@ class CancelSalesInvoiceUseCase(
         invoice: SalesInvoiceWithItemsAndPayments,
         isOnline: Boolean
     ): CancelSalesInvoiceResult {
+        val normalizedStatus = invoice.invoice.status.trim().lowercase()
+        val hasPayments = invoice.invoice.paidAmount > 0.0 ||
+                invoice.payments.any { it.amount > 0.0 }
+        if (normalizedStatus == "paid" || normalizedStatus == "partly paid" || hasPayments) {
+            throw IllegalStateException("La factura tiene pagos; usa retorno o reembolso.")
+        }
         val name = invoice.invoice.invoiceName ?: return CancelSalesInvoiceResult()
         invoiceRepository.cancelInvoice(name, isReturn = false)
         if (isOnline) {
@@ -76,7 +84,8 @@ class CancelSalesInvoiceUseCase(
         reason: String?,
         isOnline: Boolean,
         refundModeOfPayment: String?,
-        refundReferenceNo: String?
+        refundReferenceNo: String?,
+        applyRefund: Boolean
     ): CancelSalesInvoiceResult {
         if (!isOnline) {
             throw IllegalStateException("Se requiere conexión a internet para registrar un retorno.")
@@ -90,12 +99,14 @@ class CancelSalesInvoiceUseCase(
             items = entity.items,
             payments = entity.payments
         )
-        createReturnPaymentEntries(
-            invoice = invoice,
-            creditNote = created,
-            refundModeOfPayment = refundModeOfPayment,
-            refundReferenceNo = refundReferenceNo
-        )
+        if (applyRefund) {
+            createReturnPaymentEntries(
+                invoice = invoice,
+                creditNote = created,
+                refundModeOfPayment = refundModeOfPayment,
+                refundReferenceNo = refundReferenceNo
+            )
+        }
         invoiceRepository.refreshInvoiceFromRemote(created.name ?: originalName)
         return CancelSalesInvoiceResult(creditNoteName = created.name, cancelled = true)
     }
@@ -106,6 +117,7 @@ class CancelSalesInvoiceUseCase(
     ): SalesInvoiceDto {
         val parent = invoice.invoice
         val now = Clock.System.now().toEpochMilliseconds()
+        val isPos = parent.isPos
 
         val returnItems = invoice.items.map { item ->
             val dto = item.toDto(parent)
@@ -131,7 +143,6 @@ class CancelSalesInvoiceUseCase(
             items = returnItems,
             payments = emptyList(),
             remarks = reason ?: parent.remarks,
-            isPos = true,
             updateStock = true,
             posProfile = parent.profileId,
             currency = parent.currency,
@@ -141,7 +152,9 @@ class CancelSalesInvoiceUseCase(
             posOpeningEntry = parent.posOpeningEntry,
             debitTo = parent.debitTo,
             docStatus = 0,
-            isReturn = 1
+            isReturn = 1,
+            isPos = isPos,
+            doctype = if (isPos) "POS Invoice" else "Sales Invoice"
         )
     }
 

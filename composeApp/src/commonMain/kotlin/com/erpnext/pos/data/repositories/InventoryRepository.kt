@@ -72,7 +72,11 @@ class InventoryRepository(
                     context.priceList,
                 )
             },
-            saveFetchResult = { localSource.insertAll(it.toEntity()) },
+            saveFetchResult = { remoteItems ->
+                val entities = remoteItems.toEntity()
+                localSource.insertAll(entities)
+                localSource.deleteMissing(entities.map { it.itemCode })
+            },
             onFetchFailed = { RepoTrace.capture("InventoryRepository", "getItems", it) },
             shouldFetch = { localData ->
                 localData.isEmpty() ||
@@ -99,7 +103,11 @@ class InventoryRepository(
                     pageSize
                 )
             },
-            saveFetchResult = { localSource.insertAll(it.toEntity()) },
+            saveFetchResult = { remoteItems ->
+                val entities = remoteItems.toEntity()
+                localSource.insertAll(entities)
+                localSource.deleteMissing(entities.map { it.itemCode })
+            },
             clearLocalData = { localSource.deleteAll() },
             shouldFetch = {
                 val first = localSource.getOldestItem()
@@ -139,9 +147,13 @@ class InventoryRepository(
                 remoteSource.getItems(
                     context.warehouse,
                     context.priceList,
-                ).toBO()
+                )
             },
-            saveFetchResult = { localSource.insertAll(it.toEntity()) },
+            saveFetchResult = { remoteItems ->
+                val entities = remoteItems.toEntity()
+                localSource.insertAll(entities)
+                localSource.deleteMissing(entities.map { it.itemCode })
+            },
             shouldFetch = {
                 true
                 /*val first = localSource.getOldestItem()

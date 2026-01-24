@@ -22,4 +22,7 @@ interface PosProfileLocalDao {
 
     @Query("DELETE FROM tabPosProfileLocal")
     suspend fun deleteAll()
+
+    @Query("DELETE FROM tabPosProfileLocal WHERE profile_name NOT IN (:profileNames)")
+    suspend fun deleteNotIn(profileNames: List<String>)
 }

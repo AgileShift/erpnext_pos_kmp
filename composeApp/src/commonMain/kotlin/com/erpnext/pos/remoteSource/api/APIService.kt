@@ -326,12 +326,20 @@ class APIService(
         return submitDoc(ERPDocType.SalesInvoice.path, name, "submitSalesInvoice")
     }
 
+    suspend fun submitPOSInvoice(name: String): SubmitResponseDto {
+        return submitDoc("POS Invoice", name, "submitPOSInvoice")
+    }
+
     suspend fun submitPaymentEntry(name: String): SubmitResponseDto {
         return submitDoc(ERPDocType.PaymentEntry.path, name, "submitPaymentEntry")
     }
 
     suspend fun cancelSalesInvoice(name: String): SubmitResponseDto {
         return cancelDoc(ERPDocType.SalesInvoice.path, name, "cancelSalesInvoice")
+    }
+
+    suspend fun cancelPOSInvoice(name: String): SubmitResponseDto {
+        return cancelDoc("POS Invoice", name, "cancelPOSInvoice")
     }
 
     private suspend fun submitDoc(
@@ -879,6 +887,16 @@ class APIService(
         return result
     }
 
+    suspend fun createPOSInvoice(data: SalesInvoiceDto): SalesInvoiceDto {
+        val url = authStore.getCurrentSite()
+        val result: SalesInvoiceDto = client.postERP(
+            doctype = "POS Invoice",
+            payload = data,
+            baseUrl = url,
+        )
+        return result
+    }
+
     suspend fun getSalesInvoiceByName(name: String): SalesInvoiceDto {
         val url = authStore.getCurrentSite()
         return client.getERPSingle(
@@ -888,10 +906,26 @@ class APIService(
         )
     }
 
+    suspend fun getPOSInvoiceByName(name: String): SalesInvoiceDto {
+        val url = authStore.getCurrentSite()
+        return client.getERPSingle(
+            doctype = "POS Invoice",
+            name = name,
+            baseUrl = url,
+        )
+    }
+
     suspend fun updateSalesInvoice(name: String, data: SalesInvoiceDto): SalesInvoiceDto {
         val url = authStore.getCurrentSite()
         return client.putERP(
             doctype = ERPDocType.SalesInvoice.path, name = name, payload = data, baseUrl = url
+        )
+    }
+
+    suspend fun updatePOSInvoice(name: String, data: SalesInvoiceDto): SalesInvoiceDto {
+        val url = authStore.getCurrentSite()
+        return client.putERP(
+            doctype = "POS Invoice", name = name, payload = data, baseUrl = url
         )
     }
     //endregion

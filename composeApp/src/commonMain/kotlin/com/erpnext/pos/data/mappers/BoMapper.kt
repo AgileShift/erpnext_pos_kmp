@@ -290,7 +290,7 @@ fun SalesInvoiceEntity.toBO(): SalesInvoiceBO {
         netTotal = this.netTotal,
         dueDate = this.dueDate,
         outstandingAmount = this.outstandingAmount,
-        isPos = false,
+        isPos = this.isPos,
         total = this.grandTotal,
         customerId = this.customer,
         postingDate = this.postingDate,

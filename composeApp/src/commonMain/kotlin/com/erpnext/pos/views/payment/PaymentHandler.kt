@@ -107,6 +107,8 @@ class PaymentHandler(
             )
         }
 
+        val isPosInvoice =
+            createdInvoice?.doctype?.equals("POS Invoice", ignoreCase = true) == true
         val currencySpecs = buildCurrencySpecs()
         var resolvedReceivableCurrency = normalizeCurrency(createdInvoice?.partyAccountCurrency)
             ?: normalizeCurrency(context.partyAccountCurrency)
@@ -167,7 +169,7 @@ class PaymentHandler(
 
         val isOnline = networkMonitor.isConnected.first()
 
-        if (createdInvoice != null && isOnline) {
+        if (createdInvoice != null && isOnline && !isPosInvoice) {
             val resolvedInvoice = if (createdInvoice.debitTo.isNullOrBlank() &&
                 !createdInvoice.name.isNullOrBlank()
             ) {
@@ -290,6 +292,8 @@ class PaymentHandler(
             if (!remotePaymentFailed) {
                 remotePaymentsSucceeded = true
             }
+        } else if (createdInvoice != null && isPosInvoice) {
+            remotePaymentsSucceeded = true
         }
 
         val localOutstandingStart = receivableAmounts?.outstandingRc

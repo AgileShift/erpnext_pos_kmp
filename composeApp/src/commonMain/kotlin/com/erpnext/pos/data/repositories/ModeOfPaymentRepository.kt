@@ -58,7 +58,10 @@ class ModeOfPaymentRepository(
                 }
                 results
             },
-            saveFetchResult = { localSource.insertAllModes(it) },
+            saveFetchResult = { results ->
+                localSource.insertAllModes(results)
+                localSource.deleteMissing(company, results.map { it.name })
+            },
             shouldFetch = { cached ->
                 cached.isEmpty() ||
                     SyncTTL.isExpired(localSource.getLastSyncedAt(company), ttlHours)

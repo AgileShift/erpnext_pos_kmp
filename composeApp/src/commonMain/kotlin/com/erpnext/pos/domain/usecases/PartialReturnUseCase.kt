@@ -128,6 +128,7 @@ class PartialReturnUseCase(
     ): SalesInvoiceDto {
         val parent = invoice.invoice
         val now = Clock.System.now()
+        val isPos = parent.isPos
         val totalAmount = items.sumOf { -it.amount }
         return SalesInvoiceDto(
             customer = parent.customer,
@@ -145,7 +146,6 @@ class PartialReturnUseCase(
             items = items,
             payments = emptyList(),
             remarks = reason ?: parent.remarks,
-            isPos = true,
             updateStock = true,
             posProfile = parent.profileId,
             currency = parent.currency,
@@ -155,7 +155,9 @@ class PartialReturnUseCase(
             posOpeningEntry = parent.posOpeningEntry,
             debitTo = parent.debitTo,
             docStatus = 0,
-            isReturn = 1
+            isReturn = 1,
+            isPos = isPos,
+            doctype = if (isPos) "POS Invoice" else "Sales Invoice"
         )
     }
 

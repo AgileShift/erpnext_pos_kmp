@@ -556,11 +556,38 @@ interface SalesInvoiceDao {
     )
     suspend fun getOutstandingInvoiceNamesForProfile(profileId: String): List<String>
 
+    @Query(
+        """
+        SELECT invoice_name
+        FROM tabSalesInvoice
+        WHERE outstanding_amount > 0
+          AND docstatus != 2
+          AND is_return = 0
+          AND invoice_name IS NOT NULL
+          AND invoice_name NOT LIKE 'LOCAL-%'
+        """
+    )
+    suspend fun getOutstandingInvoiceNames(): List<String>
+
     @Query("DELETE FROM tabSalesInvoice WHERE invoice_name =:invoiceId")
     suspend fun deleteByInvoiceId(invoiceId: String)
 
     @Query("DELETE FROM tabSalesInvoice")
     suspend fun deleteAll()
+
+    @Transaction
+    suspend fun deleteInvoiceWithChildren(invoiceId: String) {
+        deleteItemsForInvoice(invoiceId)
+        deletePaymentsForInvoice(invoiceId)
+        deleteByInvoiceId(invoiceId)
+    }
+
+    @Transaction
+    suspend fun deleteAllWithChildren() {
+        deleteAllItems()
+        deleteAllPayments()
+        deleteAll()
+    }
 
     @Query(
         """
@@ -586,6 +613,7 @@ interface SalesInvoiceDao {
             remarks = :remarks,
             pos_opening_entry = :posOpeningEntry,
             is_return = :isReturn,
+            is_pos = :isPos,
             sync_status = :syncStatus,
             modified_at = :modifiedAt
         WHERE invoice_name = :oldName
@@ -614,12 +642,25 @@ interface SalesInvoiceDao {
         remarks: String?,
         posOpeningEntry: String?,
         isReturn: Boolean,
+        isPos: Boolean,
         syncStatus: String,
         modifiedAt: Long
     )
 
     @Query("SELECT * FROM tabSalesInvoice ORDER BY last_synced_at ASC LIMIT 1")
     suspend fun getOldestItem(): SalesInvoiceEntity?
+
+    @Query("DELETE FROM tabSalesInvoiceItem WHERE parent_invoice = :invoiceId")
+    suspend fun deleteItemsForInvoice(invoiceId: String)
+
+    @Query("DELETE FROM tabSalesInvoicePayment WHERE parent_invoice = :invoiceId")
+    suspend fun deletePaymentsForInvoice(invoiceId: String)
+
+    @Query("DELETE FROM tabSalesInvoiceItem")
+    suspend fun deleteAllItems()
+
+    @Query("DELETE FROM tabSalesInvoicePayment")
+    suspend fun deleteAllPayments()
 }
 
 data class DailySalesTotal(

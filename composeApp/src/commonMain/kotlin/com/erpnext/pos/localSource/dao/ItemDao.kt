@@ -48,4 +48,7 @@ interface ItemDao {
 
     @Query("SELECT * FROM tabItem ORDER BY last_synced_at ASC LIMIT 1")
     suspend fun getOldestItem(): ItemEntity?
+
+    @Query("DELETE FROM tabItem WHERE itemCode NOT IN (:itemCodes)")
+    suspend fun deleteNotIn(itemCodes: List<String>)
 }

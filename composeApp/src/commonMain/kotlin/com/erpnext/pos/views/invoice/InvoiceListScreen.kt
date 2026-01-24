@@ -265,10 +265,12 @@ fun InvoiceListScreen(action: InvoiceAction) {
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                 Text("Total: ${invoice.total}", fontWeight = FontWeight.Medium)
                 Spacer(Modifier.width(8.dp))
-                val normalizedStatus = invoice.status?.lowercase()
-                val canCancel =
-                    normalizedStatus == "unpaid" || normalizedStatus == "partly paid"
-                val canReturn = normalizedStatus == "paid"
+                val normalizedStatus = invoice.status?.trim()?.lowercase()
+                val hasPayments = invoice.paidAmount > 0.0 || invoice.payments.any { it.amount > 0.0 }
+                val isDraftOrUnpaid = normalizedStatus == "draft" || normalizedStatus == "unpaid"
+                val isPaidOrPartly = normalizedStatus == "paid" || normalizedStatus == "partly paid"
+                val canCancel = isDraftOrUnpaid && !hasPayments
+                val canReturn = isPaidOrPartly || hasPayments
                 if (canCancel || canReturn) {
                     val actionType =
                         if (canReturn) InvoiceCancellationAction.RETURN else InvoiceCancellationAction.CANCEL

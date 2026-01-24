@@ -700,228 +700,233 @@ class BillingViewModel(
 
 
     fun onFinalizeSale() {
-        val current = requireSuccessState() ?: return
-        val validationError = validateFinalizeSale(current)
-        if (validationError != null) {
-            _state.update { BillingState.Error(validationError, current) }
-            return
-        }
-        setFinalizingSale(true)
-
-        val customer = current.selectedCustomer ?: error("Debes seleccionar un cliente.")
-        val context = contextProvider.getContext() ?: error("El contexto POS no está inicializado.")
-
-        executeUseCase(action = {
-            val rawTotals = calculateTotals(current)
-            val totals = rawTotals.copy(
-                subtotal = roundToCurrency(rawTotals.subtotal),
-                taxes = roundToCurrency(rawTotals.taxes),
-                discount = roundToCurrency(rawTotals.discount),
-                shipping = roundToCurrency(rawTotals.shipping),
-                total = roundToCurrency(rawTotals.total)
-            )
-            val discountInfo = resolveDiscountInfo(current, totals.subtotal)
-            val discountPercent = discountInfo.percent?.takeIf { it > 0.0 }
-
-            val isCreditSale = current.isCreditSale
-            val paymentLines = current.paymentLines
-            val baseCurrency = context.currency.ifBlank { current.currency ?: "USD" }
-
-            val postingDate = DateTimeProvider.todayDate()
-            val dueDate = resolveDueDate(isCreditSale, postingDate, current.selectedPaymentTerm)
-            val paymentSchedule =
-                buildPaymentSchedule(isCreditSale, current.selectedPaymentTerm, dueDate)
-
-            val paymentStatus = resolvePaymentStatus(
-                total = totals.total,
-                paymentLines = paymentLines,
-                round = ::roundToCurrency
-            )
-
-            val invoiceCurrency = normalizeCurrency(baseCurrency)
-            val receivableCurrency = normalizeCurrency(context.partyAccountCurrency)
-            val conversionRate = resolveInvoiceConversionRate(
-                invoiceCurrency = invoiceCurrency,
-                receivableCurrency = receivableCurrency,
-                context = context
-            )
-
-            val activeCashbox = runCatching {
-                contextProvider.getActiveCashboxWithDetails()?.cashbox
-            }.getOrNull()
-            val openingEntryId = activeCashbox?.openingEntryId
-
-            val invoiceDto = buildSalesInvoiceDto(
-                current = current,
-                customer = customer,
-                context = context,
-                totals = totals,
-                discountPercent = discountPercent,
-                discountAmount = discountInfo.amount,
-                paidAmount = paymentStatus.paidAmount,
-                outstandingAmount = paymentStatus.outstandingAmount,
-                status = paymentStatus.status,
-                paymentSchedule = paymentSchedule,
-                paymentLines = paymentLines,
-                baseCurrency = baseCurrency,
-                conversionRate = conversionRate,
-                postingDate = postingDate,
-                dueDate = dueDate
-            )
-
-            val localInvoiceName = "LOCAL-${UUIDGenerator().newId()}"
-            createSalesInvoiceLocalUseCase(
-                CreateSalesInvoiceLocalInput(
-                    localInvoiceName = localInvoiceName,
-                    invoice = invoiceDto
-                )
-            )
-
-            val createdResult = runCatching {
-                createSalesInvoiceRemoteOnlyUseCase(
-                    CreateSalesInvoiceRemoteOnlyInput(invoiceDto.copy(name = null))
-                )
+        viewModelScope.launch {
+            val current = requireSuccessState() ?: return@launch
+            val validationError = validateFinalizeSale(current)
+            if (validationError != null) {
+                _state.update { BillingState.Error(validationError, current) }
+                return@launch
             }
-            val created = createdResult.getOrNull()
-            val remoteErrorMessage = createdResult.exceptionOrNull()
-                ?.toUserMessage("No se pudo sincronizar la factura.")
+            setFinalizingSale(true)
 
-            var invoiceNameForLocal = localInvoiceName
-            if (created?.name != null) {
-                val updateResult = runCatching {
-                    updateLocalInvoiceFromRemoteUseCase(
-                        UpdateLocalInvoiceFromRemoteInput(
-                            localInvoiceName = localInvoiceName,
-                            remoteInvoice = created
+            val customer = current.selectedCustomer ?: error("Debes seleccionar un cliente.")
+            val context =
+                contextProvider.getContext() ?: error("El contexto POS no está inicializado.")
+
+            executeUseCase(action = {
+                val rawTotals = calculateTotals(current)
+                val totals = rawTotals.copy(
+                    subtotal = roundToCurrency(rawTotals.subtotal),
+                    taxes = roundToCurrency(rawTotals.taxes),
+                    discount = roundToCurrency(rawTotals.discount),
+                    shipping = roundToCurrency(rawTotals.shipping),
+                    total = roundToCurrency(rawTotals.total)
+                )
+                val discountInfo = resolveDiscountInfo(current, totals.subtotal)
+                val discountPercent = discountInfo.percent?.takeIf { it > 0.0 }
+
+                val isCreditSale = current.isCreditSale
+                val paymentLines = current.paymentLines
+                val baseCurrency = context.currency.ifBlank { current.currency ?: "USD" }
+
+                val postingDate = DateTimeProvider.todayDate()
+                val dueDate = resolveDueDate(isCreditSale, postingDate, current.selectedPaymentTerm)
+                val paymentSchedule =
+                    buildPaymentSchedule(isCreditSale, current.selectedPaymentTerm, dueDate)
+
+                val paymentStatus = resolvePaymentStatus(
+                    total = totals.total,
+                    paymentLines = paymentLines,
+                    round = ::roundToCurrency
+                )
+                val usePosInvoice = !isCreditSale && paymentStatus.outstandingAmount <= 0.0
+
+                val invoiceCurrency = normalizeCurrency(baseCurrency)
+                val receivableCurrency = normalizeCurrency(context.partyAccountCurrency)
+                val conversionRate = resolveInvoiceConversionRate(
+                    invoiceCurrency = invoiceCurrency,
+                    receivableCurrency = receivableCurrency,
+                    context = context
+                )
+
+                val activeCashbox = runCatching {
+                    contextProvider.getActiveCashboxWithDetails()?.cashbox
+                }.getOrNull()
+                val openingEntryId = activeCashbox?.openingEntryId
+
+                val invoiceDto = buildSalesInvoiceDto(
+                    current = current,
+                    customer = customer,
+                    context = context,
+                    totals = totals,
+                    discountPercent = discountPercent,
+                    discountAmount = discountInfo.amount,
+                    paymentSchedule = paymentSchedule,
+                    paymentLines = paymentLines,
+                    baseCurrency = baseCurrency,
+                    conversionRate = conversionRate,
+                    postingDate = postingDate,
+                    dueDate = dueDate,
+                    usePosInvoice = usePosInvoice
+                )
+
+                val localInvoiceName = "LOCAL-${UUIDGenerator().newId()}"
+                createSalesInvoiceLocalUseCase(
+                    CreateSalesInvoiceLocalInput(
+                        localInvoiceName = localInvoiceName,
+                        invoice = invoiceDto
+                    )
+                )
+
+                val createdResult = runCatching {
+                    createSalesInvoiceRemoteOnlyUseCase(
+                        CreateSalesInvoiceRemoteOnlyInput(invoiceDto.copy(name = null))
+                    )
+                }
+                val created = createdResult.getOrNull()
+                val remoteErrorMessage = createdResult.exceptionOrNull()
+                    ?.toUserMessage("No se pudo sincronizar la factura.")
+
+                var invoiceNameForLocal = localInvoiceName
+                if (created?.name != null) {
+                    val updateResult = runCatching {
+                        updateLocalInvoiceFromRemoteUseCase(
+                            UpdateLocalInvoiceFromRemoteInput(
+                                localInvoiceName = localInvoiceName,
+                                remoteInvoice = created
+                            )
+                        )
+                    }
+                    if (updateResult.isSuccess) {
+                        invoiceNameForLocal = created.name
+                    }
+                }
+
+                val paymentResult = paymentHandler.registerPayments(
+                    paymentLines = paymentLines,
+                    createdInvoice = created,
+                    invoiceNameForLocal = invoiceNameForLocal,
+                    postingDate = postingDate,
+                    context = context,
+                    customer = customer,
+                    exchangeRateByCurrency = current.exchangeRateByCurrency,
+                    paymentModeDetails = paymentModeDetails,
+                    baseAmountCurrency = baseCurrency,
+                    posOpeningEntry = openingEntryId
+                )
+                invoiceNameForLocal = paymentResult.invoiceNameForLocal
+                val remotePaymentsSucceeded = paymentResult.remotePaymentsSucceeded
+                if (remotePaymentsSucceeded) {
+                    runCatching {
+                        markSalesInvoiceSyncedUseCase(invoiceNameForLocal)
+                    }
+                }
+
+                runCatching {
+                    adjustLocalInventoryUseCase(
+                        AdjustLocalInventoryInput(
+                            warehouse = context.warehouse ?: "",
+                            deltas = current.cartItems.map {
+                                StockDelta(
+                                    itemCode = it.itemCode,
+                                    qty = it.quantity
+                                )
+                            }
                         )
                     )
+                }.onFailure {
+                    _state.update { st ->
+                        val s = st as? BillingState.Success ?: return@update st
+                        s.copy(
+                            successMessage = "Factura ${(created?.name ?: localInvoiceName)} creada, pero fallo la actualizacion de inventario local. Reintenta sincronizacion/recarga."
+                        )
+                    }
                 }
-                if (updateResult.isSuccess) {
-                    invoiceNameForLocal = created.name
-                }
-            }
 
-            val paymentResult = paymentHandler.registerPayments(
-                paymentLines = paymentLines,
-                createdInvoice = created,
-                invoiceNameForLocal = invoiceNameForLocal,
-                postingDate = postingDate,
-                context = context,
-                customer = customer,
-                exchangeRateByCurrency = current.exchangeRateByCurrency,
-                paymentModeDetails = paymentModeDetails,
-                baseAmountCurrency = baseCurrency,
-                posOpeningEntry = openingEntryId
-            )
-            invoiceNameForLocal = paymentResult.invoiceNameForLocal
-            val remotePaymentsSucceeded = paymentResult.remotePaymentsSucceeded
-            if (remotePaymentsSucceeded) {
-                runCatching {
-                    markSalesInvoiceSyncedUseCase(invoiceNameForLocal)
-                }
-            }
+                val soldByCode = current.cartItems
+                    .groupBy { it.itemCode }
+                    .mapValues { (_, list) -> list.sumOf { it.quantity } }
 
-            runCatching {
-                adjustLocalInventoryUseCase(
-                    AdjustLocalInventoryInput(
-                        warehouse = context.warehouse ?: "",
-                        deltas = current.cartItems.map {
-                            StockDelta(
-                                itemCode = it.itemCode,
-                                qty = it.quantity
-                            )
-                        }
-                    )
-                )
-            }.onFailure {
-                _state.update { st ->
-                    val s = st as? BillingState.Success ?: return@update st
-                    s.copy(
-                        successMessage = "Factura ${(created?.name ?: localInvoiceName)} creada, pero fallo la actualizacion de inventario local. Reintenta sincronizacion/recarga."
+                products = products.map { p ->
+                    val sold = soldByCode[p.itemCode] ?: 0.0
+                    if (sold <= 0.0) p
+                    else p.copy(actualQty = (p.actualQty - sold).coerceAtLeast(0.0))
+                }.filter { it.price > 0.0 && it.actualQty > 0.0 }
+
+                val q = current.productSearchQuery
+                val refreshedResults = if (q.isBlank()) products else products.filter {
+                    it.name.contains(q, ignoreCase = true) || it.itemCode.contains(
+                        q,
+                        ignoreCase = true
                     )
                 }
-            }
 
-            val soldByCode = current.cartItems
-                .groupBy { it.itemCode }
-                .mapValues { (_, list) -> list.sumOf { it.quantity } }
-
-            products = products.map { p ->
-                val sold = soldByCode[p.itemCode] ?: 0.0
-                if (sold <= 0.0) p
-                else p.copy(actualQty = (p.actualQty - sold).coerceAtLeast(0.0))
-            }.filter { it.price > 0.0 && it.actualQty > 0.0 }
-
-            val q = current.productSearchQuery
-            val refreshedResults = if (q.isBlank()) products else products.filter {
-                it.name.contains(q, ignoreCase = true) || it.itemCode.contains(q, ignoreCase = true)
-            }
-
-            _state.update {
-                current.copy(
-                    selectedCustomer = null,
-                    cartItems = emptyList(),
-                    subtotal = 0.0,
-                    taxes = 0.0,
-                    discount = 0.0,
-                    discountCode = "",
-                    manualDiscountAmount = 0.0,
-                    manualDiscountPercent = 0.0,
-                    shippingAmount = 0.0,
-                    selectedDeliveryCharge = null,
-                    total = 0.0,
-                    isCreditSale = false,
-                    selectedPaymentTerm = null,
-                    customerSearchQuery = "",
-                    productSearchQuery = "",
-                    customers = customers,
-                    productSearchResults = refreshedResults,
-                    paymentLines = emptyList(),
-                    paidAmountBase = 0.0,
-                    balanceDueBase = 0.0,
-                    changeDueBase = 0.0,
-                    paymentErrorMessage = null,
-                    cartErrorMessage = null,
-                    successMessage = when {
-                        created == null -> {
-                            if (remoteErrorMessage.isNullOrBlank()) {
-                                "Factura $localInvoiceName guardada localmente (pendiente de sincronizacion)."
-                            } else {
-                                "Factura $localInvoiceName guardada localmente (pendiente de sincronizacion). $remoteErrorMessage"
+                _state.update {
+                    current.copy(
+                        selectedCustomer = null,
+                        cartItems = emptyList(),
+                        subtotal = 0.0,
+                        taxes = 0.0,
+                        discount = 0.0,
+                        discountCode = "",
+                        manualDiscountAmount = 0.0,
+                        manualDiscountPercent = 0.0,
+                        shippingAmount = 0.0,
+                        selectedDeliveryCharge = null,
+                        total = 0.0,
+                        isCreditSale = false,
+                        selectedPaymentTerm = null,
+                        customerSearchQuery = "",
+                        productSearchQuery = "",
+                        customers = customers,
+                        productSearchResults = refreshedResults,
+                        paymentLines = emptyList(),
+                        paidAmountBase = 0.0,
+                        balanceDueBase = 0.0,
+                        changeDueBase = 0.0,
+                        paymentErrorMessage = null,
+                        cartErrorMessage = null,
+                        successMessage = when {
+                            created == null -> {
+                                if (remoteErrorMessage.isNullOrBlank()) {
+                                    "Factura $localInvoiceName guardada localmente (pendiente de sincronizacion)."
+                                } else {
+                                    "Factura $localInvoiceName guardada localmente (pendiente de sincronizacion). $remoteErrorMessage"
+                                }
                             }
-                        }
 
-                        paymentLines.isNotEmpty() -> {
-                            val label = created.name ?: localInvoiceName
-                            "Factura $label creada. Pagos guardados localmente."
-                        }
+                            paymentLines.isNotEmpty() -> {
+                                val label = created.name ?: localInvoiceName
+                                "Factura $label creada. Pagos guardados localmente."
+                            }
 
-                        else -> {
-                            val label = created.name ?: localInvoiceName
-                            "Factura $label creada correctamente."
-                        }
-                    },
-                    successDialogMessage = when {
-                        created == null -> "Venta guardada localmente."
-                        paymentLines.isNotEmpty() -> "Tu pago se ha realizado con exito"
-                        current.isCreditSale -> "Venta a credito registrada"
-                        else -> "Venta registrada correctamente"
-                    },
-                    successDialogInvoice = created?.name ?: localInvoiceName,
-                    sourceDocument = null,
-                    isSourceDocumentApplied = false
-                )
-            }
-        }, exceptionHandler = { e ->
-            // En modo prueba necesitamos mensajes útiles: agregamos contexto del flujo.
-            _state.update { currentState ->
-                val previous = currentState as? BillingState.Success
-                val errorMessage = buildFinalizeErrorMessage(previous, e)
-                BillingState.Error(errorMessage, previous)
-            }
-        }, finallyHandler = {
-            setFinalizingSale(false)
-        })
+                            else -> {
+                                val label = created.name ?: localInvoiceName
+                                "Factura $label creada correctamente."
+                            }
+                        },
+                        successDialogMessage = when {
+                            created == null -> "Venta guardada localmente."
+                            paymentLines.isNotEmpty() -> "Tu pago se ha realizado con exito"
+                            current.isCreditSale -> "Venta a credito registrada"
+                            else -> "Venta registrada correctamente"
+                        },
+                        successDialogInvoice = created?.name ?: localInvoiceName,
+                        sourceDocument = null,
+                        isSourceDocumentApplied = false
+                    )
+                }
+            }, exceptionHandler = { e ->
+                // En modo prueba necesitamos mensajes útiles: agregamos contexto del flujo.
+                _state.update { currentState ->
+                    val previous = currentState as? BillingState.Success
+                    val errorMessage = buildFinalizeErrorMessage(previous, e)
+                    BillingState.Error(errorMessage, previous)
+                }
+            }, finallyHandler = {
+                setFinalizingSale(false)
+            })
+        }
     }
 
     private fun setFinalizingSale(active: Boolean) {
@@ -1093,36 +1098,36 @@ class BillingViewModel(
         totals: BillingTotals,
         discountPercent: Double?,
         discountAmount: Double,
-        paidAmount: Double,
-        outstandingAmount: Double,
-        status: String,
         paymentSchedule: List<SalesInvoicePaymentScheduleDto>,
         paymentLines: List<PaymentLine>,
         baseCurrency: String,
         conversionRate: Double?,
         postingDate: String,
-        dueDate: String
+        dueDate: String,
+        usePosInvoice: Boolean
     ): SalesInvoiceDto {
         val items = buildInvoiceItems(current, context, discountPercent, discountAmount)
         val paymentMetadata =
             buildInvoiceRemarks(current, paymentLines, totals.shipping, baseCurrency)
 
-        val paymentMode = paymentLines.firstOrNull()?.modeOfPayment
-            ?: current.selectedPaymentTerm?.modeOfPayment
-            ?: current.paymentModes.firstOrNull()?.modeOfPayment
-            ?: error("No hay modo de pago disponible para crear la factura.")
-
-        // Para POS ERPNext exige al menos un modo de pago en la factura (aunque sea 0.0).
-        // Los montos reales se registran por Payment Entry.
-        val account = paymentModeDetails[paymentMode]?.account
-        val payments = listOf(
-            SalesInvoicePaymentDto(
-                modeOfPayment = paymentMode,
-                amount = 0.0,
-                account = account
-            )
-        )
-        val resolvedStatus = "Unpaid"
+        val payments = if (usePosInvoice) {
+            val paymentMode = paymentLines.firstOrNull()?.modeOfPayment
+                ?: current.paymentModes.firstOrNull()?.modeOfPayment
+                ?: error("No hay modo de pago disponible para crear la factura POS.")
+            paymentLines.map { line ->
+                SalesInvoicePaymentDto(
+                    modeOfPayment = line.modeOfPayment.ifBlank { paymentMode },
+                    amount = line.baseAmount,
+                    paymentReference = line.referenceNumber,
+                    account = paymentModeDetails[line.modeOfPayment]?.account
+                )
+            }
+        } else {
+            emptyList()
+        }
+        val resolvedStatus = if (usePosInvoice) "Paid" else "Unpaid"
+        val resolvedPaid = if (usePosInvoice) totals.total else 0.0
+        val resolvedOutstanding = if (usePosInvoice) 0.0 else totals.total
 
         return SalesInvoiceDto(
             customer = customer.name,
@@ -1136,10 +1141,10 @@ class BillingViewModel(
             dueDate = dueDate,
             status = resolvedStatus,
             grandTotal = totals.total,
-            outstandingAmount = totals.total,
+            outstandingAmount = resolvedOutstanding,
             totalTaxesAndCharges = totals.taxes,
             netTotal = totals.total,
-            paidAmount = 0.0,
+            paidAmount = resolvedPaid,
             items = items,
             payments = payments,
             paymentSchedule = paymentSchedule,
@@ -1148,7 +1153,9 @@ class BillingViewModel(
             remarks = paymentMetadata,
             customExchangeRate = conversionRate?.takeIf { it > 0.0 },
             updateStock = true,
-            docStatus = 0
+            docStatus = 0,
+            isPos = usePosInvoice,
+            doctype = if (usePosInvoice) "POS Invoice" else "Sales Invoice"
         )
     }
 
@@ -1292,7 +1299,16 @@ class BillingViewModel(
         return map
     }*/
 
-    private fun validateFinalizeSale(current: BillingState.Success): String? {
+    private suspend fun validateFinalizeSale(current: BillingState.Success): String? {
+        val posContext = runCatching { contextProvider.requireContext() }.getOrNull()
+            ?: return "No hay contexto POS activo."
+        if (posContext.profileName.isBlank()) {
+            return "No hay POS Profile activo."
+        }
+        val openingEntryId = contextProvider.getActiveCashboxWithDetails()?.cashbox?.openingEntryId
+        if (openingEntryId.isNullOrBlank()) {
+            return "No hay apertura de caja activa."
+        }
         if (current.selectedCustomer == null) return "Selecciona un cliente antes de finalizar la venta."
         if (current.cartItems.isEmpty()) return "Agrega al menos un artículo al carrito."
         /*if (!current.isCreditSale && current.paidAmountBase < current.total) {

@@ -69,8 +69,11 @@ data class CustomerAction(
     val onInvoiceHistoryAction: (
         invoiceId: String,
         action: InvoiceCancellationAction,
-        reason: String?
-    ) -> Unit = { _, _, _ -> },
+        reason: String?,
+        refundModeOfPayment: String?,
+        refundReferenceNo: String?,
+        applyRefund: Boolean
+    ) -> Unit = { _, _, _, _, _, _ -> },
 
     val registerPayment: (
         customerId: String,

@@ -47,4 +47,8 @@ class CustomerRemoteSource(
     ): List<SalesInvoiceDto> {
         return api.fetchCustomerInvoicesForPeriod(customerId, startDate, endDate)
     }
+
+    suspend fun fetchInvoiceByName(invoiceName: String): SalesInvoiceDto? {
+        return runCatching { api.getSalesInvoiceByName(invoiceName) }.getOrNull()
+    }
 }

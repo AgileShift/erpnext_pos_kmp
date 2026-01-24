@@ -79,6 +79,11 @@ class LegacyPushSyncManager(
             val invoiceName = invoice.invoiceName ?: return@forEach
             if (invoiceName.startsWith("LOCAL-", ignoreCase = true)) return@forEach
             if (!invoice.syncStatus.equals("Synced", ignoreCase = true)) return@forEach
+            if (invoice.isPos) {
+                invoiceLocalSource.updatePaymentSyncStatus(payment.id, "Synced", now)
+                hasChanges = true
+                return@forEach
+            }
 
             val paidFrom = invoice.debitTo?.takeIf { it.isNotBlank() } ?: return@forEach
             val receivableCurrency = normalizeCurrency(invoice.partyAccountCurrency)

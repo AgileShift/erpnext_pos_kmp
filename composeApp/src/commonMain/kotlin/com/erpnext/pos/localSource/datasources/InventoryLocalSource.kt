@@ -22,6 +22,7 @@ interface IInventoryLocalSource {
     suspend fun count(): Int
     suspend fun deleteAll()
     suspend fun decrementStock(warehouse: String, deltas: List<StockDelta>)
+    suspend fun deleteMissing(itemCodes: List<String>)
 }
 
 class InventoryLocalSource(
@@ -62,6 +63,14 @@ class InventoryLocalSource(
         dao.getAllFiltered(search)
 
     override suspend fun deleteAll() = dao.deleteAll()
+
+    override suspend fun deleteMissing(itemCodes: List<String>) {
+        if (itemCodes.isEmpty()) {
+            dao.deleteAll()
+        } else {
+            dao.deleteNotIn(itemCodes)
+        }
+    }
 
     override suspend fun deleteAllCategories() = categoryDao.deleteAll()
     override suspend fun insertCategories(data: List<CategoryEntity>) = categoryDao.insertAll(data)

@@ -19,6 +19,10 @@ interface ICustomerLocalSource {
     suspend fun saveInvoices(invoices: List<SalesInvoiceWithItemsAndPayments>)
     suspend fun refreshCustomerSummary(customerId: String)
     suspend fun getOutstandingInvoicesForCustomer(customerName: String): List<SalesInvoiceWithItemsAndPayments>
+    suspend fun getOutstandingInvoiceNamesForProfile(profileId: String): List<String>
+    suspend fun getOutstandingInvoiceNames(): List<String>
+    suspend fun getInvoiceByName(invoiceName: String): SalesInvoiceWithItemsAndPayments?
+    suspend fun deleteInvoiceById(invoiceName: String)
     suspend fun updateSummary(
         customerId: String,
         totalPendingAmount: Double,
@@ -27,6 +31,7 @@ interface ICustomerLocalSource {
         availableCredit: Double?,
         state: String
     )
+    suspend fun deleteMissing(customerIds: List<String>)
 }
 
 class CustomerLocalSource(private val dao: CustomerDao, private val invoiceDao: SalesInvoiceDao) :
@@ -69,6 +74,26 @@ class CustomerLocalSource(private val dao: CustomerDao, private val invoiceDao: 
         return invoiceDao.getOutstandingInvoicesForCustomer(customerName)
     }
 
+    override suspend fun getOutstandingInvoiceNamesForProfile(
+        profileId: String
+    ): List<String> {
+        return invoiceDao.getOutstandingInvoiceNamesForProfile(profileId)
+    }
+
+    override suspend fun getOutstandingInvoiceNames(): List<String> {
+        return invoiceDao.getOutstandingInvoiceNames()
+    }
+
+    override suspend fun getInvoiceByName(
+        invoiceName: String
+    ): SalesInvoiceWithItemsAndPayments? {
+        return invoiceDao.getInvoiceByName(invoiceName)
+    }
+
+    override suspend fun deleteInvoiceById(invoiceName: String) {
+        invoiceDao.deleteByInvoiceId(invoiceName)
+    }
+
     override suspend fun updateSummary(
         customerId: String,
         totalPendingAmount: Double,
@@ -85,5 +110,13 @@ class CustomerLocalSource(private val dao: CustomerDao, private val invoiceDao: 
             availableCredit = availableCredit,
             state = state
         )
+    }
+
+    override suspend fun deleteMissing(customerIds: List<String>) {
+        if (customerIds.isEmpty()) {
+            dao.deleteAll()
+        } else {
+            dao.deleteNotIn(customerIds)
+        }
     }
 }

@@ -1,6 +1,7 @@
 package com.erpnext.pos.remoteSource.dto
 
 import kotlinx.serialization.EncodeDefault
+import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
@@ -20,6 +21,7 @@ enum class DocStatus(status: String) {
 @Serializable
 data class SalesInvoiceCreatedDto(@SerialName("name") val name: String)
 
+@OptIn(ExperimentalSerializationApi::class)
 @Serializable
 data class SalesInvoiceDto(
     val name: String? = null,

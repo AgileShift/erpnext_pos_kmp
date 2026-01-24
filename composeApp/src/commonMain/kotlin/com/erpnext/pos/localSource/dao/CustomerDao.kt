@@ -58,6 +58,12 @@ interface CustomerDao {
     @Query("SELECT * FROM customers ORDER BY last_synced_at ASC LIMIT 1")
     suspend fun getOldestCustomer(): CustomerEntity?
 
+    @Query("DELETE FROM customers WHERE id NOT IN (:ids)")
+    suspend fun deleteNotIn(ids: List<String>)
+
+    @Query("DELETE FROM customers")
+    suspend fun deleteAll()
+
     @Transaction
     @Query(
         """

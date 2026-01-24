@@ -30,4 +30,7 @@ interface POSProfileDao {
 
     @Query("DELETE FROM tabposprofile")
     suspend fun deleteAll()
+
+    @Query("DELETE FROM tabPosProfile WHERE profile_name NOT IN (:profileNames)")
+    suspend fun deleteNotIn(profileNames: List<String>)
 }

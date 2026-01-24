@@ -54,8 +54,18 @@ class CustomerCoordinator(
     fun performInvoiceHistoryAction(
         invoiceId: String,
         action: InvoiceCancellationAction,
-        reason: String?
-    ) = viewModel.performInvoiceHistoryAction(invoiceId, action, reason)
+        reason: String?,
+        refundModeOfPayment: String?,
+        refundReferenceNo: String?,
+        applyRefund: Boolean
+    ) = viewModel.performInvoiceHistoryAction(
+        invoiceId,
+        action,
+        reason,
+        refundModeOfPayment,
+        refundReferenceNo,
+        applyRefund
+    )
 
     suspend fun loadInvoiceLocal(invoiceId: String): SalesInvoiceWithItemsAndPayments? =
         viewModel.loadInvoiceLocal(invoiceId)

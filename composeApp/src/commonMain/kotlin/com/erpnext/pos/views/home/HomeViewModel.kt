@@ -23,6 +23,7 @@ import com.erpnext.pos.sync.PosProfileGate
 import com.erpnext.pos.sync.OpeningGate
 import com.erpnext.pos.views.CashBoxManager
 import com.erpnext.pos.views.PaymentModeWithAmount
+import com.erpnext.pos.views.home.HomeRefreshController
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -46,7 +47,8 @@ class HomeViewModel(
     private val navManager: NavigationManager,
     private val loadHomeMetricsUseCase: LoadHomeMetricsUseCase,
     private val posProfileGate: PosProfileGate,
-    private val openingGate: OpeningGate
+    private val openingGate: OpeningGate,
+    private val homeRefreshController: HomeRefreshController
 ) : BaseViewModel() {
     private val _stateFlow: MutableStateFlow<HomeState> = MutableStateFlow(HomeState.Loading)
     val stateFlow = _stateFlow.asStateFlow()
@@ -86,6 +88,11 @@ class HomeViewModel(
                 if (state is SyncState.SUCCESS) {
                     refreshMetrics()
                 }
+            }
+        }
+        viewModelScope.launch {
+            homeRefreshController.events.collectLatest {
+                loadInitialData()
             }
         }
         loadInitialData()

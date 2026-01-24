@@ -59,6 +59,20 @@ class CustomerRepository(
             // Fetch all outstanding invoices once
             val allOutstanding = remoteSource.fetchAllOutstandingInvoices()
             val outstandingByCustomer = allOutstanding.groupBy { it.customer }
+            val remoteOutstandingNames = allOutstanding.mapNotNull { it.name }.toSet()
+            val localOutstanding = localSource.getOutstandingInvoiceNames()
+            val missingOutstanding = localOutstanding.filterNot { remoteOutstandingNames.contains(it) }
+            missingOutstanding.forEach { invoiceName ->
+                val local = localSource.getInvoiceByName(invoiceName)
+                val customerId = local?.invoice?.customer
+                val remote = remoteSource.fetchInvoiceByName(invoiceName)
+                if (remote != null) {
+                    localSource.saveInvoices(listOf(remote.toEntity()))
+                } else {
+                    localSource.deleteInvoiceById(invoiceName)
+                }
+                customerId?.let { refreshCustomerSummaryWithRates(it) }
+            }
 
             coroutineScope {
                 val contextCompany = context.requireContext().company
@@ -82,15 +96,12 @@ class CustomerRepository(
                     }
                 }.awaitAll()
                 localSource.insertAll(entities)
+                localSource.deleteMissing(entities.map { it.name })
                 entities.map { it.name }.distinct().forEach { customerId ->
                     refreshCustomerSummaryWithRates(customerId)
                 }
             }
-        }, shouldFetch = { localData ->
-            localData.isEmpty() || SyncTTL.isExpired(localData.maxOf {
-                it.lastSyncedAt?.toDouble() ?: 0.0
-            }.toLong())
-        }, onFetchFailed = { e ->
+        }, shouldFetch = { true }, onFetchFailed = { e ->
             RepoTrace.capture("CustomerRepository", "getCustomers", e)
             println("⚠️ Error al sincronizar clientes: ${e.message}")
         }).map { resource -> resource.data ?: emptyList() }
@@ -118,6 +129,20 @@ class CustomerRepository(
             // Fetch all outstanding invoices once
             val allOutstanding = remoteSource.fetchAllOutstandingInvoices()
             val outstandingByCustomer = allOutstanding.groupBy { it.customer }
+            val remoteOutstandingNames = allOutstanding.mapNotNull { it.name }.toSet()
+            val localOutstanding = localSource.getOutstandingInvoiceNames()
+            val missingOutstanding = localOutstanding.filterNot { remoteOutstandingNames.contains(it) }
+            missingOutstanding.forEach { invoiceName ->
+                val local = localSource.getInvoiceByName(invoiceName)
+                val customerId = local?.invoice?.customer
+                val remote = remoteSource.fetchInvoiceByName(invoiceName)
+                if (remote != null) {
+                    localSource.saveInvoices(listOf(remote.toEntity()))
+                } else {
+                    localSource.deleteInvoiceById(invoiceName)
+                }
+                customerId?.let { refreshCustomerSummaryWithRates(it) }
+            }
 
             coroutineScope {
                 val entities = remoteData.map { dto ->
@@ -145,6 +170,7 @@ class CustomerRepository(
                     }
                 }.awaitAll()
                 localSource.insertAll(entities)
+                localSource.deleteMissing(entities.map { it.name })
                 entities.map { it.name }.distinct().forEach { customerId ->
                     refreshCustomerSummaryWithRates(customerId)
                 }

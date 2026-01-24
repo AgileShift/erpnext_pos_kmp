@@ -24,6 +24,9 @@ class SalesInvoiceRemoteSource(
 
     suspend fun fetchInvoice(name: String): SalesInvoiceDto? =
         runCatching { apiService.getSalesInvoiceByName(name) }.getOrNull()
+
+    suspend fun fetchPosInvoice(name: String): SalesInvoiceDto? =
+        runCatching { apiService.getPOSInvoiceByName(name) }.getOrNull()
     //apiService.getInvoiceDetail(name, baseUrl, headers)
 
     suspend fun fetchOutstandingInvoicesForCustomer(customerName: String): List<SalesInvoiceDto> {
@@ -33,14 +36,26 @@ class SalesInvoiceRemoteSource(
     suspend fun createInvoice(invoice: SalesInvoiceDto): SalesInvoiceDto =
         apiService.createSalesInvoice(invoice)
 
+    suspend fun createPosInvoice(invoice: SalesInvoiceDto): SalesInvoiceDto =
+        apiService.createPOSInvoice(invoice)
+
     suspend fun updateInvoice(name: String, invoice: SalesInvoiceDto): SalesInvoiceDto =
         apiService.updateSalesInvoice(name, invoice)
+
+    suspend fun updatePosInvoice(name: String, invoice: SalesInvoiceDto): SalesInvoiceDto =
+        apiService.updatePOSInvoice(name, invoice)
 
     suspend fun submitInvoice(name: String) =
         apiService.submitSalesInvoice(name)
 
+    suspend fun submitPosInvoice(name: String) =
+        apiService.submitPOSInvoice(name)
+
     suspend fun cancelInvoice(name: String) =
         apiService.cancelSalesInvoice(name)
+
+    suspend fun cancelPosInvoice(name: String) =
+        apiService.cancelPOSInvoice(name)
 
     suspend fun deleteInvoice(name: String) = null
     //apiService.delete(name, baseUrl, headers)

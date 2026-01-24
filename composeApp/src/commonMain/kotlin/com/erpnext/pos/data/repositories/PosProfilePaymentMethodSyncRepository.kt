@@ -37,6 +37,16 @@ class PosProfilePaymentMethodSyncRepository(
             )
         }
         posProfileLocalDao.upsertAll(local)
+        val profileNames = local.map { it.profileName }
+        if (profileNames.isEmpty()) {
+            posProfileLocalDao.deleteAll()
+            posProfileDao.deleteAll()
+            posProfilePaymentMethodDao.deleteAllRelations()
+        } else {
+            posProfileLocalDao.deleteNotIn(profileNames)
+            posProfileDao.deleteNotIn(profileNames)
+            posProfilePaymentMethodDao.deleteForProfilesNotIn(profileNames)
+        }
         return local
     }
 

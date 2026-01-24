@@ -38,7 +38,6 @@ import com.erpnext.pos.domain.models.CustomerBO
 import com.erpnext.pos.domain.models.ItemBO
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ConfirmationNumber
@@ -99,6 +98,8 @@ import com.erpnext.pos.utils.view.SnackbarController
 import com.erpnext.pos.utils.view.SnackbarHost
 import com.erpnext.pos.utils.view.SnackbarPosition
 import com.erpnext.pos.utils.view.SnackbarType
+import com.erpnext.pos.navigation.GlobalTopBarState
+import com.erpnext.pos.navigation.LocalTopBarController
 import kotlinx.coroutines.delay
 
 data class CartItem(
@@ -108,111 +109,6 @@ data class CartItem(
     val quantity: Double,
     val price: Double
 )
-
-@Composable
-fun BillingTopBarTitle(
-    titleAlways: String,
-    secondText: String?,
-    modifier: Modifier = Modifier,
-    showSecondText: Boolean = secondText?.isNotBlank() == true
-) {
-    Column(
-        modifier = modifier.animateContentSize(
-            animationSpec = tween(220, easing = FastOutSlowInEasing)
-        )
-    ) {
-        Text(
-            text = titleAlways,
-            style = MaterialTheme.typography.titleMedium
-        )
-
-        AnimatedVisibility(
-            visible = showSecondText,
-            enter = fadeIn(tween(180)) + slideInVertically(
-                animationSpec = tween(180, easing = FastOutSlowInEasing),
-                initialOffsetY = { it / 3 }
-            ),
-            exit = fadeOut(tween(120)) + slideOutVertically(
-                animationSpec = tween(120, easing = FastOutSlowInEasing),
-                targetOffsetY = { it / 4 }
-            )
-        ) {
-            Column {
-                Spacer(Modifier.height(2.dp))
-
-                // Si el cliente cambia mientras está visible, que el texto cambie suave
-                AnimatedContent(
-                    targetState = secondText.orEmpty(),
-                    transitionSpec = {
-                        (fadeIn(tween(160)) + slideInVertically { it / 6 })
-                            .togetherWith(fadeOut(tween(120)) + slideOutVertically { -it / 6 })
-                    },
-                    label = "customerNameAnim"
-                ) { name ->
-                    Text(
-                        text = name,
-                        style = MaterialTheme.typography.bodySmall,
-                        modifier = Modifier.alpha(0.85f) // look “subtítulo”
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-fun BillingTopBar(
-    title: String,
-    secondText: String?,
-    showBack: Boolean,
-    onBack: () -> Unit
-) {
-    val t by animateFloatAsState(
-        targetValue = if (showBack) 1f else 0f,
-        animationSpec = tween(durationMillis = 1200, easing = FastOutSlowInEasing),
-        label = "topbarBackProgress"
-    )
-    val navWidth: Dp = lerp(0.dp, 48.dp, t)
-    val navAlpha = t
-    val navScale = lerp(0.9f, 1f, t)
-    val titleShift: Dp = lerp(0.dp, (-12).dp, t)
-
-    TopAppBar(
-        navigationIcon = {
-            Box(
-                modifier = Modifier
-                    .width(navWidth)
-                    .alpha(navAlpha)
-                    .graphicsLayer {
-                        scaleX = navScale
-                        scaleY = navScale
-                        clip = true
-                    }
-            ) {
-                // Importante: deshabilitar click cuando está oculto
-                IconButton(onClick = onBack, enabled = showBack) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = "Atrás"
-                    )
-                }
-            }
-        },
-        title = {
-            BillingTopBarTitle(
-                titleAlways = title,
-                secondText = secondText,
-                modifier = Modifier.offset(x = titleShift)
-            )
-        },
-        colors = TopAppBarDefaults.topAppBarColors(
-            containerColor = MaterialTheme.colorScheme.surface,
-            titleContentColor = MaterialTheme.colorScheme.onSurface,
-            navigationIconContentColor = MaterialTheme.colorScheme.onSurface,
-            actionIconContentColor = MaterialTheme.colorScheme.onSurface
-        )
-    )
-}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -228,6 +124,7 @@ fun BillingScreen(
     val successDialogInvoice = (state as? BillingState.Success)?.successDialogInvoice
     var popupMessage by rememberSaveable { mutableStateOf<String?>(null) }
     var popupInvoice by rememberSaveable { mutableStateOf<String?>(null) }
+    val topBarController = LocalTopBarController.current
 
     // Si salimos de Success, regresamos al primer paso.
     LaunchedEffect(state) {
@@ -249,23 +146,33 @@ fun BillingScreen(
         }
     }
 
+    DisposableEffect(Unit) {
+        onDispose { topBarController.reset() }
+    }
+
+    LaunchedEffect(step, state) {
+        topBarController.set(
+            GlobalTopBarState(
+                subtitle = if (state is BillingState.Success && state.selectedCustomer != null) {
+                    state.selectedCustomer.customerName
+                } else {
+                    null
+                },
+                showBack = step != LabCheckoutStep.Cart,
+                onBack = {
+                    if (step == LabCheckoutStep.Checkout) {
+                        step = LabCheckoutStep.Cart
+                    } else if (step == LabCheckoutStep.Cart) {
+                        action.onBack()
+                    }
+                }
+            )
+        )
+    }
+
     Box(Modifier.fillMaxSize()) {
         Scaffold(
             containerColor = colors.background,
-            topBar = {
-                BillingTopBar(
-                    title = "POS${if (step == LabCheckoutStep.Cart) " - Facturaction" else " - Proceso de pago"}",
-                    secondText = if (state is BillingState.Success && state.selectedCustomer != null) {
-                        state.selectedCustomer.customerName
-                    } else null,
-                    showBack = step != LabCheckoutStep.Cart,
-                    onBack = {
-                        if (step == LabCheckoutStep.Checkout)
-                            step = LabCheckoutStep.Cart
-                        else if (step == LabCheckoutStep.Cart)
-                            action.onBack
-                    })
-            },
             bottomBar = {
                 if (state is BillingState.Success && step == LabCheckoutStep.Checkout) {
                     // Botón fijo para pagar siempre visible.

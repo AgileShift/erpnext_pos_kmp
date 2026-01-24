@@ -14,6 +14,14 @@ class ModeOfPaymentLocalSource(
         dao.insertAllModes(items)
     }
 
+    suspend fun deleteMissing(company: String, names: List<String>) {
+        if (names.isEmpty()) {
+            dao.deleteAllForCompany(company)
+        } else {
+            dao.deleteNotIn(company, names)
+        }
+    }
+
     suspend fun getLastSyncedAt(company: String): Long? {
         return dao.getLastSyncedAt(company)
     }

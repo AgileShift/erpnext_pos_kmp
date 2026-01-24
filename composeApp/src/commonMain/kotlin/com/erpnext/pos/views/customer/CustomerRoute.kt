@@ -100,8 +100,15 @@ fun rememberCustomerActions(
             clearPaymentMessages = coordinator::clearPaymentMessages,
             clearInvoiceHistory = coordinator::clearInvoiceHistory,
             clearInvoiceHistoryMessages = coordinator::clearInvoiceHistoryMessages,
-            onInvoiceHistoryAction = { invoiceId, action, reason ->
-                coordinator.performInvoiceHistoryAction(invoiceId, action, reason)
+            onInvoiceHistoryAction = { invoiceId, action, reason, refundMode, refundReference, applyRefund ->
+                coordinator.performInvoiceHistoryAction(
+                    invoiceId,
+                    action,
+                    reason,
+                    refundMode,
+                    refundReference,
+                    applyRefund
+                )
             },
             loadInvoiceLocal = { invoiceId -> coordinator.loadInvoiceLocal(invoiceId) },
             onInvoicePartialReturn = { invoiceId, reason, refundMode, refundReference, applyRefund, items ->

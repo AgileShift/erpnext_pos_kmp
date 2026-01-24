@@ -38,6 +38,7 @@ private fun buildClosingInvoiceRows(
         val rawName = invoice.invoiceName?.trim() ?: return@mapNotNull null
         if (!isRemoteInvoiceName(rawName)) return@mapNotNull null
         if (invoice.docstatus != 1) return@mapNotNull null
+        if (!invoice.isPos) return@mapNotNull null
         if (!seen.add(rawName)) return@mapNotNull null
         POSClosingInvoiceDto(
             salesInvoice = rawName,

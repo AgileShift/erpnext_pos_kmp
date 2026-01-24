@@ -33,6 +33,15 @@ fun SalesInvoiceWithItemsAndPayments.toDto(): SalesInvoiceDto {
     } else {
         emptyList()
     }
+    val resolvedPayments = if (invoice.isPos) {
+        if (payments.isNotEmpty()) {
+            payments.map { it.toDto() }
+        } else {
+            fallbackPayments
+        }
+    } else {
+        emptyList()
+    }
 
     return SalesInvoiceDto(
         name = invoiceName,
@@ -48,10 +57,10 @@ fun SalesInvoiceWithItemsAndPayments.toDto(): SalesInvoiceDto {
         outstandingAmount = invoice.outstandingAmount,
         totalTaxesAndCharges = invoice.taxTotal,
         items = items.map { it.toDto(invoice) },
-        payments = fallbackPayments,
+        payments = resolvedPayments,
         remarks = invoice.remarks,
-        isPos = true,
-        doctype = "Sales Invoice",
+        isPos = invoice.isPos,
+        doctype = if (invoice.isPos) "POS Invoice" else "Sales Invoice",
         customerName = invoice.customerName ?: "CST",
         customerPhone = invoice.customerPhone,
         netTotal = invoice.netTotal,
@@ -105,6 +114,7 @@ fun List<SalesInvoiceDto>.toEntities(): List<SalesInvoiceWithItemsAndPayments> {
 
 fun SalesInvoiceDto.toEntity(): SalesInvoiceWithItemsAndPayments {
     val now = Clock.System.now().toEpochMilliseconds()
+    val resolvedIsPos = doctype.equals("POS Invoice", ignoreCase = true) || isPos
 
     // Se asegura que la factura local conserve los montos pagados recibidos del servidor.
     val invoiceEntity = SalesInvoiceEntity(
@@ -132,6 +142,7 @@ fun SalesInvoiceDto.toEntity(): SalesInvoiceWithItemsAndPayments {
         docstatus = resolveDocStatus(status, docStatus),
         isReturn = isReturn == 1,
         modeOfPayment = payments.firstOrNull()?.modeOfPayment,
+        isPos = resolvedIsPos,
         createdAt = now,
         modifiedAt = now,
         remarks = remarks,
@@ -195,6 +206,7 @@ fun SalesInvoiceEntity.toDto(): SalesInvoiceDto {
         payments = emptyList(),
         remarks = remarks,
         isPos = isPos,
+        doctype = if (isPos) "POS Invoice" else "Sales Invoice",
         updateStock = true,
         posProfile = profileId,
         currency = currency,

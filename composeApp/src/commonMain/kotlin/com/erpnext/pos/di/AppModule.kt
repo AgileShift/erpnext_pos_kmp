@@ -106,6 +106,7 @@ import com.erpnext.pos.views.customer.CustomerViewModel
 import com.erpnext.pos.domain.usecases.FetchCustomerInvoicesForPeriodUseCase
 import com.erpnext.pos.views.deliverynote.DeliveryNoteViewModel
 import com.erpnext.pos.views.home.HomeViewModel
+import com.erpnext.pos.views.home.HomeRefreshController
 import com.erpnext.pos.views.home.POSProfileViewModel
 import com.erpnext.pos.views.inventory.InventoryViewModel
 import com.erpnext.pos.views.invoice.InvoiceViewModel
@@ -255,6 +256,7 @@ val appModule = module {
 
     single { SnackbarController() }
     single { SalesFlowContextStore() }
+    single { HomeRefreshController() }
 
     single<CoroutineScope> { CoroutineScope(SupervisorJob() + Dispatchers.IO) }
     single { NavigationManager(get()) }
@@ -483,7 +485,8 @@ val appModule = module {
             navManager = get(),
             loadHomeMetricsUseCase = get(),
             posProfileGate = get(),
-            openingGate = get()
+            openingGate = get(),
+            homeRefreshController = get()
         )
     }
     single<IUserRepository> { UserRepository(get(), get()) }

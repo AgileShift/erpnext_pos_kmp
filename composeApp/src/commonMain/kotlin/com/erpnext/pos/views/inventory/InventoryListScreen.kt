@@ -46,12 +46,6 @@ fun InventoryScreen(
     var selectedCategory by rememberSaveable { mutableStateOf("Todos los grupos de artículos") }
 
     Scaffold(
-        topBar = {
-            InventoryTopBar(
-                onRefresh = actions.onRefresh,
-                isLoading = state is InventoryState.Loading
-            )
-        },
     ) { innerPadding ->
         BoxWithConstraints(
             modifier = Modifier
