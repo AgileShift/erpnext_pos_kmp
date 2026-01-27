@@ -7,6 +7,7 @@ import com.erpnext.pos.remoteSource.oauth.AuthInfoStore
 import com.erpnext.pos.remoteSource.oauth.TokenStore
 import com.erpnext.pos.remoteSource.oauth.TransientAuthStore
 import com.erpnext.pos.utils.TokenUtils.decodePayload
+import com.erpnext.pos.utils.instanceKeyFromUrl
 import com.github.javakeyring.Keyring
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -58,6 +59,10 @@ class DesktopTokenStore(
     }
 
     private fun prefKey(key: String) = "secret.$key"
+    private suspend fun siteScopedKey(key: String): String {
+        val siteKey = instanceKeyFromUrl(getCurrentSite())
+        return "${siteKey}_$key"
+    }
 
     private inline fun <T> runKeyring(block: (Keyring) -> T): Result<T> {
         return runCatching {
@@ -111,13 +116,13 @@ class DesktopTokenStore(
         val userId = claims?.get("email").toString()
 
         // secretos
-        setSecret("access_token", tokens.access_token)
-        setSecret("refresh_token", tokens.refresh_token ?: "")
-        setSecret("id_token", tokens.id_token)
+        setSecret(siteScopedKey("access_token"), tokens.access_token)
+        setSecret(siteScopedKey("refresh_token"), tokens.refresh_token ?: "")
+        setSecret(siteScopedKey("id_token"), tokens.id_token)
 
         // metadatos (no secretos)
-        prefs.putLong("expires_in", tokens.expires_in ?: 0L)
-        prefs.put("userId", userId)
+        prefs.putLong(siteScopedKey("expires_in"), tokens.expires_in ?: 0L)
+        prefs.put(siteScopedKey("userId"), userId)
         prefs.flush()
 
         stateFlow.value = tokens
@@ -125,10 +130,10 @@ class DesktopTokenStore(
 
     override suspend fun load(): TokenResponse? = mutex.withLock {
         // si falla keyring, getSecret() retorna null o usa fallback, sin crashear
-        val at = getSecret("access_token") ?: return@withLock null
-        val idToken = getSecret("id_token") ?: return@withLock null
-        val rt = getSecret("refresh_token") ?: ""
-        val expires = prefs.getLong("expires_in", 0L)
+        val at = getSecret(siteScopedKey("access_token")) ?: return@withLock null
+        val idToken = getSecret(siteScopedKey("id_token")) ?: return@withLock null
+        val rt = getSecret(siteScopedKey("refresh_token")) ?: ""
+        val expires = prefs.getLong(siteScopedKey("expires_in"), 0L)
 
         val tokens = TokenResponse(
             access_token = at,
@@ -141,15 +146,15 @@ class DesktopTokenStore(
     }
 
     override suspend fun loadUser(): String? =
-        prefs.get("userId", null)
+        prefs.get(siteScopedKey("userId"), null)
 
     override suspend fun clear() = mutex.withLock {
-        deleteSecret("access_token")
-        deleteSecret("refresh_token")
-        deleteSecret("id_token")
+        deleteSecret(siteScopedKey("access_token"))
+        deleteSecret(siteScopedKey("refresh_token"))
+        deleteSecret(siteScopedKey("id_token"))
 
-        prefs.remove("expires_in")
-        prefs.remove("userId")
+        prefs.remove(siteScopedKey("expires_in"))
+        prefs.remove(siteScopedKey("userId"))
         prefs.flush()
 
         stateFlow.update { null }
@@ -176,7 +181,14 @@ class DesktopTokenStore(
 
     override suspend fun saveAuthInfo(info: LoginInfo) = mutex.withLock {
         val list = loadAuthInfo()
-        list.add(info)
+        val existing = list.firstOrNull { it.url == info.url }
+        list.removeAll { it.url == info.url }
+        list.add(
+            info.copy(
+                lastUsedAt = existing?.lastUsedAt,
+                isFavorite = existing?.isFavorite ?: info.isFavorite
+            )
+        )
 
         prefs.put("sitesInfo", json.encodeToString(list))
         prefs.put("current_site", info.url)
@@ -186,8 +198,26 @@ class DesktopTokenStore(
     override suspend fun getCurrentSite(): String? =
         prefs.get("current_site", null)
 
+    override suspend fun updateSiteMeta(
+        url: String,
+        lastUsedAt: Long?,
+        isFavorite: Boolean?
+    ) = mutex.withLock {
+        val list = loadAuthInfo()
+        val updated = list.map { item ->
+            if (item.url != url) return@map item
+            item.copy(
+                lastUsedAt = lastUsedAt ?: item.lastUsedAt,
+                isFavorite = isFavorite ?: item.isFavorite
+            )
+        }
+        prefs.put("sitesInfo", json.encodeToString(updated))
+        prefs.flush()
+    }
+
     override suspend fun clearAuthInfo() = mutex.withLock {
         prefs.remove("sitesInfo")
+        prefs.remove("current_site")
         prefs.flush()
     }
 

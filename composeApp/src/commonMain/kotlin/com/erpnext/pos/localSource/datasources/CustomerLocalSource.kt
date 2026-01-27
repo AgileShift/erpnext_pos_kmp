@@ -8,6 +8,7 @@ import com.erpnext.pos.localSource.entities.SalesInvoiceWithItemsAndPayments
 import kotlinx.coroutines.flow.Flow
 
 interface ICustomerLocalSource {
+    suspend fun insert(customer: CustomerEntity)
     suspend fun insertAll(customers: List<CustomerEntity>)
     suspend fun getAll(): Flow<List<CustomerEntity>>
     fun getAllFiltered(search: String): Flow<List<CustomerEntity>>
@@ -19,6 +20,11 @@ interface ICustomerLocalSource {
     suspend fun saveInvoices(invoices: List<SalesInvoiceWithItemsAndPayments>)
     suspend fun refreshCustomerSummary(customerId: String)
     suspend fun getOutstandingInvoicesForCustomer(customerName: String): List<SalesInvoiceWithItemsAndPayments>
+    suspend fun getInvoicesForCustomerInRange(
+        customerName: String,
+        startDate: String,
+        endDate: String
+    ): List<SalesInvoiceWithItemsAndPayments>
     suspend fun getOutstandingInvoiceNamesForProfile(profileId: String): List<String>
     suspend fun getOutstandingInvoiceNames(): List<String>
     suspend fun getInvoiceByName(invoiceName: String): SalesInvoiceWithItemsAndPayments?
@@ -31,11 +37,13 @@ interface ICustomerLocalSource {
         availableCredit: Double?,
         state: String
     )
+    suspend fun updateCustomerId(oldId: String, newId: String, customerName: String)
     suspend fun deleteMissing(customerIds: List<String>)
 }
 
 class CustomerLocalSource(private val dao: CustomerDao, private val invoiceDao: SalesInvoiceDao) :
     ICustomerLocalSource {
+    override suspend fun insert(customer: CustomerEntity) = dao.insert(customer)
     override suspend fun insertAll(customers: List<CustomerEntity>) = dao.insertAll(customers)
 
     override suspend fun getAll(): Flow<List<CustomerEntity>> = dao.getAll()
@@ -74,6 +82,18 @@ class CustomerLocalSource(private val dao: CustomerDao, private val invoiceDao: 
         return invoiceDao.getOutstandingInvoicesForCustomer(customerName)
     }
 
+    override suspend fun getInvoicesForCustomerInRange(
+        customerName: String,
+        startDate: String,
+        endDate: String
+    ): List<SalesInvoiceWithItemsAndPayments> {
+        return invoiceDao.getInvoicesForCustomerInRange(
+            customerName = customerName,
+            startDate = startDate,
+            endDate = endDate
+        )
+    }
+
     override suspend fun getOutstandingInvoiceNamesForProfile(
         profileId: String
     ): List<String> {
@@ -91,7 +111,8 @@ class CustomerLocalSource(private val dao: CustomerDao, private val invoiceDao: 
     }
 
     override suspend fun deleteInvoiceById(invoiceName: String) {
-        invoiceDao.deleteByInvoiceId(invoiceName)
+        invoiceDao.hardDeleteDeletedByInvoiceId(invoiceName)
+        invoiceDao.softDeleteByInvoiceId(invoiceName)
     }
 
     override suspend fun updateSummary(
@@ -112,11 +133,13 @@ class CustomerLocalSource(private val dao: CustomerDao, private val invoiceDao: 
         )
     }
 
+    override suspend fun updateCustomerId(oldId: String, newId: String, customerName: String) {
+        dao.updateCustomerId(oldId = oldId, newId = newId, customerName = customerName)
+    }
+
     override suspend fun deleteMissing(customerIds: List<String>) {
-        if (customerIds.isEmpty()) {
-            dao.deleteAll()
-        } else {
-            dao.deleteNotIn(customerIds)
-        }
+        val ids = customerIds.ifEmpty { listOf("__empty__") }
+        dao.hardDeleteDeletedNotIn(ids)
+        dao.softDeleteNotIn(ids)
     }
 }

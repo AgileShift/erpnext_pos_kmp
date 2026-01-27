@@ -6,23 +6,30 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.viewModelScope
 import com.erpnext.pos.base.BaseViewModel
 import com.erpnext.pos.domain.models.CustomerBO
+import com.erpnext.pos.domain.models.CompanyBO
 import com.erpnext.pos.domain.usecases.CheckCustomerCreditUseCase
 import com.erpnext.pos.domain.usecases.CustomerCreditInput
 import com.erpnext.pos.domain.usecases.CustomerQueryInput
 import com.erpnext.pos.domain.usecases.CancelSalesInvoiceInput
 import com.erpnext.pos.domain.usecases.CancelSalesInvoiceUseCase
+import com.erpnext.pos.domain.usecases.CreateCustomerInput
+import com.erpnext.pos.domain.usecases.CreateCustomerUseCase
 import com.erpnext.pos.domain.usecases.CustomerInvoiceHistoryInput
 import com.erpnext.pos.domain.usecases.FetchCustomerDetailUseCase
-import com.erpnext.pos.domain.usecases.FetchCustomerInvoicesForPeriodUseCase
+import com.erpnext.pos.domain.usecases.FetchCustomerInvoicesLocalForPeriodUseCase
+import com.erpnext.pos.domain.usecases.FetchCustomerGroupsLocalUseCase
 import com.erpnext.pos.domain.usecases.FetchCustomersLocalWithStateUseCase
 import com.erpnext.pos.domain.usecases.FetchOutstandingInvoicesLocalForCustomerUseCase
+import com.erpnext.pos.domain.usecases.FetchPaymentTermsLocalUseCase
 import com.erpnext.pos.domain.usecases.FetchSalesInvoiceLocalUseCase
 import com.erpnext.pos.domain.usecases.FetchSalesInvoiceWithItemsUseCase
+import com.erpnext.pos.domain.usecases.FetchTerritoriesLocalUseCase
 import com.erpnext.pos.domain.usecases.InvoiceCancellationAction
 import com.erpnext.pos.domain.usecases.PartialReturnInput
 import com.erpnext.pos.domain.usecases.PartialReturnUseCase
-import com.erpnext.pos.domain.usecases.SyncSalesInvoiceFromRemoteUseCase
+import com.erpnext.pos.domain.usecases.PushPendingCustomersUseCase
 import com.erpnext.pos.localSource.dao.ModeOfPaymentDao
+import com.erpnext.pos.localSource.dao.CompanyDao
 import com.erpnext.pos.localSource.entities.ModeOfPaymentEntity
 import com.erpnext.pos.localSource.entities.SalesInvoiceWithItemsAndPayments
 import com.erpnext.pos.remoteSource.mapper.toDto
@@ -73,14 +80,19 @@ class CustomerViewModel(
     private val checkCustomerCreditUseCase: CheckCustomerCreditUseCase,
     private val fetchCustomerDetailUseCase: FetchCustomerDetailUseCase,
     private val fetchOutstandingInvoicesUseCase: FetchOutstandingInvoicesLocalForCustomerUseCase,
-    private val fetchCustomerInvoicesForPeriodUseCase: FetchCustomerInvoicesForPeriodUseCase,
+    private val fetchCustomerInvoicesForPeriodUseCase: FetchCustomerInvoicesLocalForPeriodUseCase,
     private val fetchSalesInvoiceLocalUseCase: FetchSalesInvoiceLocalUseCase,
     private val fetchSalesInvoiceWithItemsUseCase: FetchSalesInvoiceWithItemsUseCase,
     private val modeOfPaymentDao: ModeOfPaymentDao,
     private val paymentHandler: PaymentHandler,
+    private val createCustomerUseCase: CreateCustomerUseCase,
+    private val pushPendingCustomersUseCase: PushPendingCustomersUseCase,
+    private val fetchCustomerGroupsUseCase: FetchCustomerGroupsLocalUseCase,
+    private val fetchTerritoriesUseCase: FetchTerritoriesLocalUseCase,
+    private val fetchPaymentTermsUseCase: FetchPaymentTermsLocalUseCase,
+    private val companyDao: CompanyDao,
     private val cancelSalesInvoiceUseCase: CancelSalesInvoiceUseCase,
     private val partialReturnUseCase: PartialReturnUseCase,
-    private val syncSalesInvoiceFromRemoteUseCase: SyncSalesInvoiceFromRemoteUseCase,
     private val networkMonitor: NetworkMonitor
 ) : BaseViewModel() {
 
@@ -94,12 +106,18 @@ class CustomerViewModel(
     private val _paymentState = MutableStateFlow(CustomerPaymentState())
     val paymentState = _paymentState
 
+    private val _dialogDataState = MutableStateFlow(CustomerDialogDataState())
+    val dialogDataState = _dialogDataState.asStateFlow()
+
     private val _historyState =
         MutableStateFlow<CustomerInvoiceHistoryState>(CustomerInvoiceHistoryState.Idle)
     val historyState = _historyState
 
     private val _historyMessage = MutableStateFlow<String?>(null)
     val historyMessage = _historyMessage
+
+    private val _customerMessage = MutableStateFlow<String?>(null)
+    val customerMessage = _customerMessage
 
     private val _historyActionBusy = MutableStateFlow(false)
     val historyActionBusy = _historyActionBusy.asStateFlow()
@@ -141,12 +159,37 @@ class CustomerViewModel(
 
     init {
         preloadPaymentState()
+        loadDialogData()
         combine(searchFlow, stateFlowFilter) { q, s -> q to s }
             .debounce(250)
             .onEach { (q, s) -> fetchAllCustomers(q, s) }
             .launchIn(viewModelScope)
 
         fetchAllCustomers()
+    }
+
+    private fun loadDialogData() {
+        viewModelScope.launch {
+            val groups = runCatching { fetchCustomerGroupsUseCase() }.getOrElse { emptyList() }
+            val territories = runCatching { fetchTerritoriesUseCase() }.getOrElse { emptyList() }
+            val paymentTerms = runCatching { fetchPaymentTermsUseCase(null) }.getOrElse { emptyList() }
+            val companies = runCatching {
+                companyDao.getAll().map {
+                    CompanyBO(
+                        company = it.companyName,
+                        defaultCurrency = it.defaultCurrency,
+                        country = it.country,
+                        ruc = it.taxId
+                    )
+                }
+            }.getOrElse { emptyList() }
+            _dialogDataState.value = CustomerDialogDataState(
+                customerGroups = groups,
+                territories = territories,
+                paymentTerms = paymentTerms,
+                companies = companies
+            )
+        }
     }
 
     private fun preloadPaymentState() {
@@ -273,7 +316,8 @@ class CustomerViewModel(
                         val resolved = cashboxManager
                             .resolveExchangeRateBetween(
                                 fromCurrency = baseCurrency,
-                                toCurrency = currency
+                                toCurrency = currency,
+                                allowNetwork = false
                             )
                             ?.takeIf { it > 0.0 }
                         if (resolved != null) exchangeRates[currency] = resolved
@@ -457,16 +501,6 @@ class CustomerViewModel(
     }
 
     suspend fun loadInvoiceLocal(invoiceId: String): SalesInvoiceWithItemsAndPayments? {
-        val local = fetchSalesInvoiceWithItemsUseCase(invoiceId)
-        if (local != null) return local
-        return syncInvoiceFromRemote(invoiceId)
-    }
-
-    private suspend fun syncInvoiceFromRemote(invoiceId: String): SalesInvoiceWithItemsAndPayments? {
-        val synced = runCatching {
-            syncSalesInvoiceFromRemoteUseCase(invoiceId)
-        }.getOrNull()
-        if (synced != null) return synced
         return fetchSalesInvoiceWithItemsUseCase(invoiceId)
     }
 
@@ -489,16 +523,10 @@ class CustomerViewModel(
     fun loadInvoiceHistory(customerId: String) {
         historyCustomerId = customerId
         viewModelScope.launch {
-            val isOnline = networkMonitor.isConnected.first()
-            if (!isOnline) {
-                _historyState.value =
-                    CustomerInvoiceHistoryState.Error("Sin conexión a internet.")
-                return@launch
-            }
             _historyState.value = CustomerInvoiceHistoryState.Loading
             try {
                 val now = Clock.System.now()
-                val start = now - 30.days
+                val start = now - 90.days
                 val invoices = fetchCustomerInvoicesForPeriodUseCase(
                     CustomerInvoiceHistoryInput(
                         customerId = customerId,
@@ -507,7 +535,7 @@ class CustomerViewModel(
                     )
                 )
                 val filteredInvoices = invoices.filter { invoice ->
-                    invoice.docStatus != 2 && isWithinDays(invoice.postingDate, 30)
+                    invoice.docStatus != 2 && isWithinDays(invoice.postingDate, 90)
                 }
                 _historyState.value = CustomerInvoiceHistoryState.Success(filteredInvoices)
             } catch (e: Exception) {
@@ -541,6 +569,30 @@ class CustomerViewModel(
 
     fun clearHistoryMessage() {
         _historyMessage.value = null
+    }
+
+    fun clearCustomerMessage() {
+        _customerMessage.value = null
+    }
+
+    fun createCustomer(input: CreateCustomerInput) {
+        viewModelScope.launch {
+            try {
+                createCustomerUseCase(input)
+                _customerMessage.value =
+                    "Cliente creado localmente. Se sincronizará en el próximo sync."
+                val isOnline = networkMonitor.isConnected.first()
+                if (isOnline) {
+                    val pushed = pushPendingCustomersUseCase(Unit)
+                    if (pushed) {
+                        _customerMessage.value = "Cliente sincronizado correctamente."
+                    }
+                }
+                fetchAllCustomers(searchFilter, selectedState)
+            } catch (e: Exception) {
+                _customerMessage.value = e.message ?: "No se pudo crear el cliente."
+            }
+        }
     }
 
     fun submitPartialReturn(

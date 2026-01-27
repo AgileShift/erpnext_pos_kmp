@@ -23,6 +23,8 @@ fun CustomerRoute(
     val historyState by coordinator.historyState.collectAsState(CustomerInvoiceHistoryState.Idle)
     val historyMessage by coordinator.historyMessage.collectAsState(null)
     val historyBusy by coordinator.historyActionBusy.collectAsState(false)
+    val customerMessage by coordinator.customerMessage.collectAsState(null)
+    val dialogDataState by coordinator.dialogDataState.collectAsState(CustomerDialogDataState())
     val navManager: NavigationManager = koinInject()
     val salesFlowStore: SalesFlowContextStore = koinInject()
     val actions = rememberCustomerActions(coordinator, navManager, salesFlowStore)
@@ -34,6 +36,8 @@ fun CustomerRoute(
         historyState = historyState,
         historyMessage = historyMessage,
         historyBusy = historyBusy,
+        customerMessage = customerMessage,
+        dialogDataState = dialogDataState,
         actions = actions
     )
 }
@@ -100,6 +104,7 @@ fun rememberCustomerActions(
             clearPaymentMessages = coordinator::clearPaymentMessages,
             clearInvoiceHistory = coordinator::clearInvoiceHistory,
             clearInvoiceHistoryMessages = coordinator::clearInvoiceHistoryMessages,
+            clearCustomerMessages = coordinator::clearCustomerMessages,
             onInvoiceHistoryAction = { invoiceId, action, reason, refundMode, refundReference, applyRefund ->
                 coordinator.performInvoiceHistoryAction(
                     invoiceId,
@@ -120,7 +125,8 @@ fun rememberCustomerActions(
                     applyRefund,
                     items
                 )
-            }
+            },
+            onCreateCustomer = coordinator::createCustomer
         )
     }
 }

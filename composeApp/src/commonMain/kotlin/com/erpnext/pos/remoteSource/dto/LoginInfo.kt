@@ -11,5 +11,7 @@ data class LoginInfo(
     val clientId: String,
     val clientSecret: String,
     val scopes: List<String>,
-    val name: String
+    val name: String,
+    val lastUsedAt: Long? = null,
+    val isFavorite: Boolean = false
 )

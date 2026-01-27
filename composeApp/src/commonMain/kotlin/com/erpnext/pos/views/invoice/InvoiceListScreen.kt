@@ -31,15 +31,19 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.paging.LoadState
@@ -53,7 +57,7 @@ import com.erpnext.pos.views.invoice.components.LoadingState
 
 @Composable
 fun InvoiceListScreen(action: InvoiceAction) {
-    var searchQuery by remember { mutableStateOf("") }
+    var searchQuery by rememberSaveable { mutableStateOf("") }
     val lazyPagingItems = action.getInvoices().collectAsLazyPagingItems()
     val feedback by action.feedbackMessage.collectAsState("")
     var pendingDialog by remember { mutableStateOf<InvoiceCancelDialogState?>(null) }
@@ -76,7 +80,6 @@ fun InvoiceListScreen(action: InvoiceAction) {
                     value = searchQuery,
                     onValueChange = {
                         searchQuery = it
-                        action.onSearchQueryChanged(it)
                     },
                     modifier = Modifier.weight(1f),
                     placeholder = { Text("Buscar por ID, cliente o teléfono...") },
@@ -85,13 +88,21 @@ fun InvoiceListScreen(action: InvoiceAction) {
                         if (searchQuery.isNotEmpty()) {
                             IconButton(onClick = {
                                 searchQuery = ""
-                                action.onSearchQueryChanged("")
                             }) {
                                 Icon(Icons.Default.Clear, contentDescription = "Limpiar")
                             }
                         }
                     },
-                    singleLine = true
+                    singleLine = true,
+                    colors = TextFieldDefaults.colors(
+                        focusedIndicatorColor = Color.Transparent,
+                        unfocusedIndicatorColor = Color.Transparent,
+                        disabledIndicatorColor = Color.Transparent,
+                        focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+                        unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+                        cursorColor = MaterialTheme.colorScheme.primary
+                    ),
+                    shape = RoundedCornerShape(18.dp)
                 )
                 IconButton(onClick = { /* TODO: Show date picker */ }) {
                     Icon(Icons.Default.ArrowDropDown, contentDescription = "Filtrar por fecha")
@@ -111,6 +122,23 @@ fun InvoiceListScreen(action: InvoiceAction) {
                     text = feedback!!,
                     color = MaterialTheme.colorScheme.primary
                 )
+            }
+
+            val normalizedQuery = searchQuery.trim().lowercase()
+            val filteredInvoices by remember(lazyPagingItems, normalizedQuery) {
+                derivedStateOf {
+                    if (normalizedQuery.isBlank()) {
+                        lazyPagingItems.itemSnapshotList.items
+                    } else {
+                        lazyPagingItems.itemSnapshotList.items.filter { invoice ->
+                            listOf(
+                                invoice.invoiceId,
+                                invoice.customer.orEmpty(),
+                                invoice.customerPhone.orEmpty()
+                            ).any { it.lowercase().contains(normalizedQuery) }
+                        }
+                    }
+                }
             }
 
             LazyColumn(
@@ -142,12 +170,14 @@ fun InvoiceListScreen(action: InvoiceAction) {
                 }
 
                 // Muestra la lista de items
-                items(
-                    count = lazyPagingItems.itemCount,
-                    key = lazyPagingItems.itemKey { it.invoiceId }
-                ) { index ->
-                    val item = lazyPagingItems[index]
-                    if (item != null) {
+                if (filteredInvoices.isEmpty() && normalizedQuery.isNotBlank()) {
+                    item { EmptyState(modifier = Modifier.fillParentMaxSize()) }
+                } else {
+                    items(
+                        count = filteredInvoices.size,
+                        key = { index -> filteredInvoices[index].invoiceId }
+                    ) { index ->
+                        val item = filteredInvoices[index]
                         InvoiceItem(
                             invoice = item,
                             onClick = { action.onItemClick(it.invoiceId) },
@@ -163,7 +193,7 @@ fun InvoiceListScreen(action: InvoiceAction) {
                 }
 
                 // Muestra el indicador de carga para la paginación
-                if (lazyPagingItems.loadState.append is LoadState.Loading) {
+                if (normalizedQuery.isBlank() && lazyPagingItems.loadState.append is LoadState.Loading) {
                     item {
                         CircularProgressIndicator(modifier = Modifier.padding(16.dp))
                     }

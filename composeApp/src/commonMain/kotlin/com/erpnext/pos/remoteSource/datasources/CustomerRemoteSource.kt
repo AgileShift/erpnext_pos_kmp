@@ -13,8 +13,8 @@ class CustomerRemoteSource(
         return api.getCustomers(territory)
     }
 
-    suspend fun getCustomerOutstanding(customerId: String): OutstandingInfo {
-        return api.getCustomerOutstanding(customerId)
+    suspend fun getCustomerOutstanding(customerId: String, posProfile: String): OutstandingInfo {
+        return api.getCustomerOutstanding(customerId, posProfile)
     }
 
     suspend fun getCustomerAddress(customerId: String): String? {
@@ -36,16 +36,17 @@ class CustomerRemoteSource(
         return api.fetchAllInvoices(posProfile)
     }
 
-    suspend fun fetchAllOutstandingInvoices(): List<SalesInvoiceDto> {
-        return api.getAllOutstandingInvoices()
+    suspend fun fetchAllOutstandingInvoices(posProfile: String): List<SalesInvoiceDto> {
+        return api.getAllOutstandingInvoices(posProfile)
     }
 
     suspend fun fetchInvoicesForCustomerPeriod(
         customerId: String,
         startDate: String,
-        endDate: String
+        endDate: String,
+        posProfile: String
     ): List<SalesInvoiceDto> {
-        return api.fetchCustomerInvoicesForPeriod(customerId, startDate, endDate)
+        return api.fetchCustomerInvoicesForPeriod(customerId, startDate, endDate, posProfile)
     }
 
     suspend fun fetchInvoiceByName(invoiceName: String): SalesInvoiceDto? {

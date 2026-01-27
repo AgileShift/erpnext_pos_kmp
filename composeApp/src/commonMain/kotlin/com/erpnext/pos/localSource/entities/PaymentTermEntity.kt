@@ -41,6 +41,9 @@ data class PaymentTermEntity(
     @ColumnInfo(name = "discount_validity_based_on")
     val discountValidityBasedOn: String? = null,
 
+    @ColumnInfo(name = "is_deleted")
+    val isDeleted: Boolean = false,
+
     @ColumnInfo(name = "last_synced_at")
     val lastSyncedAt: Long = Clock.System.now().toEpochMilliseconds()
 )

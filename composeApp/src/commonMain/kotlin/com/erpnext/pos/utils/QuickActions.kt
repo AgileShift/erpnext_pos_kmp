@@ -13,16 +13,16 @@ import com.erpnext.pos.domain.models.CustomerQuickActionType
 
 object QuickActions {
     fun customerQuickActions(): List<CustomerQuickAction> = listOf(
-        CustomerQuickAction(
+        /*CustomerQuickAction(
             type = CustomerQuickActionType.PendingInvoices,
             label = "Ver facturas pendientes",
             icon = Icons.Filled.ReceiptLong
-        ),
-        CustomerQuickAction(
+        ),*/
+        /*CustomerQuickAction(
             type = CustomerQuickActionType.InvoiceHistory,
             label = "Historial de facturas",
             icon = Icons.Filled.History
-        ),
+        ),*/
         CustomerQuickAction(
             type = CustomerQuickActionType.CreateQuotation,
             label = "Crear cotización",
@@ -43,10 +43,10 @@ object QuickActions {
             label = "Crear factura",
             icon = Icons.Filled.Receipt
         ),
-        CustomerQuickAction(
+        /*CustomerQuickAction(
             type = CustomerQuickActionType.RegisterPayment,
             label = "Registrar pago",
             icon = Icons.Filled.Payments
-        )
+        )*/
     )
 }

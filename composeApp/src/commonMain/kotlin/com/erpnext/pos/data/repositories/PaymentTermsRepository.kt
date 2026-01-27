@@ -12,6 +12,11 @@ class PaymentTermsRepository(
     private val api: APIService,
     private val localSource: PaymentTermLocalSource
 ) {
+    suspend fun getLocalPaymentTerms(): List<PaymentTermBO> {
+        RepoTrace.breadcrumb("PaymentTermsRepository", "getLocalPaymentTerms")
+        return localSource.getAll().map { it.toBO() }
+    }
+
     suspend fun fetchPaymentTerms(): List<PaymentTermBO> {
         RepoTrace.breadcrumb("PaymentTermsRepository", "fetchPaymentTerms")
 
@@ -19,15 +24,19 @@ class PaymentTermsRepository(
 
         return runCatching { api.fetchPaymentTerms() }
             .onSuccess { terms ->
-                localSource.deleteAll()
-                if (terms.isNotEmpty()) {
-                    localSource.insertAll(terms.map { it.toEntity() })
+                val entities = terms.map { it.toEntity() }
+                if (entities.isNotEmpty()) {
+                    localSource.insertAll(entities)
                 }
+                val names = entities.map { it.name }.ifEmpty { listOf("__empty__") }
+                localSource.hardDeleteDeletedMissing(names)
+                localSource.softDeleteMissing(names)
             }
             .map { terms -> terms.map { it.toEntity().toBO() } }
             .getOrElse { error ->
                 if (error is ClientRequestException && error.response.status.value == 404) {
-                    localSource.deleteAll()
+                    localSource.hardDeleteAllDeleted()
+                    localSource.softDeleteAll()
                     return emptyList()
                 }
                 RepoTrace.capture("PaymentTermsRepository", "fetchPaymentTerms", error)

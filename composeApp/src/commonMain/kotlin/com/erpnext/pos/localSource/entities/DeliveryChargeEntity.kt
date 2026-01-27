@@ -14,6 +14,9 @@ data class DeliveryChargeEntity(
     @ColumnInfo(name = "default_rate")
     val defaultRate: Double,
 
+    @ColumnInfo(name = "is_deleted")
+    val isDeleted: Boolean = false,
+
     @ColumnInfo(name = "last_synced_at")
     val lastSyncedAt: Long = Clock.System.now().toEpochMilliseconds()
 )

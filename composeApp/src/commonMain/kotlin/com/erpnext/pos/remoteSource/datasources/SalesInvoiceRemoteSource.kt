@@ -29,8 +29,23 @@ class SalesInvoiceRemoteSource(
         runCatching { apiService.getPOSInvoiceByName(name) }.getOrNull()
     //apiService.getInvoiceDetail(name, baseUrl, headers)
 
-    suspend fun fetchOutstandingInvoicesForCustomer(customerName: String): List<SalesInvoiceDto> {
-        return apiService.getCustomerOutstanding(customerName).pendingInvoices
+    suspend fun fetchOutstandingInvoicesForCustomer(
+        customerName: String,
+        posProfile: String
+    ): List<SalesInvoiceDto> {
+        return apiService.getCustomerOutstanding(customerName, posProfile).pendingInvoices
+    }
+
+    suspend fun fetchReturnInvoices(
+        returnAgainst: String,
+        isPos: Boolean,
+        posProfile: String
+    ): List<SalesInvoiceDto> {
+        val names = apiService.fetchReturnInvoiceNames(returnAgainst, posProfile, isPos)
+        if (names.isEmpty()) return emptyList()
+        return names.mapNotNull { name ->
+            if (isPos) fetchPosInvoice(name) else fetchInvoice(name)
+        }
     }
 
     suspend fun createInvoice(invoice: SalesInvoiceDto): SalesInvoiceDto =

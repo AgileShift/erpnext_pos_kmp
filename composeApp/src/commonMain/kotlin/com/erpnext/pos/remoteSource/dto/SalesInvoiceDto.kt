@@ -29,7 +29,7 @@ data class SalesInvoiceDto(
     @SerialName("customer_name")
     val customerName: String,
     @SerialName("contact_mobile")
-    val customerPhone: String?,
+    val customerPhone: String? = null,
     val company: String,
     @SerialName("posting_date")
     val postingDate: String,
@@ -98,7 +98,7 @@ data class SalesInvoiceDto(
 @Serializable
 data class SalesInvoicePaymentScheduleDto(
     @SerialName("payment_term")
-    val paymentTerm: String,
+    val paymentTerm: String? = null,
     @SerialName("invoice_portion")
     val invoicePortion: Double,
     @SerialName("due_date")

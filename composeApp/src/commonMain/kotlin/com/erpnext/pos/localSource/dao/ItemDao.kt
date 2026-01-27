@@ -25,30 +25,36 @@ interface ItemDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun addItems(items: List<ItemEntity>)
 
-    @Query("SELECT * FROM tabItem ORDER BY name ASC")
+    @Query("SELECT * FROM tabItem WHERE is_deleted = 0 ORDER BY name ASC")
     fun getAllItemsPaged(): PagingSource<Int, ItemEntity>
 
-    @Query("SELECT * FROM tabItem ORDER BY name ASC")
+    @Query("SELECT * FROM tabItem WHERE is_deleted = 0 ORDER BY name ASC")
     suspend fun getAllItems(): List<ItemEntity>
 
-    @Query("SELECT * FROM TABITEM WHERE name == :id")
+    @Query("SELECT * FROM TABITEM WHERE is_deleted = 0 AND name == :id")
     fun getItemById(id: String): PagingSource<Int, ItemEntity>
 
-    @Query("SELECT * FROM tabitem WHERE name LIKE '%' || :search || '%' OR description LIKE '%' || :search || '%' OR brand LIKE '%' || :search || '%' OR itemGroup LIKE '%' || :search || '%' ORDER BY name ASC")
+    @Query("SELECT * FROM tabitem WHERE is_deleted = 0 AND (name LIKE '%' || :search || '%' OR description LIKE '%' || :search || '%' OR brand LIKE '%' || :search || '%' OR itemGroup LIKE '%' || :search || '%') ORDER BY name ASC")
     fun getAllFiltered(search: String): PagingSource<Int, ItemEntity>
 
-    @Query("SELECT * FROM tabitem WHERE name LIKE '%' || :search || '%' OR description LIKE '%' || :search || '%' OR brand LIKE '%' || :search || '%' OR itemGroup LIKE '%' || :search || '%' ORDER BY name ASC")
+    @Query("SELECT * FROM tabitem WHERE is_deleted = 0 AND (name LIKE '%' || :search || '%' OR description LIKE '%' || :search || '%' OR brand LIKE '%' || :search || '%' OR itemGroup LIKE '%' || :search || '%') ORDER BY name ASC")
     fun getAllItemsFiltered(search: String): Flow<List<ItemEntity>>
 
-    @Query("SELECT COUNT(*) FROM tabItem")
+    @Query("SELECT COUNT(*) FROM tabItem WHERE is_deleted = 0")
     suspend fun countAll(): Int
 
-    @Query("DELETE FROM tabItem")
-    suspend fun deleteAll()
+    @Query("UPDATE tabItem SET is_deleted = 1 WHERE is_deleted = 0")
+    suspend fun softDeleteAll()
 
-    @Query("SELECT * FROM tabItem ORDER BY last_synced_at ASC LIMIT 1")
+    @Query("DELETE FROM tabItem WHERE is_deleted = 1")
+    suspend fun hardDeleteAllDeleted()
+
+    @Query("SELECT * FROM tabItem WHERE is_deleted = 0 ORDER BY last_synced_at ASC LIMIT 1")
     suspend fun getOldestItem(): ItemEntity?
 
-    @Query("DELETE FROM tabItem WHERE itemCode NOT IN (:itemCodes)")
-    suspend fun deleteNotIn(itemCodes: List<String>)
+    @Query("UPDATE tabItem SET is_deleted = 1 WHERE is_deleted = 0 AND itemCode NOT IN (:itemCodes)")
+    suspend fun softDeleteNotIn(itemCodes: List<String>)
+
+    @Query("DELETE FROM tabItem WHERE is_deleted = 1 AND itemCode NOT IN (:itemCodes)")
+    suspend fun hardDeleteDeletedNotIn(itemCodes: List<String>)
 }

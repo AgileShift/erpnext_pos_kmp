@@ -3,6 +3,7 @@ package com.erpnext.pos.views.login
 import androidx.lifecycle.viewModelScope
 import com.erpnext.pos.base.BaseViewModel
 import com.erpnext.pos.base.getPlatformName
+import com.erpnext.pos.auth.InstanceSwitcher
 import com.erpnext.pos.navigation.AuthNavigator
 import com.erpnext.pos.navigation.NavRoute
 import com.erpnext.pos.navigation.NavigationManager
@@ -23,13 +24,15 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
+import kotlin.time.Clock
 
 class LoginViewModel(
     private val authNavigator: AuthNavigator,
     private val oauthService: APIService,
     private val authStore: AuthInfoStore,
     private val navManager: NavigationManager,
-    private val contextProvider: CashBoxManager
+    private val contextProvider: CashBoxManager,
+    private val instanceSwitcher: InstanceSwitcher
 ) : BaseViewModel() {
 
     private val _stateFlow: MutableStateFlow<LoginState> = MutableStateFlow(LoginState.Loading)
@@ -83,7 +86,13 @@ class LoginViewModel(
         _stateFlow.update { LoginState.Loading }
         viewModelScope.launch {
             AppLogger.info("LoginViewModel.fetchSites")
-            val sites = authStore.loadAuthInfo().map { Site(it.url, it.name) }
+            val sites = authStore.loadAuthInfo()
+                .map { Site(it.url, it.name, it.lastUsedAt, it.isFavorite) }
+                .sortedWith(
+                    compareByDescending<Site> { it.isFavorite }
+                        .thenByDescending { it.lastUsedAt ?: 0L }
+                        .thenBy { it.name }
+                )
             _stateFlow.update { LoginState.Success(sites) }
         }
     }
@@ -95,7 +104,9 @@ class LoginViewModel(
             val receiver = if (isDesktop) OAuthCallbackReceiver() else null
             try {
                 AppLogger.info("LoginViewModel.onSiteSelected -> ${site.url}")
-                val oauthConfig = authStore.loadAuthInfoByUrl(site.url).toOAuthConfig()
+                val loginInfo = authStore.loadAuthInfoByUrl(site.url)
+                authStore.saveAuthInfo(loginInfo)
+                val oauthConfig = loginInfo.toOAuthConfig()
                 val request = if (isDesktop) {
                     AppLogger.info("LoginViewModel.onSiteSelected -> starting OAuthCallbackReceiver")
                     val redirectUri = runCatching {
@@ -124,11 +135,11 @@ class LoginViewModel(
         }
     }
 
-    fun onAddSite(site: Site) {
+    fun onAddSite(url: String) {
         _stateFlow.update { LoginState.Loading }
         viewModelScope.launch {
-            AppLogger.info("LoginViewModel.onAddSite -> ${site.url}")
-            val loginInfo = oauthService.getLoginWithSite(site.url)
+            AppLogger.info("LoginViewModel.onAddSite -> $url")
+            val loginInfo = oauthService.getLoginWithSite(url)
             authStore.saveAuthInfo(loginInfo)
             //val sites = authStore.loadAuthInfo().map { Site(it.url, it.name) }
             val oauthConfig = loginInfo.toOAuthConfig()
@@ -142,12 +153,29 @@ class LoginViewModel(
         _stateFlow.update { LoginState.Error(error) }
     }
 
+    fun toggleFavorite(site: Site) {
+        viewModelScope.launch {
+            authStore.updateSiteMeta(site.url, isFavorite = !site.isFavorite)
+            fetchSites()
+        }
+    }
+
     fun reset() = _stateFlow.update { LoginState.Success() }
 
     fun isAuthenticated(tokens: TokenResponse) {
         val isAuth = TokenUtils.isValid(tokens.id_token)
-        if (isAuth)
-            navManager.navigateTo(NavRoute.Home)
+        if (isAuth) {
+            viewModelScope.launch {
+                authStore.getCurrentSite()?.let { url ->
+                    authStore.updateSiteMeta(
+                        url = url,
+                        lastUsedAt = Clock.System.now().toEpochMilliseconds()
+                    )
+                }
+                instanceSwitcher.switchInstance(authStore.getCurrentSite())
+                navManager.navigateTo(NavRoute.Home)
+            }
+        }
         _stateFlow.update { LoginState.Success() }
     }
 

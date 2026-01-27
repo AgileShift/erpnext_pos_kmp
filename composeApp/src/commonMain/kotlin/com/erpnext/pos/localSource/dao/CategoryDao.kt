@@ -12,12 +12,21 @@ interface CategoryDao {
     @Insert(onConflict = REPLACE)
     suspend fun insertAll(entities: List<CategoryEntity>)
 
-    @Query("SELECT * FROM tabCategory")
+    @Query("SELECT * FROM tabCategory WHERE is_deleted = 0")
     fun getAll(): Flow<List<CategoryEntity>>
 
-    @Query("SELECT COUNT(*) FROM tabcategory")
+    @Query("SELECT COUNT(*) FROM tabcategory WHERE is_deleted = 0")
     suspend fun count(): Int
 
-    @Query("DELETE FROM tabCategory")
-    suspend fun deleteAll()
+    @Query("UPDATE tabCategory SET is_deleted = 1 WHERE is_deleted = 0 AND name NOT IN (:names)")
+    suspend fun softDeleteNotIn(names: List<String>)
+
+    @Query("DELETE FROM tabCategory WHERE is_deleted = 1 AND name NOT IN (:names)")
+    suspend fun hardDeleteDeletedNotIn(names: List<String>)
+
+    @Query("UPDATE tabCategory SET is_deleted = 1 WHERE is_deleted = 0")
+    suspend fun softDeleteAll()
+
+    @Query("DELETE FROM tabCategory WHERE is_deleted = 1")
+    suspend fun hardDeleteAllDeleted()
 }

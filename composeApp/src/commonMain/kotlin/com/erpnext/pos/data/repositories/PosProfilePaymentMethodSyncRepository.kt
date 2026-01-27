@@ -39,13 +39,19 @@ class PosProfilePaymentMethodSyncRepository(
         posProfileLocalDao.upsertAll(local)
         val profileNames = local.map { it.profileName }
         if (profileNames.isEmpty()) {
-            posProfileLocalDao.deleteAll()
-            posProfileDao.deleteAll()
-            posProfilePaymentMethodDao.deleteAllRelations()
+            posProfileLocalDao.hardDeleteAllDeleted()
+            posProfileLocalDao.softDeleteAll()
+            posProfileDao.hardDeleteAllDeleted()
+            posProfileDao.softDeleteAll()
+            posProfilePaymentMethodDao.hardDeleteAllDeletedRelations()
+            posProfilePaymentMethodDao.softDeleteAllRelations()
         } else {
-            posProfileLocalDao.deleteNotIn(profileNames)
-            posProfileDao.deleteNotIn(profileNames)
-            posProfilePaymentMethodDao.deleteForProfilesNotIn(profileNames)
+            posProfileLocalDao.hardDeleteDeletedNotIn(profileNames)
+            posProfileLocalDao.softDeleteNotIn(profileNames)
+            posProfileDao.hardDeleteDeletedNotIn(profileNames)
+            posProfileDao.softDeleteNotIn(profileNames)
+            posProfilePaymentMethodDao.hardDeleteDeletedForProfilesNotIn(profileNames)
+            posProfilePaymentMethodDao.softDeleteForProfilesNotIn(profileNames)
         }
         return local
     }
@@ -88,12 +94,12 @@ class PosProfilePaymentMethodSyncRepository(
         }
         posProfilePaymentMethodDao.upsertAll(paymentEntities)
         if (paymentEntities.isEmpty()) {
-            posProfilePaymentMethodDao.deleteAllForProfile(profile.profileName)
+            posProfilePaymentMethodDao.hardDeleteAllDeletedForProfile(profile.profileName)
+            posProfilePaymentMethodDao.softDeleteAllForProfile(profile.profileName)
         } else {
-            posProfilePaymentMethodDao.deleteStaleForProfile(
-                profile.profileName,
-                paymentEntities.map { it.mopName }
-            )
+            val mopNames = paymentEntities.map { it.mopName }
+            posProfilePaymentMethodDao.hardDeleteDeletedStaleForProfile(profile.profileName, mopNames)
+            posProfilePaymentMethodDao.softDeleteStaleForProfile(profile.profileName, mopNames)
         }
 
         syncModeOfPaymentDetails(profile, paymentEntities.map { it.mopName }, now)

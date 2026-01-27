@@ -3,6 +3,7 @@ package com.erpnext.pos.data.mappers
 import androidx.paging.PagingData
 import androidx.paging.map
 import com.erpnext.pos.domain.models.CategoryBO
+import com.erpnext.pos.domain.models.CustomerGroupBO
 import com.erpnext.pos.domain.models.CustomerBO
 import com.erpnext.pos.domain.models.DeliveryChargeBO
 import com.erpnext.pos.domain.models.ItemBO
@@ -13,8 +14,10 @@ import com.erpnext.pos.domain.models.PaymentModesBO
 import com.erpnext.pos.domain.models.SalesInvoiceBO
 import com.erpnext.pos.domain.models.SalesInvoiceItemsBO
 import com.erpnext.pos.domain.models.SalesInvoicePaymentsBO
+import com.erpnext.pos.domain.models.TerritoryBO
 import com.erpnext.pos.domain.models.UserBO
 import com.erpnext.pos.localSource.entities.CategoryEntity
+import com.erpnext.pos.localSource.entities.CustomerGroupEntity
 import com.erpnext.pos.localSource.entities.CustomerEntity
 import com.erpnext.pos.localSource.entities.ItemEntity
 import com.erpnext.pos.localSource.entities.POSInvoicePaymentEntity
@@ -26,6 +29,7 @@ import com.erpnext.pos.localSource.entities.SalesInvoiceWithItemsAndPayments
 import com.erpnext.pos.localSource.entities.UserEntity
 import com.erpnext.pos.localSource.entities.PaymentTermEntity
 import com.erpnext.pos.localSource.entities.DeliveryChargeEntity
+import com.erpnext.pos.localSource.entities.TerritoryEntity
 import com.erpnext.pos.remoteSource.dto.CategoryDto
 import com.erpnext.pos.remoteSource.dto.CustomerCreditLimitDto
 import com.erpnext.pos.remoteSource.dto.CustomerDto
@@ -153,6 +157,24 @@ fun PaymentTermEntity.toBO(): PaymentTermBO {
         description = this.description,
         discountValidity = this.discountValidity,
         discountValidityBasedOn = this.discountValidityBasedOn,
+    )
+}
+
+fun CustomerGroupEntity.toBO(): CustomerGroupBO {
+    return CustomerGroupBO(
+        name = this.name,
+        displayName = this.customerGroupName,
+        isGroup = this.isGroup,
+        parent = this.parentCustomerGroup
+    )
+}
+
+fun TerritoryEntity.toBO(): TerritoryBO {
+    return TerritoryBO(
+        name = this.name,
+        displayName = this.territoryName,
+        isGroup = this.isGroup,
+        parent = this.parentTerritory
     )
 }
 

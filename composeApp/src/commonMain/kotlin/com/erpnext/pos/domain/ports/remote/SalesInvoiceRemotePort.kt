@@ -10,5 +10,5 @@ interface SalesInvoiceRemotePort {
         fromDate: String,
     ): List<SalesInvoiceDto>
 
-    suspend fun fetchAllOutstandingInvoices(): List<SalesInvoiceDto>
+    suspend fun fetchAllOutstandingInvoices(posProfile: String): List<SalesInvoiceDto>
 }

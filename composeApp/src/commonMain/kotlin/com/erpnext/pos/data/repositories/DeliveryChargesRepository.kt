@@ -12,6 +12,11 @@ class DeliveryChargesRepository(
     private val api: APIService,
     private val localSource: DeliveryChargeLocalSource
 ) {
+    suspend fun getLocalDeliveryCharges(): List<DeliveryChargeBO> {
+        RepoTrace.breadcrumb("DeliveryChargesRepository", "getLocalDeliveryCharges")
+        return localSource.getAll().map { it.toBO() }
+    }
+
     suspend fun fetchDeliveryCharges(): List<DeliveryChargeBO> {
         RepoTrace.breadcrumb("DeliveryChargesRepository", "fetchDeliveryCharges")
 
@@ -19,15 +24,19 @@ class DeliveryChargesRepository(
 
         return runCatching { api.fetchDeliveryCharges() }
             .onSuccess { charges ->
-                localSource.deleteAll()
-                if (charges.isNotEmpty()) {
-                    localSource.insertAll(charges.map { it.toEntity() })
+                val entities = charges.map { it.toEntity() }
+                if (entities.isNotEmpty()) {
+                    localSource.insertAll(entities)
                 }
+                val labels = entities.map { it.label }.ifEmpty { listOf("__empty__") }
+                localSource.hardDeleteDeletedMissing(labels)
+                localSource.softDeleteMissing(labels)
             }
             .map { charges -> charges.map { it.toEntity().toBO() } }
             .getOrElse { error ->
                 if (error is ClientRequestException && error.response.status.value == 404) {
-                    localSource.deleteAll()
+                    localSource.hardDeleteAllDeleted()
+                    localSource.softDeleteAll()
                     return emptyList()
                 }
                 RepoTrace.capture("DeliveryChargesRepository", "fetchDeliveryCharges", error)

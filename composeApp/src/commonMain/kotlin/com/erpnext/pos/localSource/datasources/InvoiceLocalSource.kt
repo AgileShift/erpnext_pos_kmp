@@ -28,6 +28,8 @@ interface IInvoiceLocalSource {
     suspend fun countAllPendingSync(): Int
     suspend fun getOldestItem(): SalesInvoiceEntity?
     suspend fun deleteByInvoiceId(name: String)
+    suspend fun softDeleteByInvoiceId(name: String)
+    suspend fun softDeleteMissingForProfile(profileId: String, invoiceNames: List<String>)
     suspend fun applyPayments(
         invoice: SalesInvoiceEntity,
         payments: List<POSInvoicePaymentEntity>
@@ -99,6 +101,20 @@ class InvoiceLocalSource(
 
     override suspend fun deleteByInvoiceId(name: String) =
         salesInvoiceDao.deleteInvoiceWithChildren(name)
+
+    override suspend fun softDeleteByInvoiceId(name: String) {
+        salesInvoiceDao.hardDeleteDeletedByInvoiceId(name)
+        salesInvoiceDao.softDeleteByInvoiceId(name)
+    }
+
+    override suspend fun softDeleteMissingForProfile(
+        profileId: String,
+        invoiceNames: List<String>
+    ) {
+        val names = invoiceNames.ifEmpty { listOf("__empty__") }
+        salesInvoiceDao.hardDeleteDeletedNotInForProfile(profileId, names)
+        salesInvoiceDao.softDeleteNotInForProfile(profileId, names)
+    }
 
     override suspend fun applyPayments(
         invoice: SalesInvoiceEntity,

@@ -19,6 +19,7 @@ import com.erpnext.pos.remoteSource.dto.LoginInfo
 import com.erpnext.pos.remoteSource.dto.TokenResponse
 import com.erpnext.pos.remoteSource.oauth.AuthInfoStore
 import com.erpnext.pos.utils.TokenUtils.decodePayload
+import com.erpnext.pos.utils.instanceKeyFromUrl
 import androidx.core.content.edit
 
 /**
@@ -46,7 +47,10 @@ class AndroidTokenStore(private val context: Context) : TokenStore, TransientAut
         SecurePrefs(context, "secure_prefs_v2", aead)
     }
 
-    private fun stringKey(key: String) = key
+    private suspend fun siteScopedKey(key: String): String {
+        val siteKey = instanceKeyFromUrl(getCurrentSite())
+        return "${siteKey}_$key"
+    }
 
     // ------------------------------------------------------------
     // TokenStore Implementation
@@ -58,19 +62,19 @@ class AndroidTokenStore(private val context: Context) : TokenStore, TransientAut
         val claims = decodePayload(tokens.id_token)
         val userId = claims?.get("email").toString()
 
-        prefs.putString(stringKey("access_token"), tokens.access_token)
-        prefs.putString(stringKey("refresh_token"), tokens.refresh_token ?: "")
-        prefs.putString(stringKey("id_token"), tokens.id_token)
-        prefs.putLong(stringKey("expires_in"), tokens.expires_in ?: 0L)
-        prefs.putString(stringKey("userId"), userId)
+        prefs.putString(siteScopedKey("access_token"), tokens.access_token)
+        prefs.putString(siteScopedKey("refresh_token"), tokens.refresh_token ?: "")
+        prefs.putString(siteScopedKey("id_token"), tokens.id_token)
+        prefs.putLong(siteScopedKey("expires_in"), tokens.expires_in ?: 0L)
+        prefs.putString(siteScopedKey("userId"), userId)
         stateFlow.value = tokens
     }
 
     override suspend fun load(): TokenResponse? = mutex.withLock {
-        val at = prefs.getString(stringKey("access_token")) ?: return null
-        val rt = prefs.getString(stringKey("refresh_token")) ?: ""
-        val expires = prefs.getLong(stringKey("expires_in"), 0L)
-        val idToken = prefs.getString(stringKey("id_token")) ?: return null
+        val at = prefs.getString(siteScopedKey("access_token")) ?: return null
+        val rt = prefs.getString(siteScopedKey("refresh_token")) ?: ""
+        val expires = prefs.getLong(siteScopedKey("expires_in"), 0L)
+        val idToken = prefs.getString(siteScopedKey("id_token")) ?: return null
         val tokens = TokenResponse(
             access_token = at,
             refresh_token = rt,
@@ -82,7 +86,7 @@ class AndroidTokenStore(private val context: Context) : TokenStore, TransientAut
     }
 
     override suspend fun loadUser(): String? =
-        prefs.getString(stringKey("userId"))
+        prefs.getString(siteScopedKey("userId"))
 
     // ------------------------------------------------------------
     // AuthInfoStore Implementation
@@ -104,24 +108,49 @@ class AndroidTokenStore(private val context: Context) : TokenStore, TransientAut
 
     override suspend fun saveAuthInfo(info: LoginInfo) = mutex.withLock {
         val list = loadAuthInfo()
-        list.add(info)
+        val existing = list.firstOrNull { it.url == info.url }
+        list.removeAll { it.url == info.url }
+        list.add(
+            info.copy(
+                lastUsedAt = existing?.lastUsedAt,
+                isFavorite = existing?.isFavorite ?: info.isFavorite
+            )
+        )
         val serialized = json.encodeToString(list)
         prefs.putString("sitesInfo", serialized)
         prefs.putString("current_site", info.url)
     }
 
     override suspend fun getCurrentSite(): String? =
-        prefs.getString(stringKey("current_site"))
+        prefs.getString("current_site")
+
+    override suspend fun updateSiteMeta(
+        url: String,
+        lastUsedAt: Long?,
+        isFavorite: Boolean?
+    ) = mutex.withLock {
+        val list = loadAuthInfo()
+        val updated = list.map { item ->
+            if (item.url != url) return@map item
+            item.copy(
+                lastUsedAt = lastUsedAt ?: item.lastUsedAt,
+                isFavorite = isFavorite ?: item.isFavorite
+            )
+        }
+        prefs.putString("sitesInfo", json.encodeToString(updated))
+    }
 
     override suspend fun clearAuthInfo() = mutex.withLock {
         prefs.remove("sitesInfo")
+        prefs.remove("current_site")
     }
 
     override suspend fun clear() = mutex.withLock {
-        prefs.remove("access_token")
-        prefs.remove("refresh_token")
-        prefs.remove("id_token")
-        prefs.remove("expires_in")
+        prefs.remove(siteScopedKey("access_token"))
+        prefs.remove(siteScopedKey("refresh_token"))
+        prefs.remove(siteScopedKey("id_token"))
+        prefs.remove(siteScopedKey("expires_in"))
+        prefs.remove(siteScopedKey("userId"))
         stateFlow.update { null }
     }
 

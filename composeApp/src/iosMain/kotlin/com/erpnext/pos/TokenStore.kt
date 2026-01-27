@@ -1,13 +1,18 @@
 package com.erpnext.pos
 
 import com.erpnext.pos.remoteSource.dto.TokenResponse
+import com.erpnext.pos.remoteSource.dto.LoginInfo
 import com.erpnext.pos.remoteSource.oauth.TokenStore
 import com.erpnext.pos.remoteSource.oauth.TransientAuthStore
+import com.erpnext.pos.remoteSource.oauth.AuthInfoStore
+import com.erpnext.pos.utils.instanceKeyFromUrl
+import com.erpnext.pos.utils.TokenUtils.decodePayload
 import kotlinx.cinterop.*
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.serialization.json.Json
 import platform.CoreFoundation.kCFBooleanTrue
 import platform.Foundation.*
 import platform.Security.*
@@ -57,9 +62,16 @@ private fun keychainDelete(key: String) {
     SecItemDelete(query.toCFDictionary())
 }
 
-class IosTokenStore : TokenStore, TransientAuthStore {
+class IosTokenStore : TokenStore, TransientAuthStore, AuthInfoStore {
     private val mutex = Mutex()
     private val _flow = MutableStateFlow<TokenResponse?>(null)
+    private val json = Json { ignoreUnknownKeys = true }
+    private val defaults = NSUserDefaults.standardUserDefaults
+
+    private suspend fun siteScopedKey(key: String): String {
+        val siteKey = instanceKeyFromUrl(getCurrentSite())
+        return "${siteKey}_$key"
+    }
 
     private fun saveInternal(key: String, value: String) = keychainSet(key, value)
     private fun saveInternal(key: String, value: Long) = keychainSet(key, value)
@@ -67,18 +79,21 @@ class IosTokenStore : TokenStore, TransientAuthStore {
     private fun deleteInternal(key: String) = keychainDelete(key)
 
     override suspend fun save(tokens: TokenResponse) = mutex.withLock {
-        saveInternal("access_token", tokens.access_token)
-        saveInternal("refresh_token", tokens.refresh_token ?: "")
-        saveInternal("expires", tokens.expires_in ?: 0L)
-        saveInternal("id_token", tokens.id_token ?: "")
+        saveInternal(siteScopedKey("access_token"), tokens.access_token)
+        saveInternal(siteScopedKey("refresh_token"), tokens.refresh_token ?: "")
+        saveInternal(siteScopedKey("expires"), tokens.expires_in ?: 0L)
+        saveInternal(siteScopedKey("id_token"), tokens.id_token ?: "")
+        val claims = tokens.id_token?.let { decodePayload(it) }
+        val userId = claims?.get("email")?.toString()
+        userId?.let { defaults.setObject(it, forKey = siteScopedKey("userId")) }
         _flow.value = tokens
     }
 
     override suspend fun load(): TokenResponse? = mutex.withLock {
-        val at = loadInternal("access_token") ?: return null
-        val rt = loadInternal("refresh_token") ?: ""
-        val expires = loadInternal("expires")?.toLongOrNull()
-        val idToken = loadInternal("id_token") ?: return null
+        val at = loadInternal(siteScopedKey("access_token")) ?: return null
+        val rt = loadInternal(siteScopedKey("refresh_token")) ?: ""
+        val expires = loadInternal(siteScopedKey("expires"))?.toLongOrNull()
+        val idToken = loadInternal(siteScopedKey("id_token")) ?: return null
         val t = TokenResponse(
             access_token = at,
             refresh_token = rt,
@@ -90,13 +105,18 @@ class IosTokenStore : TokenStore, TransientAuthStore {
     }
 
     override suspend fun clear() = mutex.withLock {
-        deleteInternal("access_token")
-        deleteInternal("refresh_token")
-        deleteInternal("expires_at")
+        deleteInternal(siteScopedKey("access_token"))
+        deleteInternal(siteScopedKey("refresh_token"))
+        deleteInternal(siteScopedKey("expires"))
+        deleteInternal(siteScopedKey("id_token"))
+        defaults.removeObjectForKey(siteScopedKey("userId"))
         _flow.value = null
     }
 
     override fun tokensFlow() = _flow.asStateFlow()
+
+    override suspend fun loadUser(): String? =
+        defaults.stringForKey(siteScopedKey("userId"))
 
     override suspend fun savePkceVerifier(verifier: String) {
         saveInternal("pkce_verifier", verifier)
@@ -108,4 +128,57 @@ class IosTokenStore : TokenStore, TransientAuthStore {
     override suspend fun saveState(state: String) = saveInternal("oauth_state", state)
     override suspend fun loadState(): String? = loadInternal("oauth_state")
     override suspend fun clearState() = deleteInternal("oauth_state")
+
+    // ------------------------------------------------------------
+    // AuthInfoStore
+    // ------------------------------------------------------------
+    override suspend fun loadAuthInfo(): MutableList<LoginInfo> {
+        val raw = defaults.stringForKey("sitesInfo") ?: return mutableListOf()
+        if (raw.isBlank()) return mutableListOf()
+        return json.decodeFromString(raw)
+    }
+
+    override suspend fun loadAuthInfoByUrl(url: String?, platform: String?): LoginInfo {
+        val currentUrl = url?.takeIf { it.isNotBlank() } ?: getCurrentSite()
+        val sitesInfo = loadAuthInfo()
+        return sitesInfo.first { it.url == currentUrl }
+    }
+
+    override suspend fun saveAuthInfo(info: LoginInfo) = mutex.withLock {
+        val list = loadAuthInfo()
+        list.removeAll { it.url == info.url }
+        val existing = list.firstOrNull { it.url == info.url }
+        list.add(
+            info.copy(
+                lastUsedAt = existing?.lastUsedAt,
+                isFavorite = existing?.isFavorite ?: info.isFavorite
+            )
+        )
+        defaults.setObject(json.encodeToString(list), forKey = "sitesInfo")
+        defaults.setObject(info.url, forKey = "current_site")
+    }
+
+    override suspend fun getCurrentSite(): String? =
+        defaults.stringForKey("current_site")
+
+    override suspend fun updateSiteMeta(
+        url: String,
+        lastUsedAt: Long?,
+        isFavorite: Boolean?
+    ) = mutex.withLock {
+        val list = loadAuthInfo()
+        val updated = list.map { item ->
+            if (item.url != url) return@map item
+            item.copy(
+                lastUsedAt = lastUsedAt ?: item.lastUsedAt,
+                isFavorite = isFavorite ?: item.isFavorite
+            )
+        }
+        defaults.setObject(json.encodeToString(updated), forKey = "sitesInfo")
+    }
+
+    override suspend fun clearAuthInfo() = mutex.withLock {
+        defaults.removeObjectForKey("sitesInfo")
+        defaults.removeObjectForKey("current_site")
+    }
 }

@@ -38,7 +38,6 @@ fun InventoryContent(
             categories = state.categories?.map { it.name!! },
             onQueryChange = onQueryChanged,
             onCategoryChange = onCategorySelected,
-            onSearchQueryChanged = { query -> {} },
             modifier = Modifier.fillMaxWidth().padding(8.dp)
         )
 
@@ -68,7 +67,9 @@ fun InventoryContent(
                     isDesktop = isDesktop,
                     isWideLayout = isWideLayout,
                     baseCurrency = state.baseCurrency,
-                    exchangeRate = state.exchangeRate
+                    exchangeRate = state.exchangeRate,
+                    searchQuery = searchQuery,
+                    selectedCategory = selectedCategory
                 )
             }
         }

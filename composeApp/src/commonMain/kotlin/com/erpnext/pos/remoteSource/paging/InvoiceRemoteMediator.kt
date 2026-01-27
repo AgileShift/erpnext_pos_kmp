@@ -48,7 +48,8 @@ class InvoiceRemoteMediator(
                 when (loadType) {
                     LoadType.REFRESH -> {
                         if (!preserveCacheOnEmptyRefresh || entities.isNotEmpty()) {
-                            salesInvoiceDao.deleteAll()
+                            salesInvoiceDao.hardDeleteAllDeleted()
+                            salesInvoiceDao.softDeleteAll()
                             if (entities.isNotEmpty()) salesInvoiceDao.insertFullInvoices(entities)
                         }
                     }

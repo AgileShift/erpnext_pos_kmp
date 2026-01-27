@@ -3,6 +3,7 @@ package com.erpnext.pos.sync
 import com.erpnext.pos.base.Resource
 import com.erpnext.pos.data.repositories.CompanyRepository
 import com.erpnext.pos.data.repositories.CustomerRepository
+import com.erpnext.pos.data.repositories.CustomerGroupRepository
 import com.erpnext.pos.data.repositories.DeliveryChargesRepository
 import com.erpnext.pos.data.repositories.ExchangeRateRepository
 import com.erpnext.pos.data.repositories.InventoryRepository
@@ -10,6 +11,9 @@ import com.erpnext.pos.data.repositories.ModeOfPaymentRepository
 import com.erpnext.pos.data.repositories.PosProfilePaymentMethodSyncRepository
 import com.erpnext.pos.data.repositories.PaymentTermsRepository
 import com.erpnext.pos.data.repositories.SalesInvoiceRepository
+import com.erpnext.pos.data.repositories.ContactRepository
+import com.erpnext.pos.data.repositories.AddressRepository
+import com.erpnext.pos.data.repositories.TerritoryRepository
 import com.erpnext.pos.sync.PushSyncRunner
 import com.erpnext.pos.sync.SyncContextProvider
 import com.erpnext.pos.views.CashBoxManager
@@ -50,6 +54,10 @@ class SyncManager(
     private val posProfilePaymentMethodSyncRepository: PosProfilePaymentMethodSyncRepository,
     private val paymentTermsRepo: PaymentTermsRepository,
     private val deliveryChargesRepo: DeliveryChargesRepository,
+    private val contactRepo: ContactRepository,
+    private val addressRepo: AddressRepository,
+    private val customerGroupRepo: CustomerGroupRepository,
+    private val territoryRepo: TerritoryRepository,
     private val exchangeRateRepo: ExchangeRateRepository,
     private val syncPreferences: SyncPreferences,
     private val companyInfoRepo: CompanyRepository,
@@ -171,6 +179,28 @@ class SyncManager(
                             throw exception
                         }
                     }, async {
+                        _state.value = SyncState.SYNCING("Grupos de cliente...")
+                        AppSentry.breadcrumb("Sync: customer groups")
+                        runCatching { customerGroupRepo.fetchCustomerGroups() }.getOrElse { error ->
+                            val exception = Exception(
+                                error.message ?: "Error al sincronizar grupos de cliente"
+                            )
+                            AppSentry.capture(exception, "Sync: customer groups failed")
+                            AppLogger.warn("Sync: customer groups failed", exception)
+                            throw exception
+                        }
+                    }, async {
+                        _state.value = SyncState.SYNCING("Territorios...")
+                        AppSentry.breadcrumb("Sync: territories")
+                        runCatching { territoryRepo.fetchTerritories() }.getOrElse { error ->
+                            val exception = Exception(
+                                error.message ?: "Error al sincronizar territorios"
+                            )
+                            AppSentry.capture(exception, "Sync: territories failed")
+                            AppLogger.warn("Sync: territories failed", exception)
+                            throw exception
+                        }
+                    }, async {
                         _state.value = SyncState.SYNCING("Cargos de envío...")
                         AppSentry.breadcrumb("Sync: delivery charges")
                         runCatching { deliveryChargesRepo.fetchDeliveryCharges() }.getOrElse { error ->
@@ -181,6 +211,28 @@ class SyncManager(
                             AppLogger.warn(
                                 "Sync: delivery charges failed", exception
                             )
+                            throw exception
+                        }
+                    }, async {
+                        _state.value = SyncState.SYNCING("Contactos...")
+                        AppSentry.breadcrumb("Sync: contacts")
+                        runCatching { contactRepo.fetchCustomerContacts() }.getOrElse { error ->
+                            val exception = Exception(
+                                error.message ?: "Error al sincronizar contactos"
+                            )
+                            AppSentry.capture(exception, "Sync: contacts failed")
+                            AppLogger.warn("Sync: contacts failed", exception)
+                            throw exception
+                        }
+                    }, async {
+                        _state.value = SyncState.SYNCING("Direcciones...")
+                        AppSentry.breadcrumb("Sync: addresses")
+                        runCatching { addressRepo.fetchCustomerAddresses() }.getOrElse { error ->
+                            val exception = Exception(
+                                error.message ?: "Error al sincronizar direcciones"
+                            )
+                            AppSentry.capture(exception, "Sync: addresses failed")
+                            AppLogger.warn("Sync: addresses failed", exception)
                             throw exception
                         }
                     }, async {

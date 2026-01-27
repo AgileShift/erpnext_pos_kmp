@@ -32,6 +32,9 @@ data class ModeOfPaymentEntity(
     @ColumnInfo(name = "account")
     var account: String? = null,  // GL Account in ERPNext
 
+    @ColumnInfo(name = "is_deleted")
+    var isDeleted: Boolean = false,
+
     @ColumnInfo(name = "last_synced_at", defaultValue = "0")
     override var lastSyncedAt: Long? = Clock.System.now().toEpochMilliseconds()
 ) : SyncableEntity

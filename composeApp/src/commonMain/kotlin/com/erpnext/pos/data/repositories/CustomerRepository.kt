@@ -28,6 +28,7 @@ import kotlin.collections.map
 class CustomerRepository(
     private val remoteSource: CustomerRemoteSource,
     private val localSource: CustomerLocalSource,
+    private val outboxLocalSource: com.erpnext.pos.localSource.datasources.CustomerOutboxLocalSource,
     private val context: CashBoxManager
 ) : ICustomerRepository {
 
@@ -52,12 +53,12 @@ class CustomerRepository(
         }, fetch = {
             remoteSource.fetchCustomers(territory)
         }, saveFetchResult = { remoteData ->
-            val invoices =
-                remoteSource.fetchInvoices(context.requireContext().profileName).toEntities()
+            val profileId = context.requireContext().profileName
+            val invoices = remoteSource.fetchInvoices(profileId).toEntities()
             localSource.saveInvoices(invoices)
 
             // Fetch all outstanding invoices once
-            val allOutstanding = remoteSource.fetchAllOutstandingInvoices()
+            val allOutstanding = remoteSource.fetchAllOutstandingInvoices(profileId)
             val outstandingByCustomer = allOutstanding.groupBy { it.customer }
             val remoteOutstandingNames = allOutstanding.mapNotNull { it.name }.toSet()
             val localOutstanding = localSource.getOutstandingInvoiceNames()
@@ -96,7 +97,9 @@ class CustomerRepository(
                     }
                 }.awaitAll()
                 localSource.insertAll(entities)
-                localSource.deleteMissing(entities.map { it.name })
+                val ids = entities.map { it.name }
+                localSource.deleteMissing(ids)
+                outboxLocalSource.deleteMissingCustomerIds(ids)
                 entities.map { it.name }.distinct().forEach { customerId ->
                     refreshCustomerSummaryWithRates(customerId)
                 }
@@ -122,12 +125,12 @@ class CustomerRepository(
                         SyncTTL.isExpired(localData.maxOf { it.lastSyncedAt?.toDouble() ?: 0.0 }
                             .toLong())*/
         }, saveFetchResult = { remoteData ->
-            val invoices =
-                remoteSource.fetchInvoices(context.requireContext().profileName).toEntities()
+            val profileId = context.requireContext().profileName
+            val invoices = remoteSource.fetchInvoices(profileId).toEntities()
             localSource.saveInvoices(invoices)
 
             // Fetch all outstanding invoices once
-            val allOutstanding = remoteSource.fetchAllOutstandingInvoices()
+            val allOutstanding = remoteSource.fetchAllOutstandingInvoices(profileId)
             val outstandingByCustomer = allOutstanding.groupBy { it.customer }
             val remoteOutstandingNames = allOutstanding.mapNotNull { it.name }.toSet()
             val localOutstanding = localSource.getOutstandingInvoiceNames()
@@ -170,7 +173,9 @@ class CustomerRepository(
                     }
                 }.awaitAll()
                 localSource.insertAll(entities)
-                localSource.deleteMissing(entities.map { it.name })
+                val ids = entities.map { it.name }
+                localSource.deleteMissing(ids)
+                outboxLocalSource.deleteMissingCustomerIds(ids)
                 entities.map { it.name }.distinct().forEach { customerId ->
                     refreshCustomerSummaryWithRates(customerId)
                 }
@@ -231,7 +236,13 @@ class CustomerRepository(
         startDate: String,
         endDate: String
     ): List<SalesInvoiceBO> {
-        val invoices = remoteSource.fetchInvoicesForCustomerPeriod(customerId, startDate, endDate)
+        val profileId = context.requireContext().profileName
+        val invoices = remoteSource.fetchInvoicesForCustomerPeriod(
+            customerId,
+            startDate,
+            endDate,
+            profileId
+        )
         if (invoices.isEmpty()) return emptyList()
         return invoices.mapNotNull { dto ->
             runCatching {
@@ -239,5 +250,18 @@ class CustomerRepository(
                 entity.toBO()
             }.getOrNull()
         }
+    }
+
+    suspend fun fetchLocalInvoicesForCustomerPeriod(
+        customerId: String,
+        startDate: String,
+        endDate: String
+    ): List<SalesInvoiceBO> {
+        val invoices = localSource.getInvoicesForCustomerInRange(
+            customerName = customerId,
+            startDate = startDate,
+            endDate = endDate
+        )
+        return invoices.toBO()
     }
 }

@@ -25,7 +25,6 @@ fun InventoryFilters(
     selectedCategory: String,
     categories: List<String>?,
     onQueryChange: (String) -> Unit,
-    onSearchQueryChanged: (String) -> (() -> Unit),
     onCategoryChange: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -102,7 +101,6 @@ fun InventoryFilters(
             SearchTextField(
                 searchQuery = searchQuery,
                 onSearchQueryChange = onQueryChange,
-                onSearchAction = onSearchQueryChanged(searchQuery),
                 placeholderText = "Buscar por nombre, código o descripcion...",
                 modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
             )
@@ -120,25 +118,35 @@ fun SearchTextField(
 ) {
     val keyboardController = LocalSoftwareKeyboardController.current
 
-    TextField(
+    OutlinedTextField(
         value = searchQuery,
-        onValueChange = onSearchQueryChange, // <- actualiza el estado externo
+        onValueChange = onSearchQueryChange,
         modifier = modifier
             .fillMaxWidth()
-            .heightIn(min = 50.dp)
-            .padding(vertical = 2.dp),
-        placeholder = { Text(placeholderText, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+            .heightIn(min = 48.dp),
+        placeholder = {
+            Text(
+                placeholderText,
+                style = MaterialTheme.typography.bodyMedium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        },
         leadingIcon = {
             Icon(
                 Icons.Filled.Search,
                 contentDescription = "Buscar",
-                tint = MaterialTheme.colorScheme.outline
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
             )
         },
         trailingIcon = {
             AnimatedVisibility(searchQuery.isNotEmpty()) {
                 IconButton(onClick = { onSearchQueryChange("") }) {
-                    Icon(Icons.Filled.Clear, contentDescription = "Limpiar")
+                    Icon(
+                        Icons.Filled.Clear,
+                        contentDescription = "Limpiar",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
             }
         },
@@ -154,10 +162,10 @@ fun SearchTextField(
             focusedIndicatorColor = Color.Transparent,
             unfocusedIndicatorColor = Color.Transparent,
             disabledIndicatorColor = Color.Transparent,
-            focusedContainerColor = MaterialTheme.colorScheme.surface,
-            unfocusedContainerColor = MaterialTheme.colorScheme.surface,
+            focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+            unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
             cursorColor = MaterialTheme.colorScheme.primary
         ),
-        shape = RoundedCornerShape(12.dp)
+        shape = RoundedCornerShape(18.dp)
     )
 }

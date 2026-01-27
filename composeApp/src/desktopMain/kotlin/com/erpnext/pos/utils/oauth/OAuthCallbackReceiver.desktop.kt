@@ -21,10 +21,93 @@ actual class OAuthCallbackReceiver {
         s.createContext(PATH) { ex ->
             val params = parseQuery(ex.requestURI.rawQuery.orEmpty())
             val html = """
-                <html><body>
-                <h3>Login completado</h3>
-                Puedes cerrar esta ventana y volver a la app.
-                </body></html>
+                <!doctype html>
+                <html lang="es">
+                <head>
+                  <meta charset="utf-8" />
+                  <meta name="viewport" content="width=device-width, initial-scale=1" />
+                  <title>ERPNext POS</title>
+                  <style>
+                    :root { color-scheme: light; }
+                    body {
+                      margin: 0;
+                      font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+                      background: radial-gradient(100% 100% at 0% 0%, #eaf3ff 0%, #f6f2ff 45%, #ffffff 100%);
+                      color: #0f172a;
+                    }
+                    .wrap {
+                      min-height: 100vh;
+                      display: grid;
+                      place-items: center;
+                      padding: 32px;
+                    }
+                    .card {
+                      max-width: 520px;
+                      width: 100%;
+                      background: #ffffff;
+                      border-radius: 20px;
+                      box-shadow: 0 18px 50px rgba(15, 23, 42, 0.12);
+                      padding: 28px 26px;
+                      border: 1px solid rgba(15, 23, 42, 0.08);
+                    }
+                    .badge {
+                      display: inline-flex;
+                      align-items: center;
+                      gap: 10px;
+                      background: #e8f2ff;
+                      color: #0b5cff;
+                      padding: 8px 12px;
+                      border-radius: 999px;
+                      font-weight: 600;
+                      font-size: 13px;
+                    }
+                    .title {
+                      font-size: 22px;
+                      font-weight: 700;
+                      margin: 16px 0 8px;
+                    }
+                    .text {
+                      color: #475569;
+                      font-size: 15px;
+                      line-height: 1.5;
+                    }
+                    .hint {
+                      margin-top: 16px;
+                      background: #f8fafc;
+                      border-radius: 14px;
+                      padding: 14px 16px;
+                      font-size: 14px;
+                      color: #334155;
+                    }
+                    .check {
+                      width: 36px;
+                      height: 36px;
+                      border-radius: 50%;
+                      background: #22c55e;
+                      display: inline-grid;
+                      place-items: center;
+                      color: white;
+                      font-weight: 700;
+                      margin-right: 8px;
+                    }
+                  </style>
+                </head>
+                <body>
+                  <div class="wrap">
+                    <div class="card">
+                      <div class="badge">ERPNext POS</div>
+                      <div class="title">Autenticacion completada</div>
+                      <p class="text">
+                        Ya puedes cerrar esta ventana y regresar a la aplicacion para continuar.
+                      </p>
+                      <div class="hint">
+                        <span class="check">✓</span>
+                        La sesion se sincronizo correctamente.
+                      </div>
+                    </div>
+                  </div>
+                </body>
+                </html>
             """.trimIndent()
 
             ex.responseHeaders.add("Content-Type", "text/html; charset=utf-8")

@@ -7,7 +7,10 @@ import androidx.room.RoomDatabaseConstructor
 import com.erpnext.pos.localSource.dao.CashboxDao
 import com.erpnext.pos.localSource.dao.CategoryDao
 import com.erpnext.pos.localSource.dao.CompanyDao
+import com.erpnext.pos.localSource.dao.AddressDao
+import com.erpnext.pos.localSource.dao.ContactDao
 import com.erpnext.pos.localSource.dao.CustomerDao
+import com.erpnext.pos.localSource.dao.CustomerOutboxDao
 import com.erpnext.pos.localSource.dao.DeliveryChargeDao
 import com.erpnext.pos.localSource.dao.ExchangeRateDao
 import com.erpnext.pos.localSource.dao.ItemDao
@@ -37,7 +40,10 @@ import com.erpnext.pos.localSource.dao.v2.SyncStatusDao
 import com.erpnext.pos.localSource.entities.BalanceDetailsEntity
 import com.erpnext.pos.localSource.entities.CashboxEntity
 import com.erpnext.pos.localSource.entities.CategoryEntity
+import com.erpnext.pos.localSource.entities.AddressEntity
+import com.erpnext.pos.localSource.entities.CustomerGroupEntity
 import com.erpnext.pos.localSource.entities.CustomerEntity
+import com.erpnext.pos.localSource.entities.CustomerOutboxEntity
 import com.erpnext.pos.localSource.entities.DeliveryChargeEntity
 import com.erpnext.pos.localSource.entities.ExchangeRateEntity
 import com.erpnext.pos.localSource.entities.ItemEntity
@@ -52,9 +58,11 @@ import com.erpnext.pos.localSource.entities.PosProfilePaymentMethodEntity
 import com.erpnext.pos.localSource.entities.PaymentTermEntity
 import com.erpnext.pos.localSource.entities.SalesInvoiceEntity
 import com.erpnext.pos.localSource.entities.SalesInvoiceItemEntity
+import com.erpnext.pos.localSource.entities.TerritoryEntity
 import com.erpnext.pos.localSource.entities.TaxDetailsEntity
 import com.erpnext.pos.localSource.entities.UserEntity
 import com.erpnext.pos.localSource.entities.CompanyEntity
+import com.erpnext.pos.localSource.entities.ContactEntity
 import com.erpnext.pos.localSource.entities.v2.CustomerAddressEntity
 import com.erpnext.pos.localSource.entities.v2.CustomerContactEntity
 import com.erpnext.pos.localSource.entities.v2.CustomerEntity as CustomerEntityV2
@@ -86,7 +94,7 @@ import com.erpnext.pos.localSource.entities.v2.SalesPersonEntity
 import com.erpnext.pos.localSource.entities.v2.SalesTaxAndChargeEntity
 import com.erpnext.pos.localSource.entities.v2.SalesTeamEntity
 import com.erpnext.pos.localSource.entities.v2.SyncStateEntity
-import com.erpnext.pos.localSource.entities.v2.TerritoryEntity
+import com.erpnext.pos.localSource.entities.v2.TerritoryEntity as TerritoryEntityV2
 import com.erpnext.pos.localSource.entities.v2.UserEntity as UserEntityV2
 
 @Database(
@@ -104,6 +112,9 @@ import com.erpnext.pos.localSource.entities.v2.UserEntity as UserEntityV2
         CashboxEntity::class,
         BalanceDetailsEntity::class,
         CustomerEntity::class,
+        ContactEntity::class,
+        AddressEntity::class,
+        CustomerGroupEntity::class,
         CategoryEntity::class,
         SalesInvoiceEntity::class,
         SalesInvoiceItemEntity::class,
@@ -116,6 +127,7 @@ import com.erpnext.pos.localSource.entities.v2.UserEntity as UserEntityV2
         EmployeeEntity::class,
         SalesPersonEntity::class,
         SalesTeamEntity::class,
+        TerritoryEntityV2::class,
         TerritoryEntity::class,
         //====== V2 ======
         CustomerEntityV2::class,
@@ -145,9 +157,10 @@ import com.erpnext.pos.localSource.entities.v2.UserEntity as UserEntityV2
         PaymentEntryEntity::class,
         PaymentEntryReferenceEntity::class,
         PaymentScheduleEntity::class,
-        SyncStateEntity::class
+        SyncStateEntity::class,
+        CustomerOutboxEntity::class
     ],
-    version = 27,
+    version = 31,
     exportSchema = true
 )
 @ConstructedBy(AppDatabaseConstructor::class)
@@ -183,6 +196,11 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun paymentTermDao(): PaymentTermDao
     abstract fun deliveryChargeDao(): DeliveryChargeDao
     abstract fun companyDao(): CompanyDao
+    abstract fun customerOutboxDao(): CustomerOutboxDao
+    abstract fun customerGroupDao(): com.erpnext.pos.localSource.dao.CustomerGroupDao
+    abstract fun territoryDao(): com.erpnext.pos.localSource.dao.TerritoryDao
+    abstract fun contactDao(): ContactDao
+    abstract fun addressDao(): AddressDao
 }
 
 @Suppress("KotlinNoActualForExpect")

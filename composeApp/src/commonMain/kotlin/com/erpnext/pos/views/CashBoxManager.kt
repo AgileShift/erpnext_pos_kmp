@@ -458,14 +458,18 @@ class CashBoxManager(
 
     suspend fun resolveExchangeRateBetween(
         fromCurrency: String,
-        toCurrency: String
+        toCurrency: String,
+        allowNetwork: Boolean = true
     ): Double? {
         val from = fromCurrency.trim().uppercase()
         val to = toCurrency.trim().uppercase()
         if (from.isBlank() || to.isBlank()) return null
         if (from == to) return 1.0
-
-        return exchangeRateRepository.getRate(from, to)
+        return if (allowNetwork) {
+            exchangeRateRepository.getRate(from, to)
+        } else {
+            exchangeRateRepository.getLocalRate(from, to)
+        }
     }
 
     private suspend fun resolveExchangeRate(baseCurrency: String): Double {

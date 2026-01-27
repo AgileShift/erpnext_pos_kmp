@@ -1,6 +1,7 @@
 package com.erpnext.pos.sync
 
 import com.erpnext.pos.data.repositories.ExchangeRateRepository
+import com.erpnext.pos.data.repositories.CustomerSyncRepository
 import com.erpnext.pos.data.repositories.ClosingEntrySyncRepository
 import com.erpnext.pos.data.repositories.OpeningEntrySyncRepository
 import com.erpnext.pos.data.repositories.SalesInvoiceRepository
@@ -29,6 +30,7 @@ class LegacyPushSyncManager(
     private val exchangeRateRepository: ExchangeRateRepository,
     private val openingEntrySyncRepository: OpeningEntrySyncRepository,
     private val closingEntrySyncRepository: ClosingEntrySyncRepository,
+    private val customerSyncRepository: CustomerSyncRepository,
     private val cashBoxManager: CashBoxManager
 ) : PushSyncRunner {
 
@@ -38,6 +40,9 @@ class LegacyPushSyncManager(
             onDocType("Aperturas pendientes")
             val openingsSynced = openingEntrySyncRepository.pushPending()
             hasChanges = hasChanges || openingsSynced
+            onDocType("Clientes pendientes")
+            val customersSynced = customerSyncRepository.pushPending()
+            hasChanges = hasChanges || customersSynced
             onDocType("Facturas locales")
             val pending = invoiceRepository.getPendingSyncInvoices()
             if (pending.isNotEmpty()) {

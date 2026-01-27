@@ -5,6 +5,7 @@ import com.erpnext.pos.localSource.dao.ModeOfPaymentDao
 import com.erpnext.pos.localSource.entities.ModeOfPaymentEntity
 import com.erpnext.pos.localSource.entities.SalesInvoiceWithItemsAndPayments
 import com.erpnext.pos.remoteSource.dto.SalesInvoiceDto
+import com.erpnext.pos.remoteSource.dto.SalesInvoiceItemDto
 import com.erpnext.pos.remoteSource.dto.v2.PaymentEntryCreateDto
 import com.erpnext.pos.remoteSource.dto.v2.PaymentEntryReferenceCreateDto
 import com.erpnext.pos.remoteSource.mapper.toEntity
@@ -91,7 +92,11 @@ class CancelSalesInvoiceUseCase(
             throw IllegalStateException("Se requiere conexión a internet para registrar un retorno.")
         }
         val originalName = invoice.invoice.invoiceName ?: return CancelSalesInvoiceResult()
-        val creditNoteDto = buildCreditNoteDto(invoice, reason)
+        val returnItems = buildRemainingReturnItems(invoice)
+        if (returnItems.isEmpty()) {
+            throw IllegalStateException("La factura ya fue retornada por completo.")
+        }
+        val creditNoteDto = buildCreditNoteDto(invoice, returnItems, reason)
         val created = invoiceRepository.createRemoteInvoice(creditNoteDto)
         val entity = created.toEntity()
         invoiceRepository.saveInvoiceLocally(
@@ -111,21 +116,59 @@ class CancelSalesInvoiceUseCase(
         return CancelSalesInvoiceResult(creditNoteName = created.name, cancelled = true)
     }
 
+    private suspend fun buildRemainingReturnItems(
+        invoice: SalesInvoiceWithItemsAndPayments
+    ): List<SalesInvoiceItemDto> {
+        val parent = invoice.invoice
+        val originalName = parent.invoiceName ?: return emptyList()
+        val remoteParent = invoiceRepository.fetchRemoteInvoice(originalName)
+        val baseItems = remoteParent?.items?.takeIf { it.isNotEmpty() }
+            ?: invoice.items.map { it.toDto(parent) }
+        val returnInvoices = invoiceRepository.fetchRemoteReturnInvoices(
+            returnAgainst = originalName,
+            isPos = parent.isPos
+        )
+        val returnedByItem = mutableMapOf<String, Double>()
+        returnInvoices.forEach { credit ->
+            credit.items.forEach { item ->
+                val qty = kotlin.math.abs(item.qty)
+                if (qty > 0.0) {
+                    returnedByItem[item.itemCode] =
+                        (returnedByItem[item.itemCode] ?: 0.0) + qty
+                }
+            }
+        }
+        return baseItems.mapNotNull { item ->
+            val originalQty = kotlin.math.abs(item.qty)
+            val returnedQty = returnedByItem[item.itemCode] ?: 0.0
+            val remaining = (originalQty - returnedQty).coerceAtLeast(0.0)
+            if (remaining <= 0.0) null else createReturnItemFromDto(item, remaining)
+        }
+    }
+
+    private fun createReturnItemFromDto(
+        item: SalesInvoiceItemDto,
+        qtyToReturn: Double
+    ): SalesInvoiceItemDto {
+        val perUnit =
+            if (item.qty != 0.0) item.amount / item.qty else item.rate.takeIf { it != 0.0 }
+                ?: 0.0
+        val absAmount = kotlin.math.abs(perUnit) * qtyToReturn
+        return item.copy(
+            qty = -qtyToReturn,
+            amount = -absAmount
+        )
+    }
+
     private fun buildCreditNoteDto(
         invoice: SalesInvoiceWithItemsAndPayments,
+        items: List<SalesInvoiceItemDto>,
         reason: String?
     ): SalesInvoiceDto {
         val parent = invoice.invoice
         val now = Clock.System.now().toEpochMilliseconds()
         val isPos = parent.isPos
-
-        val returnItems = invoice.items.map { item ->
-            val dto = item.toDto(parent)
-            dto.copy(
-                qty = -abs(dto.qty),
-                amount = -abs(dto.amount)
-            )
-        }
+        val totalAmount = items.sumOf { -it.amount }
 
         return SalesInvoiceDto(
             customer = parent.customer,
@@ -135,12 +178,12 @@ class CancelSalesInvoiceUseCase(
             postingDate = now.toErpDateTime(),
             dueDate = now.toErpDate(),
             status = "Draft",
-            grandTotal = parent.grandTotal,
-            outstandingAmount = 0.0,
-            totalTaxesAndCharges = parent.taxTotal,
-            netTotal = parent.netTotal,
+            grandTotal = totalAmount,
+            outstandingAmount = totalAmount,
+            totalTaxesAndCharges = 0.0,
+            netTotal = totalAmount,
             paidAmount = 0.0,
-            items = returnItems,
+            items = items,
             payments = emptyList(),
             remarks = reason ?: parent.remarks,
             updateStock = true,
@@ -169,43 +212,43 @@ class CancelSalesInvoiceUseCase(
         val postingDate = Clock.System.now().toEpochMilliseconds().toErpDateTime()
         val modes = modeOfPaymentDao.getAllModes(company)
         val receivableAccount = invoice.invoice.debitTo
-        val currency = invoice.invoice.currency
+        val totalReturn = creditNote.grandTotal
+        if (totalReturn <= 0.0) return
+        val resolvedMode = refundModeOfPayment?.takeIf { it.isNotBlank() }
+            ?: invoice.payments.firstOrNull()?.modeOfPayment
+            ?: return
+        val paidToCurrency = creditNote.partyAccountCurrency
+            ?: creditNote.currency
+            ?: invoice.invoice.currency
 
-        invoice.payments
-            .filter { it.amount > 0.0 }
-            .forEach { payment ->
-                val resolvedMode = refundModeOfPayment?.takeIf { it.isNotBlank() }
-                    ?: payment.modeOfPayment
-
-                val entry = PaymentEntryCreateDto(
-                    company = company,
-                    postingDate = postingDate,
-                    paymentType = "Pay",
-                    partyType = "Customer",
-                    modeOfPayment = resolvedMode,
-                    paidAmount = payment.amount,
-                    receivedAmount = payment.amount,
-                    paidFrom = resolveAccount(resolvedMode, modes, receivableAccount),
-                    paidTo = resolveAccount(resolvedMode, modes, receivableAccount),
-                    paidToAccountCurrency = payment.paymentCurrency ?: currency,
-                    referenceNo = refundReferenceNo?.takeIf { it.isNotBlank() } ?: payment.paymentReference,
-                    referenceDate = payment.paymentDate,
-                    references = listOf(
-                        PaymentEntryReferenceCreateDto(
-                            referenceDoctype = "Sales Invoice",
-                            referenceName = creditName,
-                            totalAmount = creditNote.grandTotal,
-                            outstandingAmount = creditNote.outstandingAmount ?: 0.0,
-                            allocatedAmount = payment.amount
-                        )
-                    ),
-                    partyId = invoice.invoice.customer,
-                    sourceExchangeRate = null,
-                    targetExchangeRate = null,
-                    docStatus = 0
+        val entry = PaymentEntryCreateDto(
+            company = company,
+            postingDate = postingDate,
+            paymentType = "Pay",
+            partyType = "Customer",
+            modeOfPayment = resolvedMode,
+            paidAmount = totalReturn,
+            receivedAmount = totalReturn,
+            paidFrom = resolveAccount(resolvedMode, modes, receivableAccount),
+            paidTo = resolveAccount(resolvedMode, modes, receivableAccount),
+            paidToAccountCurrency = paidToCurrency,
+            referenceNo = refundReferenceNo?.takeIf { it.isNotBlank() },
+            referenceDate = postingDate,
+            references = listOf(
+                PaymentEntryReferenceCreateDto(
+                    referenceDoctype = "Sales Invoice",
+                    referenceName = creditName,
+                    totalAmount = totalReturn,
+                    outstandingAmount = creditNote.outstandingAmount ?: totalReturn,
+                    allocatedAmount = totalReturn
                 )
-                paymentEntryUseCase(CreatePaymentEntryInput(entry))
-            }
+            ),
+            partyId = invoice.invoice.customer,
+            sourceExchangeRate = null,
+            targetExchangeRate = null,
+            docStatus = 0
+        )
+        paymentEntryUseCase(CreatePaymentEntryInput(entry))
     }
 
     private fun resolveAccount(

@@ -18,6 +18,7 @@ interface IInventoryLocalSource {
     fun getItemCategories(): Flow<List<CategoryEntity>>
     suspend fun deleteAllCategories()
     suspend fun insertCategories(data: List<CategoryEntity>)
+    suspend fun deleteMissingCategories(names: List<String>)
     suspend fun getOldestItem(): ItemEntity?
     suspend fun count(): Int
     suspend fun deleteAll()
@@ -62,17 +63,27 @@ class InventoryLocalSource(
     override fun getAllFilteredPaged(search: String): PagingSource<Int, ItemEntity> =
         dao.getAllFiltered(search)
 
-    override suspend fun deleteAll() = dao.deleteAll()
-
-    override suspend fun deleteMissing(itemCodes: List<String>) {
-        if (itemCodes.isEmpty()) {
-            dao.deleteAll()
-        } else {
-            dao.deleteNotIn(itemCodes)
-        }
+    override suspend fun deleteAll() {
+        dao.hardDeleteAllDeleted()
+        dao.softDeleteAll()
     }
 
-    override suspend fun deleteAllCategories() = categoryDao.deleteAll()
+    override suspend fun deleteMissing(itemCodes: List<String>) {
+        val ids = itemCodes.ifEmpty { listOf("__empty__") }
+        dao.hardDeleteDeletedNotIn(ids)
+        dao.softDeleteNotIn(ids)
+    }
+
+    override suspend fun deleteAllCategories() {
+        categoryDao.hardDeleteAllDeleted()
+        categoryDao.softDeleteAll()
+    }
+
+    override suspend fun deleteMissingCategories(names: List<String>) {
+        val ids = names.ifEmpty { listOf("__empty__") }
+        categoryDao.hardDeleteDeletedNotIn(ids)
+        categoryDao.softDeleteNotIn(ids)
+    }
     override suspend fun insertCategories(data: List<CategoryEntity>) = categoryDao.insertAll(data)
     override fun getItemCategories(): Flow<List<CategoryEntity>> = categoryDao.getAll()
     override suspend fun count(): Int = dao.countAll()

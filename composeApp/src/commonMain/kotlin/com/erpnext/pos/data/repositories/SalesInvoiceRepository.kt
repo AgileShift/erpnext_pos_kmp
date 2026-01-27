@@ -96,37 +96,7 @@ class SalesInvoiceRepository(
         }
         val invoiceCurrency = dto.currency?.trim()?.uppercase()
         val receivableCurrency = dto.partyAccountCurrency?.trim()?.uppercase()
-        val providedRate = dto.conversionRate
-            ?: dto.customExchangeRate
-        if (!invoiceCurrency.isNullOrBlank() &&
-            !receivableCurrency.isNullOrBlank() &&
-            !invoiceCurrency.equals(receivableCurrency, ignoreCase = true)
-        ) {
-            val directRate = context.resolveExchangeRateBetween(invoiceCurrency, receivableCurrency)
-            val fallbackRate = if (directRate == null || directRate <= 0.0) {
-                val ctx = context.getContext()
-                when {
-                    receivableCurrency.equals("USD", true) &&
-                        invoiceCurrency.equals(ctx?.currency, true) &&
-                        (ctx?.exchangeRate ?: 0.0) > 0.0 ->
-                        1 / (ctx?.exchangeRate ?: 1.0)
-                    invoiceCurrency.equals("USD", true) &&
-                        receivableCurrency.equals(ctx?.currency, true) &&
-                        (ctx?.exchangeRate ?: 0.0) > 0.0 ->
-                        ctx?.exchangeRate
-                    else -> null
-                }
-            } else {
-                directRate
-            }
-            if (fallbackRate != null && fallbackRate > 0.0) {
-                entity.invoice.outstandingAmount =
-                    roundToCurrency(entity.invoice.outstandingAmount * fallbackRate)
-                entity.invoice.paidAmount = roundToCurrency(entity.invoice.paidAmount * fallbackRate)
-                entity.invoice.conversionRate = providedRate ?: fallbackRate
-                entity.invoice.customExchangeRate = dto.customExchangeRate ?: fallbackRate
-            }
-        }
+        val providedRate = dto.conversionRate ?: dto.customExchangeRate
         if (entity.invoice.conversionRate == null && providedRate != null && providedRate > 0.0) {
             entity.invoice.conversionRate = providedRate
         }
@@ -225,9 +195,15 @@ class SalesInvoiceRepository(
         }
     }
 
+    suspend fun fetchRemoteReturnInvoices(returnAgainst: String, isPos: Boolean): List<SalesInvoiceDto> {
+        val posProfile = context.requireContext().profileName
+        return remoteSource.fetchReturnInvoices(returnAgainst, isPos, posProfile)
+    }
+
     suspend fun refreshInvoiceFromRemote(invoiceName: String): SalesInvoiceWithItemsAndPayments? {
         val remote = fetchRemoteInvoice(invoiceName) ?: return null
-        val entity = remote.toEntity()
+        val profileId = context.getContext()?.profileName
+        val entity = ensureProfileId(remote.toEntity(), profileId)
         saveInvoiceLocally(entity.invoice, entity.items, entity.payments)
         return entity
     }
@@ -253,6 +229,17 @@ class SalesInvoiceRepository(
         val resolvedPaidAmount = if (remoteHasPayments) remotePaid else localPaid
         val resolvedOutstandingAmount =
             if (remoteHasPayments) (remoteOutstanding ?: 0.0) else localOutstanding
+        val invoiceCurrency = remote.currency?.trim()
+        val receivableCurrency = remote.partyAccountCurrency?.trim()
+        val conversionRate = remote.conversionRate ?: remote.customExchangeRate
+        val conversionNeeded = !invoiceCurrency.isNullOrBlank() &&
+            !receivableCurrency.isNullOrBlank() &&
+            !invoiceCurrency.equals(receivableCurrency, true) &&
+            conversionRate != null &&
+            conversionRate > 0.0
+        val toInvoiceFactor = if (conversionNeeded) (1 / conversionRate!!) else 1.0
+        val localPaidAmount = roundToCurrency(resolvedPaidAmount * toInvoiceFactor)
+        val localOutstandingAmount = roundToCurrency(resolvedOutstandingAmount * toInvoiceFactor)
         // El status se alinea con la fuente de verdad escogida.
         val resolvedStatus = if (remoteHasPayments) remote.status ?: "Draft"
         else localInvoice?.status ?: (remote.status ?: "Draft")
@@ -270,8 +257,8 @@ class SalesInvoiceRepository(
             netTotal = remote.netTotal,
             taxTotal = remote.totalTaxesAndCharges ?: 0.0,
             grandTotal = remote.grandTotal,
-            paidAmount = resolvedPaidAmount,
-            outstandingAmount = resolvedOutstandingAmount,
+            paidAmount = localPaidAmount,
+            outstandingAmount = localOutstandingAmount,
             status = resolvedStatus,
             docstatus = remote.docStatus ?: resolveDocStatus(remote.status, null),
             modeOfPayment = remote.payments.firstOrNull()?.modeOfPayment,
@@ -287,7 +274,7 @@ class SalesInvoiceRepository(
     }
 
     override suspend fun createRemoteInvoice(invoice: SalesInvoiceDto): SalesInvoiceDto {
-        val draft = ensureDraftDocStatus(enrichPaymentsWithAccount(invoice))
+        val draft = ensureDraftDocStatus(enrichPaymentsWithAccount(ensurePosProfile(invoice)))
         val created = if (isPosInvoice(draft)) {
             remoteSource.createPosInvoice(draft)
         } else {
@@ -393,7 +380,7 @@ class SalesInvoiceRepository(
     private suspend fun handleCancelledInvoice(invoice: SalesInvoiceWithItemsAndPayments) {
         val localName = invoice.invoice.invoiceName ?: return
         if (localName.startsWith("LOCAL-", ignoreCase = true)) {
-            localSource.deleteByInvoiceId(localName)
+            localSource.softDeleteByInvoiceId(localName)
             return
         }
         if (invoice.invoice.isPos) {
@@ -409,7 +396,7 @@ class SalesInvoiceRepository(
         if (remote != null) {
             updateLocalInvoiceFromRemote(localName, remote)
         } else {
-            localSource.deleteByInvoiceId(localName)
+            localSource.softDeleteByInvoiceId(localName)
         }
     }
 
@@ -508,9 +495,17 @@ class SalesInvoiceRepository(
                 first == null || SyncTTL.isExpired(first.lastSyncedAt)*/
             },
             saveFetchResult = { it ->
+                val profileId = context.requireContext().profileName
+                val remoteNames = it.mapNotNull { dto -> dto.name }
                 it.toEntities().forEach { payload ->
-                    localSource.saveInvoiceLocally(payload.invoice, payload.items, payload.payments)
+                    val ensured = ensureProfileId(payload, profileId)
+                    localSource.saveInvoiceLocally(
+                        ensured.invoice,
+                        ensured.items,
+                        ensured.payments
+                    )
                 }
+                localSource.softDeleteMissingForProfile(profileId, remoteNames)
                 reconcileOutstandingWithRemote(it)
             },
             onFetchFailed = { e ->
@@ -523,14 +518,17 @@ class SalesInvoiceRepository(
     override suspend fun countPending(): Int = localSource.countAllPendingSync()
 
     suspend fun getOutstandingInvoicesForCustomer(customerName: String): List<SalesInvoiceBO> {
+        val posProfile = context.requireContext().profileName
         val remoteInvoices = runCatching {
-            remoteSource.fetchOutstandingInvoicesForCustomer(customerName)
+            remoteSource.fetchOutstandingInvoicesForCustomer(customerName, posProfile)
         }.getOrNull()
 
         if (!remoteInvoices.isNullOrEmpty()) {
+            val profileId = context.getContext()?.profileName
             val entities = remoteInvoices.toEntities()
             entities.forEach { payload ->
-                saveInvoiceLocally(payload.invoice, payload.items, payload.payments)
+                val ensured = ensureProfileId(payload, profileId)
+                saveInvoiceLocally(ensured.invoice, ensured.items, ensured.payments)
             }
         }
 
@@ -557,10 +555,26 @@ class SalesInvoiceRepository(
                 updateLocalInvoiceFromRemote(invoiceName, remote)
             } else {
                 val customerId = localSource.getInvoiceByName(invoiceName)?.invoice?.customer
-                localSource.deleteByInvoiceId(invoiceName)
+                localSource.softDeleteByInvoiceId(invoiceName)
                 customerId?.let { refreshCustomerSummaryWithRates(it) }
                 AppLogger.warn("reconcileOutstandingWithRemote: invoice not found $invoiceName")
             }
         }
+    }
+
+    private fun ensureProfileId(
+        payload: SalesInvoiceWithItemsAndPayments,
+        profileId: String?
+    ): SalesInvoiceWithItemsAndPayments {
+        if (payload.invoice.profileId.isNullOrBlank() && !profileId.isNullOrBlank()) {
+            payload.invoice = payload.invoice.copy(profileId = profileId)
+        }
+        return payload
+    }
+
+    private fun ensurePosProfile(dto: SalesInvoiceDto): SalesInvoiceDto {
+        if (!dto.posProfile.isNullOrBlank()) return dto
+        val profileId = context.getContext()?.profileName?.takeIf { it.isNotBlank() } ?: return dto
+        return dto.copy(posProfile = profileId)
     }
 }

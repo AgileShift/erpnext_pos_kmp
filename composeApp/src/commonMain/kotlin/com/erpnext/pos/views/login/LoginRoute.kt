@@ -23,6 +23,7 @@ fun rememberLoginActions(coordinator: LoginCoordinator): LoginAction {
         LoginAction(
             existingSites = coordinator::existingSites,
             onSiteSelected = coordinator::onSiteSelected,
+            onToggleFavorite = coordinator::onToggleFavorite,
             onAddSite = coordinator::onAddSite,
             onError = coordinator::onError,
             onReset = coordinator::onReset,

@@ -27,6 +27,11 @@ interface AuthInfoStore {
     suspend fun loadAuthInfoByUrl(url: String? = null, platform: String? = null): LoginInfo
     suspend fun saveAuthInfo(info: LoginInfo)
     suspend fun getCurrentSite(): String?
+    suspend fun updateSiteMeta(
+        url: String,
+        lastUsedAt: Long? = null,
+        isFavorite: Boolean? = null
+    )
     suspend fun clearAuthInfo()
 }
 

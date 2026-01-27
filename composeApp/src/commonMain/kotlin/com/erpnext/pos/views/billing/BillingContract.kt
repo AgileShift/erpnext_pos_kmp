@@ -118,6 +118,7 @@ data class BillingAction(
     val onPaymentCurrencySelected: (String) -> Unit = {},
     val onClearSuccessMessage: () -> Unit = {},
     val onBack: () -> Unit = {},
+    val onResetSale: () -> Unit = {},
     val onLinkSource: (SalesFlowSource, String) -> Unit = { _, _ -> },
     val onClearSource: () -> Unit = {},
     val onLoadSourceDocuments: (SalesFlowSource) -> Unit = {}

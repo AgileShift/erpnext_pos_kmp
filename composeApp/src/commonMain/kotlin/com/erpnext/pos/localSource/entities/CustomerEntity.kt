@@ -23,6 +23,8 @@ data class CustomerEntity(
     var image: String? = null,
     var address: String? = null,
     var state: String? = null,
+    @ColumnInfo(name = "is_deleted")
+    var isDeleted: Boolean = false,
     @ColumnInfo(name = "last_synced_at")
     override var lastSyncedAt: Long? = Clock.System.now().toEpochMilliseconds() // Formatted
 ) : SyncableEntity

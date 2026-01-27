@@ -6,7 +6,15 @@ import com.erpnext.pos.remoteSource.dto.BinDto
 import com.erpnext.pos.remoteSource.dto.CategoryDto
 import com.erpnext.pos.remoteSource.dto.CurrencyDto
 import com.erpnext.pos.remoteSource.dto.ContactChildDto
+import com.erpnext.pos.remoteSource.dto.ContactListDto
+import com.erpnext.pos.remoteSource.dto.ContactUpdateDto
 import com.erpnext.pos.remoteSource.dto.CustomerDto
+import com.erpnext.pos.remoteSource.dto.CustomerCreateDto
+import com.erpnext.pos.remoteSource.dto.AddressCreateDto
+import com.erpnext.pos.remoteSource.dto.AddressListDto
+import com.erpnext.pos.remoteSource.dto.AddressUpdateDto
+import com.erpnext.pos.remoteSource.dto.ContactCreateDto
+import com.erpnext.pos.remoteSource.dto.DocNameResponseDto
 import com.erpnext.pos.remoteSource.dto.DeliveryChargeDto
 import com.erpnext.pos.remoteSource.dto.ExchangeRateResponse
 import com.erpnext.pos.remoteSource.dto.ItemDetailDto
@@ -30,6 +38,8 @@ import com.erpnext.pos.remoteSource.dto.SubmitResponseDto
 import com.erpnext.pos.remoteSource.dto.TokenResponse
 import com.erpnext.pos.remoteSource.dto.UserDto
 import com.erpnext.pos.remoteSource.dto.WarehouseItemDto
+import com.erpnext.pos.remoteSource.dto.CustomerGroupDto
+import com.erpnext.pos.remoteSource.dto.TerritoryDto
 import com.erpnext.pos.remoteSource.dto.v2.CompanyDto
 import com.erpnext.pos.remoteSource.dto.v2.CustomerAddressDto
 import com.erpnext.pos.remoteSource.dto.v2.PaymentEntryCreateDto
@@ -46,7 +56,6 @@ import com.erpnext.pos.remoteSource.sdk.filters
 import com.erpnext.pos.remoteSource.sdk.getERPList
 import com.erpnext.pos.remoteSource.sdk.getERPSingle
 import com.erpnext.pos.remoteSource.sdk.getFields
-import com.erpnext.pos.remoteSource.sdk.json
 import com.erpnext.pos.remoteSource.sdk.postERP
 import com.erpnext.pos.remoteSource.sdk.putERP
 import com.erpnext.pos.remoteSource.sdk.withRetries
@@ -72,12 +81,8 @@ import kotlinx.serialization.json.decodeFromJsonElement
 import kotlinx.serialization.json.jsonObject
 import com.erpnext.pos.utils.AppLogger
 import com.erpnext.pos.utils.AppSentry
-import io.ktor.client.request.HttpRequestBuilder
-import io.ktor.client.request.invoke
-import io.ktor.client.request.url
 import io.ktor.client.statement.HttpResponse
 import io.ktor.http.takeFrom
-import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.put
 
 class APIService(
@@ -141,6 +146,122 @@ class APIService(
         val url = authStore.getCurrentSite()
         return client.getERPList(
             ERPDocType.DeliveryCharges.path, ERPDocType.DeliveryCharges.getFields(), baseUrl = url
+        )
+    }
+
+    suspend fun fetchCustomerGroups(): List<CustomerGroupDto> {
+        val url = authStore.getCurrentSite()
+        return client.getERPList(
+            ERPDocType.CustomerGroup.path,
+            ERPDocType.CustomerGroup.getFields(),
+            baseUrl = url
+        )
+    }
+
+    suspend fun fetchTerritories(): List<TerritoryDto> {
+        val url = authStore.getCurrentSite()
+        return client.getERPList(
+            ERPDocType.Territory.path,
+            ERPDocType.Territory.getFields(),
+            baseUrl = url
+        )
+    }
+
+    suspend fun fetchCustomerContacts(): List<ContactListDto> {
+        val url = authStore.getCurrentSite()
+        return client.getERPList(
+            ERPDocType.CustomerContact.path,
+            listOf("name", "email_id", "mobile_no", "phone", "links"),
+            baseUrl = url
+        )
+    }
+
+    suspend fun fetchCustomerAddresses(): List<AddressListDto> {
+        val url = authStore.getCurrentSite()
+        return client.getERPList(
+            ERPDocType.Address.path,
+            listOf(
+                "name",
+                "address_title",
+                "address_type",
+                "address_line1",
+                "address_line2",
+                "city",
+                "state",
+                "country",
+                "email_id",
+                "phone",
+                "links"
+            ),
+            baseUrl = url
+        )
+    }
+
+    suspend fun createCustomer(payload: CustomerCreateDto): DocNameResponseDto {
+        val url = authStore.getCurrentSite()
+        return client.postERP(ERPDocType.Customer.path, payload, baseUrl = url)
+    }
+
+    suspend fun createAddress(payload: AddressCreateDto): DocNameResponseDto {
+        val url = authStore.getCurrentSite()
+        return client.postERP(ERPDocType.Address.path, payload, baseUrl = url)
+    }
+
+    suspend fun createContact(payload: ContactCreateDto): DocNameResponseDto {
+        val url = authStore.getCurrentSite()
+        return client.postERP(ERPDocType.CustomerContact.path, payload, baseUrl = url)
+    }
+
+    suspend fun findCustomerContacts(customerId: String): List<ContactListDto> {
+        val url = authStore.getCurrentSite()
+        val list: List<ContactListDto> = client.getERPList(
+            ERPDocType.CustomerContact.path,
+            listOf("name", "email_id", "mobile_no", "phone"),
+            baseUrl = url
+        )
+        return list.filter { dto ->
+            dto.links.any { it.linkDoctype == "Customer" && it.linkName == customerId }
+        }
+    }
+
+    suspend fun findCustomerAddresses(customerId: String): List<AddressListDto> {
+        val url = authStore.getCurrentSite()
+        val list: List<AddressListDto> = client.getERPList(
+            ERPDocType.Address.path,
+            listOf(
+                "name",
+                "address_line1",
+                "address_line2",
+                "city",
+                "state",
+                "country",
+                "email_id",
+                "phone"
+            ),
+            baseUrl = url
+        )
+        return list.filter { dto ->
+            dto.links.any { it.linkDoctype == "Customer" && it.linkName == customerId }
+        }
+    }
+
+    suspend fun updateContact(contactId: String, payload: ContactUpdateDto): ContactListDto {
+        val url = authStore.getCurrentSite()
+        return client.putERP(
+            doctype = ERPDocType.CustomerContact.path,
+            name = contactId,
+            payload = payload,
+            baseUrl = url
+        )
+    }
+
+    suspend fun updateAddress(addressId: String, payload: AddressUpdateDto): AddressListDto {
+        val url = authStore.getCurrentSite()
+        return client.putERP(
+            doctype = ERPDocType.Address.path,
+            name = addressId,
+            payload = payload,
+            baseUrl = url
         )
     }
 
@@ -749,7 +870,7 @@ class APIService(
     }
 
     //Para monto total pendientes y List (method whitelisted)
-    suspend fun getCustomerOutstanding(customer: String): OutstandingInfo {
+    suspend fun getCustomerOutstanding(customer: String, posProfile: String): OutstandingInfo {
         val url = authStore.getCurrentSite()
         val invoices = client.getERPList<SalesInvoiceDto>(
             doctype = ERPDocType.SalesInvoice.path,
@@ -757,6 +878,7 @@ class APIService(
             baseUrl = url,
             filters = filters {
                 "customer" eq customer
+                "pos_profile" eq posProfile
                 "status" `in` listOf(
                     "Unpaid",
                     "Overdue",
@@ -775,7 +897,8 @@ class APIService(
     suspend fun fetchCustomerInvoicesForPeriod(
         customer: String,
         startDate: String,
-        endDate: String
+        endDate: String,
+        posProfile: String
     ): List<SalesInvoiceDto> {
         val url = authStore.getCurrentSite()
         return client.getERPList(
@@ -785,6 +908,7 @@ class APIService(
             orderBy = "posting_date desc",
             filters = filters {
                 "customer" eq customer
+                "pos_profile" eq posProfile
                 "posting_date" gte startDate
                 "posting_date" lte endDate
             })
@@ -825,13 +949,14 @@ class APIService(
     }
 
     // Batch method for all outstanding invoices
-    suspend fun getAllOutstandingInvoices(): List<SalesInvoiceDto> {
+    suspend fun getAllOutstandingInvoices(posProfile: String): List<SalesInvoiceDto> {
         val url = authStore.getCurrentSite()
         return client.getERPList<SalesInvoiceDto>(
             doctype = ERPDocType.SalesInvoice.path,
             fields = ERPDocType.SalesInvoice.getFields(),
             baseUrl = url,
             filters = filters {
+                "pos_profile" eq posProfile
                 "status" `in` listOf(
                     "Unpaid",
                     "Overdue",
@@ -871,6 +996,32 @@ class APIService(
             e.printStackTrace()
             AppSentry.capture(e, "fetchAllInvoices failed")
             AppLogger.warn("fetchAllInvoices failed", e)
+            emptyList()
+        }
+    }
+
+    suspend fun fetchReturnInvoiceNames(
+        returnAgainst: String,
+        posProfile: String,
+        isPos: Boolean
+    ): List<String> {
+        return try {
+            val url = authStore.getCurrentSite()
+            val doctype = if (isPos) "POS Invoice" else ERPDocType.SalesInvoice.path
+            client.getERPList<SalesInvoiceDto>(
+                doctype = doctype,
+                fields = listOf("name"),
+                baseUrl = url,
+                filters = filters {
+                    "return_against" eq returnAgainst
+                    "is_return" eq 1
+                    "pos_profile" eq posProfile
+                }
+            ).mapNotNull { it.name }
+        } catch (e: Exception) {
+            e.printStackTrace()
+            AppSentry.capture(e, "fetchReturnInvoiceNames failed")
+            AppLogger.warn("fetchReturnInvoiceNames failed", e)
             emptyList()
         }
     }

@@ -9,8 +9,8 @@ import com.erpnext.pos.domain.models.ItemBO
 import com.erpnext.pos.domain.models.PaymentTermBO
 import com.erpnext.pos.domain.usecases.FetchBillingProductsLocalUseCase
 import com.erpnext.pos.domain.usecases.FetchCustomersLocalUseCase
-import com.erpnext.pos.domain.usecases.FetchDeliveryChargesUseCase
-import com.erpnext.pos.domain.usecases.FetchPaymentTermsUseCase
+import com.erpnext.pos.domain.usecases.FetchDeliveryChargesLocalUseCase
+import com.erpnext.pos.domain.usecases.FetchPaymentTermsLocalUseCase
 import com.erpnext.pos.domain.usecases.CreateSalesInvoiceLocalInput
 import com.erpnext.pos.domain.usecases.CreateSalesInvoiceLocalUseCase
 import com.erpnext.pos.domain.usecases.CreateSalesInvoiceRemoteOnlyInput
@@ -37,6 +37,7 @@ import com.erpnext.pos.domain.usecases.v2.LoadSourceDocumentsInput
 import com.erpnext.pos.domain.usecases.v2.LoadSourceDocumentsUseCase
 import com.erpnext.pos.remoteSource.dto.SalesInvoicePaymentDto
 import com.erpnext.pos.views.CashBoxManager
+import com.erpnext.pos.views.billing.BillingResetController
 import com.erpnext.pos.views.POSContext
 import com.erpnext.pos.views.salesflow.SalesFlowContext
 import com.erpnext.pos.views.salesflow.SalesFlowContextStore
@@ -68,8 +69,8 @@ class BillingViewModel(
     private val adjustLocalInventoryUseCase: AdjustLocalInventoryUseCase,
     private val contextProvider: CashBoxManager,
     private val modeOfPaymentDao: ModeOfPaymentDao,
-    private val paymentTermsUseCase: FetchPaymentTermsUseCase,
-    private val deliveryChargesUseCase: FetchDeliveryChargesUseCase,
+    private val paymentTermsUseCase: FetchPaymentTermsLocalUseCase,
+    private val deliveryChargesUseCase: FetchDeliveryChargesLocalUseCase,
     private val navManager: NavigationManager,
     private val salesFlowStore: SalesFlowContextStore,
     private val loadSourceDocumentsUseCase: LoadSourceDocumentsUseCase,
@@ -79,6 +80,7 @@ class BillingViewModel(
     private val markSalesInvoiceSyncedUseCase: MarkSalesInvoiceSyncedUseCase,
     private val api: APIService,
     private val paymentHandler: PaymentHandler,
+    private val billingResetController: BillingResetController,
 ) : BaseViewModel() {
 
     private val _state: MutableStateFlow<BillingState> = MutableStateFlow(BillingState.Loading)
@@ -98,6 +100,11 @@ class BillingViewModel(
 
     init {
         observeSalesFlowContext()
+        viewModelScope.launch {
+            billingResetController.events.collectLatest {
+                resetSale()
+            }
+        }
         loadInitialData()
     }
 
@@ -1077,6 +1084,21 @@ class BillingViewModel(
             sourceDocument = null,
             isSourceDocumentApplied = false
         )
+    }
+
+    fun resetSale() {
+        val current = requireSuccessState() ?: return
+        val reset = resetFromSource(current).copy(
+            selectedCustomer = null,
+            customerSearchQuery = "",
+            productSearchQuery = "",
+            salesFlowContext = null,
+            successMessage = null,
+            successDialogMessage = null,
+            successDialogInvoice = null,
+            isFinalizingSale = false
+        )
+        _state.update { reset }
     }
 
     private fun buildQtyErrorMessage(itemName: String, maxQty: Double): String {

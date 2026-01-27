@@ -16,6 +16,8 @@ data class PosProfileLocalEntity(
     val company: String,
     @ColumnInfo(name = "currency")
     val currency: String,
+    @ColumnInfo(name = "is_deleted")
+    val isDeleted: Boolean = false,
     @ColumnInfo(name = "last_synced_at")
     val lastSyncedAt: Long = Clock.System.now().toEpochMilliseconds()
 )

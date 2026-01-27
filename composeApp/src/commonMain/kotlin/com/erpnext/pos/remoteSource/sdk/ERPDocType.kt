@@ -1,7 +1,5 @@
 package com.erpnext.pos.remoteSource.sdk
 
-import androidx.compose.material3.DockedSearchBar
-
 data class DocTypeFields(val doctype: ERPDocType, val fields: List<String>)
 
 enum class ERPDocType(val path: String) {
@@ -15,6 +13,7 @@ enum class ERPDocType(val path: String) {
     User("User"),
     Bin("Bin"),
     Customer("Customer"),
+    Address("Address"),
     CustomerContact("Contact"),
     SalesInvoice("Sales Invoice"),
     PurchaseInvoice("Purchase Invoice"),
@@ -24,7 +23,9 @@ enum class ERPDocType(val path: String) {
     POSOpeningEntry("POS Opening Entry"),
     POSClosingEntry("POS Closing Entry"),
     PaymentTerm("Payment Term"),
-    DeliveryCharges("Delivery Charges")
+    DeliveryCharges("Delivery Charges"),
+    CustomerGroup("Customer Group"),
+    Territory("Territory")
 }
 
 val fields: List<DocTypeFields> = listOf(
@@ -145,7 +146,7 @@ val fields: List<DocTypeFields> = listOf(
     ),
     DocTypeFields(
         ERPDocType.CustomerContact,
-        listOf("phone", "mobile_no", "email_id")
+        listOf("name", "phone", "mobile_no", "email_id", "links")
     ),
     DocTypeFields(
         ERPDocType.PaymentTerm,
@@ -168,6 +169,40 @@ val fields: List<DocTypeFields> = listOf(
         listOf(
             "label",
             "default_rate"
+        )
+    ),
+    DocTypeFields(
+        ERPDocType.CustomerGroup,
+        listOf(
+            "name",
+            "customer_group_name",
+            "is_group",
+            "parent_customer_group"
+        )
+    ),
+    DocTypeFields(
+        ERPDocType.Territory,
+        listOf(
+            "name",
+            "territory_name",
+            "is_group",
+            "parent_territory"
+        )
+    ),
+    DocTypeFields(
+        ERPDocType.Address,
+        listOf(
+            "name",
+            "address_title",
+            "address_type",
+            "address_line1",
+            "address_line2",
+            "city",
+            "state",
+            "country",
+            "email_id",
+            "phone",
+            "links"
         )
     )
 )

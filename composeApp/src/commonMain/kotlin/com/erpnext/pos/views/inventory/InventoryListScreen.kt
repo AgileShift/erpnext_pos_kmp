@@ -86,7 +86,6 @@ fun InventoryScreen(
                                 selectedCategory = selectedCategory,
                                 onQueryChanged = { query ->
                                     searchQuery = query
-                                    actions.onSearchQueryChanged(query)
                                 },
                                 onCategorySelected = { category ->
                                     selectedCategory = category
@@ -128,7 +127,6 @@ fun InventoryScreen(
                             selectedCategory = selectedCategory,
                             onQueryChanged = { query ->
                                 searchQuery = query
-                                actions.onSearchQueryChanged(query)
                             },
                             onCategorySelected = { category ->
                                 selectedCategory = category

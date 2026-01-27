@@ -15,6 +15,8 @@ class CustomerCoordinator(
     val historyState = viewModel.historyState
     val historyMessage = viewModel.historyMessage
     val historyActionBusy = viewModel.historyActionBusy
+    val customerMessage = viewModel.customerMessage
+    val dialogDataState = viewModel.dialogDataState
 
     fun fetchAll() = viewModel.fetchAllCustomers()
 
@@ -51,6 +53,9 @@ class CustomerCoordinator(
     fun loadInvoiceHistory(customerId: String) = viewModel.loadInvoiceHistory(customerId)
     fun clearInvoiceHistory() = viewModel.clearInvoiceHistory()
     fun clearInvoiceHistoryMessages() = viewModel.clearHistoryMessage()
+    fun clearCustomerMessages() = viewModel.clearCustomerMessage()
+    fun createCustomer(input: com.erpnext.pos.domain.usecases.CreateCustomerInput) =
+        viewModel.createCustomer(input)
     fun performInvoiceHistoryAction(
         invoiceId: String,
         action: InvoiceCancellationAction,

@@ -128,8 +128,11 @@ class InventoryRepository(
         },
         fetch = { remoteSource.getCategories() },
         saveFetchResult = { categories ->
-            localSource.deleteAllCategories()
-            localSource.insertCategories(categories.map { it.toEntity() })
+            val entities = categories.map { it.toEntity() }
+            if (entities.isNotEmpty()) {
+                localSource.insertCategories(entities)
+            }
+            localSource.deleteMissingCategories(entities.map { it.name })
         },
         shouldFetch = { cached -> cached.isEmpty() },
         onFetchFailed = { e ->

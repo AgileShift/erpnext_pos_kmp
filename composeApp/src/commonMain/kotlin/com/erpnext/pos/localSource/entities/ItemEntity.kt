@@ -26,6 +26,8 @@ data class ItemEntity(
     var isStocked: Boolean = false,
     var stockUom: String,
     var currency: String,
+    @ColumnInfo(name = "is_deleted")
+    var isDeleted: Boolean = false,
     @ColumnInfo(name = "last_synced_at")
     override var lastSyncedAt: Long? = Clock.System.now().toEpochMilliseconds()
 ) : SyncableEntity

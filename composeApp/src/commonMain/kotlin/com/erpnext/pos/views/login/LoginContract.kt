@@ -13,6 +13,7 @@ sealed class LoginState {
 data class LoginAction(
     val existingSites: () -> Unit = { },
     val onSiteSelected: (site: Site) -> Unit = { },
+    val onToggleFavorite: (site: Site) -> Unit = { },
     val onAddSite: (String) -> Unit = {},
     val isAuthenticated: (TokenResponse) -> Unit = { },
     val onError: (error: String) -> Unit = {},
@@ -20,4 +21,9 @@ data class LoginAction(
 )
 
 @Serializable
-data class Site(val url: String, val name: String)
+data class Site(
+    val url: String,
+    val name: String,
+    val lastUsedAt: Long? = null,
+    val isFavorite: Boolean = false
+)

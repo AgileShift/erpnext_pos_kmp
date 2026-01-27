@@ -13,10 +13,10 @@ interface POSProfileDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAll(pos: List<POSProfileEntity>)
 
-    @Query("SELECT * FROM tabPosProfile WHERE profile_name = :profileId")
+    @Query("SELECT * FROM tabPosProfile WHERE is_deleted = 0 AND profile_name = :profileId")
     suspend fun getPOSProfile(profileId: String): POSProfileEntity
 
-    @Query("SELECT * FROM tabPosProfile WHERE active = 1")
+    @Query("SELECT * FROM tabPosProfile WHERE is_deleted = 0 AND active = 1")
     suspend fun getActiveProfile(): POSProfileEntity?
 
     @Transaction
@@ -28,9 +28,15 @@ interface POSProfileDao {
     @Update
     suspend fun update(profile: POSProfileEntity): Int
 
-    @Query("DELETE FROM tabposprofile")
-    suspend fun deleteAll()
+    @Query("UPDATE tabPosProfile SET is_deleted = 1 WHERE is_deleted = 0")
+    suspend fun softDeleteAll()
 
-    @Query("DELETE FROM tabPosProfile WHERE profile_name NOT IN (:profileNames)")
-    suspend fun deleteNotIn(profileNames: List<String>)
+    @Query("DELETE FROM tabPosProfile WHERE is_deleted = 1")
+    suspend fun hardDeleteAllDeleted()
+
+    @Query("UPDATE tabPosProfile SET is_deleted = 1 WHERE is_deleted = 0 AND profile_name NOT IN (:profileNames)")
+    suspend fun softDeleteNotIn(profileNames: List<String>)
+
+    @Query("DELETE FROM tabPosProfile WHERE is_deleted = 1 AND profile_name NOT IN (:profileNames)")
+    suspend fun hardDeleteDeletedNotIn(profileNames: List<String>)
 }

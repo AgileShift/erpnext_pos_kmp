@@ -39,6 +39,9 @@ data class POSProfileEntity(
 
     @ColumnInfo(name = "user") var user: String? = null,
 
+    @ColumnInfo(name = "is_deleted")
+    var isDeleted: Boolean = false,
+
     @ColumnInfo(name = "last_synced_at")
     override var lastSyncedAt: Long? = Clock.System.now().toEpochMilliseconds()
 ) : SyncableEntity

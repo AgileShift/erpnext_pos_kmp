@@ -9,6 +9,14 @@ class ExchangeRateRepository(
     private val localSource: ExchangeRateLocalSource,
     private val api: APIService
 ) {
+    suspend fun getLocalRate(fromCurrency: String, toCurrency: String): Double? {
+        val normalizedFrom = fromCurrency.trim().uppercase()
+        val normalizedTo = toCurrency.trim().uppercase()
+        if (normalizedFrom.isBlank() || normalizedTo.isBlank()) return null
+        if (normalizedFrom == normalizedTo) return 1.0
+        return localSource.getRate(normalizedFrom, normalizedTo)?.rate
+    }
+
     suspend fun getRate(fromCurrency: String, toCurrency: String): Double? {
         val normalizedFrom = fromCurrency.trim().uppercase()
         val normalizedTo = toCurrency.trim().uppercase()

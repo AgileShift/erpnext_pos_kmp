@@ -23,6 +23,8 @@ data class PosProfilePaymentMethodEntity(
     val allowInReturns: Boolean,
     @ColumnInfo(name = "enabled_in_profile")
     val enabledInProfile: Boolean = true,
+    @ColumnInfo(name = "is_deleted")
+    val isDeleted: Boolean = false,
     @ColumnInfo(name = "last_synced_at")
     val lastSyncedAt: Long = Clock.System.now().toEpochMilliseconds()
 )

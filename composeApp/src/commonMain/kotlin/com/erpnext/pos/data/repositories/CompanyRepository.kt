@@ -22,10 +22,23 @@ class CompanyRepository(
     private val companyDao: CompanyDao,
 ) : ICompanyRepository {
     override suspend fun getCompanyInfo(): CompanyBO {
-        val company = api.getCompanyInfo().first()
-        companyDao.insert(company.toEntity())
-
-        return company.toBO()
+        val companies = api.getCompanyInfo()
+        companies.forEach { companyDao.insert(it.toEntity()) }
+        val names = companies.map { it.company }
+        val ids = names.ifEmpty { listOf("__empty__") }
+        companyDao.hardDeleteDeletedNotIn(ids)
+        companyDao.softDeleteNotIn(ids)
+        val first = companies.firstOrNull()
+            ?: companyDao.getCompanyInfo()?.let { local ->
+                CompanyDto(
+                    company = local.companyName,
+                    defaultCurrency = local.defaultCurrency,
+                    country = local.country,
+                    taxId = local.taxId
+                )
+            }
+            ?: throw IllegalStateException("Company info not available")
+        return first.toBO()
     }
 
     override suspend fun sync(): CompanyBO {

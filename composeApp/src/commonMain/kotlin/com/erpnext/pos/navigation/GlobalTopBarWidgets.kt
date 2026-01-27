@@ -83,9 +83,24 @@ fun StatusIconButton(
         tooltip = { PlainTooltip { Text(label) } },
         state = rememberTooltipState()
     ) {
-        IconButton(onClick = onClick, enabled = enabled) {
-            CompositionLocalProvider(LocalContentColor provides tint) {
-                content()
+        val container = if (enabled) {
+            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f)
+        } else {
+            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+        }
+        Surface(
+            color = container,
+            shape = RoundedCornerShape(12.dp),
+            tonalElevation = 0.dp
+        ) {
+            IconButton(
+                onClick = onClick,
+                enabled = enabled,
+                modifier = Modifier.size(36.dp)
+            ) {
+                CompositionLocalProvider(LocalContentColor provides tint) {
+                    content()
+                }
             }
         }
     }

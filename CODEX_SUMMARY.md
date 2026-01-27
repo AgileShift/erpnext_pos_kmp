@@ -16,4 +16,7 @@
 - [ ] Refactorizar profundamente todo el codigo, aplicando principios KISS y SOLID
 - [ ] Tenemos que crear politicas de sincronizacion, en cuantoa  tiempo los Customer, Items y Invoices deben de sincronizarse mas seguido que la tasa de cambio, informacion de empresa, etc
 
-codex resume 019bdcfd-47f4-7320-9065-c94a53eefef4
+codex resume 019bec56-16f0-7c20-8cf3-6a047f25e2ed
+
+› NO, LAS VAMOS A ELIMINAR, HE ESTADO VIENDO QUE ESE ERROR SOLO APARECE EN EL CARD DE CUSTOMERLISTSCREEN EN EL MONTO QUE SE PRESENTA AHI, POR FAVOR VALIDAR Y VERIFICAR, VOY A VOLVER A EJECUTAR TODO PARA SABER QUE ESTA PASANDO Y SI
+EL CAMBIO QUE ACABAS DE HACER NO AFECTA LO QUE YA ESTABA[D

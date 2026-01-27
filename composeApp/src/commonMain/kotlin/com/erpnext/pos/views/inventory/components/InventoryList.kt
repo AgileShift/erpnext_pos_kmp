@@ -9,6 +9,7 @@ import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.itemsIndexed
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Error
@@ -54,9 +55,29 @@ fun InventoryList(
     isDesktop: Boolean,
     baseCurrency: String,
     exchangeRate: Double,
+    searchQuery: String,
+    selectedCategory: String,
     modifier: Modifier = Modifier
 ) {
     val strings = LocalAppStrings.current
+    val snapshotItems = items.itemSnapshotList.items
+    val normalizedQuery = searchQuery.trim().lowercase()
+    val isFiltering = normalizedQuery.isNotBlank() ||
+            selectedCategory != "Todos los grupos de artículos"
+    val filteredItems = remember(snapshotItems, normalizedQuery, selectedCategory) {
+        snapshotItems.filter { item ->
+            val matchesQuery = normalizedQuery.isBlank() || listOf(
+                item.name,
+                item.itemCode,
+                item.description,
+                item.barcode,
+                item.brand.orEmpty()
+            ).any { it.lowercase().contains(normalizedQuery) }
+            val matchesCategory = selectedCategory == "Todos los grupos de artículos" ||
+                    item.itemGroup.equals(selectedCategory, ignoreCase = true)
+            matchesQuery && matchesCategory
+        }
+    }
 
     AnimatedContent(
         modifier = Modifier.fillMaxWidth(),
@@ -89,6 +110,59 @@ fun InventoryList(
             }
 
             else -> {
+                if (isFiltering) {
+                    if (filteredItems.isEmpty()) {
+                        EmptyStateMessage(
+                            strings.inventory.emptySearchMessage,
+                            Icons.Default.Inventory2
+                        )
+                        return@AnimatedContent
+                    }
+                    if (isDesktop) {
+                        val spacing = if (isWideLayout) 16.dp else 12.dp
+                        LazyVerticalGrid(
+                            columns = GridCells.Adaptive(minSize = 360.dp),
+                            modifier = modifier.fillMaxSize(),
+                            contentPadding = PaddingValues(horizontal = 4.dp, vertical = 8.dp),
+                            verticalArrangement = Arrangement.spacedBy(spacing),
+                            horizontalArrangement = Arrangement.spacedBy(spacing),
+                        ) {
+                            itemsIndexed(filteredItems, key = { _, item ->
+                                val keyBase = item.itemCode.ifBlank { item.name }
+                                "$keyBase-$baseCurrency-${exchangeRate}"
+                            }) { _, item ->
+                                ProductCard(
+                                    actions,
+                                    item,
+                                    isDesktop = isDesktop,
+                                    baseCurrency = baseCurrency,
+                                    exchangeRate = exchangeRate
+                                )
+                            }
+                        }
+                    } else {
+                        LazyColumn(
+                            modifier = modifier.fillMaxSize(),
+                            state = listState,
+                            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 12.dp),
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            itemsIndexed(filteredItems, key = { _, item ->
+                                val keyBase = item.itemCode.ifBlank { item.name }
+                                "$keyBase-$baseCurrency-${exchangeRate}"
+                            }) { _, item ->
+                                ProductCard(
+                                    actions,
+                                    item,
+                                    isDesktop = isDesktop,
+                                    baseCurrency = baseCurrency,
+                                    exchangeRate = exchangeRate
+                                )
+                            }
+                        }
+                    }
+                    return@AnimatedContent
+                }
                 if (isDesktop) {
                     val spacing = if (isWideLayout) 16.dp else 12.dp
 
@@ -271,6 +345,8 @@ fun InventoryListPreview() {
         modifier = Modifier,
         isWideLayout = true,
         baseCurrency = "USD",
-        exchangeRate = 0.027
+        exchangeRate = 0.027,
+        searchQuery = "",
+        selectedCategory = "Todos los grupos de artículos"
     )
 }

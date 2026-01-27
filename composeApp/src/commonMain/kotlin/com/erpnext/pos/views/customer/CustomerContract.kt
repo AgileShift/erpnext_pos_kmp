@@ -4,7 +4,11 @@ import com.erpnext.pos.domain.models.CustomerBO
 import com.erpnext.pos.domain.models.POSCurrencyOption
 import com.erpnext.pos.domain.models.POSPaymentModeOption
 import com.erpnext.pos.domain.models.SalesInvoiceBO
+import com.erpnext.pos.domain.models.CustomerGroupBO
+import com.erpnext.pos.domain.models.TerritoryBO
+import com.erpnext.pos.domain.models.PaymentTermBO
 import com.erpnext.pos.domain.usecases.InvoiceCancellationAction
+import com.erpnext.pos.domain.usecases.CreateCustomerInput
 import com.erpnext.pos.localSource.entities.ModeOfPaymentEntity
 import com.erpnext.pos.localSource.entities.SalesInvoiceWithItemsAndPayments
 
@@ -47,6 +51,13 @@ data class CustomerPaymentState(
     val paymentModeCurrencyByMode: Map<String, String>? = mapOf()
 )
 
+data class CustomerDialogDataState(
+    val customerGroups: List<CustomerGroupBO> = emptyList(),
+    val territories: List<TerritoryBO> = emptyList(),
+    val paymentTerms: List<PaymentTermBO> = emptyList(),
+    val companies: List<com.erpnext.pos.domain.models.CompanyBO> = emptyList()
+)
+
 data class CustomerAction(
     val onSearchQueryChanged: (String) -> Unit = {},
     val onStateSelected: (String?) -> Unit = {},
@@ -55,6 +66,7 @@ data class CustomerAction(
     val fetchAll: () -> Unit = {},
     val onViewPendingInvoices: (CustomerBO) -> Unit = {},
     val onViewInvoiceHistory: (CustomerBO) -> Unit = {},
+    val onCreateCustomer: (CreateCustomerInput) -> Unit = {},
     val onCreateQuotation: (CustomerBO) -> Unit = {},
     val onCreateSalesOrder: (CustomerBO) -> Unit = {},
     val onCreateDeliveryNote: (CustomerBO) -> Unit = {},
@@ -65,6 +77,7 @@ data class CustomerAction(
     val clearPaymentMessages: () -> Unit = {},
     val clearInvoiceHistory: () -> Unit = {},
     val clearInvoiceHistoryMessages: () -> Unit = {},
+    val clearCustomerMessages: () -> Unit = {},
 
     val onInvoiceHistoryAction: (
         invoiceId: String,

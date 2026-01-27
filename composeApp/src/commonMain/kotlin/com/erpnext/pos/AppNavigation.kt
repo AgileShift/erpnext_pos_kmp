@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
@@ -26,11 +27,12 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Print
-import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Storage
-import androidx.compose.material.icons.filled.Wifi
-import androidx.compose.material.icons.filled.WifiOff
+import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.outlined.Print
+import androidx.compose.material.icons.outlined.Refresh
+import androidx.compose.material.icons.outlined.Storage
+import androidx.compose.material.icons.outlined.Wifi
+import androidx.compose.material.icons.outlined.WifiOff
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -46,6 +48,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.rememberNavController
@@ -74,6 +77,8 @@ import com.erpnext.pos.utils.view.SnackbarController
 import com.erpnext.pos.sync.SyncManager
 import com.erpnext.pos.sync.SyncState
 import com.erpnext.pos.domain.usecases.LogoutUseCase
+import com.erpnext.pos.views.billing.BillingResetController
+import com.erpnext.pos.remoteSource.oauth.AuthInfoStore
 import org.koin.compose.koinInject
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
@@ -86,6 +91,15 @@ fun shouldShowBottomBar(currentRoute: String): Boolean {
 
 fun shouldShowTopBar(currentRoute: String): Boolean {
     return shouldShowBottomBar(currentRoute)
+}
+
+private fun instanceLabel(url: String?): String? {
+    if (url.isNullOrBlank()) return null
+    val normalized = url
+        .removePrefix("https://")
+        .removePrefix("http://")
+        .trim()
+    return normalized.substringBefore("/").removePrefix("www.").ifBlank { null }
 }
 
 private fun defaultTitleForRoute(route: String): String {
@@ -139,7 +153,9 @@ fun AppNavigation() {
     val isLoading by LoadingIndicator.isLoading.collectAsState(initial = false)
     val cashBoxManager = koinInject<CashBoxManager>()
     val homeRefreshController = koinInject<HomeRefreshController>()
+    val billingResetController = koinInject<BillingResetController>()
     val logoutUseCase = koinInject<LogoutUseCase>()
+    val authInfoStore = koinInject<AuthInfoStore>()
     val topBarController = remember { TopBarController() }
     val scope = rememberCoroutineScope()
     val syncState by syncManager.state.collectAsState(initial = SyncState.IDLE)
@@ -156,7 +172,9 @@ fun AppNavigation() {
     val isCashboxOpen by cashBoxManager.cashboxState.collectAsState()
     val shiftStart by cashBoxManager.activeCashboxStart().collectAsState(null)
     var profileMenuExpanded by remember { mutableStateOf(false) }
+    var currentSite by remember { mutableStateOf<String?>(null) }
     var tick by remember { mutableStateOf(0L) }
+    var settingsFromMenu by remember { mutableStateOf(false) }
 
     LaunchedEffect(cashBoxManager) {
         cashBoxManager.initializeContext()
@@ -167,9 +185,16 @@ fun AppNavigation() {
             delay(1000)
         }
     }
-
+    LaunchedEffect(Unit) {
+        currentSite = authInfoStore.getCurrentSite()
+    }
     val visibleEntries by navController.visibleEntries.collectAsState()
     val currentRoute = visibleEntries.lastOrNull()?.destination?.route ?: ""
+
+    LaunchedEffect(currentRoute) {
+        currentSite = authInfoStore.getCurrentSite()
+    }
+
     val isDesktop = getPlatformName() == "Desktop"
     val titleFallback = defaultTitleForRoute(currentRoute)
     val previousRoute = navController.previousBackStackEntry?.destination?.route
@@ -185,12 +210,12 @@ fun AppNavigation() {
     val showBackDefault = when {
         currentRoute in noBackRoutes -> false
         currentRoute == NavRoute.Settings.path ->
-            previousRoute != null && previousRoute !in noBackRoutes &&
-                    previousRoute !in listOf(
-                NavRoute.Settings.path,
-                NavRoute.Splash.path,
-                NavRoute.Login.path
-            )
+            settingsFromMenu && previousRoute != null &&
+                previousRoute !in listOf(
+                    NavRoute.Settings.path,
+                    NavRoute.Splash.path,
+                    NavRoute.Login.path
+                )
 
         else -> previousRoute != null && currentRoute !in listOf(
             NavRoute.Splash.path,
@@ -201,7 +226,6 @@ fun AppNavigation() {
     val resolvedShowBack = topBarState.showBack ?: showBackDefault
     val resolvedOnBack: () -> Unit = topBarState.onBack ?: {
         navController.popBackStack()
-        Unit
     }
     val subtitle = topBarState.subtitle
     val titleText = if (currentRoute == NavRoute.Home.path) {
@@ -212,12 +236,25 @@ fun AppNavigation() {
     val cashier = posContext?.cashier
     val cashierDisplayName = listOfNotNull(
         cashier?.firstName?.takeIf { it.isNotBlank() },
-        cashier?.lastName?.takeIf { it?.isNotBlank() == true }
+        cashier?.lastName?.takeIf { it.isNotBlank() == true }
     ).joinToString(" ").ifBlank {
         cashier?.name?.takeIf { it.isNotBlank() }
             ?: cashier?.username?.takeIf { it.isNotBlank() }
             ?: cashier?.email?.takeIf { it.isNotBlank() }
             ?: "Cajero"
+    }
+    val cashierInitials = cashierDisplayName
+        .split(" ")
+        .filter { it.isNotBlank() }
+        .take(2)
+        .map { it.first().uppercaseChar() }
+        .joinToString("")
+        .ifBlank { "C" }
+
+    LaunchedEffect(currentRoute) {
+        if (currentRoute != NavRoute.Settings.path) {
+            settingsFromMenu = false
+        }
     }
 
     AppTheme(theme = appTheme, themeMode = appThemeMode) {
@@ -331,6 +368,25 @@ fun AppNavigation() {
                                                 "Base de datos: Pendiente"
                                             }
                                         }
+                                        val showNewSale = (currentRoute == NavRoute.Billing.path ||
+                                            currentRoute == NavRoute.BillingLab.path) &&
+                                            !subtitle.isNullOrBlank()
+                                        AnimatedVisibility(
+                                            visible = showNewSale,
+                                            enter = fadeIn(tween(180)),
+                                            exit = fadeOut(tween(160))
+                                        ) {
+                                            StatusIconButton(
+                                                label = "Nueva venta",
+                                                onClick = { billingResetController.reset() },
+                                                tint = MaterialTheme.colorScheme.primary
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Outlined.Add,
+                                                    contentDescription = null
+                                                )
+                                            }
+                                        }
                                         StatusIconButton(
                                             label = if (isOnline) "Internet: Conectado" else "Internet: Sin conexión",
                                             onClick = {},
@@ -339,7 +395,7 @@ fun AppNavigation() {
                                             else MaterialTheme.colorScheme.error,
                                         ) {
                                             Icon(
-                                                if (isOnline) Icons.Filled.Wifi else Icons.Filled.WifiOff,
+                                                if (isOnline) Icons.Outlined.Wifi else Icons.Outlined.WifiOff,
                                                 contentDescription = null
                                             )
                                         }
@@ -362,7 +418,7 @@ fun AppNavigation() {
                                                 CircularProgressIndicator(Modifier.size(18.dp))
                                             } else {
                                                 Icon(
-                                                    Icons.Filled.Storage,
+                                                    Icons.Outlined.Storage,
                                                     contentDescription = null
                                                 )
                                             }
@@ -371,7 +427,7 @@ fun AppNavigation() {
                                             label = "Refrescar",
                                             onClick = { homeRefreshController.refresh() },
                                         ) {
-                                            Icon(Icons.Filled.Refresh, contentDescription = null)
+                                            Icon(Icons.Outlined.Refresh, contentDescription = null)
                                         }
                                         val printerConnected = false
                                         StatusIconButton(
@@ -382,28 +438,78 @@ fun AppNavigation() {
                                             tint = if (printerConnected) MaterialTheme.colorScheme.primary
                                             else MaterialTheme.colorScheme.onSurfaceVariant
                                         ) {
-                                            Icon(Icons.Filled.Print, contentDescription = null)
+                                            Icon(Icons.Outlined.Print, contentDescription = null)
                                         }
                                         Spacer(modifier = Modifier.width(8.dp))
-                                        Column(horizontalAlignment = Alignment.End) {
-                                            Text(
-                                                cashierDisplayName,
-                                                style = MaterialTheme.typography.bodyMedium,
-                                                fontWeight = FontWeight.SemiBold
-                                            )
-                                            Surface(
-                                                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
-                                                shape = MaterialTheme.shapes.small
-                                            ) {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                        ) {
+                                            Column(horizontalAlignment = Alignment.End) {
                                                 Text(
-                                                    "En linea",
-                                                    modifier = Modifier.padding(
-                                                        horizontal = 10.dp,
-                                                        vertical = 4.dp
-                                                    ),
-                                                    style = MaterialTheme.typography.labelSmall,
-                                                    color = MaterialTheme.colorScheme.primary
+                                                    cashierDisplayName,
+                                                    style = MaterialTheme.typography.bodyMedium,
+                                                    fontWeight = FontWeight.SemiBold
                                                 )
+                                                Row(
+                                                    verticalAlignment = Alignment.CenterVertically,
+                                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                                ) {
+                                                    Surface(
+                                                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
+                                                        shape = MaterialTheme.shapes.small
+                                                    ) {
+                                                        Text(
+                                                            if (isOnline) "Online" else "Offline",
+                                                            modifier = Modifier.padding(
+                                                                horizontal = 10.dp,
+                                                                vertical = 4.dp
+                                                            ),
+                                                            style = MaterialTheme.typography.labelSmall,
+                                                            color = if (isOnline) {
+                                                                MaterialTheme.colorScheme.primary
+                                                            } else {
+                                                                MaterialTheme.colorScheme.error
+                                                            }
+                                                        )
+                                                    }
+                                                    instanceLabel(currentSite)?.let { site ->
+                                                        Surface(
+                                                            color = MaterialTheme.colorScheme.surfaceVariant,
+                                                            shape = MaterialTheme.shapes.small
+                                                        ) {
+                                                            Text(
+                                                                text = site,
+                                                                modifier = Modifier.padding(
+                                                                    horizontal = 8.dp,
+                                                                    vertical = 4.dp
+                                                                ),
+                                                                style = MaterialTheme.typography.labelSmall,
+                                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                            )
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                            Surface(
+                                                color = MaterialTheme.colorScheme.surfaceVariant,
+                                                shape = CircleShape
+                                            ) {
+                                                Box(
+                                                    modifier = Modifier
+                                                        .size(36.dp)
+                                                        .clickable(
+                                                            interactionSource = remember { MutableInteractionSource() },
+                                                            indication = null
+                                                        ) { profileMenuExpanded = true },
+                                                    contentAlignment = Alignment.Center
+                                                ) {
+                                                    Text(
+                                                        text = cashierInitials,
+                                                        style = MaterialTheme.typography.labelLarge,
+                                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                    )
+                                                }
                                             }
                                         }
                                         DropdownMenu(
@@ -462,7 +568,8 @@ fun AppNavigation() {
                                                 text = { Text("Configuración") },
                                                 onClick = {
                                                     profileMenuExpanded = false
-                                                    navController.navigateTopLevel(NavRoute.Settings.path)
+                                                    settingsFromMenu = true
+                                                    navController.navigateSingle(NavRoute.Settings.path)
                                                 }
                                             )
                                             DropdownMenuItem(
@@ -470,6 +577,13 @@ fun AppNavigation() {
                                                 onClick = {
                                                     profileMenuExpanded = false
                                                     navController.navigateSingle(NavRoute.Reconciliation().path)
+                                                }
+                                            )
+                                            DropdownMenuItem(
+                                                text = { Text("Cambiar instancia") },
+                                                onClick = {
+                                                    profileMenuExpanded = false
+                                                    navController.navigateSingle(NavRoute.Login.path)
                                                 }
                                             )
                                             DropdownMenuItem(

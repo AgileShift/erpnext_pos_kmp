@@ -15,11 +15,9 @@ class ModeOfPaymentLocalSource(
     }
 
     suspend fun deleteMissing(company: String, names: List<String>) {
-        if (names.isEmpty()) {
-            dao.deleteAllForCompany(company)
-        } else {
-            dao.deleteNotIn(company, names)
-        }
+        val ids = names.ifEmpty { listOf("__empty__") }
+        dao.hardDeleteDeletedNotIn(company, ids)
+        dao.softDeleteNotIn(company, ids)
     }
 
     suspend fun getLastSyncedAt(company: String): Long? {

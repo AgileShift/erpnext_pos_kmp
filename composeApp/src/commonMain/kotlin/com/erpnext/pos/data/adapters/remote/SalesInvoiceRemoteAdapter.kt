@@ -21,7 +21,7 @@ class SalesInvoiceRemoteAdapter(
         )
     }
 
-    override suspend fun fetchAllOutstandingInvoices(): List<SalesInvoiceDto> {
-        return api.getAllOutstandingInvoices()
+    override suspend fun fetchAllOutstandingInvoices(posProfile: String): List<SalesInvoiceDto> {
+        return api.getAllOutstandingInvoices(posProfile)
     }
 }

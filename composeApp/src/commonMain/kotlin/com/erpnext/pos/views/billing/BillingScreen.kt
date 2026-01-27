@@ -1,4 +1,4 @@
-@file:OptIn(ExperimentalMaterial3Api::class)
+@file:OptIn(ExperimentalMaterial3Api::class, ExperimentalTime::class)
 
 package com.erpnext.pos.views.billing
 
@@ -40,6 +40,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.ConfirmationNumber
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Money
@@ -60,7 +61,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -74,13 +74,10 @@ import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.input.TransformedText
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.lerp
-import androidx.compose.ui.util.lerp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.PopupProperties
-import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import androidx.compose.ui.input.pointer.pointerInput
 import coil3.compose.LocalPlatformContext
 import coil3.compose.SubcomposeAsyncImage
 import coil3.request.ImageRequest
@@ -101,6 +98,8 @@ import com.erpnext.pos.utils.view.SnackbarType
 import com.erpnext.pos.navigation.GlobalTopBarState
 import com.erpnext.pos.navigation.LocalTopBarController
 import kotlinx.coroutines.delay
+import kotlin.time.Clock
+import kotlin.time.ExperimentalTime
 
 data class CartItem(
     val itemCode: String,
@@ -121,20 +120,30 @@ fun BillingScreen(
     val colors = MaterialTheme.colorScheme
     var step by rememberSaveable { mutableStateOf(LabCheckoutStep.Cart) }
     val successMessage = (state as? BillingState.Success)?.successMessage
+    val successDialogMessage = (state as? BillingState.Success)?.successDialogMessage
     val successDialogInvoice = (state as? BillingState.Success)?.successDialogInvoice
     var popupMessage by rememberSaveable { mutableStateOf<String?>(null) }
     var popupInvoice by rememberSaveable { mutableStateOf<String?>(null) }
     val topBarController = LocalTopBarController.current
+    val inactivityTimeoutMs = 5 * 60 * 1000L
+    var lastInteraction by remember { mutableStateOf(Clock.System.now().toEpochMilliseconds()) }
+    val hasActiveSale = state is BillingState.Success &&
+            (state.selectedCustomer != null ||
+                    state.cartItems.isNotEmpty() ||
+                    state.paymentLines.isNotEmpty())
 
     // Si salimos de Success, regresamos al primer paso.
     LaunchedEffect(state) {
         if (state !is BillingState.Success) {
             step = LabCheckoutStep.Cart
+        } else if (state.selectedCustomer == null && state.cartItems.isEmpty() && step != LabCheckoutStep.Cart) {
+            step = LabCheckoutStep.Cart
         }
     }
 
-    LaunchedEffect(successMessage, successDialogInvoice) {
-        val message = successMessage?.takeIf { it.isNotBlank() } ?: return@LaunchedEffect
+    LaunchedEffect(successMessage, successDialogMessage, successDialogInvoice) {
+        val message = (successDialogMessage ?: successMessage)
+            ?.takeIf { it.isNotBlank() } ?: return@LaunchedEffect
         popupMessage = message
         popupInvoice = successDialogInvoice
         delay(3000)
@@ -143,6 +152,33 @@ fun BillingScreen(
         action.onClearSuccessMessage()
         if (step == LabCheckoutStep.Checkout) {
             step = LabCheckoutStep.Cart
+        }
+    }
+
+    LaunchedEffect(lastInteraction, hasActiveSale) {
+        if (!hasActiveSale) return@LaunchedEffect
+        val now = Clock.System.now().toEpochMilliseconds()
+        val remaining = inactivityTimeoutMs - (now - lastInteraction)
+        if (remaining <= 0) {
+            step = LabCheckoutStep.Cart
+            action.onResetSale()
+            snackbar.show(
+                "Venta reiniciada por inactividad",
+                SnackbarType.Info,
+                SnackbarPosition.Top
+            )
+            return@LaunchedEffect
+        }
+        delay(remaining)
+        val elapsed = Clock.System.now().toEpochMilliseconds() - lastInteraction
+        if (elapsed >= inactivityTimeoutMs && hasActiveSale) {
+            step = LabCheckoutStep.Cart
+            action.onResetSale()
+            snackbar.show(
+                "Venta reiniciada por inactividad",
+                SnackbarType.Info,
+                SnackbarPosition.Top
+            )
         }
     }
 
@@ -170,7 +206,18 @@ fun BillingScreen(
         )
     }
 
-    Box(Modifier.fillMaxSize()) {
+    Box(
+        Modifier
+            .fillMaxSize()
+            .pointerInput(Unit) {
+                awaitPointerEventScope {
+                    while (true) {
+                        awaitPointerEvent()
+                        lastInteraction = Clock.System.now().toEpochMilliseconds()
+                    }
+                }
+            }
+    ) {
         Scaffold(
             containerColor = colors.background,
             bottomBar = {
@@ -766,13 +813,21 @@ private fun LabSearchBar(
         trailingIcon = {
             if (value.isNotBlank()) {
                 IconButton(onClick = onClear) {
-                    Icon(Icons.Default.Delete, contentDescription = null)
+                    Icon(Icons.Default.Clear, contentDescription = null)
                 }
             }
         },
         placeholder = { Text("Buscar productos o escanear...") },
         singleLine = true,
-        shape = RoundedCornerShape(16.dp)
+        colors = TextFieldDefaults.colors(
+            focusedIndicatorColor = Color.Transparent,
+            unfocusedIndicatorColor = Color.Transparent,
+            disabledIndicatorColor = Color.Transparent,
+            focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+            unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+            cursorColor = MaterialTheme.colorScheme.primary
+        ),
+        shape = RoundedCornerShape(18.dp)
     )
 }
 
