@@ -1,0 +1,9 @@
+{
+  "data": {
+    "name": "Cuentas por Cobrar a Clientes USD - CL",
+    "account_currency": "USD",
+    "company": "Clothing Center",
+    "root_type": "Asset",
+    "account_type": "Receivable"
+  }
+}

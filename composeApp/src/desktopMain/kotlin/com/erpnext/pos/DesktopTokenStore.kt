@@ -245,4 +245,15 @@ class DesktopTokenStore(
     override suspend fun clearState() {
         deleteSecret("oauth_state")
     }
+
+    override suspend fun saveRedirectUri(uri: String) {
+        setSecret("oauth_redirect_uri", uri)
+    }
+
+    override suspend fun loadRedirectUri(): String? =
+        getSecret("oauth_redirect_uri")
+
+    override suspend fun clearRedirectUri() {
+        deleteSecret("oauth_redirect_uri")
+    }
 }

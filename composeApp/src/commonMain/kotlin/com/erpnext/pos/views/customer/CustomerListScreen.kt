@@ -66,6 +66,7 @@ import com.erpnext.pos.localSource.entities.SalesInvoiceWithItemsAndPayments
 import com.erpnext.pos.localization.LocalAppStrings
 import com.erpnext.pos.utils.QuickActions.customerQuickActions
 import com.erpnext.pos.utils.formatDoubleToString
+import com.erpnext.pos.utils.formatCurrency
 import com.erpnext.pos.utils.normalizeCurrency
 import com.erpnext.pos.utils.resolveRateBetweenFromBaseRates
 import com.erpnext.pos.utils.resolvePaymentCurrencyForMode
@@ -803,25 +804,30 @@ private fun CustomerDetailPanel(
     val pendingAmount = bd(customer.totalPendingAmount ?: customer.currentBalance ?: 0.0)
         .moneyScale(2).toDouble(2)
     val displayCurrencies = remember(supportedCurrencies, posCurrency, baseCurrency) {
-        (supportedCurrencies + listOf(posCurrency, baseCurrency))
-            .mapNotNull { normalizeCurrency(it) }
-            .distinct()
+        com.erpnext.pos.utils.CurrencyService.resolveDisplayCurrencies(
+            supported = supportedCurrencies,
+            invoiceCurrency = null,
+            receivableCurrency = baseCurrency,
+            posCurrency = posCurrency
+        )
     }
     var pendingByCurrency by remember { mutableStateOf<Map<String, Double>>(emptyMap()) }
     LaunchedEffect(displayCurrencies, baseCurrency, pendingAmount) {
         val resolved = mutableMapOf<String, Double>()
         displayCurrencies.forEach { currency ->
-            val rate = if (baseCurrency.equals(currency, ignoreCase = true)) {
-                1.0
-            } else {
-                cashboxManager.resolveExchangeRateBetween(
-                    fromCurrency = baseCurrency,
-                    toCurrency = currency,
-                    allowNetwork = false
-                )
-            }
-            if (rate != null && rate > 0.0) {
-                resolved[currency] = pendingAmount * rate
+            val converted = com.erpnext.pos.utils.CurrencyService.convertFromReceivable(
+                amount = pendingAmount,
+                receivableCurrency = baseCurrency,
+                targetCurrency = currency,
+                invoiceCurrency = null,
+                conversionRate = null,
+                customExchangeRate = null,
+                rateResolver = { from, to ->
+                    cashboxManager.resolveExchangeRateBetween(from, to, allowNetwork = false)
+                }
+            )
+            if (converted != null) {
+                resolved[currency] = converted
             }
         }
         pendingByCurrency = resolved
@@ -831,13 +837,11 @@ private fun CustomerDetailPanel(
         pendingByCurrency.containsKey(baseCurrency) -> baseCurrency
         else -> displayCurrencies.firstOrNull() ?: "USD"
     }
-    val primarySymbol = primaryCurrency.toCurrencySymbol().ifBlank { primaryCurrency }
     val primaryAmount = pendingByCurrency[primaryCurrency] ?: pendingAmount
     val secondaryValue = pendingByCurrency
         .filterKeys { !it.equals(primaryCurrency, ignoreCase = true) }
         .map { (currency, amount) ->
-            val symbol = currency.toCurrencySymbol().ifBlank { currency }
-            "$symbol ${formatAmount(amount)}"
+            formatCurrency(currency, amount)
         }
         .takeIf { it.isNotEmpty() }
         ?.joinToString(" · ")
@@ -878,7 +882,7 @@ private fun CustomerDetailPanel(
 
         MetricBlock(
             label = "Pendiente",
-            value = "$primarySymbol ${formatAmount(primaryAmount)}",
+            value = formatCurrency(primaryCurrency, primaryAmount),
             secondaryValue = secondaryValue,
             isCritical = (customer.pendingInvoices ?: 0) > 0
         )
@@ -1601,31 +1605,30 @@ fun CustomerItem(
     val pendingAmount = pendingAmountRaw.toDouble(2)
     val posCurr = normalizeCurrency(posCurrency)
     val displayCurrencies = remember(baseCurrency, posCurr, supportedCurrencies) {
-        (supportedCurrencies + listOfNotNull(baseCurrency, posCurr))
-            .mapNotNull { normalizeCurrency(it) }
-            .distinct()
+        com.erpnext.pos.utils.CurrencyService.resolveDisplayCurrencies(
+            supported = supportedCurrencies,
+            invoiceCurrency = null,
+            receivableCurrency = baseCurrency,
+            posCurrency = posCurr
+        )
     }
     var pendingByCurrency by remember { mutableStateOf<Map<String, Double>>(emptyMap()) }
     LaunchedEffect(baseCurrency, displayCurrencies, pendingAmount) {
         val resolved = mutableMapOf<String, Double>()
         displayCurrencies.forEach { currency ->
-            val rate = if (baseCurrency.equals(currency, ignoreCase = true)) {
-                1.0
-            } else {
-                cashboxManager.resolveExchangeRateBetween(
-                    fromCurrency = baseCurrency,
-                    toCurrency = currency,
-                    allowNetwork = false
-                ) ?: run {
-                    when {
-                        baseCurrency.equals("USD", true) -> posExchangeRate.takeIf { it > 0.0 }
-                        currency.equals("USD", true) && posExchangeRate > 0.0 -> 1 / posExchangeRate
-                        else -> null
-                    }
+            val converted = com.erpnext.pos.utils.CurrencyService.convertFromReceivable(
+                amount = pendingAmount,
+                receivableCurrency = baseCurrency,
+                targetCurrency = currency,
+                invoiceCurrency = null,
+                conversionRate = null,
+                customExchangeRate = null,
+                rateResolver = { from, to ->
+                    cashboxManager.resolveExchangeRateBetween(from, to, allowNetwork = false)
                 }
-            }
-            if (rate != null && rate > 0.0) {
-                resolved[currency] = pendingAmount * rate
+            )
+            if (converted != null) {
+                resolved[currency] = converted
             }
         }
         pendingByCurrency = resolved
@@ -1639,8 +1642,7 @@ fun CustomerItem(
     val secondaryLabels = pendingByCurrency
         .filterKeys { !it.equals(primaryCurrency, ignoreCase = true) }
         .map { (currency, amount) ->
-            val symbol = currency.toCurrencySymbol().ifBlank { currency }
-            "$symbol ${formatAmount(amount)}"
+            formatCurrency(currency, amount)
         }
     val secondaryValue = secondaryLabels.takeIf { it.isNotEmpty() }?.joinToString(" · ")
     val statusLabel = when {
@@ -1778,10 +1780,8 @@ fun CustomerItem(
                 }
             }
 
-            val pendingPrimarySymbol =
-                primaryCurrency.toCurrencySymbol().ifBlank { primaryCurrency }
             Text(
-                text = "$pendingPrimarySymbol ${formatAmount(primaryAmount)}",
+                text = formatCurrency(primaryCurrency, primaryAmount),
                 style = MaterialTheme.typography.titleSmall,
                 color = if (emphasis) MaterialTheme.colorScheme.error
                 else MaterialTheme.colorScheme.onSurface
@@ -2158,8 +2158,7 @@ private fun CustomerOutstandingInvoicesContent(
             }
         )
     }
-    val receivableSymbol = receivableCurrency.toCurrencySymbol().ifBlank { receivableCurrency }
-    val baseOutstandingLabel = "$receivableSymbol ${formatAmount(outstandingReceivable)}"
+    val baseOutstandingLabel = formatCurrency(receivableCurrency, outstandingReceivable)
     val changeDue = outstandingInSelectedCurrency?.let { amountValue - it } ?: 0.0
     val isSubmitEnabled = !paymentState.isSubmitting &&
             selectedInvoice?.invoiceId?.isNotBlank() == true &&
@@ -2238,13 +2237,10 @@ private fun CustomerOutstandingInvoicesContent(
                                     baseRates = invoicesState.exchangeRateByCurrency
                                 )
                             }
-                            val posSymbol = posBaseCurrency.toCurrencySymbol()
-                                .ifBlank { posBaseCurrency }
                             val posLabel = rateBaseToPos?.let { rate ->
-                                "$posSymbol ${formatAmount(invoice.outstandingAmount * rate)}"
-                            } ?: "$posSymbol --"
-                            val baseLabel =
-                                "$baseSymbol ${formatAmount(invoice.outstandingAmount)}"
+                                formatCurrency(posBaseCurrency, invoice.outstandingAmount * rate)
+                            } ?: "${posBaseCurrency.toCurrencySymbol()} --"
+                            val baseLabel = formatCurrency(invoiceBaseCurrency, invoice.outstandingAmount)
 
                             Card(
                                 modifier = Modifier.fillMaxWidth(),
@@ -2451,16 +2447,13 @@ private fun CustomerOutstandingInvoicesContent(
                         color = MaterialTheme.colorScheme.error
                     )
                 } else if (!selectedCurrency.equals(invoiceBaseCurrency, ignoreCase = true)) {
-                    val symbol =
-                        invoiceBaseCurrency.toCurrencySymbol().ifBlank { invoiceBaseCurrency }
-                    Text("Base: $symbol ${formatAmount(baseAmount)}")
+                    Text("Base: ${formatCurrency(invoiceBaseCurrency, baseAmount)}")
                 }
             }
         )
-        val posSymbol = posBaseCurrency.toCurrencySymbol().ifBlank { posBaseCurrency }
         val posOutstandingLabel = rateBaseToPos?.let { rate ->
-            "$posSymbol ${formatAmount(outstandingBase * rate)}"
-        } ?: "$posSymbol --"
+            formatCurrency(posBaseCurrency, outstandingBase * rate)
+        } ?: "${posBaseCurrency.toCurrencySymbol()} --"
         Text(
             text = "${strings.customer.outstandingLabel}: $posOutstandingLabel",
             style = MaterialTheme.typography.bodySmall,
@@ -2475,10 +2468,8 @@ private fun CustomerOutstandingInvoicesContent(
         }
 
         if (changeDue > 0.0) {
-            val currencySymbol =
-                selectedCurrency.toCurrencySymbol().ifBlank { selectedCurrency }
             Text(
-                text = "Change due: $currencySymbol ${formatAmount(changeDue)}",
+                text = "Change due: ${formatCurrency(selectedCurrency, changeDue)}",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.primary
             )
@@ -3804,35 +3795,17 @@ private fun InvoiceHistorySummary(
 ) {
     val base = normalizeCurrency(posBaseCurrency) ?: "USD"
     val displayCurrencies = remember(supportedCurrencies, base) {
-        (supportedCurrencies + base).mapNotNull { normalizeCurrency(it) }.distinct()
+        com.erpnext.pos.utils.CurrencyService.resolveDisplayCurrencies(
+            supported = supportedCurrencies,
+            invoiceCurrency = null,
+            receivableCurrency = base,
+            posCurrency = null
+        )
     }
     var totalsByCurrency by remember { mutableStateOf<Map<String, Double>>(emptyMap()) }
 
     LaunchedEffect(invoices, displayCurrencies, base) {
         val totals = mutableMapOf<String, Double>()
-        val rateCache = mutableMapOf<Pair<String, String>, Double?>()
-        suspend fun rate(
-            from: String,
-            to: String,
-            invoiceRate: Double?,
-            invoiceCurrency: String,
-            receivableCurrency: String
-        ): Double? {
-            if (from.equals(to, true)) return 1.0
-            if (invoiceRate != null && invoiceRate > 0.0) {
-                if (from.equals(receivableCurrency, true) && to.equals(invoiceCurrency, true)) {
-                    return 1 / invoiceRate
-                }
-                if (from.equals(invoiceCurrency, true) && to.equals(receivableCurrency, true)) {
-                    return invoiceRate
-                }
-            }
-            val key = from.uppercase() to to.uppercase()
-            if (rateCache.containsKey(key)) return rateCache[key]
-            val resolved = cashboxManager.resolveExchangeRateBetween(from, to, allowNetwork = false)
-            rateCache[key] = resolved
-            return resolved
-        }
         invoices.forEach { invoice ->
             val receivableCurrency = normalizeCurrency(invoice.partyAccountCurrency)
                 ?: normalizeCurrency(invoice.currency)
@@ -3840,15 +3813,19 @@ private fun InvoiceHistorySummary(
             val invoiceCurrency = normalizeCurrency(invoice.currency) ?: receivableCurrency
             val invoiceRate = invoice.conversionRate ?: invoice.customExchangeRate
             displayCurrencies.forEach { target ->
-                val r = rate(
-                    from = receivableCurrency,
-                    to = target,
-                    invoiceRate = invoiceRate,
+                val converted = com.erpnext.pos.utils.CurrencyService.convertFromReceivable(
+                    amount = invoice.outstandingAmount,
+                    receivableCurrency = receivableCurrency,
+                    targetCurrency = target,
                     invoiceCurrency = invoiceCurrency,
-                    receivableCurrency = receivableCurrency
+                    conversionRate = invoiceRate,
+                    customExchangeRate = invoiceRate,
+                    rateResolver = { from, to ->
+                        cashboxManager.resolveExchangeRateBetween(from, to, allowNetwork = false)
+                    }
                 )
-                if (r != null && r > 0.0) {
-                    totals[target] = (totals[target] ?: 0.0) + invoice.outstandingAmount * r
+                if (converted != null) {
+                    totals[target] = (totals[target] ?: 0.0) + converted
                 }
             }
         }
@@ -3874,7 +3851,7 @@ private fun InvoiceHistorySummary(
                 ) {
                     Text(currency, style = MaterialTheme.typography.labelSmall)
                     Text(
-                        "$symbol ${formatAmount(amount)}",
+                        formatCurrency(currency, amount),
                         style = MaterialTheme.typography.labelMedium
                     )
                 }
@@ -3899,41 +3876,46 @@ private fun InvoiceHistoryRow(
         ?: "USD"
     val receivableCurrency = normalizeCurrency(invoice.partyAccountCurrency) ?: invoiceCurrency
     val displayCurrencies = remember(supportedCurrencies, invoiceCurrency, receivableCurrency) {
-        (supportedCurrencies + listOf(invoiceCurrency, receivableCurrency))
-            .mapNotNull { normalizeCurrency(it) }
-            .distinct()
+        com.erpnext.pos.utils.CurrencyService.resolveDisplayCurrencies(
+            supported = supportedCurrencies,
+            invoiceCurrency = invoiceCurrency,
+            receivableCurrency = receivableCurrency,
+            posCurrency = null
+        )
     }
     var totalByCurrency by remember { mutableStateOf<Map<String, Double>>(emptyMap()) }
     var outstandingByCurrency by remember { mutableStateOf<Map<String, Double>>(emptyMap()) }
     LaunchedEffect(displayCurrencies, invoiceCurrency, receivableCurrency, invoice.total, invoice.outstandingAmount) {
         val totals = mutableMapOf<String, Double>()
         val outs = mutableMapOf<String, Double>()
-        val rateCache = mutableMapOf<Pair<String, String>, Double?>()
-        suspend fun rate(from: String, to: String): Double? {
-            if (from.equals(to, true)) return 1.0
-            val conversionRate = invoice.conversionRate ?: invoice.customExchangeRate
-            if (conversionRate != null && conversionRate > 0.0) {
-                if (from.equals(receivableCurrency, true) && to.equals(invoiceCurrency, true)) {
-                    return 1 / conversionRate
-                }
-                if (from.equals(invoiceCurrency, true) && to.equals(receivableCurrency, true)) {
-                    return conversionRate
-                }
-            }
-            val key = from.uppercase() to to.uppercase()
-            if (rateCache.containsKey(key)) return rateCache[key]
-            val resolved = cashboxManager.resolveExchangeRateBetween(from, to, allowNetwork = false)
-            rateCache[key] = resolved
-            return resolved
-        }
         displayCurrencies.forEach { target ->
-            val rTotal = rate(invoiceCurrency, target)
-            val rOut = rate(receivableCurrency, target)
-            if (rTotal != null && rTotal > 0.0) {
-                totals[target] = invoice.total * rTotal
+            val totalConverted = com.erpnext.pos.utils.CurrencyService.convertFromReceivable(
+                amount = invoice.total,
+                receivableCurrency = invoiceCurrency,
+                targetCurrency = target,
+                invoiceCurrency = invoiceCurrency,
+                conversionRate = invoice.conversionRate ?: invoice.customExchangeRate,
+                customExchangeRate = invoice.customExchangeRate,
+                rateResolver = { from, to ->
+                    cashboxManager.resolveExchangeRateBetween(from, to, allowNetwork = false)
+                }
+            )
+            if (totalConverted != null) {
+                totals[target] = totalConverted
             }
-            if (rOut != null && rOut > 0.0) {
-                outs[target] = invoice.outstandingAmount * rOut
+            val outConverted = com.erpnext.pos.utils.CurrencyService.convertFromReceivable(
+                amount = invoice.outstandingAmount,
+                receivableCurrency = receivableCurrency,
+                targetCurrency = target,
+                invoiceCurrency = invoiceCurrency,
+                conversionRate = invoice.conversionRate ?: invoice.customExchangeRate,
+                customExchangeRate = invoice.customExchangeRate,
+                rateResolver = { from, to ->
+                    cashboxManager.resolveExchangeRateBetween(from, to, allowNetwork = false)
+                }
+            )
+            if (outConverted != null) {
+                outs[target] = outConverted
             }
         }
         totalByCurrency = totals
@@ -4011,16 +3993,14 @@ private fun InvoiceHistoryRow(
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                    val totalSymbol = invoiceCurrency.toCurrencySymbol().ifBlank { invoiceCurrency }
                     Text(
-                        "$totalSymbol $formattedTotal",
+                        formatCurrency(invoiceCurrency, formattedTotal.toDouble()),
                         style = MaterialTheme.typography.titleSmall
                     )
                     val totalSecondary = totalByCurrency
                         .filterKeys { !it.equals(invoiceCurrency, ignoreCase = true) }
                         .map { (cur, amount) ->
-                            val symbol = cur.toCurrencySymbol().ifBlank { cur }
-                            "$symbol ${formatAmount(amount)}"
+                            formatCurrency(cur, amount)
                         }
                         .takeIf { it.isNotEmpty() }
                         ?.joinToString(" · ")
@@ -4038,10 +4018,8 @@ private fun InvoiceHistoryRow(
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                    val outSymbol =
-                        receivableCurrency.toCurrencySymbol().ifBlank { receivableCurrency }
                     Text(
-                        "$outSymbol $formattedOutstanding",
+                        formatCurrency(receivableCurrency, formattedOutstanding.toDouble()),
                         style = MaterialTheme.typography.titleSmall,
                         color = if (invoice.outstandingAmount > 0.0)
                             MaterialTheme.colorScheme.error
@@ -4050,8 +4028,7 @@ private fun InvoiceHistoryRow(
                     val outstandingSecondary = outstandingByCurrency
                         .filterKeys { !it.equals(receivableCurrency, ignoreCase = true) }
                         .map { (cur, amount) ->
-                            val symbol = cur.toCurrencySymbol().ifBlank { cur }
-                            "$symbol ${formatAmount(amount)}"
+                            formatCurrency(cur, amount)
                         }
                         .takeIf { it.isNotEmpty() }
                         ?.joinToString(" · ")
@@ -4139,24 +4116,26 @@ private fun CustomerOutstandingSummary(
 
     LaunchedEffect(invoices, displayCurrencies, posCurrency) {
         val totals = mutableMapOf<String, Double>()
-        val rateCache = mutableMapOf<Pair<String, String>, Double?>()
-        suspend fun rate(from: String, to: String): Double? {
-            if (from.equals(to, true)) return 1.0
-            val key = from.uppercase() to to.uppercase()
-            if (rateCache.containsKey(key)) return rateCache[key]
-            val resolved = cashboxManager.resolveExchangeRateBetween(from, to, allowNetwork = false)
-            rateCache[key] = resolved
-            return resolved
-        }
         if (invoices.isNotEmpty()) {
             invoices.forEach { invoice ->
-                val invoiceCurrency = normalizeCurrency(invoice.partyAccountCurrency)
+                val receivableCurrency = normalizeCurrency(invoice.partyAccountCurrency)
                     ?: normalizeCurrency(invoice.currency)
                     ?: posCurrency
+                val invoiceCurrency = normalizeCurrency(invoice.currency) ?: receivableCurrency
                 displayCurrencies.forEach { target ->
-                    val r = rate(invoiceCurrency, target)
-                    if (r != null && r > 0.0) {
-                        totals[target] = (totals[target] ?: 0.0) + invoice.outstandingAmount * r
+                    val converted = com.erpnext.pos.utils.CurrencyService.convertFromReceivable(
+                        amount = invoice.outstandingAmount,
+                        receivableCurrency = receivableCurrency,
+                        targetCurrency = target,
+                        invoiceCurrency = invoiceCurrency,
+                        conversionRate = invoice.conversionRate ?: invoice.customExchangeRate,
+                        customExchangeRate = invoice.customExchangeRate,
+                        rateResolver = { from, to ->
+                            cashboxManager.resolveExchangeRateBetween(from, to, allowNetwork = false)
+                        }
+                    )
+                    if (converted != null) {
+                        totals[target] = (totals[target] ?: 0.0) + converted
                     }
                 }
             }
@@ -4164,9 +4143,19 @@ private fun CustomerOutstandingSummary(
             val baseAmount = customer.totalPendingAmount
                 ?: customer.currentBalance ?: 0.0
             displayCurrencies.forEach { target ->
-                val r = rate(posCurrency, target)
-                if (r != null && r > 0.0) {
-                    totals[target] = baseAmount * r
+                val converted = com.erpnext.pos.utils.CurrencyService.convertFromReceivable(
+                    amount = baseAmount,
+                    receivableCurrency = posCurrency,
+                    targetCurrency = target,
+                    invoiceCurrency = null,
+                    conversionRate = null,
+                    customExchangeRate = null,
+                    rateResolver = { from, to ->
+                        cashboxManager.resolveExchangeRateBetween(from, to, allowNetwork = false)
+                    }
+                )
+                if (converted != null) {
+                    totals[target] = converted
                 }
             }
         }
@@ -4199,13 +4188,12 @@ private fun CustomerOutstandingSummary(
             Text(strings.customer.outstandingSummaryAmountLabel)
         } else {
             totalsByCurrency.forEach { (currency, amount) ->
-                val symbol = currency.toCurrencySymbol().ifBlank { currency }
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Text(currency)
-                    Text("$symbol ${formatAmount(amount)}")
+                    Text(formatCurrency(currency, amount))
                 }
             }
         }

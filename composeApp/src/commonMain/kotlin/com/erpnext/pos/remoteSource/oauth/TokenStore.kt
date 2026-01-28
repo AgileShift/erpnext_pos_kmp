@@ -47,4 +47,8 @@ interface TransientAuthStore {
     suspend fun saveState(state: String)
     suspend fun loadState(): String?
     suspend fun clearState()
+
+    suspend fun saveRedirectUri(uri: String)
+    suspend fun loadRedirectUri(): String?
+    suspend fun clearRedirectUri()
 }

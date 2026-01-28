@@ -344,13 +344,11 @@ private fun ReconciliationContent(
         }
     }
     val countSymbol = remember(selectedCountCurrency, summary.currencySymbol) {
-        when {
-            selectedCountCurrency.equals(summary.currency, ignoreCase = true) ->
-                summary.currencySymbol?.takeIf { it.isNotBlank() } ?: selectedCountCurrency
-
-            selectedCountCurrency == "USD" -> "$"
-            selectedCountCurrency == "NIO" -> "C$"
-            else -> selectedCountCurrency
+        if (selectedCountCurrency.equals(summary.currency, ignoreCase = true)) {
+            summary.currencySymbol?.takeIf { it.isNotBlank() }
+                ?: selectedCountCurrency.toCurrencySymbol().ifBlank { selectedCountCurrency }
+        } else {
+            selectedCountCurrency.toCurrencySymbol().ifBlank { selectedCountCurrency }
         }
     }
     val formatCountAmount = remember(selectedCountCurrency, countSymbol) {
@@ -387,11 +385,7 @@ private fun ReconciliationContent(
                             formatCurrency(
                                 value,
                                 currencyCode = code,
-                                currencySymbol = when (code.uppercase()) {
-                                    "USD" -> "$"
-                                    "NIO" -> "C$"
-                                    else -> code
-                                },
+                                currencySymbol = code.toCurrencySymbol().ifBlank { code },
                                 formatter = formatter
                             )
                         },
@@ -411,11 +405,7 @@ private fun ReconciliationContent(
                             formatCurrency(
                                 value,
                                 currencyCode = code,
-                                currencySymbol = when (code.uppercase()) {
-                                    "USD" -> "$"
-                                    "NIO" -> "C$"
-                                    else -> code
-                                },
+                                currencySymbol = code.toCurrencySymbol().ifBlank { code },
                                 formatter = formatter
                             )
                         },
@@ -469,11 +459,7 @@ private fun ReconciliationContent(
                         formatCurrency(
                             value,
                             currencyCode = code,
-                            currencySymbol = when (code.uppercase()) {
-                                "USD" -> "$"
-                                "NIO" -> "C$"
-                                else -> code
-                            },
+                            currencySymbol = code.toCurrencySymbol().ifBlank { code },
                             formatter = formatter
                         )
                     },
@@ -493,11 +479,7 @@ private fun ReconciliationContent(
                         formatCurrency(
                             value,
                             currencyCode = code,
-                            currencySymbol = when (code.uppercase()) {
-                                "USD" -> "$"
-                                "NIO" -> "C$"
-                                else -> code
-                            },
+                            currencySymbol = code.toCurrencySymbol().ifBlank { code },
                             formatter = formatter
                         )
                     },
@@ -881,11 +863,7 @@ private fun ReconciliationActionsBar(
             formatCurrency(
                 value = value,
                 currencyCode = code,
-                currencySymbol = when (code.uppercase()) {
-                    "USD" -> "$"
-                    "NIO" -> "C$"
-                    else -> code
-                },
+                currencySymbol = code.toCurrencySymbol().ifBlank { code },
                 formatter = DecimalFormatter()
             )
         }
@@ -1067,11 +1045,7 @@ fun formatCurrency(
 
 fun Double.formatCurrencyWithCode(code: String): String {
     val formatter = DecimalFormatter()
-    val symbol = when (code.uppercase()) {
-        "USD" -> "$"
-        "NIO" -> "C$"
-        else -> code
-    }
+    val symbol = code.toCurrencySymbol().ifBlank { code }
     return formatCurrency(this, code, symbol, formatter)
 }
 

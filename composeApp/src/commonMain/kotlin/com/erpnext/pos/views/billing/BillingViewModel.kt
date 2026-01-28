@@ -601,8 +601,7 @@ class BillingViewModel(
 
         executeUseCase(
             action = {
-                val rate = resolveRateToInvoiceCurrency(
-                    api = api,
+                val rate = resolveRateToInvoiceCurrencyLocal(
                     paymentCurrency = paymentCurrency,
                     invoiceCurrency = baseCurrency,
                     cache = current.exchangeRateByCurrency
@@ -999,10 +998,11 @@ class BillingViewModel(
 
         for (code in allCodes) {
             if (code == base) continue
-            val direct = contextProvider.resolveExchangeRateBetween(code, base)
+            val direct = contextProvider.resolveExchangeRateBetween(code, base, allowNetwork = false)
             val rate = when {
                 direct != null && direct > 0.0 -> direct
-                else -> contextProvider.resolveExchangeRateBetween(base, code)?.takeIf { it > 0.0 }
+                else -> contextProvider.resolveExchangeRateBetween(base, code, allowNetwork = false)
+                    ?.takeIf { it > 0.0 }
                     ?.let { 1.0 / it }
             }
             if (rate != null && rate > 0.0) {
@@ -1028,11 +1028,11 @@ class BillingViewModel(
             return fallbackRate
         }
 
-        return resolveExchangeRateBetween(
-            api = api,
-            fromCurrency = from,
-            toCurrency = to
-        ) ?: error("No se pudo resolver la tasa de cambio $from -> $to")
+        val direct = contextProvider.resolveExchangeRateBetween(from, to, allowNetwork = false)
+        if (direct != null && direct > 0.0) return direct
+        val reverse = contextProvider.resolveExchangeRateBetween(to, from, allowNetwork = false)
+            ?.takeIf { it > 0.0 }?.let { 1.0 / it }
+        return reverse ?: error("No se pudo resolver la tasa de cambio $from -> $to")
     }
 
     private fun convertSourceDocument(
@@ -1148,8 +1148,18 @@ class BillingViewModel(
             emptyList()
         }
         val resolvedStatus = if (usePosInvoice) "Paid" else "Unpaid"
-        val resolvedPaid = if (usePosInvoice) totals.total else 0.0
-        val resolvedOutstanding = if (usePosInvoice) 0.0 else totals.total
+        val rateInvToRc = com.erpnext.pos.utils.CurrencyService.resolveInvoiceToReceivableRate(
+            invoiceCurrency = baseCurrency,
+            receivableCurrency = context.partyAccountCurrency,
+            conversionRate = conversionRate,
+            customExchangeRate = conversionRate
+        )
+        val totalReceivable = com.erpnext.pos.utils.CurrencyService.amountInvoiceToReceivable(
+            totals.total,
+            rateInvToRc
+        )
+        val resolvedPaid = if (usePosInvoice) totalReceivable else 0.0
+        val resolvedOutstanding = if (usePosInvoice) 0.0 else totalReceivable
 
         return SalesInvoiceDto(
             customer = customer.name,
@@ -1278,7 +1288,23 @@ class BillingViewModel(
             }
         }
 
-        return contextProvider.resolveExchangeRateBetween(invoice, receivable)
+        return contextProvider.resolveExchangeRateBetween(invoice, receivable, allowNetwork = false)
+    }
+
+    private suspend fun resolveRateToInvoiceCurrencyLocal(
+        paymentCurrency: String,
+        invoiceCurrency: String,
+        cache: Map<String, Double>
+    ): Double {
+        val pay = normalizeCurrency(paymentCurrency) ?: return 1.0
+        val inv = normalizeCurrency(invoiceCurrency) ?: return 1.0
+        if (pay == inv) return 1.0
+        cache[pay]?.takeIf { it > 0.0 }?.let { return it }
+        val direct = contextProvider.resolveExchangeRateBetween(pay, inv, allowNetwork = false)
+        if (direct != null && direct > 0.0) return direct
+        val reverse = contextProvider.resolveExchangeRateBetween(inv, pay, allowNetwork = false)
+            ?.takeIf { it > 0.0 }?.let { 1 / it }
+        return reverse ?: error("No se pudo resolver tasa $pay -> $inv")
     }
 
     private fun resolveDueDate(

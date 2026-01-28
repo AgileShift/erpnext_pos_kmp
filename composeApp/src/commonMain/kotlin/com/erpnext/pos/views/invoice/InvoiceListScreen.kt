@@ -51,6 +51,8 @@ import androidx.paging.compose.collectAsLazyPagingItems
 import androidx.paging.compose.itemKey
 import com.erpnext.pos.domain.models.SalesInvoiceBO
 import com.erpnext.pos.domain.usecases.InvoiceCancellationAction
+import com.erpnext.pos.utils.formatCurrency
+import com.erpnext.pos.utils.normalizeCurrency
 import com.erpnext.pos.views.invoice.components.EmptyState
 import com.erpnext.pos.views.invoice.components.ErrorState
 import com.erpnext.pos.views.invoice.components.LoadingState
@@ -293,7 +295,18 @@ fun InvoiceListScreen(action: InvoiceAction) {
             Text(invoice.postingDate, style = MaterialTheme.typography.bodySmall)
             Spacer(Modifier.height(8.dp))
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                Text("Total: ${invoice.total}", fontWeight = FontWeight.Medium)
+                val invoiceCurrency = normalizeCurrency(invoice.currency) ?: "USD"
+                val receivableCurrency =
+                    normalizeCurrency(invoice.partyAccountCurrency) ?: invoiceCurrency
+                Text(
+                    "Total: ${formatCurrency(invoiceCurrency, invoice.total)}",
+                    fontWeight = FontWeight.Medium
+                )
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    "Pendiente: ${formatCurrency(receivableCurrency, invoice.outstandingAmount)}",
+                    fontWeight = FontWeight.Medium
+                )
                 Spacer(Modifier.width(8.dp))
                 val normalizedStatus = invoice.status?.trim()?.lowercase()
                 val hasPayments = invoice.paidAmount > 0.0 || invoice.payments.any { it.amount > 0.0 }

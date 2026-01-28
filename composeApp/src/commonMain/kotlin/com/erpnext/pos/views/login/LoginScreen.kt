@@ -48,6 +48,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -65,6 +66,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.erpnext.pos.utils.isValidUrlInput
+import com.erpnext.pos.utils.rememberWindowSizeClass
+import com.erpnext.pos.utils.WindowWidthSizeClass
+import com.erpnext.pos.utils.WindowHeightSizeClass
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.number
 import kotlinx.datetime.toLocalDateTime
@@ -86,10 +90,16 @@ fun LoginScreen(
     BoxWithConstraints(
         modifier = Modifier.fillMaxSize()
     ) {
-        val useGridLayout = maxWidth >= 1200.dp
-        val compactSites = maxWidth < 900.dp
-        val horizontalPadding = if (useGridLayout) 56.dp else 24.dp
-        val verticalPadding = if (useGridLayout) 48.dp else 24.dp
+        val sizeClass = rememberWindowSizeClass()
+        val isCompact = sizeClass.widthSizeClass == WindowWidthSizeClass.Compact ||
+            sizeClass.widthSizeClass == WindowWidthSizeClass.Medium
+        val isExpandedWidth = sizeClass.widthSizeClass == WindowWidthSizeClass.Expanded
+        val isExpandedHeight = sizeClass.heightSizeClass == WindowHeightSizeClass.Expanded
+        val useSideLayout = !isCompact
+        val useGridForSites = isExpandedWidth && isExpandedHeight
+        val compactSites = !useGridForSites
+        val horizontalPadding = if (useSideLayout) 56.dp else 24.dp
+        val verticalPadding = if (useSideLayout) 48.dp else 24.dp
 
         val background = Brush.linearGradient(
             listOf(
@@ -105,7 +115,7 @@ fun LoginScreen(
                 .background(background)
         ) {
             val scrollState = rememberScrollState()
-            if (useGridLayout) {
+            if (useSideLayout) {
                 Row(
                     modifier = Modifier
                         .fillMaxSize()
@@ -125,7 +135,10 @@ fun LoginScreen(
                         onSiteUrlChanged = { siteUrl = it },
                         actions = actions,
                         compact = compactSites,
-                        modifier = Modifier.weight(1f)
+                        useGridForSites = useGridForSites,
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxHeight()
                     )
                 }
             } else {
@@ -147,9 +160,11 @@ fun LoginScreen(
                         onSiteUrlChanged = { siteUrl = it },
                         actions = actions,
                         compact = compactSites,
+                        useGridForSites = useGridForSites,
                         modifier = Modifier.fillMaxWidth()
                     )
                 }
+                //}
             }
         }
     }
@@ -178,7 +193,7 @@ private fun BrandPanel(
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
 
-        if (!compact) {
+        //if (!compact) {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 FeatureRow(icon = Icons.Default.Security, text = "OAuth seguro con ERPNext")
                 FeatureRow(icon = Icons.Default.Speed, text = "Sincronización rápida y confiable")
@@ -187,7 +202,7 @@ private fun BrandPanel(
                     text = "Soporte multi‑instancia y multi‑sucursal"
                 )
             }
-        }
+        //}
     }
 }
 
@@ -213,6 +228,7 @@ private fun LoginCard(
     onSiteUrlChanged: (String) -> Unit,
     actions: LoginAction,
     compact: Boolean,
+    useGridForSites: Boolean,
     modifier: Modifier = Modifier
 ) {
     Card(
@@ -258,7 +274,8 @@ private fun LoginCard(
                             sites = sites.orEmpty(),
                             onSelect = { actions.onSiteSelected(it) },
                             onToggleFavorite = { actions.onToggleFavorite(it) },
-                            compact = compact
+                            compact = compact,
+                            useGrid = useGridForSites
                         )
                     }
 
@@ -303,7 +320,8 @@ private fun SitePicker(
     sites: List<Site>,
     onSelect: (Site) -> Unit,
     onToggleFavorite: (Site) -> Unit,
-    compact: Boolean
+    compact: Boolean,
+    useGrid: Boolean
 ) {
     var query by remember { mutableStateOf("") }
     val filtered = remember(sites, query) {
@@ -320,7 +338,7 @@ private fun SitePicker(
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
         // Search is intentionally hidden for now (kept for future toggle).
-        if (compact) {
+        if (!useGrid) {
             LazyColumn(
                 modifier = Modifier
                     .fillMaxWidth()

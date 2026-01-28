@@ -12,6 +12,7 @@ import com.erpnext.pos.remoteSource.dto.TokenResponse
 import com.erpnext.pos.remoteSource.oauth.AuthInfoStore
 import com.erpnext.pos.remoteSource.oauth.buildAuthorizeRequest
 import com.erpnext.pos.remoteSource.oauth.toOAuthConfig
+import com.erpnext.pos.remoteSource.oauth.TransientAuthStore
 import com.erpnext.pos.utils.TokenUtils
 import com.erpnext.pos.utils.AppLogger
 import com.erpnext.pos.utils.oauth.OAuthCallbackReceiver
@@ -32,7 +33,8 @@ class LoginViewModel(
     private val authStore: AuthInfoStore,
     private val navManager: NavigationManager,
     private val contextProvider: CashBoxManager,
-    private val instanceSwitcher: InstanceSwitcher
+    private val instanceSwitcher: InstanceSwitcher,
+    private val transientAuthStore: TransientAuthStore
 ) : BaseViewModel() {
 
     private val _stateFlow: MutableStateFlow<LoginState> = MutableStateFlow(LoginState.Loading)
@@ -55,7 +57,13 @@ class LoginViewModel(
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 AppLogger.info("LoginViewModel.onAuthCodeReceived")
-                val oAuthConfig = authStore.loadAuthInfoByUrl().toOAuthConfig()
+                val oAuthConfigBase = authStore.loadAuthInfoByUrl().toOAuthConfig()
+                val redirectUri = transientAuthStore.loadRedirectUri()
+                val oAuthConfig = if (!redirectUri.isNullOrBlank()) {
+                    oAuthConfigBase.copy(redirectUrl = redirectUri)
+                } else {
+                    oAuthConfigBase
+                }
                 val authRequest = buildAuthorizeRequest(oAuthConfig)
                 val tokens = oauthService.exchangeCode(
                     oAuthConfig,
@@ -66,11 +74,14 @@ class LoginViewModel(
                 )
                 if (tokens != null) {
                     AppLogger.info("LoginViewModel.onAuthCodeReceived -> tokens OK")
-                    _stateFlow.update { LoginState.Authenticated(tokens) }
+                    isAuthenticated(tokens)
                 } else {
                     AppLogger.warn("LoginViewModel.onAuthCodeReceived -> tokens null")
                     _stateFlow.update { LoginState.Error("Error durante la autenticación") }
                 }
+                transientAuthStore.clearRedirectUri()
+                transientAuthStore.clearPkceVerifier()
+                transientAuthStore.clearState()
             } catch (e: Exception) {
                 AppLogger.warn("LoginViewModel.onAuthCodeReceived -> error", e)
                 _stateFlow.update {
@@ -78,6 +89,9 @@ class LoginViewModel(
                         e.message ?: "Error durante la autenticación"
                     )
                 }
+                transientAuthStore.clearRedirectUri()
+                transientAuthStore.clearPkceVerifier()
+                transientAuthStore.clearState()
             }
         }
     }
@@ -104,7 +118,11 @@ class LoginViewModel(
             val receiver = if (isDesktop) OAuthCallbackReceiver() else null
             try {
                 AppLogger.info("LoginViewModel.onSiteSelected -> ${site.url}")
-                val loginInfo = authStore.loadAuthInfoByUrl(site.url)
+                val loginInfo = runCatching {
+                    oauthService.getLoginWithSite(site.url)
+                }.getOrElse {
+                    authStore.loadAuthInfoByUrl(site.url)
+                }
                 authStore.saveAuthInfo(loginInfo)
                 val oauthConfig = loginInfo.toOAuthConfig()
                 val request = if (isDesktop) {
@@ -116,6 +134,7 @@ class LoginViewModel(
                     }.onFailure {
                         AppLogger.warn("OAuthCallbackReceiver.start failed, using default redirect", it)
                     }.getOrElse { DESKTOP_REDIRECT_URI }
+                    transientAuthStore.saveRedirectUri(redirectUri)
                     buildAuthorizeRequest(oauthConfig.copy(redirectUrl = redirectUri))
                 } else {
                     buildAuthorizeRequest(oauthConfig)
@@ -123,8 +142,21 @@ class LoginViewModel(
                 AppLogger.info("LoginViewModel.onSiteSelected URL -> ${request.url}")
                 doLogin(request.url)
                 if (isDesktop) {
-                    val code = receiver?.awaitCode(request.state) ?: ""
-                    onAuthCodeReceived(code)
+                    val code = runCatching {
+                        withTimeout(120_000) {
+                            receiver?.awaitCode(request.state) ?: ""
+                        }
+                    }.getOrElse {
+                        AppLogger.warn("LoginViewModel.onSiteSelected -> auth code timeout", it)
+                        ""
+                    }
+                    if (code.isBlank()) {
+                        _stateFlow.update {
+                            LoginState.Error("No se recibió el código de autenticación.")
+                        }
+                    } else {
+                        onAuthCodeReceived(code)
+                    }
                 }
             } catch (e: Exception) {
                 AppLogger.warn("LoginViewModel.onSiteSelected -> error", e)
@@ -161,10 +193,13 @@ class LoginViewModel(
     }
 
     fun reset() = _stateFlow.update { LoginState.Success() }
+        .also { fetchSites() }
 
     fun isAuthenticated(tokens: TokenResponse) {
         val isAuth = TokenUtils.isValid(tokens.id_token)
+        _stateFlow.update { LoginState.Success() }
         if (isAuth) {
+            navManager.navigateTo(NavRoute.Home)
             viewModelScope.launch {
                 authStore.getCurrentSite()?.let { url ->
                     authStore.updateSiteMeta(
@@ -173,10 +208,8 @@ class LoginViewModel(
                     )
                 }
                 instanceSwitcher.switchInstance(authStore.getCurrentSite())
-                navManager.navigateTo(NavRoute.Home)
             }
         }
-        _stateFlow.update { LoginState.Success() }
     }
 
     private companion object {

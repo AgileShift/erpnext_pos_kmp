@@ -61,6 +61,7 @@ import com.erpnext.pos.utils.DecimalFormatter
 import com.erpnext.pos.utils.formatDoubleToString
 import com.erpnext.pos.utils.normalizeCurrency
 import com.erpnext.pos.utils.toCurrencySymbol
+import com.erpnext.pos.utils.formatCurrency
 import com.erpnext.pos.utils.view.SnackbarController
 import com.erpnext.pos.utils.view.SnackbarHost
 import com.erpnext.pos.utils.view.SnackbarPosition
@@ -243,7 +244,7 @@ fun CashboxOpeningScreen(
             isSubmitting = true
             scope.launch {
                 val totalsMsg = totalsByCurrency.entries.joinToString(" · ") { (cur, total) ->
-                    "${cur.toCurrencySymbol()} ${formatMoney(total)}"
+                    formatCurrency(cur, total)
                 }
                 try {
                     onOpenCashbox(profile, amounts)
@@ -576,7 +577,7 @@ private fun OpeningFormSection(
                     SummaryRow(
                         icon = Icons.Outlined.Wallet,
                         label = "Efectivo $cur",
-                        value = "${cur.toCurrencySymbol()} ${formatMoney(total)}"
+                        value = formatCurrency(cur, total)
                     )
                 }
                 Divider(color = MaterialTheme.colorScheme.outlineVariant)
@@ -591,7 +592,7 @@ private fun OpeningFormSection(
                     Column(horizontalAlignment = Alignment.End) {
                         totalsByCurrency.forEach { (cur, total) ->
                             Text(
-                                text = "${cur.toCurrencySymbol()} ${formatMoney(total)}",
+                                text = formatCurrency(cur, total),
                                 style = MaterialTheme.typography.titleLarge.copy(
                                     fontWeight = FontWeight.Bold,
                                     color = MaterialTheme.colorScheme.primary
@@ -679,7 +680,7 @@ private fun OpeningCashContent(
                 onCountChange = onDenominationChange,
                 total = totalsByCurrency[selectedCurrency] ?: 0.0,
                 formatAmount = { amount ->
-                    "${selectedCurrency.toCurrencySymbol()} ${formatMoney(amount)}"
+                    formatCurrency(selectedCurrency, amount)
                 },
                 labels = DenominationCounterLabels(
                     title = "Detalle por denominación",
@@ -719,7 +720,7 @@ private fun OpeningCashContent(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                             Text(
-                                text = "${cur.toCurrencySymbol()} ${formatMoney(total)}",
+                                text = formatCurrency(cur, total),
                                 style = MaterialTheme.typography.titleLarge.copy(
                                     fontWeight = FontWeight.ExtraBold,
                                     color = MaterialTheme.colorScheme.primary

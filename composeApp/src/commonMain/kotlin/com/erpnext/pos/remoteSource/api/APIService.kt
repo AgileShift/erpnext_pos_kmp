@@ -274,7 +274,7 @@ class APIService(
     ): TokenResponse? {
         try {
             require(expectedState == returnedState) { "CSRF state mismatch" }
-            val res = client.post(oauthConfig.tokenUrl) {
+            val res = tokenClient.post(oauthConfig.tokenUrl) {
                 contentType(ContentType.Application.FormUrlEncoded)
                 setBody(Parameters.build {
                     append("grant_type", "authorization_code")

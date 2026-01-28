@@ -204,15 +204,22 @@ class CustomerRepository(
         var totalPending = 0.0
         invoices.forEach { wrapper ->
             val invoice = wrapper.invoice
-            val currency = invoice.partyAccountCurrency ?: invoice.currency
+            val receivableCurrency = invoice.partyAccountCurrency ?: invoice.currency
             val outstanding = invoice.outstandingAmount.coerceAtLeast(0.0)
             val rate = when {
-                currency.equals(baseCurrency, ignoreCase = true) -> 1.0
-                invoice.conversionRate != null && invoice.conversionRate!! > 0.0 ->
-                    invoice.conversionRate!!
-                invoice.customExchangeRate != null && invoice.customExchangeRate!! > 0.0 ->
-                    invoice.customExchangeRate!!
-                else -> context.resolveExchangeRateBetween(currency, baseCurrency) ?: 1.0
+                receivableCurrency.equals(baseCurrency, ignoreCase = true) -> 1.0
+                else -> context.resolveExchangeRateBetween(
+                    receivableCurrency,
+                    baseCurrency,
+                    allowNetwork = false
+                )
+                    ?: com.erpnext.pos.utils.CurrencyService.resolveReceivableToInvoiceRate(
+                        invoiceCurrency = invoice.currency,
+                        receivableCurrency = receivableCurrency,
+                        conversionRate = invoice.conversionRate,
+                        customExchangeRate = invoice.customExchangeRate
+                    )
+                    ?: 1.0
             }
             totalPending += (outstanding * rate)
         }

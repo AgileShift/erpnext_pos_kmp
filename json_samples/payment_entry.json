@@ -1,0 +1,81 @@
+{
+  "data": {
+    "name": "ACC-PAY-2026-00172",
+    "paid_from": "Cuentas por Cobrar a Clientes USD - CL",
+    "paid_to": "Caja Tienda USD - CL",
+    "paid_from_account_currency": "USD",
+    "paid_to_account_currency": "USD",
+    "source_exchange_rate": 1.0,
+    "target_exchange_rate": 1.0,
+    "paid_amount": 10.0,
+    "received_amount": 10.0,
+    "reference_no": "POSPAY-07f57aea-0958-4fd5-94b3-f2112190280e",
+    "references": [
+      {
+        "name": "3oj12ekes9",
+        "owner": "realherrold@gmail.com",
+        "creation": "2026-01-27 19:35:36.342264",
+        "modified": "2026-01-27 19:35:37.567263",
+        "modified_by": "realherrold@gmail.com",
+        "docstatus": 1,
+        "idx": 1,
+        "reference_doctype": "Sales Invoice",
+        "reference_name": "FACT-2026-0058",
+        "due_date": "2026-02-26",
+        "payment_term_outstanding": 0.0,
+        "total_amount": 92.0,
+        "outstanding_amount": 82.0,
+        "allocated_amount": 10.0,
+        "exchange_rate": 1.0,
+        "exchange_gain_loss": 0.0,
+        "account": "Cuentas por Cobrar a Clientes USD - CL",
+        "payment_request_outstanding": 0.0,
+        "parent": "ACC-PAY-2026-00172",
+        "parentfield": "references",
+        "parenttype": "Payment Entry",
+        "doctype": "Payment Entry Reference"
+      }
+    ]
+  }
+}
+
+{
+  "data": {
+    "name": "ACC-PAY-2026-00173",
+    "paid_from": "Cuentas por Cobrar a Clientes USD - CL",
+    "paid_to": "Caja Tienda COR - CL",
+    "paid_from_account_currency": "USD",
+    "paid_to_account_currency": "NIO",
+    "source_exchange_rate": 1.0,
+    "target_exchange_rate": 0.027304,
+    "paid_amount": 27.39,
+    "received_amount": 1003.0,
+    "reference_no": "POSPAY-a78bb357-4b3c-426c-b7fa-03755022a6fd",
+    "references": [
+      {
+        "name": "3p7epls0s1",
+        "owner": "realherrold@gmail.com",
+        "creation": "2026-01-27 19:35:38.318208",
+        "modified": "2026-01-27 19:35:39.454232",
+        "modified_by": "realherrold@gmail.com",
+        "docstatus": 1,
+        "idx": 1,
+        "reference_doctype": "Sales Invoice",
+        "reference_name": "FACT-2026-0058",
+        "due_date": "2026-02-26",
+        "payment_term_outstanding": 0.0,
+        "total_amount": 92.0,
+        "outstanding_amount": 54.61,
+        "allocated_amount": 27.39,
+        "exchange_rate": 1.0,
+        "exchange_gain_loss": 0.0,
+        "account": "Cuentas por Cobrar a Clientes USD - CL",
+        "payment_request_outstanding": 0.0,
+        "parent": "ACC-PAY-2026-00173",
+        "parentfield": "references",
+        "parenttype": "Payment Entry",
+        "doctype": "Payment Entry Reference"
+      }
+    ],
+  }
+}

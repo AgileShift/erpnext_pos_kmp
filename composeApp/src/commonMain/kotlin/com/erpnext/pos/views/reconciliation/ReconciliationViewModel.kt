@@ -226,7 +226,8 @@ class ReconciliationViewModel(
                 modeCurrency,
                 rateCache
             )
-        val paymentsByCurrency = aggregatePaymentsByCurrency(paymentRows, posCurrency, modeCurrency)
+        val paymentsByCurrency =
+            aggregatePaymentsByCurrency(invoices, paymentRows, posCurrency, modeCurrency)
         val availableModes = context.paymentModes.mapNotNull { mode ->
             mode.modeOfPayment.takeIf { it.isNotBlank() }
         }
@@ -337,7 +338,11 @@ class ReconciliationViewModel(
             } else {
                 val key = "${invoiceCurrency.uppercase()}->${changeCurrency.uppercase()}"
                 val rate = rateCache.getOrPut(key) {
-                    cashBoxManager.resolveExchangeRateBetween(invoiceCurrency, changeCurrency) ?: 1.0
+                    cashBoxManager.resolveExchangeRateBetween(
+                        invoiceCurrency,
+                        changeCurrency,
+                        allowNetwork = false
+                    ) ?: 1.0
                 }
                 changeBase * rate
             }
@@ -362,17 +367,58 @@ class ReconciliationViewModel(
     }
 
     private fun aggregatePaymentsByCurrency(
+        invoices: List<com.erpnext.pos.localSource.entities.SalesInvoiceEntity>,
         rows: List<ShiftPaymentRow>,
         posCurrency: String,
         modeCurrency: Map<String, String>
     ): Map<String, Double> {
         val totals = mutableMapOf<String, Double>()
+        val paymentsByInvoice = mutableMapOf<String, Double>()
+        val invoiceByName = invoices.associateBy { it.invoiceName }
         rows.forEach { row ->
             val payCurrency = resolvePaymentCurrency(row, posCurrency, modeCurrency)
             val normalizedCurrency = payCurrency.uppercase()
-            totals[normalizedCurrency] =
-                (totals[normalizedCurrency] ?: 0.0) + resolvePaymentAmount(row, payCurrency)
+            val amount = resolvePaymentAmount(row, payCurrency)
+            totals[normalizedCurrency] = (totals[normalizedCurrency] ?: 0.0) + amount
+
+            val invoice = invoiceByName[row.invoiceName]
+            val receivableCurrency = normalizeCurrency(invoice?.partyAccountCurrency)
+                ?: normalizeCurrency(row.partyAccountCurrency)
+                ?: normalizeCurrency(invoice?.currency)
+                ?: normalizeCurrency(row.invoiceCurrency)
+                ?: posCurrency
+            val invoiceCurrency = normalizeCurrency(invoice?.currency)
+                ?: normalizeCurrency(row.invoiceCurrency)
+                ?: receivableCurrency
+            val rateInvToRc = com.erpnext.pos.utils.CurrencyService.resolveInvoiceToReceivableRate(
+                invoiceCurrency = invoiceCurrency,
+                receivableCurrency = receivableCurrency,
+                conversionRate = invoice?.conversionRate,
+                customExchangeRate = invoice?.customExchangeRate
+            )
+            val rowReceivable = com.erpnext.pos.utils.CurrencyService.amountInvoiceToReceivable(
+                row.amount,
+                rateInvToRc
+            )
+            paymentsByInvoice[row.invoiceName] =
+                (paymentsByInvoice[row.invoiceName] ?: 0.0) + rowReceivable
         }
+
+        invoices.forEach { invoice ->
+            val invoiceName = invoice.invoiceName ?: return@forEach
+            val paidAmount = invoice.paidAmount
+            if (paidAmount <= 0.0) return@forEach
+            val captured = paymentsByInvoice[invoiceName] ?: 0.0
+            val delta = paidAmount - captured
+            if (delta > 0.005) {
+                val currency = normalizeCurrency(invoice.partyAccountCurrency)
+                    ?: normalizeCurrency(invoice.currency)
+                    ?: posCurrency
+                val code = currency.uppercase()
+                totals[code] = (totals[code] ?: 0.0) + delta
+            }
+        }
+
         return totals.mapValues { roundToCurrency(it.value) }
     }
 
@@ -388,7 +434,8 @@ class ReconciliationViewModel(
     private fun resolvePaymentAmount(row: ShiftPaymentRow, paymentCurrency: String): Double {
         val hasEntered = row.enteredAmount > 0.0
         if (row.paymentCurrency != null && hasEntered) return row.enteredAmount
-        if (row.paymentCurrency != null && row.exchangeRate > 0.0) {
+        if (row.exchangeRate > 0.0 && !paymentCurrency.isBlank()) {
+            // amount está en moneda de factura, exchangeRate es pago -> factura.
             return row.amount / row.exchangeRate
         }
         return row.amount
@@ -439,7 +486,11 @@ class ReconciliationViewModel(
             } else {
                 val key = "${sourceCurrency.uppercase()}->${target.uppercase()}"
                 val rate = rateCache.getOrPut(key) {
-                    cashBoxManager.resolveExchangeRateBetween(sourceCurrency, target) ?: 1.0
+                    cashBoxManager.resolveExchangeRateBetween(
+                        sourceCurrency,
+                        target,
+                        allowNetwork = false
+                    ) ?: 1.0
                 }
                 roundToCurrency(amount * rate)
             }
@@ -455,12 +506,32 @@ class ReconciliationViewModel(
     ): Map<String, Double> {
         val totals = mutableMapOf<String, Double>()
         val paymentsByInvoice = mutableMapOf<String, Double>()
+        val invoiceByName = invoices.associateBy { it.invoiceName }
         rows.forEach { row ->
             val payCurrency = resolvePaymentCurrency(row, posCurrency, modeCurrency)
             val amount = resolvePaymentAmount(row, payCurrency)
             totals[row.modeOfPayment] = (totals[row.modeOfPayment] ?: 0.0) + amount
+            val invoice = invoiceByName[row.invoiceName]
+            val receivableCurrency = normalizeCurrency(invoice?.partyAccountCurrency)
+                ?: normalizeCurrency(row.partyAccountCurrency)
+                ?: normalizeCurrency(invoice?.currency)
+                ?: normalizeCurrency(row.invoiceCurrency)
+                ?: posCurrency
+            val invoiceCurrency = normalizeCurrency(invoice?.currency)
+                ?: normalizeCurrency(row.invoiceCurrency)
+                ?: receivableCurrency
+            val rateInvToRc = com.erpnext.pos.utils.CurrencyService.resolveInvoiceToReceivableRate(
+                invoiceCurrency = invoiceCurrency,
+                receivableCurrency = receivableCurrency,
+                conversionRate = invoice?.conversionRate,
+                customExchangeRate = invoice?.customExchangeRate
+            )
+            val rowReceivable = com.erpnext.pos.utils.CurrencyService.amountInvoiceToReceivable(
+                row.amount,
+                rateInvToRc
+            )
             paymentsByInvoice[row.invoiceName] =
-                (paymentsByInvoice[row.invoiceName] ?: 0.0) + row.amount
+                (paymentsByInvoice[row.invoiceName] ?: 0.0) + rowReceivable
         }
         invoices.forEach { invoice ->
             val invoiceName = invoice.invoiceName ?: return@forEach
@@ -480,7 +551,11 @@ class ReconciliationViewModel(
                 } else {
                     val key = "${invoiceCurrency.uppercase()}->${targetCurrency.uppercase()}"
                     val rate = rateCache.getOrPut(key) {
-                        cashBoxManager.resolveExchangeRateBetween(invoiceCurrency, targetCurrency)
+                        cashBoxManager.resolveExchangeRateBetween(
+                            invoiceCurrency,
+                            targetCurrency,
+                            allowNetwork = false
+                        )
                             ?: 1.0
                     }
                     delta * rate
@@ -573,7 +648,11 @@ class ReconciliationViewModel(
             } else {
                 val key = "${invoiceCurrency.uppercase()}->$posCurrency"
                 rateCache.getOrPut(key) {
-                    cashBoxManager.resolveExchangeRateBetween(invoiceCurrency, posCurrency) ?: 1.0
+                    cashBoxManager.resolveExchangeRateBetween(
+                        invoiceCurrency,
+                        posCurrency,
+                        allowNetwork = false
+                    ) ?: 1.0
                 }
             }
             pendingTotal += outstanding * rate

@@ -129,6 +129,12 @@ class IosTokenStore : TokenStore, TransientAuthStore, AuthInfoStore {
     override suspend fun loadState(): String? = loadInternal("oauth_state")
     override suspend fun clearState() = deleteInternal("oauth_state")
 
+    override suspend fun saveRedirectUri(uri: String) = saveInternal("oauth_redirect_uri", uri)
+
+    override suspend fun loadRedirectUri(): String? = loadInternal("oauth_redirect_uri")
+
+    override suspend fun clearRedirectUri() = deleteInternal("oauth_redirect_uri")
+
     // ------------------------------------------------------------
     // AuthInfoStore
     // ------------------------------------------------------------

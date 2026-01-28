@@ -65,7 +65,7 @@ class PaymentHandler(
             invoiceCurrency = invoiceCurrency,
             cache = exchangeRateByCurrency,
             rateResolver = { from, to ->
-                exchangeRateRepository.getRate(from, to)
+                exchangeRateRepository.getLocalRate(from, to)
             }
         )
 
@@ -341,8 +341,8 @@ class PaymentHandler(
         val to = normalizeCurrency(toCurrency) ?: return null
         if (from.equals(to, ignoreCase = true)) return 1.0
 
-        exchangeRateRepository.getRate(from, to)?.takeIf { it > 0.0 }?.let { return it }
-        exchangeRateRepository.getRate(to, from)?.takeIf { it > 0.0 }?.let { return 1 / it }
+        exchangeRateRepository.getLocalRate(from, to)?.takeIf { it > 0.0 }?.let { return it }
+        exchangeRateRepository.getLocalRate(to, from)?.takeIf { it > 0.0 }?.let { return 1 / it }
 
         val ctxCurrency = normalizeCurrency(context.currency)
         val ctxRate = context.exchangeRate

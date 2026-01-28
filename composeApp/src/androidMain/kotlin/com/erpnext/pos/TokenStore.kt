@@ -182,6 +182,17 @@ class AndroidTokenStore(private val context: Context) : TokenStore, TransientAut
         prefs.remove("oauth_state")
     }
 
+    override suspend fun saveRedirectUri(uri: String) {
+        prefs.putString("oauth_redirect_uri", uri)
+    }
+
+    override suspend fun loadRedirectUri(): String? =
+        prefs.getString("oauth_redirect_uri")
+
+    override suspend fun clearRedirectUri() {
+        prefs.remove("oauth_redirect_uri")
+    }
+
     // ------------------------------------------------------------
     // Internal helper class (Android only)
     // ------------------------------------------------------------

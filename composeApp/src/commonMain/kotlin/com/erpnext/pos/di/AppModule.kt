@@ -173,6 +173,13 @@ val appModule = module {
     single(named("tokenHttpClient")) {
         HttpClient(defaultEngine()) {
             expectSuccess = true
+            install(ContentNegotiation) {
+                json(Json {
+                    ignoreUnknownKeys = true
+                    isLenient = true
+                    prettyPrint = false
+                })
+            }
         }
     }
 
@@ -274,7 +281,7 @@ val appModule = module {
     single { BillingResetController() }
 
     single<CoroutineScope> { CoroutineScope(SupervisorJob() + Dispatchers.IO) }
-    single { NavigationManager(get()) }
+    single { com.erpnext.pos.navigation.NavigationManagerHolder.instance }
     single {
         SessionRefresher(
             tokenStore = get(),
@@ -388,7 +395,7 @@ val appModule = module {
     //endregion
 
     //region Login DI
-    single { LoginViewModel(get(), get(named("apiService")), get(), get(), get(), get()) }
+    single { LoginViewModel(get(), get(named("apiService")), get(), get(), get(), get(), get()) }
     //endregion
 
     //region Splash DI

@@ -94,8 +94,6 @@ class SalesInvoiceRepository(
         if (entity.invoice.profileId.isNullOrBlank() || entity.invoice.posOpeningEntry.isNullOrBlank()) {
             throw IllegalStateException("Falta POS Profile o apertura de caja activa para crear la factura.")
         }
-        val invoiceCurrency = dto.currency?.trim()?.uppercase()
-        val receivableCurrency = dto.partyAccountCurrency?.trim()?.uppercase()
         val providedRate = dto.conversionRate ?: dto.customExchangeRate
         if (entity.invoice.conversionRate == null && providedRate != null && providedRate > 0.0) {
             entity.invoice.conversionRate = providedRate
@@ -131,7 +129,17 @@ class SalesInvoiceRepository(
         }
         if (uniquePayments.isEmpty()) return
 
-        val paidDelta = uniquePayments.sumOf { it.amount }
+        val paidDeltaInvoice = uniquePayments.sumOf { it.amount }
+        val rateInvToRc = com.erpnext.pos.utils.CurrencyService.resolveInvoiceToReceivableRate(
+            invoiceCurrency = invoice.currency,
+            receivableCurrency = invoice.partyAccountCurrency,
+            conversionRate = invoice.conversionRate,
+            customExchangeRate = invoice.customExchangeRate
+        )
+        val paidDelta = com.erpnext.pos.utils.CurrencyService.amountInvoiceToReceivable(
+            paidDeltaInvoice,
+            rateInvToRc
+        )
         val totalBefore = invoice.paidAmount + invoice.outstandingAmount
         val totalPaid = roundToCurrency((invoice.paidAmount + paidDelta).coerceAtLeast(0.0))
         var newOutstanding =
@@ -229,17 +237,8 @@ class SalesInvoiceRepository(
         val resolvedPaidAmount = if (remoteHasPayments) remotePaid else localPaid
         val resolvedOutstandingAmount =
             if (remoteHasPayments) (remoteOutstanding ?: 0.0) else localOutstanding
-        val invoiceCurrency = remote.currency?.trim()
-        val receivableCurrency = remote.partyAccountCurrency?.trim()
-        val conversionRate = remote.conversionRate ?: remote.customExchangeRate
-        val conversionNeeded = !invoiceCurrency.isNullOrBlank() &&
-            !receivableCurrency.isNullOrBlank() &&
-            !invoiceCurrency.equals(receivableCurrency, true) &&
-            conversionRate != null &&
-            conversionRate > 0.0
-        val toInvoiceFactor = if (conversionNeeded) (1 / conversionRate!!) else 1.0
-        val localPaidAmount = roundToCurrency(resolvedPaidAmount * toInvoiceFactor)
-        val localOutstandingAmount = roundToCurrency(resolvedOutstandingAmount * toInvoiceFactor)
+        val localPaidAmount = roundToCurrency(resolvedPaidAmount)
+        val localOutstandingAmount = roundToCurrency(resolvedOutstandingAmount)
         // El status se alinea con la fuente de verdad escogida.
         val resolvedStatus = if (remoteHasPayments) remote.status ?: "Draft"
         else localInvoice?.status ?: (remote.status ?: "Draft")
@@ -435,15 +434,20 @@ class SalesInvoiceRepository(
         var totalPending = 0.0
         invoices.forEach { wrapper ->
             val invoice = wrapper.invoice
-            val currency = invoice.partyAccountCurrency ?: invoice.currency
+            val receivableCurrency = invoice.partyAccountCurrency ?: invoice.currency
             val outstanding = invoice.outstandingAmount.coerceAtLeast(0.0)
             val rate = when {
-                currency.equals(baseCurrency, ignoreCase = true) -> 1.0
-                invoice.conversionRate != null && invoice.conversionRate!! > 0.0 ->
-                    invoice.conversionRate!!
-                invoice.customExchangeRate != null && invoice.customExchangeRate!! > 0.0 ->
-                    invoice.customExchangeRate!!
-                else -> context.resolveExchangeRateBetween(currency, baseCurrency) ?: 1.0
+                receivableCurrency.equals(baseCurrency, ignoreCase = true) -> 1.0
+                else -> context.resolveExchangeRateBetween(
+                    receivableCurrency,
+                    baseCurrency,
+                    allowNetwork = false
+                ) ?: com.erpnext.pos.utils.CurrencyService.resolveReceivableToInvoiceRate(
+                    invoiceCurrency = invoice.currency,
+                    receivableCurrency = receivableCurrency,
+                    conversionRate = invoice.conversionRate,
+                    customExchangeRate = invoice.customExchangeRate
+                ) ?: 1.0
             }
             totalPending += (outstanding * rate)
         }
