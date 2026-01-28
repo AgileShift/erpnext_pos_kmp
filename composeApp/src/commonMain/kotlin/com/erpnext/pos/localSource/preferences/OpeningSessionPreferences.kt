@@ -1,10 +1,7 @@
 package com.erpnext.pos.localSource.preferences
 
-import androidx.datastore.core.DataStore
-import androidx.datastore.preferences.core.Preferences
-import androidx.datastore.preferences.core.edit
-import androidx.datastore.preferences.core.stringPreferencesKey
 import com.erpnext.pos.domain.models.OpeningSessionDraft
+import com.erpnext.pos.localSource.configuration.ConfigurationStore
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import kotlinx.serialization.decodeFromString
@@ -12,28 +9,22 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 
 class OpeningSessionPreferences(
-    private val dataStore: DataStore<Preferences>
+    private val store: ConfigurationStore
 ) {
     companion object {
-        private val draftKey = stringPreferencesKey("opening_session_draft")
+        private const val draftKey = "opening_session_draft"
         private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
     }
 
-    val draft: Flow<OpeningSessionDraft?> = dataStore.data.map { prefs ->
-        prefs[draftKey]?.let { payload ->
-            runCatching { json.decodeFromString<OpeningSessionDraft>(payload) }.getOrNull()
-        }
+    val draft: Flow<OpeningSessionDraft?> = store.observeRaw(draftKey).map { payload ->
+        payload?.let { runCatching { json.decodeFromString<OpeningSessionDraft>(it) }.getOrNull() }
     }
 
     suspend fun saveDraft(draft: OpeningSessionDraft) {
-        dataStore.edit { prefs ->
-            prefs[draftKey] = json.encodeToString(draft)
-        }
+        store.saveRaw(draftKey, json.encodeToString(draft))
     }
 
     suspend fun clearDraft() {
-        dataStore.edit { prefs ->
-            prefs.remove(draftKey)
-        }
+        store.delete(draftKey)
     }
 }

@@ -11,6 +11,8 @@ import com.erpnext.pos.localSource.dao.AddressDao
 import com.erpnext.pos.localSource.dao.ContactDao
 import com.erpnext.pos.localSource.dao.CustomerDao
 import com.erpnext.pos.localSource.dao.CustomerOutboxDao
+import com.erpnext.pos.localSource.dao.ConfigurationDao
+import com.erpnext.pos.localSource.dao.CustomerGroupDao
 import com.erpnext.pos.localSource.dao.DeliveryChargeDao
 import com.erpnext.pos.localSource.dao.ExchangeRateDao
 import com.erpnext.pos.localSource.dao.ItemDao
@@ -23,6 +25,7 @@ import com.erpnext.pos.localSource.dao.POSProfileDao
 import com.erpnext.pos.localSource.dao.PosProfileLocalDao
 import com.erpnext.pos.localSource.dao.PosProfilePaymentMethodDao
 import com.erpnext.pos.localSource.dao.SalesInvoiceDao
+import com.erpnext.pos.localSource.dao.TerritoryDao
 import com.erpnext.pos.localSource.dao.UserDao
 import com.erpnext.pos.localSource.dao.v2.CatalogDao as CatalogDaoV2
 import com.erpnext.pos.localSource.dao.v2.CustomerDao as CustomerDaoV2
@@ -63,6 +66,7 @@ import com.erpnext.pos.localSource.entities.TaxDetailsEntity
 import com.erpnext.pos.localSource.entities.UserEntity
 import com.erpnext.pos.localSource.entities.CompanyEntity
 import com.erpnext.pos.localSource.entities.ContactEntity
+import com.erpnext.pos.localSource.entities.ConfigurationEntity
 import com.erpnext.pos.localSource.entities.v2.CustomerAddressEntity
 import com.erpnext.pos.localSource.entities.v2.CustomerContactEntity
 import com.erpnext.pos.localSource.entities.v2.CustomerEntity as CustomerEntityV2
@@ -115,6 +119,7 @@ import com.erpnext.pos.localSource.entities.v2.UserEntity as UserEntityV2
         ContactEntity::class,
         AddressEntity::class,
         CustomerGroupEntity::class,
+        ConfigurationEntity::class,
         CategoryEntity::class,
         SalesInvoiceEntity::class,
         SalesInvoiceItemEntity::class,
@@ -160,7 +165,7 @@ import com.erpnext.pos.localSource.entities.v2.UserEntity as UserEntityV2
         SyncStateEntity::class,
         CustomerOutboxEntity::class
     ],
-    version = 31,
+    version = 32,
     exportSchema = true
 )
 @ConstructedBy(AppDatabaseConstructor::class)
@@ -179,6 +184,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun posOpeningEntryLinkDao(): POSOpeningEntryLinkDao
     abstract fun posClosingDao(): POSClosingEntryDao
     abstract fun exchangeRateDao(): ExchangeRateDao
+    abstract fun configurationDao(): ConfigurationDao
     abstract fun catalogDaoV2(): CatalogDaoV2
     abstract fun customerDaoV2(): CustomerDaoV2
     abstract fun inventoryDaoV2(): InventoryDaoV2
@@ -197,8 +203,8 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun deliveryChargeDao(): DeliveryChargeDao
     abstract fun companyDao(): CompanyDao
     abstract fun customerOutboxDao(): CustomerOutboxDao
-    abstract fun customerGroupDao(): com.erpnext.pos.localSource.dao.CustomerGroupDao
-    abstract fun territoryDao(): com.erpnext.pos.localSource.dao.TerritoryDao
+    abstract fun customerGroupDao(): CustomerGroupDao
+    abstract fun territoryDao(): TerritoryDao
     abstract fun contactDao(): ContactDao
     abstract fun addressDao(): AddressDao
 }

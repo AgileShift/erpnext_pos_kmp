@@ -80,12 +80,13 @@ import com.erpnext.pos.localSource.datasources.PaymentTermLocalSource
 import com.erpnext.pos.localSource.datasources.CustomerGroupLocalSource
 import com.erpnext.pos.localSource.datasources.TerritoryLocalSource
 import com.erpnext.pos.localSource.datasources.POSProfileLocalSource
+import com.erpnext.pos.localSource.configuration.ConfigurationStore
 import com.erpnext.pos.localSource.preferences.ExchangeRatePreferences
+import com.erpnext.pos.localSource.preferences.GeneralPreferences
 import com.erpnext.pos.localSource.preferences.LanguagePreferences
 import com.erpnext.pos.localSource.preferences.OpeningSessionPreferences
 import com.erpnext.pos.localSource.preferences.SyncPreferences
 import com.erpnext.pos.localSource.preferences.ThemePreferences
-import com.erpnext.pos.localSource.preferences.PreferenceStoreProvider
 import com.erpnext.pos.navigation.NavigationManager
 import com.erpnext.pos.remoteSource.api.APIService
 import com.erpnext.pos.remoteSource.api.defaultEngine
@@ -112,7 +113,6 @@ import com.erpnext.pos.di.v2.appModulev2
 import com.erpnext.pos.utils.AppLogger
 import com.erpnext.pos.utils.AppSentry
 import com.erpnext.pos.utils.TokenUtils
-import com.erpnext.pos.utils.prefsPath
 import com.erpnext.pos.utils.view.SnackbarController
 import com.erpnext.pos.views.CashBoxManager
 import com.erpnext.pos.views.billing.BillingViewModel
@@ -309,7 +309,8 @@ val appModule = module {
             networkMonitor = get()
         )
     }
-    single { PreferenceStoreProvider.get(prefsPath()) }
+    single { get<AppDatabase>().configurationDao() }
+    single { ConfigurationStore(get()) }
     single { ExchangeRatePreferences(get()) }
     single { LanguagePreferences(get()) }
     single { OpeningSessionPreferences(get()) }
@@ -591,7 +592,17 @@ val appModule = module {
     //endregion
 
     //region Settings
-    single { SettingsViewModel(get(), get(), get(), get()) }
+    single { GeneralPreferences(get()) }
+    single {
+        SettingsViewModel(
+            get(),
+            get(),
+            get(),
+            get(),
+            get(),
+            get()
+        )
+    }
     //endregion
 
     //region UseCases DI

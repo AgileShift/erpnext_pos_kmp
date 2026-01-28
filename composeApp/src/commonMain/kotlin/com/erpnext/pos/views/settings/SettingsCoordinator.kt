@@ -14,7 +14,10 @@ class SettingsCoordinator(
 
     fun loadSettings() {}
 
-    fun onToggle(s: String, b: Boolean) {}
+    fun onTaxesIncludedChanged(enabled: Boolean) = viewModel.setTaxesIncluded(enabled)
+    fun onOfflineModeChanged(enabled: Boolean) = viewModel.setOfflineMode(enabled)
+    fun onPrinterEnabledChanged(enabled: Boolean) = viewModel.setPrinterEnabled(enabled)
+    fun onCashDrawerEnabledChanged(enabled: Boolean) = viewModel.setCashDrawerEnabled(enabled)
 
     fun onSelect(s: String) {}
 

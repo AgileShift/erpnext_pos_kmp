@@ -20,7 +20,10 @@ fun rememberSettingsActions(coordinator: SettingsCoordinator): POSSettingAction 
     return remember(coordinator) {
         POSSettingAction(
             loadSettings = coordinator::loadSettings,
-            onToggle = coordinator::onToggle,
+            onTaxesIncludedChanged = coordinator::onTaxesIncludedChanged,
+            onOfflineModeChanged = coordinator::onOfflineModeChanged,
+            onPrinterEnabledChanged = coordinator::onPrinterEnabledChanged,
+            onCashDrawerEnabledChanged = coordinator::onCashDrawerEnabledChanged,
             onSelect = coordinator::onSelect,
             onSyncNow = coordinator::onSyncNow,
             onAutoSyncChanged = coordinator::onAutoSyncChanged,

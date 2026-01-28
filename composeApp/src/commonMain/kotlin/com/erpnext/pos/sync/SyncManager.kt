@@ -16,6 +16,7 @@ import com.erpnext.pos.data.repositories.AddressRepository
 import com.erpnext.pos.data.repositories.TerritoryRepository
 import com.erpnext.pos.sync.PushSyncRunner
 import com.erpnext.pos.sync.SyncContextProvider
+import com.erpnext.pos.domain.sync.SyncContext
 import com.erpnext.pos.views.CashBoxManager
 import com.erpnext.pos.localSource.dao.POSProfileDao
 import com.erpnext.pos.localSource.preferences.SyncPreferences
@@ -24,6 +25,8 @@ import com.erpnext.pos.utils.NetworkMonitor
 import com.erpnext.pos.utils.AppLogger
 import com.erpnext.pos.utils.AppSentry
 import com.erpnext.pos.auth.SessionRefresher
+import com.erpnext.pos.domain.policy.DefaultPolicy
+import com.erpnext.pos.domain.policy.PolicyInput
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -303,10 +306,27 @@ class SyncManager(
     }
 
     private suspend fun runPushQueue() {
-        val ctx = syncContextProvider.buildContext()
-        if (ctx == null) {
-            AppLogger.warn("SyncManager: push queue skipped because context is not ready")
-            return
+        val ctx = syncContextProvider.buildContext() ?: run {
+            val base = cashBoxManager.getContext() ?: cashBoxManager.initializeContext()
+            if (base == null) {
+                AppLogger.warn("SyncManager: push queue skipped because context is not ready")
+                return
+            }
+            val instanceId = base.company.ifBlank { base.profileName }.ifBlank { base.username }
+            val companyId = base.company.ifBlank { base.profileName }
+            if (instanceId.isBlank() || companyId.isBlank()) {
+                AppLogger.warn("SyncManager: push queue skipped because instance/company is blank")
+                return
+            }
+            SyncContext(
+                instanceId = instanceId,
+                companyId = companyId,
+                territoryId = base.territory ?: base.route ?: "",
+                warehouseId = base.warehouse ?: "",
+                priceList = base.priceList ?: base.currency,
+                fromDate = syncContextProvider.buildContext()?.fromDate
+                    ?: DefaultPolicy(PolicyInput(3)).invoicesFromDate()
+            )
         }
         _state.value = SyncState.SYNCING("Sincronizando push...")
         try {

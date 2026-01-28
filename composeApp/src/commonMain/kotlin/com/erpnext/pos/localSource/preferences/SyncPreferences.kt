@@ -1,54 +1,49 @@
 package com.erpnext.pos.localSource.preferences
 
-import androidx.datastore.core.DataStore
-import androidx.datastore.preferences.core.Preferences
-import androidx.datastore.preferences.core.booleanPreferencesKey
-import androidx.datastore.preferences.core.edit
-import androidx.datastore.preferences.core.longPreferencesKey
+import com.erpnext.pos.localSource.configuration.ConfigurationStore
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 
 class SyncPreferences(
-    private val dataStore: DataStore<Preferences>
+    private val store: ConfigurationStore
 ) {
     companion object {
-        private val autoSyncKey = booleanPreferencesKey("sync_auto")
-        private val syncOnStartupKey = booleanPreferencesKey("sync_on_startup")
-        private val wifiOnlyKey = booleanPreferencesKey("sync_wifi_only")
-        private val lastSyncAtKey = longPreferencesKey("sync_last_at")
+        private const val autoSyncKey = "sync_auto"
+        private const val syncOnStartupKey = "sync_on_startup"
+        private const val wifiOnlyKey = "sync_wifi_only"
+        private const val lastSyncAtKey = "sync_last_at"
     }
 
-    val settings: Flow<SyncSettings> = dataStore.data.map { prefs ->
-        SyncSettings(
-            autoSync = prefs[autoSyncKey] ?: true,
-            syncOnStartup = prefs[syncOnStartupKey] ?: true,
-            wifiOnly = prefs[wifiOnlyKey] ?: false,
-            lastSyncAt = prefs[lastSyncAtKey]
-        )
+    private fun observeBoolean(key: String, default: Boolean) =
+        store.observeRaw(key).map { it?.toBooleanStrictOrNull() ?: default }
+
+    private fun observeLong(key: String) =
+        store.observeRaw(key).map { it?.toLongOrNull() }
+
+    val settings: Flow<SyncSettings> = combine(
+        observeBoolean(autoSyncKey, true),
+        observeBoolean(syncOnStartupKey, true),
+        observeBoolean(wifiOnlyKey, false),
+        observeLong(lastSyncAtKey)
+    ) { autoSync, syncOnStartup, wifiOnly, lastSyncAt ->
+        SyncSettings(autoSync, syncOnStartup, wifiOnly, lastSyncAt)
     }
 
     suspend fun setAutoSync(enabled: Boolean) {
-        dataStore.edit { prefs ->
-            prefs[autoSyncKey] = enabled
-        }
+        store.saveRaw(autoSyncKey, enabled.toString())
     }
 
     suspend fun setSyncOnStartup(enabled: Boolean) {
-        dataStore.edit { prefs ->
-            prefs[syncOnStartupKey] = enabled
-        }
+        store.saveRaw(syncOnStartupKey, enabled.toString())
     }
 
     suspend fun setWifiOnly(enabled: Boolean) {
-        dataStore.edit { prefs ->
-            prefs[wifiOnlyKey] = enabled
-        }
+        store.saveRaw(wifiOnlyKey, enabled.toString())
     }
 
     suspend fun setLastSyncAt(epochMillis: Long) {
-        dataStore.edit { prefs ->
-            prefs[lastSyncAtKey] = epochMillis
-        }
+        store.saveRaw(lastSyncAtKey, epochMillis.toString())
     }
 }
 

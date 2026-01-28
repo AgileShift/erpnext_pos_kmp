@@ -32,7 +32,10 @@ sealed class POSSettingState {
 
 data class POSSettingAction(
     val loadSettings: () -> Unit = {},
-    val onToggle: (String, Boolean) -> Unit = { _, _ -> },
+    val onTaxesIncludedChanged: (Boolean) -> Unit = {},
+    val onOfflineModeChanged: (Boolean) -> Unit = {},
+    val onPrinterEnabledChanged: (Boolean) -> Unit = {},
+    val onCashDrawerEnabledChanged: (Boolean) -> Unit = {},
     val onSelect: (String) -> Unit = {},
     val onSyncNow: () -> Unit = {},
     val onAutoSyncChanged: (Boolean) -> Unit = {},

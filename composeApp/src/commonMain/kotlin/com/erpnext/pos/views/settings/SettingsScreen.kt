@@ -7,24 +7,35 @@ import AppThemeMode
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuAnchorType
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
@@ -36,10 +47,15 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.erpnext.pos.localSource.preferences.SyncSettings
 import com.erpnext.pos.localization.AppLanguage
 import com.erpnext.pos.localization.LocalAppStrings
+import com.erpnext.pos.sync.SyncState
 import com.erpnext.pos.utils.toErpDateTime
 import com.erpnext.pos.utils.view.SnackbarController
 import com.erpnext.pos.utils.view.SnackbarPosition
@@ -50,30 +66,31 @@ import org.koin.compose.koinInject
 @Preview(showBackground = true, name = "Settings Screen")
 @Composable
 fun SettingsScreenPreview() {
-        PosSettingsScreen(
-            POSSettingState.Success(
-                POSSettingBO(
-                    "Clothing Center",
-                    "Main",
-                    "Main",
-                    "Standar Price List",
-                    taxesIncluded = false,
-                    offlineMode = true,
-                    printerEnabled = true,
-                    cashDrawerEnabled = true
-                ),
-                syncSettings = com.erpnext.pos.localSource.preferences.SyncSettings(
-                    autoSync = true,
-                    syncOnStartup = true,
-                    wifiOnly = false,
-                    lastSyncAt = null
-                ),
-                syncState = com.erpnext.pos.sync.SyncState.IDLE,
-                language = AppLanguage.Spanish,
-                theme = AppColorTheme.Noir,
-                themeMode = AppThemeMode.System
-            ), POSSettingAction()
-        )
+    PosSettingsScreen(
+        POSSettingState.Success(
+            settings = POSSettingBO(
+                company = "Clothing Center",
+                posProfile = "Main",
+                warehouse = "Almacén Principal",
+                priceList = "Standard Price List",
+                taxesIncluded = false,
+                offlineMode = true,
+                printerEnabled = true,
+                cashDrawerEnabled = true
+            ),
+            syncSettings = SyncSettings(
+                autoSync = true,
+                syncOnStartup = true,
+                wifiOnly = false,
+                lastSyncAt = null
+            ),
+            syncState = SyncState.IDLE,
+            language = AppLanguage.Spanish,
+            theme = AppColorTheme.Noir,
+            themeMode = AppThemeMode.System
+        ),
+        POSSettingAction()
+    )
 }
 
 @Composable
@@ -83,149 +100,313 @@ fun PosSettingsScreen(
 ) {
     val snackbar = koinInject<SnackbarController>()
     val strings = LocalAppStrings.current
+    val scrollState = rememberScrollState()
 
-    Column(
+    Box(
         modifier = Modifier
             .fillMaxSize()
-            .padding(16.dp)
-            .verticalScroll(rememberScrollState())
+            .background(MaterialTheme.colorScheme.background)
     ) {
-        when (state) {
-            is POSSettingState.Success -> {
-                Text(
-                    text = strings.settings.title,
-                    style = MaterialTheme.typography.titleLarge,
-                    modifier = Modifier.padding(bottom = 16.dp)
-                )
-                PosSettingsCard(
-                    title = strings.settings.generalTitle,
-                    items = {
-                        SettingsRow(
-                            strings.settings.companyLabel,
-                            state.settings.company
-                        ) { action.onSelect("company") }
-                        SettingsRow(
-                            strings.settings.posProfileLabel,
-                            state.settings.posProfile
-                        ) { action.onSelect("profile") }
-                        SettingsRow(
-                            strings.settings.warehouseLabel,
-                            state.settings.warehouse
-                        ) { action.onSelect("warehouse") }
-                        SettingsRow(
-                            strings.settings.priceListLabel,
-                            state.settings.priceList
-                        ) { action.onSelect("price_list") }
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(scrollState)
+                .padding(20.dp)
+        ) {
+            when (state) {
+                is POSSettingState.Success -> {
+                    Text(
+                        text = strings.settings.title,
+                        style = MaterialTheme.typography.headlineMedium,
+                        modifier = Modifier.padding(bottom = 12.dp)
+                    )
+
+                    SettingsOverviewRow(
+                        settings = state.settings,
+                        syncSettings = state.syncSettings,
+                        syncState = state.syncState,
+                        onSyncNow = action.onSyncNow,
+                    )
+
+                    SettingSection(title = strings.settings.generalTitle) {
+                        SettingItem(
+                            label = strings.settings.companyLabel,
+                            value = state.settings.company,
+                            onClick = { action.onSelect("company") }
+                        )
+                        SettingItem(
+                            label = strings.settings.posProfileLabel,
+                            value = state.settings.posProfile,
+                            onClick = { action.onSelect("profile") }
+                        )
+                        SettingItem(
+                            label = strings.settings.warehouseLabel,
+                            value = state.settings.warehouse,
+                            onClick = { action.onSelect("warehouse") }
+                        )
+                        SettingItem(
+                            label = strings.settings.priceListLabel,
+                            value = state.settings.priceList,
+                            onClick = { action.onSelect("price_list") }
+                        )
                     }
-                )
 
-                SyncSettingsCard(
-                    syncSettings = state.syncSettings,
-                    syncState = state.syncState,
-                    onSyncNow = action.onSyncNow,
-                    onAutoSyncChanged = action.onAutoSyncChanged,
-                    onSyncOnStartupChanged = action.onSyncOnStartupChanged,
-                    onWifiOnlyChanged = action.onWifiOnlyChanged
-                )
+                    SyncSection(
+                        syncSettings = state.syncSettings,
+                        syncState = state.syncState,
+                        onAutoSyncChanged = action.onAutoSyncChanged,
+                        onSyncOnStartupChanged = action.onSyncOnStartupChanged,
+                        onWifiOnlyChanged = action.onWifiOnlyChanged,
+                        onSyncNow = action.onSyncNow,
+                    )
 
-                PosSettingsCard(
-                    title = strings.settings.operationTitle,
-                    items = {
-                        SwitchRow(
+                    SettingSection(title = strings.settings.operationTitle) {
+                        SettingToggle(
                             label = strings.settings.taxesIncludedLabel,
-                            checked = state.settings.taxesIncluded
-                        ) { action.onToggle("taxes", it) }
-
-                        SwitchRow(
+                            checked = state.settings.taxesIncluded,
+                            onCheckedChange = action.onTaxesIncludedChanged
+                        )
+                        SettingToggle(
                             label = strings.settings.offlineModeLabel,
-                            checked = state.settings.offlineMode
-                        ) { action.onToggle("offline", it) }
+                            checked = state.settings.offlineMode,
+                            onCheckedChange = action.onOfflineModeChanged
+                        )
                     }
-                )
 
-                PosSettingsCard(
-                    title = strings.settings.hardwareTitle,
-                    items = {
-                        SwitchRow(
+                    SettingSection(title = strings.settings.hardwareTitle) {
+                        SettingToggle(
                             label = strings.settings.printerEnabledLabel,
-                            checked = state.settings.printerEnabled
-                        ) { action.onToggle("printer", it) }
-
-                        SwitchRow(
+                            checked = state.settings.printerEnabled,
+                            onCheckedChange = action.onPrinterEnabledChanged
+                        )
+                        SettingToggle(
                             label = strings.settings.cashDrawerEnabledLabel,
-                            checked = state.settings.cashDrawerEnabled
-                        ) { action.onToggle("cash_drawer", it) }
+                            checked = state.settings.cashDrawerEnabled,
+                            onCheckedChange = action.onCashDrawerEnabledChanged
+                        )
                     }
-                )
 
-                PosSettingsCard(
-                    title = strings.settings.languageTitle,
-                    items = {
+                    SettingSection(
+                        title = strings.settings.languageTitle,
+                        description = strings.settings.languageInstantHint
+                    ) {
                         LanguageSelector(
                             currentLanguage = state.language,
                             onLanguageSelected = action.onLanguageSelected
                         )
-                        ThemeSelector(
+                        ThemeChipSelector(
                             currentTheme = state.theme,
                             onThemeSelected = action.onThemeSelected
                         )
-                        Spacer(Modifier.height(12.dp))
-                        ThemeModeSelector(
+                        ThemeModeChipSelector(
                             currentMode = state.themeMode,
                             onModeSelected = action.onThemeModeSelected
                         )
-                        Text(
-                            text = strings.settings.languageInstantHint,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(top = 8.dp)
-                        )
                     }
-                )
-            }
+                }
 
-            is POSSettingState.Loading -> {
-                CircularProgressIndicator(
-                    modifier = Modifier
-                        .align(Alignment.CenterHorizontally)
-                )
-            }
+                is POSSettingState.Loading -> {
+                    Spacer(modifier = Modifier.height(120.dp))
+                    CircularProgressIndicator(
+                        modifier = Modifier.align(Alignment.CenterHorizontally)
+                    )
+                }
 
-            is POSSettingState.Error -> {
-                snackbar.show(state.message, SnackbarType.Error, SnackbarPosition.Top)
+                is POSSettingState.Error -> {
+                    snackbar.show(state.message, SnackbarType.Error, SnackbarPosition.Top)
+                }
             }
         }
     }
 }
 
 @Composable
-fun PosSettingsCard(
-    title: String,
-    items: @Composable ColumnScope.() -> Unit
+private fun SettingsOverviewRow(
+    settings: POSSettingBO,
+    syncSettings: SyncSettings,
+    syncState: SyncState,
+    onSyncNow: () -> Unit,
 ) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(bottom = 16.dp)
-            .shadow(10.dp, RoundedCornerShape(20.dp))
-            .background(
-                MaterialTheme.colorScheme.surface,
-                RoundedCornerShape(20.dp)
-            )
-            .padding(16.dp)
-    ) {
-        Text(
-            text = title,
-            style = MaterialTheme.typography.titleMedium,
-            modifier = Modifier.padding(bottom = 12.dp)
-        )
-
-        items()
+    BoxWithConstraints {
+        val isWide = maxWidth > 780.dp
+        if (isWide) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                SettingsInfoCard(settings = settings, modifier = Modifier.weight(0.35f))
+                SettingsHeroCard(
+                    syncSettings = syncSettings,
+                    syncState = syncState,
+                    onSyncNow = onSyncNow,
+                    modifier = Modifier.weight(0.65f)
+                )
+            }
+        } else {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                SettingsInfoCard(settings = settings)
+                SettingsHeroCard(
+                    syncSettings = syncSettings,
+                    syncState = syncState,
+                    onSyncNow = onSyncNow
+                )
+            }
+        }
     }
 }
 
 @Composable
-fun SettingsRow(
+private fun SettingsInfoCard(
+    settings: POSSettingBO,
+    modifier: Modifier = Modifier
+) {
+    val strings = LocalAppStrings.current
+    ElevatedCard(
+        modifier = modifier,
+        shape = RoundedCornerShape(20.dp),
+        elevation = CardDefaults.elevatedCardElevation(defaultElevation = 12.dp)
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text(
+                text = strings.settings.generalTitle,
+                style = MaterialTheme.typography.labelLarge
+            )
+            Spacer(modifier = Modifier.height(14.dp))
+            InfoLine(label = strings.settings.companyLabel, value = settings.company)
+            InfoLine(label = strings.settings.posProfileLabel, value = settings.posProfile)
+            InfoLine(label = strings.settings.warehouseLabel, value = settings.warehouse)
+            InfoLine(label = strings.settings.priceListLabel, value = settings.priceList)
+        }
+    }
+}
+
+@Composable
+private fun InfoLine(label: String, value: String) {
+    Column(modifier = Modifier.padding(bottom = 8.dp)) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Text(
+            text = value,
+            style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Medium),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            color = MaterialTheme.colorScheme.onSurface
+        )
+    }
+}
+
+@Composable
+private fun SettingsHeroCard(
+    syncSettings: SyncSettings,
+    syncState: SyncState,
+    onSyncNow: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val gradient = Brush.verticalGradient(
+        colors = listOf(
+            MaterialTheme.colorScheme.primaryContainer,
+            MaterialTheme.colorScheme.secondaryContainer
+        )
+    )
+    val strings = LocalAppStrings.current
+    val statusLabel = when (syncState) {
+        SyncState.IDLE -> strings.settings.syncStatusIdle
+        SyncState.SUCCESS -> strings.settings.syncStatusSuccess
+        is SyncState.ERROR -> strings.settings.syncStatusError
+        is SyncState.SYNCING -> strings.settings.syncStatusSyncing
+    }
+
+    ElevatedCard(
+        modifier = modifier,
+        shape = RoundedCornerShape(24.dp),
+        elevation = CardDefaults.elevatedCardElevation(defaultElevation = 16.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(gradient)
+                .graphicsLayer { clip = true }
+                .padding(20.dp)
+        ) {
+            Column {
+                Text(
+                    text = strings.settings.syncTitle,
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                )
+                Spacer(modifier = Modifier.height(6.dp))
+                Text(
+                    text = strings.settings.syncStatusLabel,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
+                )
+                Text(
+                    text = statusLabel,
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                Text(
+                    text = syncSettings.lastSyncAt?.toErpDateTime()
+                        ?: strings.settings.lastSyncNever,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+                Button(
+                    onClick = onSyncNow,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                        contentColor = MaterialTheme.colorScheme.primary
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(strings.settings.syncNowButton)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SettingSection(
+    title: String,
+    description: String? = null,
+    modifier: Modifier = Modifier,
+    content: @Composable ColumnScope.() -> Unit
+) {
+    ElevatedCard(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(bottom = 18.dp),
+        shape = RoundedCornerShape(20.dp),
+        elevation = CardDefaults.elevatedCardElevation(defaultElevation = 8.dp)
+    ) {
+        Column(modifier = Modifier.padding(18.dp)) {
+            Text(text = title, style = MaterialTheme.typography.titleMedium)
+            if (description != null) {
+                Text(
+                    text = description,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 4.dp, bottom = 12.dp)
+                )
+            } else {
+                Spacer(modifier = Modifier.height(12.dp))
+            }
+            content()
+        }
+    }
+}
+
+@Composable
+private fun SettingItem(
     label: String,
     value: String,
     onClick: () -> Unit
@@ -234,21 +415,28 @@ fun SettingsRow(
         modifier = Modifier
             .fillMaxWidth()
             .clickable { onClick() }
-            .padding(vertical = 12.dp),
+            .padding(vertical = 8.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(label, style = MaterialTheme.typography.bodyMedium)
-        Text(
-            value,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.primary
+        Column {
+            Text(label, style = MaterialTheme.typography.bodyMedium)
+            Text(
+                text = value,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.primary
+            )
+        }
+        Icon(
+            imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.primary
         )
     }
 }
 
 @Composable
-fun SwitchRow(
+private fun SettingToggle(
     label: String,
     checked: Boolean,
     onCheckedChange: (Boolean) -> Unit
@@ -263,61 +451,92 @@ fun SwitchRow(
         Text(label, style = MaterialTheme.typography.bodyMedium)
         Switch(
             checked = checked,
-            onCheckedChange = onCheckedChange
+            onCheckedChange = onCheckedChange,
+            colors = androidx.compose.material3.SwitchDefaults.colors(
+                checkedThumbColor = MaterialTheme.colorScheme.primary,
+                uncheckedThumbColor = MaterialTheme.colorScheme.onSurface
+            )
         )
     }
 }
 
 @Composable
-private fun SyncSettingsCard(
-    syncSettings: com.erpnext.pos.localSource.preferences.SyncSettings,
-    syncState: com.erpnext.pos.sync.SyncState,
+private fun SyncSection(
+    syncSettings: SyncSettings,
+    syncState: SyncState,
+    onAutoSyncChanged: (Boolean) -> Unit,
+    onSyncOnStartupChanged: (Boolean) -> Unit,
+    onWifiOnlyChanged: (Boolean) -> Unit,
     onSyncNow: () -> Unit,
+) {
+    val strings = LocalAppStrings.current
+    SettingSection(title = strings.settings.syncTitle) {
+        SyncTogglesRow(
+            autoSync = syncSettings.autoSync,
+            syncOnStartup = syncSettings.syncOnStartup,
+            wifiOnly = syncSettings.wifiOnly,
+            onAutoSyncChanged = onAutoSyncChanged,
+            onSyncOnStartupChanged = onSyncOnStartupChanged,
+            onWifiOnlyChanged = onWifiOnlyChanged,
+        )
+        Spacer(modifier = Modifier.height(12.dp))
+        Text(
+            text = when (syncState) {
+                SyncState.IDLE -> strings.settings.syncStatusIdle
+                SyncState.SUCCESS -> strings.settings.syncStatusSuccess
+                is SyncState.ERROR -> strings.settings.syncStatusError
+                is SyncState.SYNCING -> strings.settings.syncStatusSyncing
+            },
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.primary
+        )
+        Text(
+            text = strings.settings.syncLastLabel + ": " +
+                    (syncSettings.lastSyncAt?.toErpDateTime() ?: strings.settings.lastSyncNever),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Spacer(modifier = Modifier.height(12.dp))
+        Button(
+            onClick = onSyncNow,
+            modifier = Modifier.fillMaxWidth(),
+            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+        ) {
+            Text(strings.settings.syncNowButton)
+        }
+    }
+}
+
+@Composable
+private fun SyncTogglesRow(
+    autoSync: Boolean,
+    syncOnStartup: Boolean,
+    wifiOnly: Boolean,
     onAutoSyncChanged: (Boolean) -> Unit,
     onSyncOnStartupChanged: (Boolean) -> Unit,
     onWifiOnlyChanged: (Boolean) -> Unit
 ) {
     val strings = LocalAppStrings.current
-    val lastSyncLabel = syncSettings.lastSyncAt?.toErpDateTime() ?: strings.settings.lastSyncNever
-    val statusLabel = when (syncState) {
-        com.erpnext.pos.sync.SyncState.IDLE -> strings.settings.syncStatusIdle
-        com.erpnext.pos.sync.SyncState.SUCCESS -> strings.settings.syncStatusSuccess
-        is com.erpnext.pos.sync.SyncState.ERROR -> strings.settings.syncStatusError
-        is com.erpnext.pos.sync.SyncState.SYNCING -> strings.settings.syncStatusSyncing
-    }
 
-    PosSettingsCard(
-        title = strings.settings.syncTitle,
-        items = {
-            SettingsRow(strings.settings.syncStatusLabel, statusLabel) {}
-            SettingsRow(strings.settings.syncLastLabel, lastSyncLabel) {}
-            Button(
-                onClick = onSyncNow,
-                modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
-            ) {
-                Text(strings.settings.syncNowButton)
-            }
-            SwitchRow(
-                label = strings.settings.autoSyncLabel,
-                checked = syncSettings.autoSync,
-                onCheckedChange = onAutoSyncChanged
-            )
-            SwitchRow(
-                label = strings.settings.syncOnStartupLabel,
-                checked = syncSettings.syncOnStartup,
-                onCheckedChange = onSyncOnStartupChanged
-            )
-            SwitchRow(
-                label = strings.settings.wifiOnlyLabel,
-                checked = syncSettings.wifiOnly,
-                onCheckedChange = onWifiOnlyChanged
-            )
-        }
-    )
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        SettingToggle(
+            label = strings.settings.autoSyncLabel,
+            checked = autoSync,
+            onCheckedChange = onAutoSyncChanged
+        )
+        SettingToggle(
+            label = strings.settings.syncOnStartupLabel,
+            checked = syncOnStartup,
+            onCheckedChange = onSyncOnStartupChanged
+        )
+        SettingToggle(
+            label = strings.settings.wifiOnlyLabel,
+            checked = wifiOnly,
+            onCheckedChange = onWifiOnlyChanged
+        )
+    }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun LanguageSelector(
     currentLanguage: AppLanguage,
@@ -325,22 +544,19 @@ private fun LanguageSelector(
 ) {
     val strings = LocalAppStrings.current
     var expanded by remember { mutableStateOf(false) }
-
-    val currentLabel = when (currentLanguage) {
-        AppLanguage.Spanish -> strings.settings.languageSpanish
-        AppLanguage.English -> strings.settings.languageEnglish
-    }
-
     ExposedDropdownMenuBox(
         expanded = expanded,
         onExpandedChange = { expanded = !expanded }
     ) {
         OutlinedTextField(
-            value = currentLabel,
+            value = when (currentLanguage) {
+                AppLanguage.Spanish -> strings.settings.languageSpanish
+                AppLanguage.English -> strings.settings.languageEnglish
+            },
             onValueChange = {},
             modifier = Modifier
                 .fillMaxWidth()
-                .menuAnchor(),
+                .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable),
             readOnly = true,
             label = { Text(strings.settings.languageLabel) },
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) }
@@ -368,59 +584,46 @@ private fun LanguageSelector(
 }
 
 @Composable
-private fun ThemeSelector(
+private fun ThemeChipSelector(
     currentTheme: AppColorTheme,
     onThemeSelected: (AppColorTheme) -> Unit
 ) {
-    var expanded by remember { mutableStateOf(false) }
-    ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = it }) {
-        OutlinedTextField(
-            value = currentTheme.label,
-            onValueChange = {},
-            readOnly = true,
-            label = { Text("Tema") },
-            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-            modifier = Modifier.fillMaxWidth().menuAnchor()
-        )
-        ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-            AppColorTheme.values().forEach { theme ->
-                DropdownMenuItem(
-                    text = { Text(theme.label) },
-                    onClick = {
-                        onThemeSelected(theme)
-                        expanded = false
-                    }
-                )
-            }
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        AppColorTheme.entries.forEach { theme ->
+            FilterChip(
+                selected = theme == currentTheme,
+                onClick = { onThemeSelected(theme) },
+                label = { Text(theme.label) },
+                colors = FilterChipDefaults.filterChipColors(
+                    selectedContainerColor = MaterialTheme.colorScheme.secondaryContainer,
+                    selectedLabelColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                    labelColor = MaterialTheme.colorScheme.onSurface
+                ),
+            )
         }
     }
 }
 
 @Composable
-private fun ThemeModeSelector(
+private fun ThemeModeChipSelector(
     currentMode: AppThemeMode,
     onModeSelected: (AppThemeMode) -> Unit
 ) {
-    var expanded by remember { mutableStateOf(false) }
-    ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = it }) {
-        OutlinedTextField(
-            value = currentMode.label,
-            onValueChange = {},
-            readOnly = true,
-            label = { Text("Modo de tema") },
-            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-            modifier = Modifier.fillMaxWidth().menuAnchor()
-        )
-        ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-            AppThemeMode.values().forEach { mode ->
-                DropdownMenuItem(
-                    text = { Text(mode.label) },
-                    onClick = {
-                        onModeSelected(mode)
-                        expanded = false
-                    }
-                )
-            }
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        AppThemeMode.entries.forEach { mode ->
+            FilterChip(
+                selected = mode == currentMode,
+                onClick = { onModeSelected(mode) },
+                label = { Text(mode.label) },
+                colors = FilterChipDefaults.filterChipColors(
+                    selectedContainerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                    selectedLabelColor = MaterialTheme.colorScheme.onTertiaryContainer,
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                    labelColor = MaterialTheme.colorScheme.onSurface,
+                ),
+                elevation = FilterChipDefaults.elevatedFilterChipElevation(),
+            )
         }
     }
 }
