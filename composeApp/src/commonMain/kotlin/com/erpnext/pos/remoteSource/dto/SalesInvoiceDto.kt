@@ -42,10 +42,22 @@ data class SalesInvoiceDto(
     val outstandingAmount: Double? = 0.0,
     @SerialName("total_taxes_and_charges")
     val totalTaxesAndCharges: Double? = 0.0,
+    @SerialName("total")
+    val total: Double? = null,
     @SerialName("net_total")
     val netTotal: Double,
+    @SerialName("rounded_total")
+    val roundedTotal: Double? = null,
+    @SerialName("rounding_adjustment")
+    val roundingAdjustment: Double? = null,
+    @SerialName("discount_amount")
+    val discountAmount: Double? = null,
     @SerialName("paid_amount")
     val paidAmount: Double = 0.0,
+    @SerialName("change_amount")
+    val changeAmount: Double? = null,
+    @SerialName("write_off_amount")
+    val writeOffAmount: Double? = null,
     val items: List<SalesInvoiceItemDto> = emptyList(),
     @SerialName("payments")
     val payments: List<SalesInvoicePaymentDto> = emptyList(),
@@ -91,8 +103,26 @@ data class SalesInvoiceDto(
     // Response
     @SerialName("base_grand_total")
     val baseGrandTotal: Double? = null,
+    @SerialName("base_total")
+    val baseTotal: Double? = null,
+    @SerialName("base_net_total")
+    val baseNetTotal: Double? = null,
+    @SerialName("base_total_taxes_and_charges")
+    val baseTotalTaxesAndCharges: Double? = null,
+    @SerialName("base_rounding_adjustment")
+    val baseRoundingAdjustment: Double? = null,
+    @SerialName("base_rounded_total")
+    val baseRoundedTotal: Double? = null,
+    @SerialName("base_discount_amount")
+    val baseDiscountAmount: Double? = null,
     @SerialName("base_paid_amount")
     val basePaidAmount: Double? = null,
+    @SerialName("base_change_amount")
+    val baseChangeAmount: Double? = null,
+    @SerialName("base_write_off_amount")
+    val baseWriteOffAmount: Double? = null,
+    @SerialName("base_outstanding_amount")
+    val baseOutstandingAmount: Double? = null,
 )
 
 @Serializable

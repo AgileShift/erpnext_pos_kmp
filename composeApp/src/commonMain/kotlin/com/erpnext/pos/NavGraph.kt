@@ -49,7 +49,7 @@ object NavGraph {
             composable(NavRoute.Billing.path) {
                 BillingRoute()
             }
-            composable(NavRoute.BillingLab.path) { entry ->
+            composable(NavRoute.Billing.path) { entry ->
                 // Se usa un ViewModel por destino para reiniciar estado al volver a entrar.
                 BillingLabRoute(entry)
             }
@@ -69,7 +69,7 @@ object NavGraph {
                 DeliveryNoteRoute()
             }
             composable(
-                route = NavRoute.Reconciliation.route,
+                route = NavRoute.Reconciliation.ROUTE,
                 arguments = listOf(
                     navArgument("mode") {
                         type = NavType.StringType

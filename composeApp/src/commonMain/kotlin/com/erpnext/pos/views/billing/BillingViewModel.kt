@@ -133,6 +133,8 @@ class BillingViewModel(
                     products = i.filter { it.price > 0.0 && it.actualQty > 0.0 }
 
                     val invoiceCurrency = context.currency.trim()
+                    val baseCurrency = context.partyAccountCurrency?.trim()?.uppercase()
+                        ?.takeIf { it.isNotBlank() } ?: invoiceCurrency.trim().uppercase()
 
                     val modeDefinitions =
                         runCatching { modeOfPaymentDao.getAllModes(context.company) }
@@ -162,8 +164,11 @@ class BillingViewModel(
                     }
 
                     // Cache de tasas currency -> invoiceCurrency
-                    val exchangeRateByCurrency =
-                        buildExchangeRateMap(invoiceCurrency, context.allowedCurrencies)
+                    val exchangeRateByCurrency = buildExchangeRateMap(
+                        invoiceCurrency,
+                        context.allowedCurrencies,
+                        extraCodes = listOf(baseCurrency)
+                    )
 
                     val contextSelection = pendingSalesFlowContext
                     val selectedCustomer = contextSelection?.customerId?.let { customerId ->
@@ -177,6 +182,7 @@ class BillingViewModel(
                             customerSearchQuery = selectedCustomer?.customerName.orEmpty(),
                             productSearchResults = products,
                             currency = invoiceCurrency,
+                            baseCurrency = baseCurrency,
                             paymentModes = paymentModes,
                             allowedCurrencies = context.allowedCurrencies,
                             exchangeRate = contextProvider.getContext()?.exchangeRate ?: 1.0,
@@ -987,7 +993,8 @@ class BillingViewModel(
 
     private suspend fun buildExchangeRateMap(
         baseCurrency: String,
-        allowed: List<POSCurrencyOption>
+        allowed: List<POSCurrencyOption>,
+        extraCodes: List<String> = emptyList()
     ): Map<String, Double> {
         val base = baseCurrency.trim().uppercase()
         val map = mutableMapOf(base to 1.0)
@@ -995,6 +1002,10 @@ class BillingViewModel(
             allowed.mapNotNull { it.code.trim().uppercase().takeIf { c -> c.isNotBlank() } }
                 .toMutableSet()
         allCodes += "USD" // asegurar USD siempre presente
+        extraCodes.forEach { code ->
+            val normalized = code.trim().uppercase()
+            if (normalized.isNotBlank()) allCodes += normalized
+        }
 
         for (code in allCodes) {
             if (code == base) continue

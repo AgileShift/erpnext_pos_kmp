@@ -254,25 +254,17 @@ class SyncManager(
                     }, async {
                         _state.value = SyncState.SYNCING("Tasas de cambio...")
                         AppSentry.breadcrumb("Sync: exchange rates")
-                        val context = cashBoxManager.getContext()
-                        val currencies = mutableSetOf<String>()
-                        context?.let {
-                            currencies.add(it.currency)
-                            it.allowedCurrencies.mapTo(currencies) { option -> option.code }
-                            }
-                            currencies.filter { it.isNotBlank() }.map { it.uppercase() }.distinct()
-                                .forEach { currency ->
-                                    runCatching {
-                                        exchangeRateRepo.getRate("USD", currency)
-                                    }.getOrElse { error ->
-                                        AppSentry.capture(
-                                            error, "Sync: exchange rate failed for $currency"
-                                        )
-                                        AppLogger.warn(
-                                            "Sync: exchange rate failed for $currency", error
-                                        )
-                                    }
-                                }
+                        val enabledCurrencies =
+                            runCatching { exchangeRateRepo.getEnabledCurrencyCodes() }
+                                .getOrElse { emptyList() }
+                        val normalized =
+                            enabledCurrencies.filter { it.isNotBlank() }.map { it.uppercase() }.distinct()
+                        runCatching {
+                            exchangeRateRepo.syncRatesForCurrencies(normalized)
+                        }.getOrElse { error ->
+                            AppSentry.capture(error, "Sync: exchange rates failed")
+                            AppLogger.warn("Sync: exchange rates failed", error)
+                        }
                     }, async {
                         _state.value = SyncState.SYNCING("POS Profile payments...")
                         val profile = posProfileDao.getActiveProfile()

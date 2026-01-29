@@ -218,10 +218,17 @@ data class SalesFlowStrings(
 data class NavigationStrings(
     val home: String,
     val customer: String,
+    val quotations: String,
+    val credits: String,
+    val salesOrder: String,
+    val deliveryNote: String,
+    val reconciliation: String,
+    val paymentEntry: String,
+    val settings: String,
+    val openCashbox: String,
     val invoice: String,
     val billing: String,
     val inventory: String,
-    val reconciliation: String
 )
 
 data class ReconciliationStrings(
@@ -482,7 +489,14 @@ object AppStringsFactory {
             home = "Inicio",
             billing = "Ventas",
             invoice = "Creditos",
-            reconciliation = "Conciliación"
+            reconciliation = "Conciliación",
+            quotations = "Cotizaciones",
+            credits = "Creditos",
+            salesOrder = "Orden de venta",
+            deliveryNote = "Nota de envio",
+            paymentEntry = "Entrada de pago",
+            settings = "Configuracion",
+            openCashbox = "Abrir caja",
         ),
         reconciliation = ReconciliationStrings(
             title = "Cierre de caja",
@@ -748,7 +762,14 @@ object AppStringsFactory {
             invoice = "Credits",
             home = "Home",
             billing = "Billing",
-            reconciliation = "Reconciliation"
+            reconciliation = "Close Shift",
+            quotations = "Quotations",
+            credits = "Credits",
+            salesOrder = "Sales Order",
+            deliveryNote = "Delivery Note",
+            paymentEntry = "Payment Entry",
+            settings = "Settings",
+            openCashbox = "Open Shift",
         ),
         reconciliation = ReconciliationStrings(
             title = "Cash closing",

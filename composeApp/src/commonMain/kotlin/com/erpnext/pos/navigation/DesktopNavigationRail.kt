@@ -17,7 +17,6 @@ import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.currentBackStackEntryAsState
-import com.erpnext.pos.localization.LocalAppStrings
 import com.erpnext.pos.views.CashBoxManager
 
 @Composable
@@ -32,7 +31,7 @@ fun DesktopNavigationRail(
     val primaryItems = listOf(
         NavRoute.Home,
         NavRoute.Inventory,
-        NavRoute.BillingLab,
+        NavRoute.Billing,
         NavRoute.Customer
     )
     val secondaryItems = listOf(NavRoute.Settings)
@@ -54,7 +53,7 @@ fun DesktopNavigationRail(
                         NavRoute.Settings -> true
 
                         NavRoute.Inventory,
-                        NavRoute.BillingLab,
+                        NavRoute.Billing,
                         NavRoute.Customer -> isCashBoxOpen
 
                         else -> true

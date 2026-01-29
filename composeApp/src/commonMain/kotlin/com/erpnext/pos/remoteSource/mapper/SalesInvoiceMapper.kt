@@ -115,6 +115,11 @@ fun List<SalesInvoiceDto>.toEntities(): List<SalesInvoiceWithItemsAndPayments> {
 fun SalesInvoiceDto.toEntity(): SalesInvoiceWithItemsAndPayments {
     val now = Clock.System.now().toEpochMilliseconds()
     val resolvedIsPos = doctype.equals("POS Invoice", ignoreCase = true) || isPos
+    fun resolveBaseAmount(amount: Double?, baseAmount: Double?): Double? {
+        baseAmount?.let { return it }
+        val rate = conversionRate?.takeIf { it > 0.0 } ?: return amount
+        return amount?.let { it * rate }
+    }
 
     // Se asegura que la factura local conserve los montos pagados recibidos del servidor.
     val invoiceEntity = SalesInvoiceEntity(
@@ -131,10 +136,21 @@ fun SalesInvoiceDto.toEntity(): SalesInvoiceWithItemsAndPayments {
         partyAccountCurrency = partyAccountCurrency,
         conversionRate = conversionRate,
         customExchangeRate = customExchangeRate,
-        netTotal = items.sumOf { it.amount },
+        netTotal = netTotal,
         taxTotal = totalTaxesAndCharges ?: 0.0,
         grandTotal = grandTotal,
         outstandingAmount = outstandingAmount ?: 0.0,
+        baseTotal = resolveBaseAmount(total ?: netTotal, baseTotal),
+        baseNetTotal = resolveBaseAmount(netTotal, baseNetTotal),
+        baseTotalTaxesAndCharges = resolveBaseAmount(totalTaxesAndCharges, baseTotalTaxesAndCharges),
+        baseGrandTotal = resolveBaseAmount(grandTotal, baseGrandTotal),
+        baseRoundingAdjustment = resolveBaseAmount(roundingAdjustment, baseRoundingAdjustment),
+        baseRoundedTotal = resolveBaseAmount(roundedTotal, baseRoundedTotal),
+        baseDiscountAmount = resolveBaseAmount(discountAmount, baseDiscountAmount),
+        basePaidAmount = resolveBaseAmount(paidAmount, basePaidAmount),
+        baseChangeAmount = resolveBaseAmount(changeAmount, baseChangeAmount),
+        baseWriteOffAmount = resolveBaseAmount(writeOffAmount, baseWriteOffAmount),
+        baseOutstandingAmount = baseOutstandingAmount ?: outstandingAmount,
         // El paid_amount remoto es la fuente de verdad para reconciliación y BI.
         paidAmount = paidAmount,
         status = status ?: "Draft",
@@ -200,6 +216,7 @@ fun SalesInvoiceEntity.toDto(): SalesInvoiceDto {
         grandTotal = grandTotal,
         outstandingAmount = outstandingAmount,
         totalTaxesAndCharges = taxTotal,
+        total = netTotal,
         netTotal = netTotal,
         paidAmount = paidAmount,
         items = emptyList(),
@@ -215,6 +232,17 @@ fun SalesInvoiceEntity.toDto(): SalesInvoiceDto {
         customExchangeRate = customExchangeRate,
         debitTo = debitTo,
         docStatus = docstatus,
+        baseTotal = baseTotal,
+        baseNetTotal = baseNetTotal,
+        baseTotalTaxesAndCharges = baseTotalTaxesAndCharges,
+        baseGrandTotal = baseGrandTotal,
+        baseRoundingAdjustment = baseRoundingAdjustment,
+        baseRoundedTotal = baseRoundedTotal,
+        baseDiscountAmount = baseDiscountAmount,
+        basePaidAmount = basePaidAmount,
+        baseChangeAmount = baseChangeAmount,
+        baseWriteOffAmount = baseWriteOffAmount,
+        baseOutstandingAmount = baseOutstandingAmount,
     )
 }
 

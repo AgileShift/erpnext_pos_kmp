@@ -8,4 +8,4 @@
 - [ ] Tenemos que crear politicas de sincronizacion, en cuantoa  tiempo los Customer, Items y Invoices deben de sincronizarse mas seguido que la tasa de cambio, informacion de empresa, etc
 - [ ] Cuando es pago multimoneda y queda en credito el dialogo de exito no aparece, por favor verificar ese escenario por favor
 
-codex resume 019bec56-16f0-7c20-8cf3-6a047f25e2ed
+codex resume 019c06a5-a06e-7860-b573-f0c039c7533f

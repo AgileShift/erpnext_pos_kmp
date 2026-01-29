@@ -121,35 +121,26 @@ fun CustomerListScreen(
     val posCurrency = normalizeCurrency(posContext?.currency) ?: "USD"
     val partyCurrency = normalizeCurrency(paymentState.partyAccountCurrency)
     val supportedCurrencies = remember(
-        posContext?.allowedCurrencies,
-        posContext?.currency,
-        paymentState.partyAccountCurrency
+        posContext?.allowedCurrencies, posContext?.currency, paymentState.partyAccountCurrency
     ) {
-        val fromModes = posContext?.allowedCurrencies
-            ?.map { it.code }
-            .orEmpty()
+        val fromModes = posContext?.allowedCurrencies?.map { it.code }.orEmpty()
         val merged = (fromModes + listOfNotNull(
-            posContext?.currency,
-            paymentState.partyAccountCurrency
-        )).map { normalizeCurrency(it) }
-            .distinct()
+            posContext?.currency, paymentState.partyAccountCurrency
+        )).map { normalizeCurrency(it) }.distinct()
         merged.ifEmpty { listOf(posCurrency) }
     }
     val customers = if (state is CustomerState.Success) {
-        state.customers.sortedWith(
-            compareByDescending<CustomerBO> {
-                val pendingAmount = it.totalPendingAmount ?: it.currentBalance ?: 0.0
-                (it.pendingInvoices ?: 0) > 0 || pendingAmount > 0.0
-            }.thenByDescending { it.totalPendingAmount ?: it.currentBalance ?: 0.0 }
-                .thenBy { it.customerName }
-        )
+        state.customers.sortedWith(compareByDescending<CustomerBO> {
+            val pendingAmount = it.totalPendingAmount ?: it.currentBalance ?: 0.0
+            (it.pendingInvoices ?: 0) > 0 || pendingAmount > 0.0
+        }.thenByDescending { it.totalPendingAmount ?: it.currentBalance ?: 0.0 }
+            .thenBy { it.customerName })
     } else emptyList()
     var baseCounts by remember { mutableStateOf(CustomerCounts(0, 0)) }
     val isDesktop = getPlatformName() == "Desktop"
 
     val filterElevation by animateDpAsState(
-        targetValue = if (customers.isNotEmpty()) 4.dp else 0.dp,
-        label = "filterElevation"
+        targetValue = if (customers.isNotEmpty()) 4.dp else 0.dp, label = "filterElevation"
     )
 
 
@@ -162,8 +153,7 @@ fun CustomerListScreen(
         if (searchQuery.isEmpty() && selectedState == "Todos" && state is CustomerState.Success) {
             val pending = state.customers.count { (it.pendingInvoices ?: 0) > 0 }
             baseCounts = CustomerCounts(
-                total = state.customers.size,
-                pending = pending
+                total = state.customers.size, pending = pending
             )
         }
     }
@@ -203,16 +193,12 @@ fun CustomerListScreen(
     Scaffold(
         floatingActionButton = {
             FloatingActionButton(
-                onClick = { showNewCustomerDialog = true }
-            ) {
+                onClick = { showNewCustomerDialog = true }) {
                 Icon(Icons.Default.PersonAdd, contentDescription = "Nuevo cliente")
             }
-        }
-    ) { paddingValues ->
+        }) { paddingValues ->
         BoxWithConstraints(
-            modifier = Modifier
-                .padding(paddingValues)
-                .fillMaxSize()
+            modifier = Modifier.padding(paddingValues).fillMaxSize()
         ) {
             val isWideLayout = maxWidth >= 840.dp || isDesktop
             val contentPadding = if (isWideLayout) 24.dp else 16.dp
@@ -257,9 +243,7 @@ fun CustomerListScreen(
 
                 // Contenido principal según estado
                 Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(contentPadding)
+                    modifier = Modifier.fillMaxSize().padding(contentPadding)
                 ) {
                     when (state) {
                         is CustomerState.Loading -> {
@@ -275,25 +259,21 @@ fun CustomerListScreen(
 
                         is CustomerState.Error -> {
                             FullScreenErrorMessage(
-                                errorMessage = state.message,
-                                onRetry = actions.fetchAll
+                                errorMessage = state.message, onRetry = actions.fetchAll
                             )
                         }
 
                         is CustomerState.Success -> {
                             val filtered = customers.filter { customer ->
-                                val matchesQuery =
-                                    customer.customerName.contains(
-                                        searchQuery,
-                                        ignoreCase = true
-                                    ) ||
-                                            (customer.mobileNo ?: "").contains(searchQuery)
+                                val matchesQuery = customer.customerName.contains(
+                                    searchQuery, ignoreCase = true
+                                ) || (customer.mobileNo ?: "").contains(searchQuery)
                                 val matchesState = when (selectedState) {
-                                    "Pendientes" -> (customer.pendingInvoices ?: 0) > 0 ||
-                                            (customer.totalPendingAmount ?: 0.0) > 0.0
+                                    "Pendientes" -> (customer.pendingInvoices
+                                        ?: 0) > 0 || (customer.totalPendingAmount ?: 0.0) > 0.0
 
-                                    "Sin Pendientes" -> (customer.pendingInvoices ?: 0) == 0 &&
-                                            (customer.totalPendingAmount ?: 0.0) <= 0.0
+                                    "Sin Pendientes" -> (customer.pendingInvoices
+                                        ?: 0) == 0 && (customer.totalPendingAmount ?: 0.0) <= 0.0
 
                                     "Todos" -> true
                                     else -> customer.state.equals(selectedState, ignoreCase = true)
@@ -303,10 +283,8 @@ fun CustomerListScreen(
 
                             if (filtered.isEmpty()) {
                                 EmptyStateMessage(
-                                    message = if (searchQuery.isEmpty())
-                                        strings.customer.emptyCustomers
-                                    else
-                                        strings.customer.emptySearchCustomers,
+                                    message = if (searchQuery.isEmpty()) strings.customer.emptyCustomers
+                                    else strings.customer.emptySearchCustomers,
                                     icon = Icons.Filled.People
                                 )
                             } else {
@@ -338,8 +316,7 @@ fun CustomerListScreen(
                                                 },
                                                 onQuickAction = { customer, actionType ->
                                                     when (actionType) {
-                                                        CustomerQuickActionType.PendingInvoices,
-                                                        CustomerQuickActionType.RegisterPayment -> {
+                                                        CustomerQuickActionType.PendingInvoices, CustomerQuickActionType.RegisterPayment -> {
                                                             selectedCustomer = customer
                                                             rightPanelTab = CustomerPanelTab.Pending
                                                         }
@@ -350,13 +327,10 @@ fun CustomerListScreen(
                                                         }
 
                                                         else -> handleQuickAction(
-                                                            actions,
-                                                            customer,
-                                                            actionType
+                                                            actions, customer, actionType
                                                         )
                                                     }
-                                                }
-                                            )
+                                                })
                                         }
                                         Surface(
                                             modifier = Modifier.weight(1.35f),
@@ -406,8 +380,7 @@ fun CustomerListScreen(
                                                 },
                                                 onOpenRegisterPayment = {
                                                     rightPanelTab = CustomerPanelTab.Pending
-                                                }
-                                            )
+                                                })
                                         }
                                     }
                                 } else {
@@ -423,8 +396,7 @@ fun CustomerListScreen(
                                         onSelect = {},
                                         onQuickAction = { customer, actionType ->
                                             when (actionType) {
-                                                CustomerQuickActionType.PendingInvoices,
-                                                CustomerQuickActionType.RegisterPayment -> {
+                                                CustomerQuickActionType.PendingInvoices, CustomerQuickActionType.RegisterPayment -> {
                                                     outstandingCustomer = customer
                                                 }
 
@@ -433,13 +405,10 @@ fun CustomerListScreen(
                                                 }
 
                                                 else -> handleQuickAction(
-                                                    actions,
-                                                    customer,
-                                                    actionType
+                                                    actions, customer, actionType
                                                 )
                                             }
-                                        }
-                                    )
+                                        })
                                 }
                             }
                         }
@@ -460,8 +429,7 @@ fun CustomerListScreen(
                 onDismiss = { },
                 onActionSelected = { actionType ->
                     when (actionType) {
-                        CustomerQuickActionType.PendingInvoices,
-                        CustomerQuickActionType.RegisterPayment -> {
+                        CustomerQuickActionType.PendingInvoices, CustomerQuickActionType.RegisterPayment -> {
                             outstandingCustomer = customer
                         }
 
@@ -471,8 +439,7 @@ fun CustomerListScreen(
 
                         else -> handleQuickAction(actions, customer, actionType)
                     }
-                }
-            )
+                })
         }
 
         outstandingCustomer?.let { customer ->
@@ -493,8 +460,7 @@ fun CustomerListScreen(
                         enteredCurrency,
                         referenceNumber
                     )
-                }
-            )
+                })
         }
 
         historyCustomer?.let { customer ->
@@ -509,12 +475,7 @@ fun CustomerListScreen(
                 cashboxManager = cashboxManager,
                 onAction = { invoiceId, action, refundMode, refundReference, applyRefund ->
                     actions.onInvoiceHistoryAction(
-                        invoiceId,
-                        action,
-                        null,
-                        refundMode,
-                        refundReference,
-                        applyRefund
+                        invoiceId, action, null, refundMode, refundReference, applyRefund
                     )
                 },
                 onDismiss = {
@@ -540,16 +501,11 @@ fun CustomerListScreen(
 }
 
 private enum class CustomerPanelTab(val label: String) {
-    Details("Resumen"),
-    Pending("Pendientes"),
-    History("Historial")
+    Details("Resumen"), Pending("Pendientes"), History("Historial")
 }
 
 private enum class CustomerDialogTab(val label: String) {
-    Personal("Principal"),
-    Contact("Contacto"),
-    Tax("Impuestos"),
-    Accounting("Contabilidad")
+    Personal("Principal"), Contact("Contacto"), Tax("Impuestos"), Accounting("Contabilidad")
 }
 
 @Composable
@@ -581,8 +537,7 @@ private fun CustomerFilters(
                         value = "$totalCount",
                         selected = allSelected,
                         color = MaterialTheme.colorScheme.primary,
-                        onClick = { onStateChange("Todos") }
-                    )
+                        onClick = { onStateChange("Todos") })
                     states.forEach { state ->
                         val isSelected = selectedState == state
                         val color = if (state == "Pendientes") {
@@ -600,8 +555,7 @@ private fun CustomerFilters(
                             value = value,
                             selected = isSelected,
                             color = color,
-                            onClick = { onStateChange(state) }
-                        )
+                            onClick = { onStateChange(state) })
                     }
                 }
 
@@ -624,8 +578,7 @@ private fun CustomerFilters(
                         value = "$totalCount",
                         selected = isSelected,
                         color = MaterialTheme.colorScheme.primary,
-                        onClick = { onStateChange("Todos") }
-                    )
+                        onClick = { onStateChange("Todos") })
                 }
                 items(states) { state ->
                     val isSelected = selectedState == state
@@ -644,8 +597,7 @@ private fun CustomerFilters(
                         value = value,
                         selected = isSelected,
                         color = color,
-                        onClick = { onStateChange(state) }
-                    )
+                        onClick = { onStateChange(state) })
                 }
             }
             Spacer(modifier = Modifier.height(8.dp))
@@ -693,8 +645,7 @@ fun SearchTextField(
                     onClick = {
                         onSearchQueryChange("")
                         keyboardController?.show()
-                    }
-                ) {
+                    }) {
                     Icon(
                         imageVector = Icons.Filled.Clear,
                         contentDescription = "Limpiar",
@@ -707,13 +658,10 @@ fun SearchTextField(
         keyboardOptions = KeyboardOptions.Default.copy(
             imeAction = if (onSearchAction != null) ImeAction.Search else ImeAction.Done
         ),
-        keyboardActions = KeyboardActions(
-            onSearch = {
-                onSearchAction?.invoke()
-                keyboardController?.hide()
-            },
-            onDone = { keyboardController?.hide() }
-        ),
+        keyboardActions = KeyboardActions(onSearch = {
+            onSearchAction?.invoke()
+            keyboardController?.hide()
+        }, onDone = { keyboardController?.hide() }),
         colors = TextFieldDefaults.colors(
             focusedIndicatorColor = Color.Transparent,
             unfocusedIndicatorColor = Color.Transparent,
@@ -799,8 +747,8 @@ private fun CustomerDetailPanel(
 ) {
     val posCurrency = normalizeCurrency(paymentState.baseCurrency)
     val baseCurrency = normalizeCurrency(paymentState.partyAccountCurrency)
-    val pendingAmount = bd(customer.totalPendingAmount ?: customer.currentBalance ?: 0.0)
-        .moneyScale(2).toDouble(2)
+    val pendingAmount =
+        bd(customer.totalPendingAmount ?: customer.currentBalance ?: 0.0).moneyScale(2).toDouble(2)
     val displayCurrencies = remember(supportedCurrencies, posCurrency, baseCurrency) {
         com.erpnext.pos.utils.CurrencyService.resolveDisplayCurrencies(
             supported = supportedCurrencies,
@@ -822,8 +770,7 @@ private fun CustomerDetailPanel(
                 customExchangeRate = null,
                 rateResolver = { from, to ->
                     cashboxManager.resolveExchangeRateBetween(from, to, allowNetwork = false)
-                }
-            )
+                })
             if (converted != null) {
                 resolved[currency] = converted
             }
@@ -836,13 +783,11 @@ private fun CustomerDetailPanel(
         else -> displayCurrencies.firstOrNull() ?: "USD"
     }
     val primaryAmount = pendingByCurrency[primaryCurrency] ?: pendingAmount
-    val secondaryValue = pendingByCurrency
-        .filterKeys { !it.equals(primaryCurrency, ignoreCase = true) }
-        .map { (currency, amount) ->
-            formatCurrency(currency, amount)
-        }
-        .takeIf { it.isNotEmpty() }
-        ?.joinToString(" · ")
+    val secondaryValue =
+        pendingByCurrency.filterKeys { !it.equals(primaryCurrency, ignoreCase = true) }
+            .map { (currency, amount) ->
+                formatCurrency(currency, amount)
+            }.takeIf { it.isNotEmpty() }?.joinToString(" · ")
 
     Column(
         modifier = Modifier.fillMaxSize().padding(20.dp),
@@ -853,8 +798,7 @@ private fun CustomerDetailPanel(
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Surface(
-                color = MaterialTheme.colorScheme.surfaceVariant,
-                shape = CircleShape
+                color = MaterialTheme.colorScheme.surfaceVariant, shape = CircleShape
             ) {
                 Text(
                     text = customer.customerName.take(1).uppercase(),
@@ -926,27 +870,14 @@ private fun CustomerRightPanel(
     cashboxManager: CashBoxManager,
     posBaseCurrency: String,
     onRegisterPayment: (
-        invoiceId: String,
-        modeOfPayment: String,
-        enteredAmount: Double,
-        enteredCurrency: String,
-        referenceNumber: String
+        invoiceId: String, modeOfPayment: String, enteredAmount: Double, enteredCurrency: String, referenceNumber: String
     ) -> Unit,
     onInvoiceHistoryAction: (
-        invoiceId: String,
-        action: InvoiceCancellationAction,
-        refundModeOfPayment: String?,
-        refundReferenceNo: String?,
-        applyRefund: Boolean
+        invoiceId: String, action: InvoiceCancellationAction, refundModeOfPayment: String?, refundReferenceNo: String?, applyRefund: Boolean
     ) -> Unit,
     loadLocalInvoice: suspend (String) -> SalesInvoiceWithItemsAndPayments?,
     onSubmitPartialReturn: (
-        invoiceId: String,
-        reason: String?,
-        refundModeOfPayment: String?,
-        refundReferenceNo: String?,
-        applyRefund: Boolean,
-        itemsToReturnByCode: Map<String, Double>
+        invoiceId: String, reason: String?, refundModeOfPayment: String?, refundReferenceNo: String?, applyRefund: Boolean, itemsToReturnByCode: Map<String, Double>
     ) -> Unit,
     onOpenPending: () -> Unit,
     onOpenHistory: () -> Unit,
@@ -967,14 +898,9 @@ private fun CustomerRightPanel(
         ) {
             tabs.forEach { tab ->
                 val enabled = customer != null
-                Tab(
-                    selected = tab == rightPanelTab,
-                    onClick = {
-                        if (enabled) onTabChange(tab)
-                    },
-                    enabled = enabled,
-                    text = { Text(tab.label) }
-                )
+                Tab(selected = tab == rightPanelTab, onClick = {
+                    if (enabled) onTabChange(tab)
+                }, enabled = enabled, text = { Text(tab.label) })
             }
         }
 
@@ -1008,9 +934,7 @@ private fun CustomerRightPanel(
                             invoicesState = invoicesState,
                             paymentState = paymentState,
                             onRegisterPayment = onRegisterPayment,
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .padding(20.dp)
+                            modifier = Modifier.fillMaxSize().padding(20.dp)
                         )
                     } else {
                         EmptyStateMessage(
@@ -1035,9 +959,7 @@ private fun CustomerRightPanel(
                             onAction = onInvoiceHistoryAction,
                             loadLocalInvoice = loadLocalInvoice,
                             onSubmitPartialReturn = onSubmitPartialReturn,
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .padding(20.dp)
+                            modifier = Modifier.fillMaxSize().padding(20.dp)
                         )
                     } else {
                         EmptyStateMessage(
@@ -1057,20 +979,16 @@ private fun CustomerPanelHeader(
     customer: CustomerBO?
 ) {
     Surface(
-        color = MaterialTheme.colorScheme.surface,
-        tonalElevation = 0.dp
+        color = MaterialTheme.colorScheme.surface, tonalElevation = 0.dp
     ) {
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 12.dp),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Surface(
-                    shape = CircleShape,
-                    color = MaterialTheme.colorScheme.surfaceVariant
+                    shape = CircleShape, color = MaterialTheme.colorScheme.surfaceVariant
                 ) {
                     Text(
                         text = customer?.customerName?.take(1)?.uppercase() ?: "?",
@@ -1134,8 +1052,7 @@ private fun NewCustomerDialog(
     var paymentExpanded by remember { mutableStateOf(false) }
     var companyExpanded by remember { mutableStateOf(false) }
     var selectedTab by rememberSaveable { mutableStateOf(CustomerDialogTab.Personal) }
-    val isValid = name.isNotBlank() &&
-            (!isInternalCustomer || internalCompany.isNotBlank())
+    val isValid = name.isNotBlank() && (!isInternalCustomer || internalCompany.isNotBlank())
 
     Dialog(onDismissRequest = onDismiss) {
         Surface(
@@ -1144,9 +1061,7 @@ private fun NewCustomerDialog(
             color = MaterialTheme.colorScheme.surface
         ) {
             Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(20.dp)
+                modifier = Modifier.fillMaxWidth().padding(20.dp)
             ) {
                 Text(
                     text = "Nuevo cliente",
@@ -1159,17 +1074,13 @@ private fun NewCustomerDialog(
                         Tab(
                             selected = selectedTab.ordinal == index,
                             onClick = { selectedTab = tab },
-                            text = { Text(tab.label) }
-                        )
+                            text = { Text(tab.label) })
                     }
                 }
                 Spacer(Modifier.height(12.dp))
                 val scrollState = rememberScrollState()
                 Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(max = 520.dp)
-                        .padding(end = 4.dp)
+                    modifier = Modifier.fillMaxWidth().heightIn(max = 520.dp).padding(end = 4.dp)
                         .verticalScroll(scrollState),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
@@ -1182,87 +1093,69 @@ private fun NewCustomerDialog(
                                 placeholder = "Cliente S.A.",
                                 leadingIcon = {
                                     Icon(
-                                        Icons.Default.Person,
-                                        contentDescription = null
+                                        Icons.Default.Person, contentDescription = null
                                     )
                                 },
                                 modifier = Modifier.fillMaxWidth()
                             )
                             ExposedDropdownMenuBox(
-                                expanded = typeExpanded,
-                                onExpandedChange = { typeExpanded = it }
-                            ) {
+                                expanded = typeExpanded, onExpandedChange = { typeExpanded = it }) {
                                 AppTextField(
                                     value = customerType,
                                     onValueChange = {},
                                     label = "Tipo de cliente",
                                     placeholder = "Seleccionar",
-                                    modifier = Modifier
-                                        .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable)
+                                    modifier = Modifier.menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable)
                                         .fillMaxWidth(),
                                     leadingIcon = {
                                         Icon(
-                                            Icons.Default.Badge,
-                                            contentDescription = null
+                                            Icons.Default.Badge, contentDescription = null
                                         )
                                     },
                                     trailingIcon = {
                                         ExposedDropdownMenuDefaults.TrailingIcon(expanded = typeExpanded)
-                                    }
-                                )
+                                    })
                                 ExposedDropdownMenu(
                                     expanded = typeExpanded,
-                                    onDismissRequest = { typeExpanded = false }
-                                ) {
+                                    onDismissRequest = { typeExpanded = false }) {
                                     listOf("Individual", "Empresa").forEach { option ->
-                                        DropdownMenuItem(
-                                            text = { Text(option) },
-                                            onClick = {
-                                                customerType = option
-                                                typeExpanded = false
-                                            }
-                                        )
+                                        DropdownMenuItem(text = { Text(option) }, onClick = {
+                                            customerType = option
+                                            typeExpanded = false
+                                        })
                                     }
                                 }
                             }
                             if (customerGroups.isNotEmpty()) {
                                 ExposedDropdownMenuBox(
                                     expanded = groupExpanded,
-                                    onExpandedChange = { groupExpanded = it }
-                                ) {
+                                    onExpandedChange = { groupExpanded = it }) {
                                     AppTextField(
                                         value = customerGroup,
                                         onValueChange = {},
                                         label = "Grupo de cliente",
                                         placeholder = "Seleccionar",
-                                        modifier = Modifier
-                                            .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable)
+                                        modifier = Modifier.menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable)
                                             .fillMaxWidth(),
                                         leadingIcon = {
                                             Icon(
-                                                Icons.Default.Group,
-                                                contentDescription = null
+                                                Icons.Default.Group, contentDescription = null
                                             )
                                         },
                                         trailingIcon = {
                                             ExposedDropdownMenuDefaults.TrailingIcon(expanded = groupExpanded)
-                                        }
-                                    )
+                                        })
                                     ExposedDropdownMenu(
                                         expanded = groupExpanded,
-                                        onDismissRequest = { groupExpanded = false }
-                                    ) {
+                                        onDismissRequest = { groupExpanded = false }) {
                                         customerGroups.forEach { option ->
                                             val label =
                                                 option.displayName?.takeIf { it.isNotBlank() }
                                                     ?: option.name
-                                            DropdownMenuItem(
-                                                text = { Text(label) },
-                                                onClick = {
-                                                    customerGroup = option.name
-                                                    groupExpanded = false
-                                                }
-                                            )
+                                            DropdownMenuItem(text = { Text(label) }, onClick = {
+                                                customerGroup = option.name
+                                                groupExpanded = false
+                                            })
                                         }
                                     }
                                 }
@@ -1274,8 +1167,7 @@ private fun NewCustomerDialog(
                                     placeholder = "Retail",
                                     leadingIcon = {
                                         Icon(
-                                            Icons.Default.Group,
-                                            contentDescription = null
+                                            Icons.Default.Group, contentDescription = null
                                         )
                                     },
                                     modifier = Modifier.fillMaxWidth()
@@ -1284,41 +1176,33 @@ private fun NewCustomerDialog(
                             if (territories.isNotEmpty()) {
                                 ExposedDropdownMenuBox(
                                     expanded = territoryExpanded,
-                                    onExpandedChange = { territoryExpanded = it }
-                                ) {
+                                    onExpandedChange = { territoryExpanded = it }) {
                                     AppTextField(
                                         value = territory,
                                         onValueChange = {},
                                         label = "Territorio",
                                         placeholder = "Seleccionar",
-                                        modifier = Modifier
-                                            .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable)
+                                        modifier = Modifier.menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable)
                                             .fillMaxWidth(),
                                         leadingIcon = {
                                             Icon(
-                                                Icons.Default.Place,
-                                                contentDescription = null
+                                                Icons.Default.Place, contentDescription = null
                                             )
                                         },
                                         trailingIcon = {
                                             ExposedDropdownMenuDefaults.TrailingIcon(expanded = territoryExpanded)
-                                        }
-                                    )
+                                        })
                                     ExposedDropdownMenu(
                                         expanded = territoryExpanded,
-                                        onDismissRequest = { territoryExpanded = false }
-                                    ) {
+                                        onDismissRequest = { territoryExpanded = false }) {
                                         territories.forEach { option ->
                                             val label =
                                                 option.displayName?.takeIf { it.isNotBlank() }
                                                     ?: option.name
-                                            DropdownMenuItem(
-                                                text = { Text(label) },
-                                                onClick = {
-                                                    territory = option.name
-                                                    territoryExpanded = false
-                                                }
-                                            )
+                                            DropdownMenuItem(text = { Text(label) }, onClick = {
+                                                territory = option.name
+                                                territoryExpanded = false
+                                            })
                                         }
                                     }
                                 }
@@ -1330,8 +1214,7 @@ private fun NewCustomerDialog(
                                     placeholder = "Managua",
                                     leadingIcon = {
                                         Icon(
-                                            Icons.Default.Place,
-                                            contentDescription = null
+                                            Icons.Default.Place, contentDescription = null
                                         )
                                     },
                                     modifier = Modifier.fillMaxWidth()
@@ -1343,8 +1226,7 @@ private fun NewCustomerDialog(
                             ) {
                                 Checkbox(
                                     checked = isInternalCustomer,
-                                    onCheckedChange = { isInternalCustomer = it }
-                                )
+                                    onCheckedChange = { isInternalCustomer = it })
                                 Text("Cliente interno (intercompany)")
                             }
                             if (isInternalCustomer) {
@@ -1369,16 +1251,15 @@ private fun NewCustomerDialog(
                                 if (companies.isNotEmpty()) {
                                     ExposedDropdownMenuBox(
                                         expanded = companyExpanded,
-                                        onExpandedChange = { companyExpanded = it }
-                                    ) {
+                                        onExpandedChange = { companyExpanded = it }) {
                                         AppTextField(
                                             value = internalCompany,
                                             onValueChange = {},
                                             label = "Compañía",
                                             placeholder = "Seleccionar",
-                                            modifier = Modifier
-                                                .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable)
-                                                .fillMaxWidth(),
+                                            modifier = Modifier.menuAnchor(
+                                                ExposedDropdownMenuAnchorType.PrimaryNotEditable
+                                            ).fillMaxWidth(),
                                             leadingIcon = {
                                                 Icon(
                                                     Icons.Default.Business,
@@ -1387,20 +1268,17 @@ private fun NewCustomerDialog(
                                             },
                                             trailingIcon = {
                                                 ExposedDropdownMenuDefaults.TrailingIcon(expanded = companyExpanded)
-                                            }
-                                        )
+                                            })
                                         ExposedDropdownMenu(
                                             expanded = companyExpanded,
-                                            onDismissRequest = { companyExpanded = false }
-                                        ) {
+                                            onDismissRequest = { companyExpanded = false }) {
                                             companies.forEach { option ->
                                                 DropdownMenuItem(
                                                     text = { Text(option.company) },
                                                     onClick = {
                                                         internalCompany = option.company
                                                         companyExpanded = false
-                                                    }
-                                                )
+                                                    })
                                             }
                                         }
                                     }
@@ -1412,8 +1290,7 @@ private fun NewCustomerDialog(
                                         placeholder = "Escribe la compañía",
                                         leadingIcon = {
                                             Icon(
-                                                Icons.Default.Business,
-                                                contentDescription = null
+                                                Icons.Default.Business, contentDescription = null
                                             )
                                         },
                                         modifier = Modifier.fillMaxWidth()
@@ -1427,8 +1304,7 @@ private fun NewCustomerDialog(
                                 placeholder = "Observaciones internas",
                                 leadingIcon = {
                                     Icon(
-                                        Icons.AutoMirrored.Filled.Note,
-                                        contentDescription = null
+                                        Icons.AutoMirrored.Filled.Note, contentDescription = null
                                     )
                                 },
                                 modifier = Modifier.fillMaxWidth()
@@ -1444,8 +1320,7 @@ private fun NewCustomerDialog(
                                     placeholder = "+505 8888 8888",
                                     leadingIcon = {
                                         Icon(
-                                            Icons.Default.Phone,
-                                            contentDescription = null
+                                            Icons.Default.Phone, contentDescription = null
                                         )
                                     },
                                     modifier = Modifier.weight(1f)
@@ -1457,8 +1332,7 @@ private fun NewCustomerDialog(
                                     placeholder = "2222 2222",
                                     leadingIcon = {
                                         Icon(
-                                            Icons.Default.Call,
-                                            contentDescription = null
+                                            Icons.Default.Call, contentDescription = null
                                         )
                                     },
                                     modifier = Modifier.weight(1f)
@@ -1471,8 +1345,7 @@ private fun NewCustomerDialog(
                                 placeholder = "cliente@correo.com",
                                 leadingIcon = {
                                     Icon(
-                                        Icons.Default.Email,
-                                        contentDescription = null
+                                        Icons.Default.Email, contentDescription = null
                                     )
                                 },
                                 modifier = Modifier.fillMaxWidth()
@@ -1484,8 +1357,7 @@ private fun NewCustomerDialog(
                                 placeholder = "Calle principal",
                                 leadingIcon = {
                                     Icon(
-                                        Icons.Default.Home,
-                                        contentDescription = null
+                                        Icons.Default.Home, contentDescription = null
                                     )
                                 },
                                 modifier = Modifier.fillMaxWidth()
@@ -1530,8 +1402,7 @@ private fun NewCustomerDialog(
                                 placeholder = "J0310000000001",
                                 leadingIcon = {
                                     Icon(
-                                        Icons.Default.Badge,
-                                        contentDescription = null
+                                        Icons.Default.Badge, contentDescription = null
                                     )
                                 },
                                 modifier = Modifier.fillMaxWidth()
@@ -1554,8 +1425,7 @@ private fun NewCustomerDialog(
                                     placeholder = "0.00",
                                     leadingIcon = {
                                         Icon(
-                                            Icons.Default.CreditCard,
-                                            contentDescription = null
+                                            Icons.Default.CreditCard, contentDescription = null
                                         )
                                     },
                                     modifier = Modifier.weight(1f)
@@ -1571,9 +1441,9 @@ private fun NewCustomerDialog(
                                             onValueChange = {},
                                             label = "Términos de pago",
                                             placeholder = "Seleccionar",
-                                            modifier = Modifier
-                                                .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable)
-                                                .fillMaxWidth(),
+                                            modifier = Modifier.menuAnchor(
+                                                ExposedDropdownMenuAnchorType.PrimaryNotEditable
+                                            ).fillMaxWidth(),
                                             leadingIcon = {
                                                 Icon(
                                                     Icons.Default.Schedule,
@@ -1582,20 +1452,17 @@ private fun NewCustomerDialog(
                                             },
                                             trailingIcon = {
                                                 ExposedDropdownMenuDefaults.TrailingIcon(expanded = paymentExpanded)
-                                            }
-                                        )
+                                            })
                                         ExposedDropdownMenu(
                                             expanded = paymentExpanded,
-                                            onDismissRequest = { paymentExpanded = false }
-                                        ) {
+                                            onDismissRequest = { paymentExpanded = false }) {
                                             paymentTermsOptions.forEach { option ->
                                                 DropdownMenuItem(
                                                     text = { Text(option.name) },
                                                     onClick = {
                                                         selectedPaymentTerm = option.name
                                                         paymentExpanded = false
-                                                    }
-                                                )
+                                                    })
                                             }
                                         }
                                     }
@@ -1607,8 +1474,7 @@ private fun NewCustomerDialog(
                                         placeholder = "Contado / 30 días",
                                         leadingIcon = {
                                             Icon(
-                                                Icons.Default.Schedule,
-                                                contentDescription = null
+                                                Icons.Default.Schedule, contentDescription = null
                                             )
                                         },
                                         modifier = Modifier.weight(1f)
@@ -1624,8 +1490,7 @@ private fun NewCustomerDialog(
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     OutlinedButton(
-                        onClick = onDismiss,
-                        modifier = Modifier.weight(1f)
+                        onClick = onDismiss, modifier = Modifier.weight(1f)
                     ) {
                         Text("Cancelar")
                     }
@@ -1651,13 +1516,10 @@ private fun NewCustomerDialog(
                                     country = country.trim().ifBlank { null },
                                     creditLimit = creditLimit.toDoubleOrNull(),
                                     paymentTerms = selectedPaymentTerm.trim().ifBlank { null },
-                                    notes = notes.trim().ifBlank { null }
-                                )
+                                    notes = notes.trim().ifBlank { null })
                             )
                             onDismiss()
-                        },
-                        enabled = isValid,
-                        modifier = Modifier.weight(1f)
+                        }, enabled = isValid, modifier = Modifier.weight(1f)
                     ) {
                         Text("Guardar")
                     }
@@ -1687,8 +1549,7 @@ fun CustomerItem(
     var isMenuExpanded by remember { mutableStateOf(false) }
     val quickActions = remember { customerQuickActions() }
     val avatarSize = if (isDesktop) 52.dp else 44.dp
-    val pendingAmountRaw =
-        bd(customer.totalPendingAmount ?: 0.0).moneyScale(2)
+    val pendingAmountRaw = bd(customer.totalPendingAmount ?: 0.0).moneyScale(2)
     val pendingAmount = pendingAmountRaw.toDouble(2)
     val posCurr = normalizeCurrency(posCurrency)
     val displayCurrencies = remember(baseCurrency, posCurr, supportedCurrencies) {
@@ -1712,8 +1573,7 @@ fun CustomerItem(
                 customExchangeRate = null,
                 rateResolver = { from, to ->
                     cashboxManager.resolveExchangeRateBetween(from, to, allowNetwork = false)
-                }
-            )
+                })
             if (converted != null) {
                 resolved[currency] = converted
             }
@@ -1726,11 +1586,11 @@ fun CustomerItem(
         else -> displayCurrencies.firstOrNull() ?: "USD"
     }
     val primaryAmount = pendingByCurrency[primaryCurrency] ?: pendingAmount
-    val secondaryLabels = pendingByCurrency
-        .filterKeys { !it.equals(primaryCurrency, ignoreCase = true) }
-        .map { (currency, amount) ->
-            formatCurrency(currency, amount)
-        }
+    val secondaryLabels =
+        pendingByCurrency.filterKeys { !it.equals(primaryCurrency, ignoreCase = true) }
+            .map { (currency, amount) ->
+                formatCurrency(currency, amount)
+            }
     val secondaryValue = secondaryLabels.takeIf { it.isNotEmpty() }?.joinToString(" · ")
     val statusLabel = when {
         isOverLimit -> strings.customer.overdueLabel
@@ -1751,23 +1611,16 @@ fun CustomerItem(
         )
     )
     Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .heightIn(min = 120.dp)
-            .clip(cardShape)
-            .clickable { onSelect(customer) }
-            .pointerInput(customer.name, isDesktop) {
+        modifier = Modifier.fillMaxWidth().heightIn(min = 120.dp).clip(cardShape)
+            .clickable { onSelect(customer) }.pointerInput(customer.name, isDesktop) {
                 if (!isDesktop) {
                     val totalDrag = 0f
-                    detectHorizontalDragGestures(
-                        onDragEnd = {
-                            if (kotlin.math.abs(totalDrag) > 64) {
-                                onOpenQuickActions()
-                            }
-                        },
-                        onHorizontalDrag = { _, _ ->
+                    detectHorizontalDragGestures(onDragEnd = {
+                        if (kotlin.math.abs(totalDrag) > 64) {
+                            onOpenQuickActions()
                         }
-                    )
+                    }, onHorizontalDrag = { _, _ ->
+                    })
                 }
             },
         //.clickable { onClick() },
@@ -1779,29 +1632,24 @@ fun CustomerItem(
         )
     ) {
         Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(cardBrush, cardShape)
+            modifier = Modifier.fillMaxWidth().background(cardBrush, cardShape)
                 .border(1.dp, Color.Transparent, shape = cardShape)
                 .padding(if (isDesktop) 12.dp else 10.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             val context = LocalPlatformContext.current
             Row(
-                modifier = Modifier.fillMaxWidth()
-                    .height(48.dp),
+                modifier = Modifier.fillMaxWidth().height(48.dp),
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 if (!customer.image.isNullOrEmpty()) {
                     AsyncImage(
-                        modifier = Modifier.size(60.dp)
-                            .clip(RoundedCornerShape(50.dp)),
+                        modifier = Modifier.size(60.dp).clip(RoundedCornerShape(50.dp)),
                         model = remember(customer.image) {
                             ImageRequest.Builder(context)
                                 .data(customer.image.ifBlank { "https://placehold.co/600x400" })
-                                .crossfade(true)
-                                .build()
+                                .crossfade(true).build()
                         },
                         contentDescription = customer.name,
                         contentScale = ContentScale.Crop,
@@ -1810,15 +1658,13 @@ fun CustomerItem(
                     Icon(
                         Icons.Filled.Person,
                         contentDescription = customer.customerName,
-                        modifier = Modifier.size(avatarSize).clip(CircleShape)
-                            .padding(12.dp),
+                        modifier = Modifier.size(avatarSize).clip(CircleShape).padding(12.dp),
                         tint = statusColor
                     )
                 }
 
                 Column(
-                    modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                    modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
                     Text(
                         customer.customerName,
@@ -1829,8 +1675,7 @@ fun CustomerItem(
                         color = MaterialTheme.colorScheme.onSurface
                     )
                     StatusPill(
-                        label = statusLabel,
-                        isCritical = emphasis
+                        label = statusLabel, isCritical = emphasis
                     )
                 }
 
@@ -1850,19 +1695,14 @@ fun CustomerItem(
 
                 DropdownMenu(
                     expanded = isDesktop && isMenuExpanded,
-                    onDismissRequest = { isMenuExpanded = false }
-                ) {
+                    onDismissRequest = { isMenuExpanded = false }) {
                     quickActions.forEach { action ->
-                        DropdownMenuItem(
-                            text = { Text(action.label) },
-                            leadingIcon = {
-                                Icon(action.icon, contentDescription = null)
-                            },
-                            onClick = {
-                                isMenuExpanded = false
-                                onQuickAction(action.type)
-                            }
-                        )
+                        DropdownMenuItem(text = { Text(action.label) }, leadingIcon = {
+                            Icon(action.icon, contentDescription = null)
+                        }, onClick = {
+                            isMenuExpanded = false
+                            onQuickAction(action.type)
+                        })
                     }
                 }
             }
@@ -1909,9 +1749,7 @@ private fun StatusPill(label: String, isCritical: Boolean) {
         MaterialTheme.colorScheme.secondary
     }
     Surface(
-        color = background,
-        shape = RoundedCornerShape(12.dp),
-        tonalElevation = 0.dp
+        color = background, shape = RoundedCornerShape(12.dp), tonalElevation = 0.dp
     ) {
         Text(
             label,
@@ -1924,10 +1762,7 @@ private fun StatusPill(label: String, isCritical: Boolean) {
 
 @Composable
 fun MetricBlock(
-    label: String,
-    value: String,
-    secondaryValue: String? = null,
-    isCritical: Boolean
+    label: String, value: String, secondaryValue: String? = null, isCritical: Boolean
 ) {
     val background = if (isCritical) {
         MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.33f)
@@ -1940,9 +1775,7 @@ fun MetricBlock(
         MaterialTheme.colorScheme.onSecondaryContainer
     }
     Surface(
-        color = background,
-        shape = RoundedCornerShape(12.dp),
-        tonalElevation = 0.dp
+        color = background, shape = RoundedCornerShape(12.dp), tonalElevation = 0.dp
     ) {
         Column(
             modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
@@ -1963,11 +1796,7 @@ fun MetricBlock(
 
 @Composable
 private fun FilterSummaryTile(
-    label: String,
-    value: String,
-    selected: Boolean,
-    color: Color,
-    onClick: () -> Unit
+    label: String, value: String, selected: Boolean, color: Color, onClick: () -> Unit
 ) {
     val background = if (selected) color.copy(alpha = 0.18f) else color.copy(alpha = 0.08f)
     Surface(
@@ -2007,16 +1836,12 @@ private fun FilterSummaryTile(
 @Composable
 fun CustomerShimmerList() {
     Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(horizontal = 16.dp, vertical = 8.dp),
+        modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         repeat(6) {
             Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(96.dp)
+                modifier = Modifier.fillMaxWidth().height(96.dp)
                     .shimmerBackground(RoundedCornerShape(16.dp))
             )
         }
@@ -2037,13 +1862,9 @@ private fun CustomerQuickActionsSheet(
     val quickActions = remember { customerQuickActions() }
 
     ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        dragHandle = { BottomSheetDefaults.DragHandle() }
-    ) {
+        onDismissRequest = onDismiss, dragHandle = { BottomSheetDefaults.DragHandle() }) {
         Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 24.dp, vertical = 8.dp),
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             Text(
@@ -2067,8 +1888,7 @@ private fun CustomerQuickActionsSheet(
                 ListItem(
                     headlineContent = { Text(action.label) },
                     leadingContent = { Icon(action.icon, contentDescription = null) },
-                    modifier = Modifier.clickable { onActionSelected(action.type) }
-                )
+                    modifier = Modifier.clickable { onActionSelected(action.type) })
             }
             Spacer(modifier = Modifier.height(12.dp))
         }
@@ -2083,25 +1903,17 @@ private fun CustomerOutstandingInvoicesSheet(
     paymentState: CustomerPaymentState,
     onDismiss: () -> Unit,
     onRegisterPayment: (
-        invoiceId: String,
-        modeOfPayment: String,
-        enteredAmount: Double,
-        enteredCurrency: String,
-        referenceNumber: String
+        invoiceId: String, modeOfPayment: String, enteredAmount: Double, enteredCurrency: String, referenceNumber: String
     ) -> Unit
 ) {
     ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        dragHandle = { BottomSheetDefaults.DragHandle() }
-    ) {
+        onDismissRequest = onDismiss, dragHandle = { BottomSheetDefaults.DragHandle() }) {
         CustomerOutstandingInvoicesContent(
             customer = customer,
             invoicesState = invoicesState,
             paymentState = paymentState,
             onRegisterPayment = onRegisterPayment,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 24.dp, vertical = 12.dp)
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 12.dp)
         )
     }
 }
@@ -2112,11 +1924,7 @@ private fun CustomerOutstandingInvoicesContent(
     invoicesState: CustomerInvoicesState,
     paymentState: CustomerPaymentState,
     onRegisterPayment: (
-        invoiceId: String,
-        modeOfPayment: String,
-        enteredAmount: Double,
-        enteredCurrency: String,
-        referenceNumber: String
+        invoiceId: String, modeOfPayment: String, enteredAmount: Double, enteredCurrency: String, referenceNumber: String
     ) -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -2126,8 +1934,7 @@ private fun CustomerOutstandingInvoicesContent(
     var amountRaw by remember { mutableStateOf("") }
     var amountValue by remember { mutableStateOf(0.0) }
     val posBaseCurrency = normalizeCurrency(paymentState.baseCurrency)
-    val baseCurrency = normalizeCurrency(selectedInvoice?.partyAccountCurrency)
-        ?: posBaseCurrency
+    val baseCurrency = normalizeCurrency(selectedInvoice?.partyAccountCurrency) ?: posBaseCurrency
     val invoiceCurrency = normalizeCurrency(selectedInvoice?.currency) ?: baseCurrency
     val invoiceToBaseRate = selectedInvoice?.conversionRate ?: selectedInvoice?.customExchangeRate
     val paymentModes = paymentState.paymentModes
@@ -2191,9 +1998,7 @@ private fun CustomerOutstandingInvoicesContent(
         if (from.equals(to, ignoreCase = true)) return@LaunchedEffect
         if (resolveRateLocal(from, to) != null) return@LaunchedEffect
         val fetched = cashboxManager.resolveExchangeRateBetween(
-            fromCurrency = from,
-            toCurrency = to,
-            allowNetwork = false
+            fromCurrency = from, toCurrency = to, allowNetwork = false
         )
         if (fetched != null && fetched > 0.0) {
             fallbackRates[rateKey(from, to)] = fetched
@@ -2207,28 +2012,25 @@ private fun CustomerOutstandingInvoicesContent(
         if (rate <= 0.0) 0.0 else amountValue / rate
     } ?: 0.0
 
-    val outstandingBase = selectedInvoice?.outstandingAmount ?: 0.0
-    val outstandingInvoice = toInvoiceAmountFromBase(
-        baseAmount = outstandingBase,
-        invoiceCurrency = invoiceCurrency,
-        baseCurrency = baseCurrency,
-        conversionRate = invoiceToBaseRate
-    )
+    val outstandingBase =
+        selectedInvoice?.baseOutstandingAmount ?: selectedInvoice?.outstandingAmount ?: 0.0
+    val posRate = resolveRateLocal(baseCurrency, posBaseCurrency)
+    val outstandingPos = when {
+        baseCurrency.equals(posBaseCurrency, ignoreCase = true) -> outstandingBase
+        posRate != null && posRate > 0.0 -> outstandingBase * posRate
+        else -> outstandingBase
+    }
     val outstandingInSelectedCurrency = exchangeRate?.let { rate ->
         outstandingBase * rate
     }
     val baseOutstandingLabel = formatCurrency(baseCurrency, outstandingBase)
-    val invoiceOutstandingLabel = formatCurrency(invoiceCurrency, outstandingInvoice)
+    val posOutstandingLabel = formatCurrency(posBaseCurrency, outstandingPos)
     val changeDue = outstandingInSelectedCurrency?.let { amountValue - it } ?: 0.0
-    val isSubmitEnabled = !paymentState.isSubmitting &&
-            selectedInvoice?.invoiceId?.isNotBlank() == true &&
-            selectedMode.isNotBlank() &&
-            amountValue > 0.0 &&
-            !conversionError
+    val isSubmitEnabled =
+        !paymentState.isSubmitting && selectedInvoice?.invoiceId?.isNotBlank() == true && selectedMode.isNotBlank() && amountValue > 0.0 && !conversionError
 
     Column(
-        modifier = modifier,
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+        modifier = modifier, verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         Text(
             text = "${strings.customer.outstandingInvoicesTitle} - ${customer.customerName}",
@@ -2247,8 +2049,7 @@ private fun CustomerOutstandingInvoicesContent(
 
             CustomerInvoicesState.Loading -> {
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.Center
+                    modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center
                 ) {
                     CircularProgressIndicator()
                 }
@@ -2270,27 +2071,36 @@ private fun CustomerOutstandingInvoicesContent(
                     )
                 } else {
                     LazyColumn(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .heightIn(max = 320.dp),
+                        modifier = Modifier.fillMaxWidth().heightIn(max = 320.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         items(invoicesState.invoices, key = { it.invoiceId }) { invoice ->
                             val isSelected = invoice.invoiceId == selectedInvoice?.invoiceId
                             val baseCurrency =
                                 normalizeCurrency(invoice.partyAccountCurrency) ?: posBaseCurrency
-                            val invoiceCurrency = normalizeCurrency(invoice.currency) ?: baseCurrency
+                            val invoiceCurrency =
+                                normalizeCurrency(invoice.currency) ?: baseCurrency
                             val invoiceToBaseRate =
                                 invoice.conversionRate ?: invoice.customExchangeRate
-                            val outstandingBase = invoice.outstandingAmount
-                            val outstandingInvoice = toInvoiceAmountFromBase(
-                                baseAmount = outstandingBase,
-                                invoiceCurrency = invoiceCurrency,
-                                baseCurrency = baseCurrency,
-                                conversionRate = invoiceToBaseRate
+                            val outstandingBase =
+                                invoice.baseOutstandingAmount ?: invoice.outstandingAmount
+                            val rateBaseToPos = resolveRateBetweenFromBaseRates(
+                                fromCurrency = baseCurrency,
+                                toCurrency = posBaseCurrency,
+                                baseCurrency = posBaseCurrency,
+                                baseRates = invoicesState.exchangeRateByCurrency
                             )
+                            val outstandingPos = when {
+                                baseCurrency.equals(posBaseCurrency, ignoreCase = true) ->
+                                    outstandingBase
+
+                                rateBaseToPos != null && rateBaseToPos > 0.0 ->
+                                    outstandingBase * rateBaseToPos
+
+                                else -> outstandingBase
+                            }
                             val baseLabel = formatCurrency(baseCurrency, outstandingBase)
-                            val invoiceLabel = formatCurrency(invoiceCurrency, outstandingInvoice)
+                            val posLabel = formatCurrency(posBaseCurrency, outstandingPos)
 
                             Card(
                                 modifier = Modifier.fillMaxWidth(),
@@ -2308,23 +2118,19 @@ private fun CustomerOutstandingInvoicesContent(
                                 }
                             ) {
                                 Column(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clickable {
-                                            selectedInvoice = invoice
-                                            val rateBaseToSelected =
-                                                resolveRateBetweenFromBaseRates(
-                                                    fromCurrency = baseCurrency,
-                                                    toCurrency = selectedCurrency,
-                                                    baseCurrency = posBaseCurrency,
-                                                    baseRates = invoicesState.exchangeRateByCurrency
-                                                )
-                                            val amountToUse = rateBaseToSelected?.let { rate ->
-                                                outstandingBase * rate
-                                            } ?: outstandingBase
-                                            amountRaw = amountToUse.toString()
-                                        }
-                                        .padding(12.dp),
+                                    modifier = Modifier.fillMaxWidth().clickable {
+                                        selectedInvoice = invoice
+                                        val rateBaseToSelected = resolveRateBetweenFromBaseRates(
+                                            fromCurrency = baseCurrency,
+                                            toCurrency = selectedCurrency,
+                                            baseCurrency = posBaseCurrency,
+                                            baseRates = invoicesState.exchangeRateByCurrency
+                                        )
+                                        val amountToUse = rateBaseToSelected?.let { rate ->
+                                            outstandingBase * rate
+                                        } ?: outstandingBase
+                                        amountRaw = amountToUse.toString()
+                                    }.padding(12.dp),
                                     verticalArrangement = Arrangement.spacedBy(6.dp)
                                 ) {
                                     Row(
@@ -2353,8 +2159,7 @@ private fun CustomerOutstandingInvoicesContent(
                                                 "Pending" -> {
                                                     AssistChip(
                                                         onClick = {},
-                                                        label = { Text("Pendiente sync") }
-                                                    )
+                                                        label = { Text("Pendiente sync") })
                                                 }
 
                                                 "Failed" -> {
@@ -2369,8 +2174,7 @@ private fun CustomerOutstandingInvoicesContent(
                                                 }
                                             }
                                             RadioButton(
-                                                selected = isSelected,
-                                                onClick = {
+                                                selected = isSelected, onClick = {
                                                     selectedInvoice = invoice
                                                     val rateBaseToSelected =
                                                         resolveRateBetweenFromBaseRates(
@@ -2384,8 +2188,7 @@ private fun CustomerOutstandingInvoicesContent(
                                                             outstandingBase * rate
                                                         } ?: outstandingBase
                                                     amountRaw = amountToUse.toString()
-                                                }
-                                            )
+                                                })
                                         }
                                     }
 
@@ -2394,9 +2197,9 @@ private fun CustomerOutstandingInvoicesContent(
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.primary
                                     )
-                                    if (!invoiceCurrency.equals(baseCurrency, ignoreCase = true)) {
+                                    if (!baseCurrency.equals(posBaseCurrency, ignoreCase = true)) {
                                         Text(
-                                            text = "Factura: $invoiceLabel",
+                                            text = "${strings.customer.baseCurrency}: $baseLabel",
                                             style = MaterialTheme.typography.bodySmall,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
@@ -2418,8 +2221,7 @@ private fun CustomerOutstandingInvoicesContent(
             color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
         ) {
             Column(
-                modifier = Modifier.padding(12.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+                modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Text(
                     text = strings.customer.registerPaymentTitle,
@@ -2428,41 +2230,31 @@ private fun CustomerOutstandingInvoicesContent(
                 )
 
                 ExposedDropdownMenuBox(
-                    expanded = modeExpanded,
-                    onExpandedChange = { modeExpanded = it }
-                ) {
+                    expanded = modeExpanded, onExpandedChange = { modeExpanded = it }) {
                     AppTextField(
                         value = selectedMode,
                         onValueChange = {},
                         label = strings.customer.selectPaymentMode,
                         placeholder = strings.customer.selectPaymentMode,
-                        modifier = Modifier
-                            .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable)
+                        modifier = Modifier.menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable)
                             .fillMaxWidth(),
                         leadingIcon = { Icon(Icons.Default.Money, contentDescription = null) },
                         trailingIcon = {
                             ExposedDropdownMenuDefaults.TrailingIcon(expanded = modeExpanded)
-                        }
-                    )
+                        })
                     ExposedDropdownMenu(
-                        expanded = modeExpanded,
-                        onDismissRequest = { modeExpanded = false }
-                    ) {
+                        expanded = modeExpanded, onDismissRequest = { modeExpanded = false }) {
                         paymentModes.forEach { mode ->
-                            DropdownMenuItem(
-                                text = { Text(mode.name) },
-                                onClick = {
-                                    selectedMode = mode.name
-                                    selectedCurrency = resolvePaymentCurrencyForMode(
-                                        modeOfPayment = mode.modeOfPayment,
-                                        invoiceCurrency = invoiceCurrency,
-                                        paymentModeCurrencyByMode =
-                                            paymentState.paymentModeCurrencyByMode,
-                                        paymentModeDetails = paymentState.modeTypes ?: mapOf()
-                                    )
-                                    modeExpanded = false
-                                }
-                            )
+                            DropdownMenuItem(text = { Text(mode.name) }, onClick = {
+                                selectedMode = mode.name
+                                selectedCurrency = resolvePaymentCurrencyForMode(
+                                    modeOfPayment = mode.modeOfPayment,
+                                    invoiceCurrency = invoiceCurrency,
+                                    paymentModeCurrencyByMode = paymentState.paymentModeCurrencyByMode,
+                                    paymentModeDetails = paymentState.modeTypes ?: mapOf()
+                                )
+                                modeExpanded = false
+                            })
                         }
                     }
                 }
@@ -2475,8 +2267,7 @@ private fun CustomerOutstandingInvoicesContent(
                         placeholder = "#11231",
                         leadingIcon = {
                             Icon(
-                                Icons.Default.ConfirmationNumber,
-                                contentDescription = null
+                                Icons.Default.ConfirmationNumber, contentDescription = null
                             )
                         },
                         supportingText = {
@@ -2504,16 +2295,15 @@ private fun CustomerOutstandingInvoicesContent(
                         } else if (!selectedCurrency.equals(baseCurrency, ignoreCase = true)) {
                             Text("Base: ${formatCurrency(baseCurrency, baseAmount)}")
                         }
-                    }
-                )
+                    })
                 Text(
-                    text = "${strings.customer.outstandingLabel}: $baseOutstandingLabel",
+                    text = "${strings.customer.outstandingLabel}: $posOutstandingLabel",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                if (!invoiceCurrency.equals(baseCurrency, ignoreCase = true)) {
+                if (!baseCurrency.equals(posBaseCurrency, ignoreCase = true)) {
                     Text(
-                        text = "Factura: $invoiceOutstandingLabel",
+                        text = "${strings.customer.baseCurrency}: $baseOutstandingLabel",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -2531,19 +2321,12 @@ private fun CustomerOutstandingInvoicesContent(
                     onClick = {
                         val invoiceId = selectedInvoice?.invoiceId?.trim().orEmpty()
                         onRegisterPayment(
-                            invoiceId,
-                            selectedMode,
-                            amountValue,
-                            selectedCurrency,
-                            referenceInput
+                            invoiceId, selectedMode, amountValue, selectedCurrency, referenceInput
                         )
-                    },
-                    enabled = isSubmitEnabled,
-                    modifier = Modifier.fillMaxWidth()
+                    }, enabled = isSubmitEnabled, modifier = Modifier.fillMaxWidth()
                 ) {
                     Text(
-                        if (paymentState.isSubmitting)
-                            strings.customer.processing
+                        if (paymentState.isSubmitting) strings.customer.processing
                         else strings.customer.registerPaymentButton
                     )
                 }
@@ -2569,12 +2352,7 @@ private fun CustomerInvoiceHistorySheet(
     onDismiss: () -> Unit,
     loadLocalInvoice: suspend (String) -> SalesInvoiceWithItemsAndPayments? = { null },
     onSubmitPartialReturn: (
-        invoiceId: String,
-        reason: String?,
-        refundModeOfPayment: String?,
-        refundReferenceNo: String?,
-        applyRefund: Boolean,
-        itemsToReturnByCode: Map<String, Double>
+        invoiceId: String, reason: String?, refundModeOfPayment: String?, refundReferenceNo: String?, applyRefund: Boolean, itemsToReturnByCode: Map<String, Double>
     ) -> Unit = { _, _, _, _, _, _ -> }
 ) {
     var returnInvoiceId by remember { mutableStateOf<String?>(null) }
@@ -2630,382 +2408,202 @@ private fun CustomerInvoiceHistorySheet(
         val canConfirmRefund =
             !refundEnabled || (hasRefundOptions && !missingRefundMode && !missingReference)
 
-        AlertDialog(
-            onDismissRequest = {
-                if (!historyBusy) {
-                    closeReturnDialog()
-                }
-            },
-            title = { Text("Retorno parcial") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text("Factura: ${returnInvoiceId!!}")
+        AlertDialog(onDismissRequest = {
+            if (!historyBusy) {
+                closeReturnDialog()
+            }
+        }, title = { Text("Retorno parcial") }, text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text("Factura: ${returnInvoiceId!!}")
 
-                    if (returnLoading) {
-                        LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
-                        Text(
-                            "Cargando detalle local...",
-                            style = MaterialTheme.typography.bodySmall
-                        )
-                    }
-
-                    if (!returnError.isNullOrBlank()) {
-                        Text(
-                            returnError!!,
-                            color = MaterialTheme.colorScheme.error,
-                            style = MaterialTheme.typography.bodySmall
-                        )
-                    }
-
-                    var refundModeExpanded by remember { mutableStateOf(false) }
-
+                if (returnLoading) {
+                    LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
                     Text(
-                        text = "Destino del monto devuelto",
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.SemiBold
+                        "Cargando detalle local...", style = MaterialTheme.typography.bodySmall
                     )
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        ReturnDestination.entries.forEach { destination ->
-                            FilterChip(
-                                selected = returnDestination == destination,
-                                onClick = { returnDestination = destination },
-                                label = { Text(destination.label) }
-                            )
-                        }
-                    }
-                    Spacer(Modifier.height(6.dp))
+                }
 
-                    if (refundEnabled && refundOptions.isNotEmpty()) {
-                        ExposedDropdownMenuBox(
+                if (!returnError.isNullOrBlank()) {
+                    Text(
+                        returnError!!,
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+
+                var refundModeExpanded by remember { mutableStateOf(false) }
+
+                Text(
+                    text = "Destino del monto devuelto",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    ReturnDestination.entries.forEach { destination ->
+                        FilterChip(
+                            selected = returnDestination == destination,
+                            onClick = { returnDestination = destination },
+                            label = { Text(destination.label) })
+                    }
+                }
+                Spacer(Modifier.height(6.dp))
+
+                if (refundEnabled && refundOptions.isNotEmpty()) {
+                    ExposedDropdownMenuBox(
+                        expanded = refundModeExpanded,
+                        onExpandedChange = { refundModeExpanded = it }) {
+                        OutlinedTextField(
+                            value = refundMode ?: "",
+                            onValueChange = { },
+                            modifier = Modifier.menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable)
+                                .fillMaxWidth(),
+                            label = { Text("Modo de reembolso (opcional)") },
+                            trailingIcon = {
+                                ExposedDropdownMenuDefaults.TrailingIcon(
+                                    expanded = refundModeExpanded
+                                )
+                            },
+                            leadingIcon = {
+                                Icon(Icons.Default.Sell, contentDescription = null)
+                            },
+                            readOnly = true,
+                            singleLine = true,
+                            enabled = !historyBusy,
+                            supportingText = {
+                                Text("Vacío = solo nota de crédito.")
+                            })
+                        ExposedDropdownMenu(
                             expanded = refundModeExpanded,
-                            onExpandedChange = { refundModeExpanded = it }
-                        ) {
-                            OutlinedTextField(
-                                value = refundMode ?: "",
-                                onValueChange = { },
-                                modifier = Modifier
-                                    .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable)
-                                    .fillMaxWidth(),
-                                label = { Text("Modo de reembolso (opcional)") },
-                                trailingIcon = {
-                                    ExposedDropdownMenuDefaults.TrailingIcon(
-                                        expanded = refundModeExpanded
-                                    )
-                                },
-                                leadingIcon = {
-                                    Icon(Icons.Default.Sell, contentDescription = null)
-                                },
-                                readOnly = true,
-                                singleLine = true,
-                                enabled = !historyBusy,
-                                supportingText = {
-                                    Text("Vacío = solo nota de crédito.")
-                                }
-                            )
-                            ExposedDropdownMenu(
-                                expanded = refundModeExpanded,
-                                onDismissRequest = { refundModeExpanded = false }
-                            ) {
-                                refundOptions.forEach { option ->
-                                    DropdownMenuItem(
-                                        text = { Text(option) },
-                                        onClick = {
-                                            refundMode = option
-                                            refundModeExpanded = false
-                                        }
-                                    )
-                                }
+                            onDismissRequest = { refundModeExpanded = false }) {
+                            refundOptions.forEach { option ->
+                                DropdownMenuItem(text = { Text(option) }, onClick = {
+                                    refundMode = option
+                                    refundModeExpanded = false
+                                })
                             }
                         }
                     }
+                }
 
-                    if (refundEnabled && refundOptions.isEmpty()) {
-                        Text(
-                            "No hay modos de pago disponibles para reembolsos.",
-                            color = MaterialTheme.colorScheme.error,
-                            style = MaterialTheme.typography.bodySmall
-                        )
-                    }
-
-                    if (refundEnabled && needsReference) {
-                        OutlinedTextField(
-                            value = refundReference,
-                            onValueChange = { refundReference = it },
-                            modifier = Modifier.fillMaxWidth(),
-                            label = { Text("Referencia (requerida)") },
-                            singleLine = true,
-                            enabled = !historyBusy
-                        )
-                    }
-
-                    if (refundEnabled) {
-                        Text(
-                            "El retorno genera una nota de crédito aplicable contra la factura original.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-
+                if (refundEnabled && refundOptions.isEmpty()) {
                     Text(
-                        "Selecciona cantidades a devolver:",
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.SemiBold
+                        "No hay modos de pago disponibles para reembolsos.",
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall
                     )
+                }
 
-                    returnInvoiceLocal?.let { local ->
-                        LazyColumn(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .heightIn(max = 260.dp),
-                            verticalArrangement = Arrangement.spacedBy(6.dp),
-                            contentPadding = PaddingValues(vertical = 4.dp)
-                        ) {
-                            items(local.items, key = { it.itemCode }) { item ->
-                                val soldQty = item.qty
-                                val current = qtyByItemCode[item.itemCode] ?: 0.0
-                                Card(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    colors = CardDefaults.cardColors(
-                                        containerColor = MaterialTheme.colorScheme.surfaceVariant
-                                            .copy(alpha = 0.45f)
-                                    ),
-                                    shape = RoundedCornerShape(10.dp)
+                if (refundEnabled && needsReference) {
+                    OutlinedTextField(
+                        value = refundReference,
+                        onValueChange = { refundReference = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text("Referencia (requerida)") },
+                        singleLine = true,
+                        enabled = !historyBusy
+                    )
+                }
+
+                if (refundEnabled) {
+                    Text(
+                        "El retorno genera una nota de crédito aplicable contra la factura original.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+
+                Text(
+                    "Selecciona cantidades a devolver:",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold
+                )
+
+                returnInvoiceLocal?.let { local ->
+                    LazyColumn(
+                        modifier = Modifier.fillMaxWidth().heightIn(max = 260.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                        contentPadding = PaddingValues(vertical = 4.dp)
+                    ) {
+                        items(local.items, key = { it.itemCode }) { item ->
+                            val soldQty = item.qty
+                            val current = qtyByItemCode[item.itemCode] ?: 0.0
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(
+                                        alpha = 0.45f
+                                    )
+                                ),
+                                shape = RoundedCornerShape(10.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth().padding(10.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Row(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(10.dp),
-                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                        verticalAlignment = Alignment.CenterVertically
+                                    Column(
+                                        verticalArrangement = Arrangement.spacedBy(2.dp)
                                     ) {
-                                        Column(
-                                            verticalArrangement = Arrangement.spacedBy(2.dp)
+                                        Text(
+                                            text = item.itemName ?: item.itemCode,
+                                            fontWeight = FontWeight.SemiBold,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                        Text(
+                                            text = "Vendidos: ${
+                                                formatDoubleToString(
+                                                    soldQty, 2
+                                                )
+                                            }",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                    ) {
+                                        IconButton(
+                                            onClick = {
+                                                val next = (current - 1.0).coerceAtLeast(0.0)
+                                                qtyByItemCode = qtyByItemCode.toMutableMap().apply {
+                                                    put(item.itemCode, next)
+                                                }
+                                            }, enabled = !historyBusy && current > 0.0
                                         ) {
-                                            Text(
-                                                text = item.itemName ?: item.itemCode,
-                                                fontWeight = FontWeight.SemiBold,
-                                                maxLines = 1,
-                                                overflow = TextOverflow.Ellipsis
-                                            )
-                                            Text(
-                                                text = "Vendidos: ${
-                                                    formatDoubleToString(
-                                                        soldQty,
-                                                        2
-                                                    )
-                                                }",
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                                            )
+                                            Icon(Icons.Default.Remove, null)
                                         }
-                                        Row(
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                        Text(
+                                            text = formatDoubleToString(current, 2),
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 16.sp
+                                        )
+                                        IconButton(
+                                            onClick = {
+                                                val next = (current + 1.0).coerceAtMost(soldQty)
+                                                qtyByItemCode = qtyByItemCode.toMutableMap().apply {
+                                                    put(item.itemCode, next)
+                                                }
+                                            }, enabled = !historyBusy && current < soldQty
                                         ) {
-                                            IconButton(
-                                                onClick = {
-                                                    val next =
-                                                        (current - 1.0).coerceAtLeast(0.0)
-                                                    qtyByItemCode =
-                                                        qtyByItemCode.toMutableMap().apply {
-                                                            put(item.itemCode, next)
-                                                        }
-                                                },
-                                                enabled = !historyBusy && current > 0.0
-                                            ) {
-                                                Icon(Icons.Default.Remove, null)
-                                            }
-                                            Text(
-                                                text = formatDoubleToString(current, 2),
-                                                fontWeight = FontWeight.Bold,
-                                                fontSize = 16.sp
-                                            )
-                                            IconButton(
-                                                onClick = {
-                                                    val next =
-                                                        (current + 1.0).coerceAtMost(soldQty)
-                                                    qtyByItemCode =
-                                                        qtyByItemCode.toMutableMap().apply {
-                                                            put(item.itemCode, next)
-                                                        }
-                                                },
-                                                enabled = !historyBusy && current < soldQty
-                                            ) {
-                                                Icon(Icons.Default.Add, null)
-                                            }
+                                            Icon(Icons.Default.Add, null)
                                         }
                                     }
                                 }
                             }
                         }
-                        if (!canConfirmReturn()) {
-                            Text(
-                                "Debes seleccionar al menos 1 artículo.",
-                                color = MaterialTheme.colorScheme.error,
-                                style = MaterialTheme.typography.bodySmall
-                            )
-                        }
-                        if (refundEnabled && missingRefundMode) {
-                            Text(
-                                "Selecciona un modo de reembolso.",
-                                color = MaterialTheme.colorScheme.error,
-                                style = MaterialTheme.typography.bodySmall
-                            )
-                        }
-                        if (refundEnabled && missingReference) {
-                            Text(
-                                "La referencia es requerida para este modo de reembolso.",
-                                color = MaterialTheme.colorScheme.error,
-                                style = MaterialTheme.typography.bodySmall
-                            )
-                        }
                     }
-
-                }
-            },
-            confirmButton = {
-                Button(
-                    enabled = !historyBusy && !returnLoading && returnInvoiceLocal != null &&
-                            canConfirmReturn() && canConfirmRefund,
-                    onClick = {
-                        val invoiceId = returnInvoiceId ?: return@Button
-                        onSubmitPartialReturn(
-                            invoiceId,
-                            null,
-                            refundMode?.takeIf { it.isNotBlank() },
-                            refundReference.takeIf { it.isNotBlank() },
-                            returnDestination == ReturnDestination.RETURN,
-                            qtyByItemCode.filterValues { it > 0.0 }
-                        )
-                        closeReturnDialog()
-                    }
-                ) { Text("Confirmar retorno") }
-            },
-            dismissButton = {
-                OutlinedButton(
-                    enabled = !historyBusy,
-                    onClick = { closeReturnDialog() }
-                ) { Text("Cerrar") }
-            }
-        )
-    }
-
-    if (showFullReturnDialog && fullReturnInvoiceId != null) {
-        val refundEnabled = fullReturnDestination == ReturnDestination.RETURN
-        val selectedMode = paymentState.paymentModes.firstOrNull {
-            it.modeOfPayment.equals(fullRefundMode, true)
-        }
-        val needsReference = refundEnabled && requiresReference(selectedMode)
-        val missingRefundMode = refundEnabled && fullRefundMode.isNullOrBlank()
-        val missingReference = needsReference && fullRefundReference.isBlank()
-        val hasRefundOptions = refundOptions.isNotEmpty()
-        val canConfirmRefund =
-            !refundEnabled || (hasRefundOptions && !missingRefundMode && !missingReference)
-
-        AlertDialog(
-            onDismissRequest = {
-                if (!historyBusy) {
-                    closeFullReturnDialog()
-                }
-            },
-            title = { Text("Retorno total") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text("Factura: ${fullReturnInvoiceId!!}")
-                    Text(
-                        text = "Destino del monto devuelto",
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        ReturnDestination.entries.forEach { destination ->
-                            FilterChip(
-                                selected = fullReturnDestination == destination,
-                                onClick = { fullReturnDestination = destination },
-                                label = { Text(destination.label) }
-                            )
-                        }
-                    }
-                    Spacer(Modifier.height(6.dp))
-
-                    var refundModeExpanded by remember { mutableStateOf(false) }
-                    if (refundEnabled && refundOptions.isNotEmpty()) {
-                        ExposedDropdownMenuBox(
-                            expanded = refundModeExpanded,
-                            onExpandedChange = { refundModeExpanded = it }
-                        ) {
-                            OutlinedTextField(
-                                value = fullRefundMode ?: "",
-                                onValueChange = { },
-                                modifier = Modifier
-                                    .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable)
-                                    .fillMaxWidth(),
-                                label = { Text("Modo de reembolso (opcional)") },
-                                trailingIcon = {
-                                    ExposedDropdownMenuDefaults.TrailingIcon(
-                                        expanded = refundModeExpanded
-                                    )
-                                },
-                                leadingIcon = {
-                                    Icon(Icons.Default.Sell, contentDescription = null)
-                                },
-                                readOnly = true,
-                                singleLine = true,
-                                enabled = !historyBusy,
-                                supportingText = {
-                                    Text("Vacío = solo nota de crédito.")
-                                }
-                            )
-                            ExposedDropdownMenu(
-                                expanded = refundModeExpanded,
-                                onDismissRequest = { refundModeExpanded = false }
-                            ) {
-                                refundOptions.forEach { option ->
-                                    DropdownMenuItem(
-                                        text = { Text(option) },
-                                        onClick = {
-                                            fullRefundMode = option
-                                            refundModeExpanded = false
-                                        }
-                                    )
-                                }
-                            }
-                        }
-                    }
-
-                    if (refundEnabled && refundOptions.isEmpty()) {
+                    if (!canConfirmReturn()) {
                         Text(
-                            "No hay modos de pago disponibles para reembolsos.",
+                            "Debes seleccionar al menos 1 artículo.",
                             color = MaterialTheme.colorScheme.error,
                             style = MaterialTheme.typography.bodySmall
                         )
                     }
-
-                    if (refundEnabled && needsReference) {
-                        OutlinedTextField(
-                            value = fullRefundReference,
-                            onValueChange = { fullRefundReference = it },
-                            modifier = Modifier.fillMaxWidth(),
-                            label = { Text("Referencia (requerida)") },
-                            singleLine = true,
-                            enabled = !historyBusy
-                        )
-                    }
-
-                    if (refundEnabled) {
-                        Text(
-                            "El retorno genera una nota de crédito aplicable contra la factura original.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-
                     if (refundEnabled && missingRefundMode) {
                         Text(
                             "Selecciona un modo de reembolso.",
@@ -3021,36 +2619,166 @@ private fun CustomerInvoiceHistorySheet(
                         )
                     }
                 }
-            },
-            confirmButton = {
-                Button(
-                    enabled = !historyBusy && canConfirmRefund,
-                    onClick = {
-                        val invoiceId = fullReturnInvoiceId ?: return@Button
-                        onAction(
-                            invoiceId,
-                            InvoiceCancellationAction.RETURN,
-                            fullRefundMode?.takeIf { it.isNotBlank() },
-                            fullRefundReference.takeIf { it.isNotBlank() },
-                            fullReturnDestination == ReturnDestination.RETURN
-                        )
-                        closeFullReturnDialog()
-                    }
-                ) { Text("Confirmar retorno") }
-            },
-            dismissButton = {
-                OutlinedButton(
-                    enabled = !historyBusy,
-                    onClick = { closeFullReturnDialog() }
-                ) { Text("Cerrar") }
+
             }
-        )
+        }, confirmButton = {
+            Button(
+                enabled = !historyBusy && !returnLoading && returnInvoiceLocal != null && canConfirmReturn() && canConfirmRefund,
+                onClick = {
+                    val invoiceId = returnInvoiceId ?: return@Button
+                    onSubmitPartialReturn(
+                        invoiceId,
+                        null,
+                        refundMode?.takeIf { it.isNotBlank() },
+                        refundReference.takeIf { it.isNotBlank() },
+                        returnDestination == ReturnDestination.RETURN,
+                        qtyByItemCode.filterValues { it > 0.0 })
+                    closeReturnDialog()
+                }) { Text("Confirmar retorno") }
+        }, dismissButton = {
+            OutlinedButton(
+                enabled = !historyBusy, onClick = { closeReturnDialog() }) { Text("Cerrar") }
+        })
+    }
+
+    if (showFullReturnDialog && fullReturnInvoiceId != null) {
+        val refundEnabled = fullReturnDestination == ReturnDestination.RETURN
+        val selectedMode = paymentState.paymentModes.firstOrNull {
+            it.modeOfPayment.equals(fullRefundMode, true)
+        }
+        val needsReference = refundEnabled && requiresReference(selectedMode)
+        val missingRefundMode = refundEnabled && fullRefundMode.isNullOrBlank()
+        val missingReference = needsReference && fullRefundReference.isBlank()
+        val hasRefundOptions = refundOptions.isNotEmpty()
+        val canConfirmRefund =
+            !refundEnabled || (hasRefundOptions && !missingRefundMode && !missingReference)
+
+        AlertDialog(onDismissRequest = {
+            if (!historyBusy) {
+                closeFullReturnDialog()
+            }
+        }, title = { Text("Retorno total") }, text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text("Factura: ${fullReturnInvoiceId!!}")
+                Text(
+                    text = "Destino del monto devuelto",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    ReturnDestination.entries.forEach { destination ->
+                        FilterChip(
+                            selected = fullReturnDestination == destination,
+                            onClick = { fullReturnDestination = destination },
+                            label = { Text(destination.label) })
+                    }
+                }
+                Spacer(Modifier.height(6.dp))
+
+                var refundModeExpanded by remember { mutableStateOf(false) }
+                if (refundEnabled && refundOptions.isNotEmpty()) {
+                    ExposedDropdownMenuBox(
+                        expanded = refundModeExpanded,
+                        onExpandedChange = { refundModeExpanded = it }) {
+                        OutlinedTextField(
+                            value = fullRefundMode ?: "",
+                            onValueChange = { },
+                            modifier = Modifier.menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable)
+                                .fillMaxWidth(),
+                            label = { Text("Modo de reembolso (opcional)") },
+                            trailingIcon = {
+                                ExposedDropdownMenuDefaults.TrailingIcon(
+                                    expanded = refundModeExpanded
+                                )
+                            },
+                            leadingIcon = {
+                                Icon(Icons.Default.Sell, contentDescription = null)
+                            },
+                            readOnly = true,
+                            singleLine = true,
+                            enabled = !historyBusy,
+                            supportingText = {
+                                Text("Vacío = solo nota de crédito.")
+                            })
+                        ExposedDropdownMenu(
+                            expanded = refundModeExpanded,
+                            onDismissRequest = { refundModeExpanded = false }) {
+                            refundOptions.forEach { option ->
+                                DropdownMenuItem(text = { Text(option) }, onClick = {
+                                    fullRefundMode = option
+                                    refundModeExpanded = false
+                                })
+                            }
+                        }
+                    }
+                }
+
+                if (refundEnabled && refundOptions.isEmpty()) {
+                    Text(
+                        "No hay modos de pago disponibles para reembolsos.",
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+
+                if (refundEnabled && needsReference) {
+                    OutlinedTextField(
+                        value = fullRefundReference,
+                        onValueChange = { fullRefundReference = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text("Referencia (requerida)") },
+                        singleLine = true,
+                        enabled = !historyBusy
+                    )
+                }
+
+                if (refundEnabled) {
+                    Text(
+                        "El retorno genera una nota de crédito aplicable contra la factura original.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+
+                if (refundEnabled && missingRefundMode) {
+                    Text(
+                        "Selecciona un modo de reembolso.",
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+                if (refundEnabled && missingReference) {
+                    Text(
+                        "La referencia es requerida para este modo de reembolso.",
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+            }
+        }, confirmButton = {
+            Button(
+                enabled = !historyBusy && canConfirmRefund, onClick = {
+                    val invoiceId = fullReturnInvoiceId ?: return@Button
+                    onAction(
+                        invoiceId,
+                        InvoiceCancellationAction.RETURN,
+                        fullRefundMode?.takeIf { it.isNotBlank() },
+                        fullRefundReference.takeIf { it.isNotBlank() },
+                        fullReturnDestination == ReturnDestination.RETURN
+                    )
+                    closeFullReturnDialog()
+                }) { Text("Confirmar retorno") }
+        }, dismissButton = {
+            OutlinedButton(
+                enabled = !historyBusy, onClick = { closeFullReturnDialog() }) { Text("Cerrar") }
+        })
     }
 
     ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        dragHandle = { BottomSheetDefaults.DragHandle() }
-    ) {
+        onDismissRequest = onDismiss, dragHandle = { BottomSheetDefaults.DragHandle() }) {
         CustomerInvoiceHistoryContent(
             customer = customer,
             historyState = historyState,
@@ -3063,9 +2791,7 @@ private fun CustomerInvoiceHistorySheet(
             onAction = onAction,
             loadLocalInvoice = loadLocalInvoice,
             onSubmitPartialReturn = onSubmitPartialReturn,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 24.dp, vertical = 12.dp)
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 12.dp)
         )
     }
 }
@@ -3083,12 +2809,7 @@ private fun CustomerInvoiceHistoryContent(
     onAction: (String, InvoiceCancellationAction, String?, String?, Boolean) -> Unit,
     loadLocalInvoice: suspend (String) -> SalesInvoiceWithItemsAndPayments? = { null },
     onSubmitPartialReturn: (
-        invoiceId: String,
-        reason: String?,
-        refundModeOfPayment: String?,
-        refundReferenceNo: String?,
-        applyRefund: Boolean,
-        itemsToReturnByCode: Map<String, Double>
+        invoiceId: String, reason: String?, refundModeOfPayment: String?, refundReferenceNo: String?, applyRefund: Boolean, itemsToReturnByCode: Map<String, Double>
     ) -> Unit = { _, _, _, _, _, _ -> },
     modifier: Modifier = Modifier,
     showDialogs: Boolean = true
@@ -3186,259 +2907,232 @@ private fun CustomerInvoiceHistoryContent(
         val canConfirmRefund =
             !refundEnabled || (hasRefundOptions && !missingRefundMode && !missingReference)
 
-        AlertDialog(
-            onDismissRequest = {
-                if (!historyBusy) {
-                    closeReturnDialog()
-                }
-            },
-            title = { Text("Retorno parcial") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text("Factura: ${returnInvoiceId!!}")
+        AlertDialog(onDismissRequest = {
+            if (!historyBusy) {
+                closeReturnDialog()
+            }
+        }, title = { Text("Retorno parcial") }, text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text("Factura: ${returnInvoiceId!!}")
 
-                    if (returnLoading) {
-                        LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
-                        Text(
-                            "Cargando detalle local...",
-                            style = MaterialTheme.typography.bodySmall
-                        )
-                    }
-
-                    if (!returnError.isNullOrBlank()) {
-                        Text(
-                            returnError!!,
-                            color = MaterialTheme.colorScheme.error,
-                            style = MaterialTheme.typography.bodySmall
-                        )
-                    }
-
-                    var refundModeExpanded by remember { mutableStateOf(false) }
-
+                if (returnLoading) {
+                    LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
                     Text(
-                        text = "Destino del monto devuelto",
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.SemiBold
+                        "Cargando detalle local...", style = MaterialTheme.typography.bodySmall
                     )
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        ReturnDestination.entries.forEach { destination ->
-                            FilterChip(
-                                selected = returnDestination == destination,
-                                onClick = { returnDestination = destination },
-                                label = { Text(destination.label) }
-                            )
-                        }
-                    }
-                    Spacer(Modifier.height(6.dp))
+                }
 
-                    if (refundEnabled && refundOptions.isNotEmpty()) {
-                        ExposedDropdownMenuBox(
+                if (!returnError.isNullOrBlank()) {
+                    Text(
+                        returnError!!,
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+
+                var refundModeExpanded by remember { mutableStateOf(false) }
+
+                Text(
+                    text = "Destino del monto devuelto",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    ReturnDestination.entries.forEach { destination ->
+                        FilterChip(
+                            selected = returnDestination == destination,
+                            onClick = { returnDestination = destination },
+                            label = { Text(destination.label) })
+                    }
+                }
+                Spacer(Modifier.height(6.dp))
+
+                if (refundEnabled && refundOptions.isNotEmpty()) {
+                    ExposedDropdownMenuBox(
+                        expanded = refundModeExpanded,
+                        onExpandedChange = { refundModeExpanded = it }) {
+                        OutlinedTextField(
+                            value = refundMode ?: "",
+                            onValueChange = { },
+                            modifier = Modifier.menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable)
+                                .fillMaxWidth(),
+                            label = { Text("Modo de reembolso (opcional)") },
+                            trailingIcon = {
+                                ExposedDropdownMenuDefaults.TrailingIcon(
+                                    expanded = refundModeExpanded
+                                )
+                            },
+                            leadingIcon = {
+                                Icon(Icons.Default.Sell, contentDescription = null)
+                            },
+                            readOnly = true,
+                            singleLine = true,
+                            enabled = !historyBusy,
+                            supportingText = {
+                                Text("Vacío = solo nota de crédito.")
+                            })
+                        ExposedDropdownMenu(
                             expanded = refundModeExpanded,
-                            onExpandedChange = { refundModeExpanded = it }
-                        ) {
-                            OutlinedTextField(
-                                value = refundMode ?: "",
-                                onValueChange = { },
-                                modifier = Modifier
-                                    .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable)
-                                    .fillMaxWidth(),
-                                label = { Text("Modo de reembolso (opcional)") },
-                                trailingIcon = {
-                                    ExposedDropdownMenuDefaults.TrailingIcon(
-                                        expanded = refundModeExpanded
-                                    )
-                                },
-                                leadingIcon = {
-                                    Icon(Icons.Default.Sell, contentDescription = null)
-                                },
-                                readOnly = true,
-                                singleLine = true,
-                                enabled = !historyBusy,
-                                supportingText = {
-                                    Text("Vacío = solo nota de crédito.")
-                                }
-                            )
-                            ExposedDropdownMenu(
-                                expanded = refundModeExpanded,
-                                onDismissRequest = { refundModeExpanded = false }
-                            ) {
-                                refundOptions.forEach { option ->
-                                    DropdownMenuItem(
-                                        text = { Text(option) },
-                                        onClick = {
-                                            refundMode = option
-                                            refundModeExpanded = false
-                                        }
-                                    )
-                                }
+                            onDismissRequest = { refundModeExpanded = false }) {
+                            refundOptions.forEach { option ->
+                                DropdownMenuItem(text = { Text(option) }, onClick = {
+                                    refundMode = option
+                                    refundModeExpanded = false
+                                })
                             }
                         }
                     }
+                }
 
-                    if (refundEnabled && refundOptions.isEmpty()) {
-                        Text(
-                            "No hay modos de pago disponibles para reembolsos.",
-                            color = MaterialTheme.colorScheme.error,
-                            style = MaterialTheme.typography.bodySmall
-                        )
-                    }
-
-                    if (refundEnabled && needsReference) {
-                        OutlinedTextField(
-                            value = refundReference,
-                            onValueChange = { refundReference = it },
-                            modifier = Modifier.fillMaxWidth(),
-                            label = { Text("Referencia (requerida)") },
-                            singleLine = true,
-                            enabled = !historyBusy
-                        )
-                    }
-
-                    if (refundEnabled) {
-                        Text(
-                            "El retorno genera una nota de crédito aplicable contra la factura original.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-
+                if (refundEnabled && refundOptions.isEmpty()) {
                     Text(
-                        "Selecciona cantidades a devolver:",
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.SemiBold
+                        "No hay modos de pago disponibles para reembolsos.",
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall
                     )
+                }
 
-                    returnInvoiceLocal?.let { local ->
-                        LazyColumn(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .heightIn(max = 260.dp),
-                            verticalArrangement = Arrangement.spacedBy(6.dp),
-                            contentPadding = PaddingValues(vertical = 4.dp)
-                        ) {
-                            items(local.items, key = { it.itemCode }) { item ->
-                                val soldQty = item.qty
-                                val current = qtyByItemCode[item.itemCode] ?: 0.0
-                                Card(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    colors = CardDefaults.cardColors(
-                                        containerColor = MaterialTheme.colorScheme.surfaceVariant
-                                            .copy(alpha = 0.45f)
-                                    ),
-                                    shape = RoundedCornerShape(10.dp)
+                if (refundEnabled && needsReference) {
+                    OutlinedTextField(
+                        value = refundReference,
+                        onValueChange = { refundReference = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text("Referencia (requerida)") },
+                        singleLine = true,
+                        enabled = !historyBusy
+                    )
+                }
+
+                if (refundEnabled) {
+                    Text(
+                        "El retorno genera una nota de crédito aplicable contra la factura original.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+
+                Text(
+                    "Selecciona cantidades a devolver:",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold
+                )
+
+                returnInvoiceLocal?.let { local ->
+                    LazyColumn(
+                        modifier = Modifier.fillMaxWidth().heightIn(max = 260.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                        contentPadding = PaddingValues(vertical = 4.dp)
+                    ) {
+                        items(local.items, key = { it.itemCode }) { item ->
+                            val soldQty = item.qty
+                            val current = qtyByItemCode[item.itemCode] ?: 0.0
+                            Card(
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(
+                                        alpha = 0.45f
+                                    )
+                                ),
+                                shape = RoundedCornerShape(10.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth().padding(10.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Row(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(10.dp),
-                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                        verticalAlignment = Alignment.CenterVertically
+                                    Column(
+                                        verticalArrangement = Arrangement.spacedBy(2.dp)
                                     ) {
-                                        Column(
-                                            verticalArrangement = Arrangement.spacedBy(2.dp)
+                                        Text(
+                                            text = item.itemName ?: item.itemCode,
+                                            fontWeight = FontWeight.SemiBold,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                        Text(
+                                            text = "Vendidos: ${
+                                                formatDoubleToString(
+                                                    soldQty, 2
+                                                )
+                                            }",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                    ) {
+                                        IconButton(
+                                            onClick = {
+                                                val next = (current - 1.0).coerceAtLeast(0.0)
+                                                qtyByItemCode = qtyByItemCode.toMutableMap().apply {
+                                                    put(item.itemCode, next)
+                                                }
+                                            }, enabled = !historyBusy && current > 0.0
                                         ) {
-                                            Text(
-                                                text = item.itemName ?: item.itemCode,
-                                                fontWeight = FontWeight.SemiBold,
-                                                maxLines = 1,
-                                                overflow = TextOverflow.Ellipsis
-                                            )
-                                            Text(
-                                                text = "Vendidos: ${
-                                                    formatDoubleToString(
-                                                        soldQty,
-                                                        2
-                                                    )
-                                                }",
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                                            )
+                                            Icon(Icons.Default.Remove, null)
                                         }
-                                        Row(
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                        Text(
+                                            text = formatDoubleToString(current, 2),
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 16.sp
+                                        )
+                                        IconButton(
+                                            onClick = {
+                                                val next = (current + 1.0).coerceAtMost(soldQty)
+                                                qtyByItemCode = qtyByItemCode.toMutableMap().apply {
+                                                    put(item.itemCode, next)
+                                                }
+                                            }, enabled = !historyBusy && current < soldQty
                                         ) {
-                                            IconButton(
-                                                onClick = {
-                                                    val next =
-                                                        (current - 1.0).coerceAtLeast(0.0)
-                                                    qtyByItemCode =
-                                                        qtyByItemCode.toMutableMap().apply {
-                                                            put(item.itemCode, next)
-                                                        }
-                                                },
-                                                enabled = !historyBusy && current > 0.0
-                                            ) {
-                                                Icon(Icons.Default.Remove, null)
-                                            }
-                                            Text(
-                                                text = formatDoubleToString(current, 2),
-                                                fontWeight = FontWeight.Bold,
-                                                fontSize = 16.sp
-                                            )
-                                            IconButton(
-                                                onClick = {
-                                                    val next =
-                                                        (current + 1.0).coerceAtMost(soldQty)
-                                                    qtyByItemCode =
-                                                        qtyByItemCode.toMutableMap().apply {
-                                                            put(item.itemCode, next)
-                                                        }
-                                                },
-                                                enabled = !historyBusy && current < soldQty
-                                            ) {
-                                                Icon(Icons.Default.Add, null)
-                                            }
+                                            Icon(Icons.Default.Add, null)
                                         }
                                     }
                                 }
                             }
                         }
-                        if (!canConfirmReturn()) {
-                            Text(
-                                "Selecciona al menos un item.",
-                                color = MaterialTheme.colorScheme.error,
-                                style = MaterialTheme.typography.bodySmall
-                            )
-                        }
                     }
-                }
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        if (!historyBusy && returnInvoiceId != null) {
-                            onSubmitPartialReturn(
-                                returnInvoiceId!!,
-                                null,
-                                if (refundEnabled) refundMode else null,
-                                if (refundEnabled) refundReference else null,
-                                refundEnabled,
-                                qtyByItemCode
-                            )
-                            closeReturnDialog()
-                        }
-                    },
-                    enabled = !historyBusy && canConfirmReturn() && canConfirmRefund
-                ) {
-                    Text("Confirmar")
-                }
-            },
-            dismissButton = {
-                TextButton(
-                    onClick = {
-                        if (!historyBusy) {
-                            closeReturnDialog()
-                        }
+                    if (!canConfirmReturn()) {
+                        Text(
+                            "Selecciona al menos un item.",
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodySmall
+                        )
                     }
-                ) {
-                    Text("Cancelar")
                 }
             }
-        )
+        }, confirmButton = {
+            TextButton(
+                onClick = {
+                    if (!historyBusy && returnInvoiceId != null) {
+                        onSubmitPartialReturn(
+                            returnInvoiceId!!,
+                            null,
+                            if (refundEnabled) refundMode else null,
+                            if (refundEnabled) refundReference else null,
+                            refundEnabled,
+                            qtyByItemCode
+                        )
+                        closeReturnDialog()
+                    }
+                }, enabled = !historyBusy && canConfirmReturn() && canConfirmRefund
+            ) {
+                Text("Confirmar")
+            }
+        }, dismissButton = {
+            TextButton(
+                onClick = {
+                    if (!historyBusy) {
+                        closeReturnDialog()
+                    }
+                }) {
+                Text("Cancelar")
+            }
+        })
     }
 
     if (showDialogs && showFullReturnDialog && fullReturnInvoiceId != null) {
@@ -3453,145 +3147,125 @@ private fun CustomerInvoiceHistoryContent(
         val canConfirmRefund =
             !refundEnabled || (hasRefundOptions && !missingRefundMode && !missingReference)
 
-        AlertDialog(
-            onDismissRequest = {
-                if (!historyBusy) {
-                    closeFullReturnDialog()
-                }
-            },
-            title = { Text("Retorno total") },
-            text = {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text("Factura: ${fullReturnInvoiceId!!}")
+        AlertDialog(onDismissRequest = {
+            if (!historyBusy) {
+                closeFullReturnDialog()
+            }
+        }, title = { Text("Retorno total") }, text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text("Factura: ${fullReturnInvoiceId!!}")
 
-                    Text(
-                        text = "Destino del monto devuelto",
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        ReturnDestination.entries.forEach { destination ->
-                            FilterChip(
-                                selected = fullReturnDestination == destination,
-                                onClick = { fullReturnDestination = destination },
-                                label = { Text(destination.label) }
-                            )
-                        }
+                Text(
+                    text = "Destino del monto devuelto",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    ReturnDestination.entries.forEach { destination ->
+                        FilterChip(
+                            selected = fullReturnDestination == destination,
+                            onClick = { fullReturnDestination = destination },
+                            label = { Text(destination.label) })
                     }
-                    Spacer(Modifier.height(6.dp))
+                }
+                Spacer(Modifier.height(6.dp))
 
-                    if (refundEnabled && refundOptions.isNotEmpty()) {
-                        var fullRefundModeExpanded by remember { mutableStateOf(false) }
-                        ExposedDropdownMenuBox(
+                if (refundEnabled && refundOptions.isNotEmpty()) {
+                    var fullRefundModeExpanded by remember { mutableStateOf(false) }
+                    ExposedDropdownMenuBox(
+                        expanded = fullRefundModeExpanded,
+                        onExpandedChange = { fullRefundModeExpanded = it }) {
+                        OutlinedTextField(
+                            value = fullRefundMode ?: "",
+                            onValueChange = { },
+                            modifier = Modifier.menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable)
+                                .fillMaxWidth(),
+                            label = { Text("Modo de reembolso (opcional)") },
+                            trailingIcon = {
+                                ExposedDropdownMenuDefaults.TrailingIcon(
+                                    expanded = fullRefundModeExpanded
+                                )
+                            },
+                            leadingIcon = {
+                                Icon(Icons.Default.Sell, contentDescription = null)
+                            },
+                            readOnly = true,
+                            singleLine = true,
+                            enabled = !historyBusy,
+                            supportingText = {
+                                Text("Vacío = solo nota de crédito.")
+                            })
+                        ExposedDropdownMenu(
                             expanded = fullRefundModeExpanded,
-                            onExpandedChange = { fullRefundModeExpanded = it }
-                        ) {
-                            OutlinedTextField(
-                                value = fullRefundMode ?: "",
-                                onValueChange = { },
-                                modifier = Modifier
-                                    .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable)
-                                    .fillMaxWidth(),
-                                label = { Text("Modo de reembolso (opcional)") },
-                                trailingIcon = {
-                                    ExposedDropdownMenuDefaults.TrailingIcon(
-                                        expanded = fullRefundModeExpanded
-                                    )
-                                },
-                                leadingIcon = {
-                                    Icon(Icons.Default.Sell, contentDescription = null)
-                                },
-                                readOnly = true,
-                                singleLine = true,
-                                enabled = !historyBusy,
-                                supportingText = {
-                                    Text("Vacío = solo nota de crédito.")
-                                }
-                            )
-                            ExposedDropdownMenu(
-                                expanded = fullRefundModeExpanded,
-                                onDismissRequest = { fullRefundModeExpanded = false }
-                            ) {
-                                refundOptions.forEach { option ->
-                                    DropdownMenuItem(
-                                        text = { Text(option) },
-                                        onClick = {
-                                            fullRefundMode = option
-                                            fullRefundModeExpanded = false
-                                        }
-                                    )
-                                }
+                            onDismissRequest = { fullRefundModeExpanded = false }) {
+                            refundOptions.forEach { option ->
+                                DropdownMenuItem(text = { Text(option) }, onClick = {
+                                    fullRefundMode = option
+                                    fullRefundModeExpanded = false
+                                })
                             }
                         }
                     }
-
-                    if (refundEnabled && refundOptions.isEmpty()) {
-                        Text(
-                            "No hay modos de pago disponibles para reembolsos.",
-                            color = MaterialTheme.colorScheme.error,
-                            style = MaterialTheme.typography.bodySmall
-                        )
-                    }
-
-                    if (refundEnabled && needsReference) {
-                        OutlinedTextField(
-                            value = fullRefundReference,
-                            onValueChange = { fullRefundReference = it },
-                            modifier = Modifier.fillMaxWidth(),
-                            label = { Text("Referencia (requerida)") },
-                            singleLine = true,
-                            enabled = !historyBusy
-                        )
-                    }
-
-                    if (refundEnabled) {
-                        Text(
-                            "El retorno genera una nota de crédito aplicable contra la factura original.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
                 }
-            },
-            confirmButton = {
-                Button(
-                    enabled = !historyBusy && canConfirmRefund,
-                    onClick = {
-                        val invoiceId = fullReturnInvoiceId ?: return@Button
-                        onAction(
-                            invoiceId,
-                            InvoiceCancellationAction.RETURN,
-                            fullRefundMode?.takeIf { it.isNotBlank() },
-                            fullRefundReference.takeIf { it.isNotBlank() },
-                            fullReturnDestination == ReturnDestination.RETURN
-                        )
-                        closeFullReturnDialog()
-                    }
-                ) { Text("Confirmar retorno") }
-            },
-            dismissButton = {
-                OutlinedButton(
-                    enabled = !historyBusy,
-                    onClick = { closeFullReturnDialog() }
-                ) { Text("Cerrar") }
+
+                if (refundEnabled && refundOptions.isEmpty()) {
+                    Text(
+                        "No hay modos de pago disponibles para reembolsos.",
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+
+                if (refundEnabled && needsReference) {
+                    OutlinedTextField(
+                        value = fullRefundReference,
+                        onValueChange = { fullRefundReference = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text("Referencia (requerida)") },
+                        singleLine = true,
+                        enabled = !historyBusy
+                    )
+                }
+
+                if (refundEnabled) {
+                    Text(
+                        "El retorno genera una nota de crédito aplicable contra la factura original.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             }
-        )
+        }, confirmButton = {
+            Button(
+                enabled = !historyBusy && canConfirmRefund, onClick = {
+                    val invoiceId = fullReturnInvoiceId ?: return@Button
+                    onAction(
+                        invoiceId,
+                        InvoiceCancellationAction.RETURN,
+                        fullRefundMode?.takeIf { it.isNotBlank() },
+                        fullRefundReference.takeIf { it.isNotBlank() },
+                        fullReturnDestination == ReturnDestination.RETURN
+                    )
+                    closeFullReturnDialog()
+                }) { Text("Confirmar retorno") }
+        }, dismissButton = {
+            OutlinedButton(
+                enabled = !historyBusy, onClick = { closeFullReturnDialog() }) { Text("Cerrar") }
+        })
     }
 
     Column(
-        modifier = modifier,
-        verticalArrangement = Arrangement.spacedBy(14.dp)
+        modifier = modifier, verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Surface(
-                color = MaterialTheme.colorScheme.surfaceVariant,
-                shape = CircleShape
+                color = MaterialTheme.colorScheme.surfaceVariant, shape = CircleShape
             ) {
                 Text(
                     text = customer.customerName.take(1).uppercase(),
@@ -3618,32 +3292,35 @@ private fun CustomerInvoiceHistoryContent(
                     is CustomerInvoiceHistoryState.Error -> "Historial no disponible"
                     else -> "Historial de facturas"
                 }
-                Text(
-                    text = subtitle,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                Row {
+                    Text(
+                        text = subtitle,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        text = " - Total pendiente: ",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             }
         }
         Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+            modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             HistoryRangeChip(
                 label = "7 días",
                 selected = selectedRangeDays == 7,
-                onClick = { selectedRangeDays = 7 }
-            )
+                onClick = { selectedRangeDays = 7 })
             HistoryRangeChip(
                 label = "30 días",
                 selected = selectedRangeDays == 30,
-                onClick = { selectedRangeDays = 30 }
-            )
+                onClick = { selectedRangeDays = 30 })
             HistoryRangeChip(
                 label = "90 días",
                 selected = selectedRangeDays == 90,
-                onClick = { selectedRangeDays = 90 }
-            )
+                onClick = { selectedRangeDays = 90 })
         }
         if (historyState is CustomerInvoiceHistoryState.Success) {
             val invoices = historyState.invoices.filter {
@@ -3671,9 +3348,7 @@ private fun CustomerInvoiceHistoryContent(
                     modifier = Modifier.weight(1f)
                 )
                 HistoryStatChip(
-                    label = "Pagadas",
-                    value = paidCount.toString(),
-                    modifier = Modifier.weight(1f)
+                    label = "Pagadas", value = paidCount.toString(), modifier = Modifier.weight(1f)
                 )
             }
         }
@@ -3722,9 +3397,7 @@ private fun CustomerInvoiceHistoryContent(
                         cashboxManager = cashboxManager
                     )
                     LazyColumn(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .heightIn(max = 360.dp),
+                        modifier = Modifier.fillMaxWidth().heightIn(max = 360.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp),
                         contentPadding = PaddingValues(bottom = 16.dp)
                     ) {
@@ -3749,8 +3422,7 @@ private fun CustomerInvoiceHistoryContent(
                                 },
                                 onPartialReturn = { invoiceId ->
                                     openPartialReturn(invoiceId)
-                                }
-                            )
+                                })
                         }
                     }
                 }
@@ -3762,9 +3434,7 @@ private fun CustomerInvoiceHistoryContent(
 
 @Composable
 private fun HistoryStatChip(
-    label: String,
-    value: String,
-    modifier: Modifier = Modifier
+    label: String, value: String, modifier: Modifier = Modifier
 ) {
     Surface(
         modifier = modifier,
@@ -3791,15 +3461,10 @@ private fun HistoryStatChip(
 
 @Composable
 private fun HistoryRangeChip(
-    label: String,
-    selected: Boolean,
-    onClick: () -> Unit
+    label: String, selected: Boolean, onClick: () -> Unit
 ) {
     FilterChip(
-        selected = selected,
-        onClick = onClick,
-        label = { Text(label) }
-    )
+        selected = selected, onClick = onClick, label = { Text(label) })
 }
 
 @Composable
@@ -3809,55 +3474,49 @@ private fun InvoiceHistorySummary(
     supportedCurrencies: List<String>,
     cashboxManager: CashBoxManager
 ) {
-    val baseCurrency = normalizeCurrency(invoices.firstOrNull()?.partyAccountCurrency)
-        ?: normalizeCurrency(posBaseCurrency)
-    val invoiceCurrencies = invoices.mapNotNull {
-        normalizeCurrency(it.currency) ?: baseCurrency
-    }.distinct()
-    val singleInvoiceCurrency = invoiceCurrencies.takeIf { it.size == 1 }?.first()
-    val totalBase = invoices.sumOf { it.outstandingAmount }
-    val totalInvoice = singleInvoiceCurrency
-        ?.takeIf { !it.equals(baseCurrency, ignoreCase = true) }
-        ?.let { invoiceCurrency ->
-            invoices.sumOf { invoice ->
-                toInvoiceAmountFromBase(
-                    baseAmount = invoice.outstandingAmount,
-                    invoiceCurrency = invoiceCurrency,
-                    baseCurrency = baseCurrency,
-                    conversionRate = invoice.conversionRate ?: invoice.customExchangeRate
-                )
-            }
-        }
+    val posCurrency = normalizeCurrency(posBaseCurrency)
+    val baseCurrency =
+        normalizeCurrency(invoices.firstOrNull()?.partyAccountCurrency) ?: posCurrency
+    val totalBase = invoices.sumOf { it.baseOutstandingAmount ?: it.outstandingAmount }
+    var totalPos by remember { mutableStateOf<Double?>(null) }
 
-    if (totalBase > 0.0 || (totalInvoice != null && totalInvoice > 0.0)) {
+    LaunchedEffect(baseCurrency, posCurrency, totalBase) {
+        if (baseCurrency.equals(posCurrency, ignoreCase = true)) {
+            totalPos = totalBase
+        } else {
+            val rate = cashboxManager.resolveExchangeRateBetween(
+                fromCurrency = baseCurrency,
+                toCurrency = posCurrency,
+                allowNetwork = false
+            )
+            totalPos = rate?.takeIf { it > 0.0 }?.let { totalBase * it }
+        }
+    }
+
+    if (totalBase > 0.0 || (totalPos != null && totalPos!! > 0.0)) {
         Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(
-                    MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
-                    RoundedCornerShape(12.dp)
-                )
-                .padding(12.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp)
+            modifier = Modifier.fillMaxWidth().background(
+                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+                RoundedCornerShape(12.dp)
+            ).padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
+                modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Text(baseCurrency, style = MaterialTheme.typography.labelSmall)
+                Text(posCurrency, style = MaterialTheme.typography.labelSmall)
                 Text(
-                    formatCurrency(baseCurrency, totalBase),
+                    formatCurrency(posCurrency, totalPos ?: totalBase),
                     style = MaterialTheme.typography.labelMedium
                 )
             }
-            if (totalInvoice != null && singleInvoiceCurrency != null) {
+            if (!baseCurrency.equals(posCurrency, ignoreCase = true)) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    Text(singleInvoiceCurrency, style = MaterialTheme.typography.labelSmall)
+                    Text(baseCurrency, style = MaterialTheme.typography.labelSmall)
                     Text(
-                        formatCurrency(singleInvoiceCurrency, totalInvoice),
+                        formatCurrency(baseCurrency, totalBase),
                         style = MaterialTheme.typography.labelMedium
                     )
                 }
@@ -3877,29 +3536,33 @@ private fun InvoiceHistoryRow(
     onReturnTotal: (String) -> Unit,
     onPartialReturn: (String) -> Unit = {}
 ) {
-    val baseCurrency = normalizeCurrency(invoice.partyAccountCurrency)
-        ?: normalizeCurrency(posBaseCurrency)
-    val invoiceCurrency = normalizeCurrency(invoice.currency) ?: baseCurrency
+    val posCurrency = normalizeCurrency(posBaseCurrency)
+    val baseCurrency =
+        normalizeCurrency(invoice.partyAccountCurrency) ?: posCurrency
+    val invoiceCurrency = normalizeCurrency(invoice.currency) ?: posCurrency
     val conversionRate = invoice.conversionRate ?: invoice.customExchangeRate
-    val baseTotal = toBaseAmount(
+    val baseTotal = invoice.baseGrandTotal ?: toBaseAmount(
         amount = invoice.total,
         invoiceCurrency = invoiceCurrency,
         baseCurrency = baseCurrency,
         conversionRate = conversionRate
     )
-    val invoiceTotal = toInvoiceAmountFromBase(
-        baseAmount = baseTotal,
-        invoiceCurrency = invoiceCurrency,
-        baseCurrency = baseCurrency,
-        conversionRate = conversionRate
-    )
-    val baseOutstanding = invoice.outstandingAmount
-    val invoiceOutstanding = toInvoiceAmountFromBase(
-        baseAmount = baseOutstanding,
-        invoiceCurrency = invoiceCurrency,
-        baseCurrency = baseCurrency,
-        conversionRate = conversionRate
-    )
+    val baseOutstanding = invoice.baseOutstandingAmount ?: invoice.outstandingAmount
+    var rateBaseToPos by remember { mutableStateOf<Double?>(null) }
+    LaunchedEffect(baseCurrency, posCurrency) {
+        if (baseCurrency.equals(posCurrency, ignoreCase = true)) {
+            rateBaseToPos = 1.0
+        } else {
+            rateBaseToPos = cashboxManager.resolveExchangeRateBetween(
+                fromCurrency = baseCurrency,
+                toCurrency = posCurrency,
+                allowNetwork = false
+            )
+        }
+    }
+    val posTotal = rateBaseToPos?.takeIf { it > 0.0 }?.let { baseTotal * it } ?: baseTotal
+    val posOutstanding =
+        rateBaseToPos?.takeIf { it > 0.0 }?.let { baseOutstanding * it } ?: baseOutstanding
     val statusLabel = invoice.status ?: "Sin estado"
     val normalizedStatus = invoice.status?.trim()?.lowercase()
     val hasPayments = invoice.paidAmount > 0.0 || invoice.payments.any { it.amount > 0.0 }
@@ -3916,9 +3579,7 @@ private fun InvoiceHistoryRow(
         else -> MaterialTheme.colorScheme.surfaceVariant to MaterialTheme.colorScheme.onSurfaceVariant
     }
     Surface(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(14.dp),
-        tonalElevation = 1.dp
+        modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp), tonalElevation = 1.dp
     ) {
         Column(modifier = Modifier.padding(14.dp)) {
             Row(
@@ -3947,8 +3608,7 @@ private fun InvoiceHistoryRow(
                         )
                     }
                     Surface(
-                        color = statusBg,
-                        shape = RoundedCornerShape(10.dp)
+                        color = statusBg, shape = RoundedCornerShape(10.dp)
                     ) {
                         Text(
                             text = statusLabel,
@@ -3961,8 +3621,7 @@ private fun InvoiceHistoryRow(
             }
             Spacer(Modifier.height(8.dp))
             Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
+                modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Column {
                     Text(
@@ -3970,18 +3629,15 @@ private fun InvoiceHistoryRow(
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                    val primaryTotal = baseTotal
                     Text(
-                        formatCurrency(baseCurrency, primaryTotal),
+                        formatCurrency(posCurrency, posTotal),
                         style = MaterialTheme.typography.titleSmall
                     )
-                    if (!invoiceCurrency.equals(baseCurrency, ignoreCase = true)) {
-                        Text(
-                            formatCurrency(invoiceCurrency, invoiceTotal),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
+                    Text(
+                        formatCurrency(baseCurrency, baseTotal),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
                 Column(horizontalAlignment = Alignment.End) {
                     Text(
@@ -3989,21 +3645,17 @@ private fun InvoiceHistoryRow(
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                    val primaryOutstanding = baseOutstanding
                     Text(
-                        formatCurrency(baseCurrency, primaryOutstanding),
+                        formatCurrency(posCurrency, posOutstanding),
                         style = MaterialTheme.typography.titleSmall,
-                        color = if (invoice.outstandingAmount > 0.0)
-                            MaterialTheme.colorScheme.error
+                        color = if (invoice.outstandingAmount > 0.0) MaterialTheme.colorScheme.error
                         else MaterialTheme.colorScheme.onSurface
                     )
-                    if (!invoiceCurrency.equals(baseCurrency, ignoreCase = true)) {
-                        Text(
-                            formatCurrency(invoiceCurrency, invoiceOutstanding),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
+                    Text(
+                        formatCurrency(baseCurrency, baseOutstanding),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
             }
             Spacer(Modifier.height(10.dp))
@@ -4019,8 +3671,7 @@ private fun InvoiceHistoryRow(
                     ) {
                         if (isBusy) {
                             CircularProgressIndicator(
-                                modifier = Modifier.size(16.dp),
-                                strokeWidth = 2.dp
+                                modifier = Modifier.size(16.dp), strokeWidth = 2.dp
                             )
                         } else {
                             Text("Cancelar")
@@ -4060,28 +3711,21 @@ fun requiresReference(option: POSPaymentModeOption?): Boolean {
 }
 
 private fun toBaseAmount(
-    amount: Double,
-    invoiceCurrency: String,
-    baseCurrency: String,
-    conversionRate: Double?
+    amount: Double, invoiceCurrency: String, baseCurrency: String, conversionRate: Double?
 ): Double {
     if (invoiceCurrency.equals(baseCurrency, ignoreCase = true)) return amount
     return if (conversionRate != null && conversionRate > 0.0) amount * conversionRate else amount
 }
 
 private fun toInvoiceAmountFromBase(
-    baseAmount: Double,
-    invoiceCurrency: String,
-    baseCurrency: String,
-    conversionRate: Double?
+    baseAmount: Double, invoiceCurrency: String, baseCurrency: String, conversionRate: Double?
 ): Double {
     if (invoiceCurrency.equals(baseCurrency, ignoreCase = true)) return baseAmount
     return if (conversionRate != null && conversionRate > 0.0) baseAmount / conversionRate else baseAmount
 }
 
 private enum class ReturnDestination(val label: String) {
-    RETURN("Reembolso"),
-    CREDIT("Crédito a favor")
+    RETURN("Reembolso"), CREDIT("Crédito a favor")
 }
 
 @Composable
@@ -4093,39 +3737,33 @@ private fun CustomerOutstandingSummary(
     cashboxManager: CashBoxManager
 ) {
     val strings = LocalAppStrings.current
-    val baseCurrency = normalizeCurrency(invoices.firstOrNull()?.partyAccountCurrency)
-        ?: normalizeCurrency(posBaseCurrency)
-    val invoiceCurrencies = invoices.mapNotNull {
-        normalizeCurrency(it.currency) ?: baseCurrency
-    }.distinct()
-    val singleInvoiceCurrency = invoiceCurrencies.takeIf { it.size == 1 }?.first()
+    val posCurrency = normalizeCurrency(posBaseCurrency)
+    val baseCurrency =
+        normalizeCurrency(invoices.firstOrNull()?.partyAccountCurrency) ?: posCurrency
     val totalBase = if (invoices.isNotEmpty()) {
-        invoices.sumOf { it.outstandingAmount }
+        invoices.sumOf { it.baseOutstandingAmount ?: it.outstandingAmount }
     } else {
         customer.totalPendingAmount ?: customer.currentBalance ?: 0.0
     }
-    val totalInvoice = singleInvoiceCurrency
-        ?.takeIf { !it.equals(baseCurrency, ignoreCase = true) }
-        ?.let { invoiceCurrency ->
-            invoices.sumOf { invoice ->
-                toInvoiceAmountFromBase(
-                    baseAmount = invoice.outstandingAmount,
-                    invoiceCurrency = invoiceCurrency,
-                    baseCurrency = baseCurrency,
-                    conversionRate = invoice.conversionRate ?: invoice.customExchangeRate
-                )
-            }
+    var totalPos by remember { mutableStateOf<Double?>(null) }
+    LaunchedEffect(baseCurrency, posCurrency, totalBase) {
+        if (baseCurrency.equals(posCurrency, ignoreCase = true)) {
+            totalPos = totalBase
+        } else {
+            val rate = cashboxManager.resolveExchangeRateBetween(
+                fromCurrency = baseCurrency,
+                toCurrency = posCurrency,
+                allowNetwork = false
+            )
+            totalPos = rate?.takeIf { it > 0.0 }?.let { totalBase * it }
         }
+    }
 
     Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(
-                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                RoundedCornerShape(12.dp)
-            )
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
+        modifier = Modifier.fillMaxWidth().background(
+            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+            RoundedCornerShape(12.dp)
+        ).padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         Text(
             text = strings.customer.outstandingSummaryTitle,
@@ -4133,8 +3771,7 @@ private fun CustomerOutstandingSummary(
             fontWeight = FontWeight.SemiBold
         )
         Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween
+            modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween
         ) {
             Text(strings.customer.outstandingSummaryInvoicesLabel)
             Text("${customer.pendingInvoices ?: 0}")
@@ -4143,19 +3780,18 @@ private fun CustomerOutstandingSummary(
             Text(strings.customer.outstandingSummaryAmountLabel)
         } else {
             Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
+                modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Text(baseCurrency)
-                Text(formatCurrency(baseCurrency, totalBase))
+                Text(posCurrency)
+                Text(formatCurrency(posCurrency, totalPos ?: totalBase))
             }
-            if (totalInvoice != null && singleInvoiceCurrency != null) {
+            if (!baseCurrency.equals(posCurrency, ignoreCase = true)) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    Text(singleInvoiceCurrency)
-                    Text(formatCurrency(singleInvoiceCurrency, totalInvoice))
+                    Text(baseCurrency)
+                    Text(formatCurrency(baseCurrency, totalBase))
                 }
             }
         }
@@ -4163,9 +3799,7 @@ private fun CustomerOutstandingSummary(
 }
 
 private fun handleQuickAction(
-    actions: CustomerAction,
-    customer: CustomerBO,
-    actionType: CustomerQuickActionType
+    actions: CustomerAction, customer: CustomerBO, actionType: CustomerQuickActionType
 ) {
     when (actionType) {
         CustomerQuickActionType.PendingInvoices -> actions.onViewPendingInvoices(customer)
@@ -4248,13 +3882,9 @@ fun Modifier.shimmerBackground(
 ): Modifier = composed {
     val transition = rememberInfiniteTransition(label = "shimmerTransition")
     val translateAnim by transition.animateFloat(
-        initialValue = 0f,
-        targetValue = gradientWidth,
-        animationSpec = infiniteRepeatable(
-            tween(durationMillis = durationMillis, easing = FastOutSlowInEasing),
-            RepeatMode.Restart
-        ),
-        label = "shimmerTranslateAnim"
+        initialValue = 0f, targetValue = gradientWidth, animationSpec = infiniteRepeatable(
+            tween(durationMillis = durationMillis, easing = FastOutSlowInEasing), RepeatMode.Restart
+        ), label = "shimmerTranslateAnim"
     )
 
     val shimmerColors = listOf(
@@ -4268,8 +3898,7 @@ fun Modifier.shimmerBackground(
             colors = shimmerColors,
             start = Offset(translateAnim - gradientWidth, translateAnim - gradientWidth),
             end = Offset(translateAnim, translateAnim)
-        ),
-        shape = shape
+        ), shape = shape
     )
 }
 

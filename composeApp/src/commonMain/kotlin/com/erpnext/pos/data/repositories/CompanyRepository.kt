@@ -21,6 +21,7 @@ class CompanyRepository(
     private val api: APIService,
     private val companyDao: CompanyDao,
 ) : ICompanyRepository {
+
     override suspend fun getCompanyInfo(): CompanyBO {
         val companies = api.getCompanyInfo()
         companies.forEach { companyDao.insert(it.toEntity()) }

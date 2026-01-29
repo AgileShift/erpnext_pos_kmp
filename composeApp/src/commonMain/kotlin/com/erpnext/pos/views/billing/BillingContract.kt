@@ -46,6 +46,7 @@ sealed interface BillingState {
 
         // Cart-related state
         val currency: String?,
+        val baseCurrency: String? = null,
         val exchangeRate: Double?,
         val cartItems: List<CartItem> = emptyList(),
         val subtotal: Double = 0.0,

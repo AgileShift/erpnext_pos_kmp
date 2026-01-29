@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.animation.AnimatedContent
@@ -29,7 +28,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Business
-import androidx.compose.material.icons.outlined.Logout
 import androidx.compose.material.icons.outlined.Print
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Settings
@@ -55,6 +53,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.DpOffset
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.material.icons.automirrored.outlined.Logout
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.rememberNavController
@@ -113,7 +112,7 @@ private fun defaultTitleForRoute(route: String): String {
         route == NavRoute.Home.path -> "Inicio"
         route == NavRoute.Inventory.path -> "Inventario"
         route == NavRoute.Billing.path -> "Ventas"
-        route == NavRoute.BillingLab.path -> "POS Lab"
+        route == NavRoute.Billing.path -> "POS Lab"
         route == NavRoute.Customer.path -> "Clientes"
         route == NavRoute.Credits.path -> "Créditos"
         route == NavRoute.Quotation.path -> "Cotizaciones"
@@ -210,12 +209,11 @@ fun AppNavigation() {
         NavRoute.Login.path,
         NavRoute.Inventory.path,
         NavRoute.Billing.path,
-        NavRoute.BillingLab.path,
         NavRoute.Customer.path
     )
-    val showBackDefault = when {
-        currentRoute in noBackRoutes -> false
-        currentRoute == NavRoute.Settings.path ->
+    val showBackDefault = when (currentRoute) {
+        in noBackRoutes -> false
+        NavRoute.Settings.path ->
             settingsFromMenu && previousRoute != null &&
                     previousRoute !in listOf(
                 NavRoute.Settings.path,
@@ -242,7 +240,7 @@ fun AppNavigation() {
     val cashier = posContext?.cashier
     val cashierDisplayName = listOfNotNull(
         cashier?.firstName?.takeIf { it.isNotBlank() },
-        cashier?.lastName?.takeIf { it.isNotBlank() == true }
+        cashier?.lastName?.takeIf { it.isNotBlank() }
     ).joinToString(" ").ifBlank {
         cashier?.name?.takeIf { it.isNotBlank() }
             ?: cashier?.username?.takeIf { it.isNotBlank() }
@@ -258,12 +256,6 @@ fun AppNavigation() {
         .ifBlank { "C" }
     val companyName = posContext?.company?.takeIf { it.isNotBlank() }
     val instanceName = instanceLabel(currentSite)
-
-    LaunchedEffect(currentRoute) {
-        if (currentRoute != NavRoute.Settings.path) {
-            settingsFromMenu = false
-        }
-    }
 
     AppTheme(theme = appTheme, themeMode = appThemeMode) {
         ProvideAppStrings {
@@ -312,40 +304,6 @@ fun AppNavigation() {
                                                     color = MaterialTheme.colorScheme.onSurface,
                                                     style = MaterialTheme.typography.titleLarge
                                                 )
-                                                AnimatedVisibility(
-                                                    visible = subtitle.isNullOrBlank(),
-                                                    enter = fadeIn(tween(180)) + slideInVertically(
-                                                        animationSpec = tween(
-                                                            180,
-                                                            easing = FastOutSlowInEasing
-                                                        ),
-                                                        initialOffsetY = { it / 3 }
-                                                    ),
-                                                    exit = fadeOut(tween(180)) + slideOutVertically(
-                                                        animationSpec = tween(
-                                                            120,
-                                                            easing = FastOutSlowInEasing
-                                                        ),
-                                                        targetOffsetY = { it / 4 }
-                                                    )
-                                                ) {
-                                                    instanceLabel(currentSite)?.let { site ->
-                                                        Surface(
-                                                            color = MaterialTheme.colorScheme.surfaceVariant,
-                                                            shape = MaterialTheme.shapes.small
-                                                        ) {
-                                                            Text(
-                                                                text = site,
-                                                                modifier = Modifier.padding(
-                                                                    horizontal = 8.dp,
-                                                                    vertical = 4.dp
-                                                                ),
-                                                                style = MaterialTheme.typography.labelSmall,
-                                                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                                                            )
-                                                        }
-                                                    }
-                                                }
                                                 AnimatedVisibility(
                                                     visible = !subtitle.isNullOrBlank(),
                                                     enter = fadeIn(tween(200)) + slideInVertically(
@@ -411,7 +369,7 @@ fun AppNavigation() {
                                             }
                                         }
                                         val showNewSale = (currentRoute == NavRoute.Billing.path ||
-                                                currentRoute == NavRoute.BillingLab.path) &&
+                                                currentRoute == NavRoute.Billing.path) &&
                                                 !subtitle.isNullOrBlank()
                                         AnimatedVisibility(
                                             visible = showNewSale,
@@ -504,7 +462,9 @@ fun AppNavigation() {
                                                             vertical = 8.dp
                                                         ),
                                                         verticalAlignment = Alignment.CenterVertically,
-                                                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                                        horizontalArrangement = Arrangement.spacedBy(
+                                                            8.dp
+                                                        )
                                                     ) {
                                                         Icon(
                                                             imageVector = Icons.Outlined.Business,
@@ -582,7 +542,9 @@ fun AppNavigation() {
                                                 }
                                                 DropdownMenu(
                                                     expanded = profileMenuExpanded,
-                                                    onDismissRequest = { profileMenuExpanded = false },
+                                                    onDismissRequest = {
+                                                        profileMenuExpanded = false
+                                                    },
                                                     offset = DpOffset(x = 0.dp, y = 8.dp)
                                                 ) {
                                                     Column(
@@ -613,7 +575,7 @@ fun AppNavigation() {
                                                             )
                                                         }
                                                     }
-                                                    Divider()
+                                                    HorizontalDivider()
                                                     DropdownMenuItem(
                                                         text = { Text("Configuración") },
                                                         leadingIcon = {
@@ -624,7 +586,6 @@ fun AppNavigation() {
                                                         },
                                                         onClick = {
                                                             profileMenuExpanded = false
-                                                            settingsFromMenu = true
                                                             navController.navigateSingle(NavRoute.Settings.path)
                                                         }
                                                     )
@@ -654,19 +615,23 @@ fun AppNavigation() {
                                                             navController.navigateSingle(NavRoute.Login.path)
                                                         }
                                                     )
-                                                    Divider()
+                                                    HorizontalDivider()
                                                     DropdownMenuItem(
                                                         text = { Text("Cerrar sesión") },
                                                         leadingIcon = {
                                                             Icon(
-                                                                imageVector = Icons.Outlined.Logout,
+                                                                imageVector = Icons.AutoMirrored.Outlined.Logout,
                                                                 contentDescription = null
                                                             )
                                                         },
                                                         onClick = {
                                                             profileMenuExpanded = false
                                                             scope.launch {
-                                                                runCatching { logoutUseCase.invoke(null) }
+                                                                runCatching {
+                                                                    logoutUseCase.invoke(
+                                                                        null
+                                                                    )
+                                                                }
                                                             }
                                                             navController.navigateSingle(NavRoute.Login.path)
                                                         }
@@ -716,8 +681,8 @@ fun AppNavigation() {
                                                 NavRoute.Home.path
                                             )
                                             //is NavRoute.Billing -> navController.navigateTopLevel(NavRoute.Billing.path)
-                                            is NavRoute.BillingLab -> navController.navigateSingle(
-                                                NavRoute.BillingLab.path
+                                            is NavRoute.Billing -> navController.navigateSingle(
+                                                NavRoute.Billing.path
                                             )
 
                                             is NavRoute.Credits -> navController.navigateSingle(

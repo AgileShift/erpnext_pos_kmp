@@ -9,6 +9,25 @@ class ExchangeRateRepository(
     private val localSource: ExchangeRateLocalSource,
     private val api: APIService
 ) {
+    suspend fun getEnabledCurrencyCodes(): List<String> {
+        return api.getEnabledCurrencies()
+            .mapNotNull { it.name.trim().uppercase().takeIf { code -> code.isNotBlank() } }
+            .distinct()
+    }
+
+    suspend fun syncRatesForCurrencies(codes: Collection<String>) {
+        val normalized = codes.mapNotNull { it.trim().uppercase().takeIf { c -> c.isNotBlank() } }
+            .distinct()
+        if (normalized.size <= 1) return
+        for (i in 0 until normalized.size) {
+            for (j in i + 1 until normalized.size) {
+                val from = normalized[i]
+                val to = normalized[j]
+                runCatching { getRate(from, to) }
+            }
+        }
+    }
+
     suspend fun getLocalRate(fromCurrency: String, toCurrency: String): Double? {
         val normalizedFrom = fromCurrency.trim().uppercase()
         val normalizedTo = toCurrency.trim().uppercase()
@@ -31,6 +50,9 @@ class ExchangeRateRepository(
         val fetched = fetchFromApi(normalizedFrom, normalizedTo)
         if (fetched != null) {
             localSource.save(ExchangeRateEntity.fromPair(normalizedFrom, normalizedTo, fetched))
+            if (fetched > 0.0) {
+                localSource.save(ExchangeRateEntity.fromPair(normalizedTo, normalizedFrom, 1 / fetched))
+            }
             return fetched
         }
 

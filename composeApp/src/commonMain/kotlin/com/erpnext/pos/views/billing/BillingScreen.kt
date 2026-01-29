@@ -419,7 +419,17 @@ private fun BillingLabContent(
     val accent = colors.primary
     val background = colors.background
     val leftPanelBg = colors.surfaceVariant
-    val baseCurrency = state.currency ?: "USD"
+    val invoiceCurrency = state.currency?.trim()?.uppercase().orEmpty().ifBlank { "USD" }
+    val baseCurrency = state.baseCurrency?.trim()?.uppercase().orEmpty().ifBlank { invoiceCurrency }
+    val rateBaseToInvoice = when {
+        baseCurrency.equals(invoiceCurrency, ignoreCase = true) -> 1.0
+        else -> state.exchangeRateByCurrency[baseCurrency]?.takeIf { it > 0.0 }
+    }
+    fun toBase(amount: Double): Double? {
+        if (rateBaseToInvoice == null || rateBaseToInvoice <= 0.0) return null
+        if (baseCurrency.equals(invoiceCurrency, ignoreCase = true)) return null
+        return amount / rateBaseToInvoice
+    }
 
     val categories =
         state.productSearchResults.mapNotNull { it.itemGroup.takeIf { g -> g.isNotBlank() } }
@@ -488,7 +498,7 @@ private fun BillingLabContent(
                     items(filteredProducts, key = { it.itemCode }) { item ->
                         LabProductCard(
                             item = item,
-                            baseCurrency = baseCurrency,
+                            baseCurrency = invoiceCurrency,
                             exchangeRateByCurrency = state.exchangeRateByCurrency,
                             accent = accent,
                             onClick = { action.onProductAdded(item) }
@@ -559,7 +569,7 @@ private fun BillingLabContent(
                             items(state.cartItems, key = { it.itemCode }) { item ->
                                 LabCartItem(
                                     item = item,
-                                    baseCurrency = baseCurrency,
+                                    baseCurrency = invoiceCurrency,
                                     exchangeRateByCurrency = state.exchangeRateByCurrency,
                                     onUpdateQuantity = { qty ->
                                         action.onQuantityChanged(item.itemCode, qty)
@@ -597,17 +607,47 @@ private fun BillingLabContent(
                                 color = colors.onSurfaceVariant
                             )
                             HorizontalDivider(color = colors.outlineVariant, thickness = 1.dp)
-                            PaymentTotalsRow("Subtotal", baseCurrency, state.subtotal)
+                            PaymentTotalsRow(
+                                "Subtotal",
+                                invoiceCurrency,
+                                state.subtotal,
+                                secondaryCurrencyCode = baseCurrency,
+                                secondaryAmount = toBase(state.subtotal)
+                            )
                             if (state.taxes > 0.0) {
-                                PaymentTotalsRow("Impuestos", baseCurrency, state.taxes)
+                                PaymentTotalsRow(
+                                    "Impuestos",
+                                    invoiceCurrency,
+                                    state.taxes,
+                                    secondaryCurrencyCode = baseCurrency,
+                                    secondaryAmount = toBase(state.taxes)
+                                )
                             }
                             if (state.discount > 0.0) {
-                                PaymentTotalsRow("Descuento", baseCurrency, -state.discount)
+                                PaymentTotalsRow(
+                                    "Descuento",
+                                    invoiceCurrency,
+                                    -state.discount,
+                                    secondaryCurrencyCode = baseCurrency,
+                                    secondaryAmount = toBase(-state.discount)
+                                )
                             }
                             if (state.shippingAmount > 0.0) {
-                                PaymentTotalsRow("Envío", baseCurrency, state.shippingAmount)
+                                PaymentTotalsRow(
+                                    "Envío",
+                                    invoiceCurrency,
+                                    state.shippingAmount,
+                                    secondaryCurrencyCode = baseCurrency,
+                                    secondaryAmount = toBase(state.shippingAmount)
+                                )
                             }
-                            PaymentTotalsRow("Total", baseCurrency, state.total)
+                            PaymentTotalsRow(
+                                "Total",
+                                invoiceCurrency,
+                                state.total,
+                                secondaryCurrencyCode = baseCurrency,
+                                secondaryAmount = toBase(state.total)
+                            )
                         }
                     }
 
@@ -648,7 +688,17 @@ private fun BillingLabCheckoutStep(
     modifier: Modifier = Modifier
 ) {
     val colors = MaterialTheme.colorScheme
-    val baseCurrency = state.currency ?: "USD"
+    val invoiceCurrency = state.currency?.trim()?.uppercase().orEmpty().ifBlank { "USD" }
+    val baseCurrency = state.baseCurrency?.trim()?.uppercase().orEmpty().ifBlank { invoiceCurrency }
+    val rateBaseToInvoice = when {
+        baseCurrency.equals(invoiceCurrency, ignoreCase = true) -> 1.0
+        else -> state.exchangeRateByCurrency[baseCurrency]?.takeIf { it > 0.0 }
+    }
+    fun toBase(amount: Double): Double? {
+        if (rateBaseToInvoice == null || rateBaseToInvoice <= 0.0) return null
+        if (baseCurrency.equals(invoiceCurrency, ignoreCase = true)) return null
+        return amount / rateBaseToInvoice
+    }
     Column(modifier = modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
         // Encabezado principal del checkout.
         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -685,24 +735,66 @@ private fun BillingLabCheckoutStep(
                         color = colors.onSurfaceVariant
                     )
                     Text(
-                        text = formatAmount(baseCurrency.toCurrencySymbol(), state.total),
+                        text = formatAmount(invoiceCurrency.toCurrencySymbol(), state.total),
                         style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.ExtraBold),
                         color = colors.onSurface
                     )
                     HorizontalDivider(color = colors.outlineVariant, thickness = (1.2).dp)
-                    PaymentTotalsRow("Pagado", baseCurrency, state.paidAmountBase)
-                    PaymentTotalsRow("Pendiente", baseCurrency, state.balanceDueBase)
-                    PaymentTotalsRow("Cambio", baseCurrency, state.changeDueBase)
+                    PaymentTotalsRow(
+                        "Pagado",
+                        invoiceCurrency,
+                        state.paidAmountBase,
+                        secondaryCurrencyCode = baseCurrency,
+                        secondaryAmount = toBase(state.paidAmountBase)
+                    )
+                    PaymentTotalsRow(
+                        "Pendiente",
+                        invoiceCurrency,
+                        state.balanceDueBase,
+                        secondaryCurrencyCode = baseCurrency,
+                        secondaryAmount = toBase(state.balanceDueBase)
+                    )
+                    PaymentTotalsRow(
+                        "Cambio",
+                        invoiceCurrency,
+                        state.changeDueBase,
+                        secondaryCurrencyCode = baseCurrency,
+                        secondaryAmount = toBase(state.changeDueBase)
+                    )
                     HorizontalDivider(color = colors.outlineVariant, thickness = (1.2).dp)
-                    PaymentTotalsRow("Subtotal", baseCurrency, state.subtotal)
+                    PaymentTotalsRow(
+                        "Subtotal",
+                        invoiceCurrency,
+                        state.subtotal,
+                        secondaryCurrencyCode = baseCurrency,
+                        secondaryAmount = toBase(state.subtotal)
+                    )
                     if (state.taxes > 0.0) {
-                        PaymentTotalsRow("Impuestos", baseCurrency, state.taxes)
+                        PaymentTotalsRow(
+                            "Impuestos",
+                            invoiceCurrency,
+                            state.taxes,
+                            secondaryCurrencyCode = baseCurrency,
+                            secondaryAmount = toBase(state.taxes)
+                        )
                     }
                     if (state.discount > 0.0) {
-                        PaymentTotalsRow("Descuento", baseCurrency, -state.discount)
+                        PaymentTotalsRow(
+                            "Descuento",
+                            invoiceCurrency,
+                            -state.discount,
+                            secondaryCurrencyCode = baseCurrency,
+                            secondaryAmount = toBase(-state.discount)
+                        )
                     }
                     if (state.shippingAmount > 0.0) {
-                        PaymentTotalsRow("Envío", baseCurrency, state.shippingAmount)
+                        PaymentTotalsRow(
+                            "Envío",
+                            invoiceCurrency,
+                            state.shippingAmount,
+                            secondaryCurrencyCode = baseCurrency,
+                            secondaryAmount = toBase(state.shippingAmount)
+                        )
                     }
                 }
             }
@@ -771,7 +863,7 @@ private fun BillingLabCheckoutStep(
                     )
                     PaymentSection(
                         state = state,
-                        baseCurrency = baseCurrency,
+                        baseCurrency = invoiceCurrency,
                         exchangeRateByCurrency = state.exchangeRateByCurrency,
                         paymentLines = state.paymentLines,
                         paymentModes = state.paymentModes,
@@ -1259,7 +1351,13 @@ private fun CustomerSelector(
 }
 
 @Composable
-private fun PaymentTotalsRow(label: String, symbol: String, amount: Double) {
+private fun PaymentTotalsRow(
+    label: String,
+    currencyCode: String,
+    amount: Double,
+    secondaryCurrencyCode: String? = null,
+    secondaryAmount: Double? = null
+) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween
@@ -1269,11 +1367,20 @@ private fun PaymentTotalsRow(label: String, symbol: String, amount: Double) {
             style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
-        Text(
-            text = formatAmount(symbol.toCurrencySymbol(), amount),
-            style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
-            color = MaterialTheme.colorScheme.onSurface
-        )
+        Column(horizontalAlignment = Alignment.End) {
+            Text(
+                text = formatAmount(currencyCode.toCurrencySymbol(), amount),
+                style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            if (secondaryCurrencyCode != null && secondaryAmount != null) {
+                Text(
+                    text = formatAmount(secondaryCurrencyCode.toCurrencySymbol(), secondaryAmount),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
     }
 }
 

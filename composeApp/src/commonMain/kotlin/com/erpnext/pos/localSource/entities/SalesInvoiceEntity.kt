@@ -86,6 +86,28 @@ data class SalesInvoiceEntity(
     var paidAmount: Double = 0.0,
     @ColumnInfo(name = "outstanding_amount")
     var outstandingAmount: Double = 0.0, // Saldo pendiente
+    @ColumnInfo(name = "base_total")
+    var baseTotal: Double? = null,
+    @ColumnInfo(name = "base_net_total")
+    var baseNetTotal: Double? = null,
+    @ColumnInfo(name = "base_total_taxes_and_charges")
+    var baseTotalTaxesAndCharges: Double? = null,
+    @ColumnInfo(name = "base_grand_total")
+    var baseGrandTotal: Double? = null,
+    @ColumnInfo(name = "base_rounding_adjustment")
+    var baseRoundingAdjustment: Double? = null,
+    @ColumnInfo(name = "base_rounded_total")
+    var baseRoundedTotal: Double? = null,
+    @ColumnInfo(name = "base_discount_amount")
+    var baseDiscountAmount: Double? = null,
+    @ColumnInfo(name = "base_paid_amount")
+    var basePaidAmount: Double? = null,
+    @ColumnInfo(name = "base_change_amount")
+    var baseChangeAmount: Double? = null,
+    @ColumnInfo(name = "base_write_off_amount")
+    var baseWriteOffAmount: Double? = null,
+    @ColumnInfo(name = "base_outstanding_amount")
+    var baseOutstandingAmount: Double? = null,
 
     // 📦 Contabilidad
     @ColumnInfo(name = "price_list")
