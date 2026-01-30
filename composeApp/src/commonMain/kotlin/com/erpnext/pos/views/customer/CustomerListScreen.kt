@@ -373,16 +373,8 @@ fun CustomerListScreen(
                                                     )
                                                 },
                                                 loadLocalInvoice = actions.loadInvoiceLocal,
-                                                onSubmitPartialReturn = actions.onInvoicePartialReturn,
-                                                onOpenPending = {
-                                                    rightPanelTab = CustomerPanelTab.Pending
-                                                },
-                                                onOpenHistory = {
-                                                    rightPanelTab = CustomerPanelTab.History
-                                                },
-                                                onOpenRegisterPayment = {
-                                                    rightPanelTab = CustomerPanelTab.Pending
-                                                })
+                                                onSubmitPartialReturn = actions.onInvoicePartialReturn
+                                            )
                                         }
                                     }
                                 } else {
@@ -739,14 +731,12 @@ private fun CustomerDetailPanel(
     customer: CustomerBO,
     paymentState: CustomerPaymentState,
     invoicesState: CustomerInvoicesState,
+    historyState: CustomerInvoiceHistoryState,
     supportedCurrencies: List<String>,
-    cashboxManager: CashBoxManager,
-    onOpenPending: () -> Unit,
-    onOpenHistory: () -> Unit,
-    onOpenRegisterPayment: () -> Unit
+    cashboxManager: CashBoxManager
 ) {
     val posCurrency = normalizeCurrency(paymentState.baseCurrency)
-    val baseCurrency = normalizeCurrency(paymentState.partyAccountCurrency)
+    val baseCurrency = posCurrency
     val pendingAmount =
         bd(customer.totalPendingAmount ?: customer.currentBalance ?: 0.0).moneyScale(2).toDouble(2)
     val displayCurrencies = remember(supportedCurrencies, posCurrency, baseCurrency) {
@@ -832,15 +822,66 @@ private fun CustomerDetailPanel(
             isCritical = (customer.pendingInvoices ?: 0) > 0
         )
 
-        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            FilledTonalButton(onClick = onOpenPending, modifier = Modifier.weight(1f)) {
-                Text("Pendientes")
-            }
-            OutlinedButton(onClick = onOpenHistory, modifier = Modifier.weight(1f)) {
-                Text("Historial")
-            }
-            OutlinedButton(onClick = onOpenRegisterPayment, modifier = Modifier.weight(1f)) {
-                Text("Registrar pago")
+        val historyInvoices =
+            (historyState as? CustomerInvoiceHistoryState.Success)?.invoices.orEmpty()
+        val recentInvoices = historyInvoices.filter { isWithinDays(it.postingDate, 90) }
+        val totalSpentBase = recentInvoices.sumOf {
+            val invoiceCurrency = normalizeCurrency(it.currency) ?: baseCurrency
+            toBaseAmount(it.total, invoiceCurrency, baseCurrency, it.conversionRate)
+        }
+        val avgTicket = if (recentInvoices.isNotEmpty()) {
+            totalSpentBase / recentInvoices.size
+        } else 0.0
+        val lastPurchase = recentInvoices.maxByOrNull {
+            parsePostingDate(it.postingDate) ?: LocalDate(1970, 1, 1)
+        }?.postingDate
+        val creditAvailable = customer.availableCredit
+
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            /*Text(
+                "Resumen inteligente",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold
+            )*/
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                item {
+                    SummaryStatChip(
+                        label = "Compras 90d",
+                        value = recentInvoices.size.toString()
+                    )
+                }
+                item {
+                    SummaryStatChip(
+                        label = "Total 90d",
+                        value = if (recentInvoices.isNotEmpty()) {
+                            formatCurrency(baseCurrency, totalSpentBase)
+                        } else {
+                            "—"
+                        }
+                    )
+                }
+                item {
+                    SummaryStatChip(
+                        label = "Ticket prom.",
+                        value = if (recentInvoices.isNotEmpty()) {
+                            formatCurrency(baseCurrency, avgTicket)
+                        } else {
+                            "—"
+                        }
+                    )
+                }
+                item {
+                    SummaryStatChip(
+                        label = "Última compra",
+                        value = lastPurchase ?: "—"
+                    )
+                }
+                item {
+                    SummaryStatChip(
+                        label = "Crédito disp.",
+                        value = creditAvailable?.let { formatCurrency(baseCurrency, it) } ?: "—"
+                    )
+                }
             }
         }
 
@@ -877,17 +918,18 @@ private fun CustomerRightPanel(
     loadLocalInvoice: suspend (String) -> SalesInvoiceWithItemsAndPayments?,
     onSubmitPartialReturn: (
         invoiceId: String, reason: String?, refundModeOfPayment: String?, refundReferenceNo: String?, applyRefund: Boolean, itemsToReturnByCode: Map<String, Double>
-    ) -> Unit,
-    onOpenPending: () -> Unit,
-    onOpenHistory: () -> Unit,
-    onOpenRegisterPayment: () -> Unit
+    ) -> Unit
 ) {
     val tabs = remember {
         listOf(CustomerPanelTab.Details, CustomerPanelTab.Pending, CustomerPanelTab.History)
     }
     val selectedIndex = tabs.indexOf(rightPanelTab).coerceAtLeast(0)
     Column(modifier = Modifier.fillMaxSize()) {
-        CustomerPanelHeader(customer = customer)
+        CustomerPanelHeader(
+            customer = customer,
+            cashboxManager = cashboxManager,
+            baseCurrency = paymentState.partyAccountCurrency
+        )
 
         PrimaryScrollableTabRow(
             selectedTabIndex = selectedIndex,
@@ -911,11 +953,9 @@ private fun CustomerRightPanel(
                             customer = customer,
                             paymentState = paymentState,
                             invoicesState = invoicesState,
+                            historyState = historyState,
                             supportedCurrencies = supportedCurrencies,
-                            cashboxManager = cashboxManager,
-                            onOpenPending = onOpenPending,
-                            onOpenHistory = onOpenHistory,
-                            onOpenRegisterPayment = onOpenRegisterPayment
+                            cashboxManager = cashboxManager
                         )
                     } else {
                         EmptyStateMessage(
@@ -974,8 +1014,40 @@ private fun CustomerRightPanel(
 
 @Composable
 private fun CustomerPanelHeader(
-    customer: CustomerBO?
+    customer: CustomerBO?,
+    cashboxManager: CashBoxManager,
+    baseCurrency: String
 ) {
+    val normalizedBase = normalizeCurrency(baseCurrency)
+    val pendingAmountRaw =
+        bd(customer?.totalPendingAmount ?: customer?.currentBalance ?: 0.0).moneyScale(2).toDouble(2)
+    val targetCurrencies = remember {
+        listOf("NIO", "USD").distinct()
+    }
+    var pendingByCurrency by remember { mutableStateOf<Map<String, Double>>(emptyMap()) }
+    LaunchedEffect(customer?.name, normalizedBase, pendingAmountRaw) {
+        if (customer == null) {
+            pendingByCurrency = emptyMap()
+            return@LaunchedEffect
+        }
+        val resolved = mutableMapOf<String, Double>()
+        targetCurrencies.forEach { currency ->
+            val target = normalizeCurrency(currency)
+            val converted = if (normalizedBase.equals(target, ignoreCase = true)) {
+                pendingAmountRaw
+            } else {
+                cashboxManager.resolveExchangeRateBetween(
+                    fromCurrency = normalizedBase,
+                    toCurrency = target,
+                    allowNetwork = false
+                )?.takeIf { it > 0.0 }?.let { rate -> pendingAmountRaw * rate }
+            }
+            if (converted != null) {
+                resolved[target] = converted
+            }
+        }
+        pendingByCurrency = resolved
+    }
     Surface(
         color = MaterialTheme.colorScheme.surface, tonalElevation = 0.dp
     ) {
@@ -1010,7 +1082,28 @@ private fun CustomerPanelHeader(
                 }
             }
 
-            Spacer(Modifier.width(8.dp))
+            if (customer != null) {
+                val pendingCount = customer.pendingInvoices ?: 0
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    HeaderChip(
+                        label = "Pendientes",
+                        value = pendingCount.toString(),
+                        isCritical = pendingCount > 0
+                    )
+                    pendingByCurrency.forEach { (currency, amount) ->
+                        HeaderChip(
+                            label = currency,
+                            value = formatCurrency(currency, amount),
+                            isCritical = pendingCount > 0
+                        )
+                    }
+                }
+            } else {
+                Spacer(Modifier.width(8.dp))
+            }
         }
     }
 }
@@ -1543,10 +1636,10 @@ fun CustomerItem(
     val strings = LocalAppStrings.current
     val isOverLimit = (customer.availableCredit ?: 0.0) < 0 || (customer.currentBalance ?: 0.0) > 0
     val pendingInvoices = customer.pendingInvoices ?: 0
-    val baseCurrency = normalizeCurrency(partyAccountCurrency)
+    val baseCurrency = normalizeCurrency(posCurrency)
     var isMenuExpanded by remember { mutableStateOf(false) }
     val quickActions = remember { customerQuickActions() }
-    val avatarSize = if (isDesktop) 52.dp else 44.dp
+    val avatarSize = if (isDesktop) 48.dp else 40.dp
     val pendingAmountRaw = bd(customer.totalPendingAmount ?: 0.0).moneyScale(0)
     val pendingAmount = pendingAmountRaw.toDouble(2)
     val posCurr = normalizeCurrency(posCurrency)
@@ -1602,7 +1695,7 @@ fun CustomerItem(
         else -> MaterialTheme.colorScheme.primary
     }
     val emphasis = pendingInvoices > 0 || isOverLimit
-    val cardShape = RoundedCornerShape(22.dp)
+    val cardShape = RoundedCornerShape(18.dp)
     val cardBrush = Brush.linearGradient(
         colors = listOf(
             MaterialTheme.colorScheme.surface,
@@ -1610,7 +1703,7 @@ fun CustomerItem(
         )
     )
     Card(
-        modifier = Modifier.fillMaxWidth().heightIn(min = 120.dp).clip(cardShape)
+        modifier = Modifier.fillMaxWidth().heightIn(min = 104.dp).clip(cardShape)
             .clickable { onSelect(customer) }.pointerInput(customer.name, isDesktop) {
                 if (!isDesktop) {
                     val totalDrag = 0f
@@ -1633,12 +1726,12 @@ fun CustomerItem(
         Column(
             modifier = Modifier.fillMaxWidth().background(cardBrush, cardShape)
                 .border(1.dp, Color.Transparent, shape = cardShape)
-                .padding(if (isDesktop) 12.dp else 10.dp),
+                .padding(if (isDesktop) 10.dp else 8.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             val context = LocalPlatformContext.current
             Row(
-                modifier = Modifier.fillMaxWidth().height(48.dp),
+                modifier = Modifier.fillMaxWidth().height(42.dp),
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -1663,7 +1756,8 @@ fun CustomerItem(
                 }
 
                 Column(
-                    modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(2.dp)
                 ) {
                     Text(
                         customer.customerName,
@@ -1673,9 +1767,17 @@ fun CustomerItem(
                         overflow = TextOverflow.Ellipsis,
                         color = MaterialTheme.colorScheme.onSurface
                     )
-                    StatusPill(
-                        label = statusLabel, isCritical = emphasis
-                    )
+                    if (customer.mobileNo?.isNotEmpty() == true) {
+                        Text(
+                            text = customer.mobileNo,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    } else {
+                        StatusPill(label = statusLabel, isCritical = emphasis)
+                    }
                 }
 
                 IconButton(onClick = {
@@ -1706,12 +1808,24 @@ fun CustomerItem(
                 }
             }
 
-            Text(
-                text = formatCurrency(primaryCurrency, primaryAmount),
-                style = MaterialTheme.typography.titleSmall,
-                color = if (emphasis) MaterialTheme.colorScheme.error
-                else MaterialTheme.colorScheme.onSurface
-            )
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = formatCurrency(primaryCurrency, primaryAmount),
+                    style = MaterialTheme.typography.titleSmall,
+                    color = if (emphasis) MaterialTheme.colorScheme.error
+                    else MaterialTheme.colorScheme.onSurface
+                )
+                if (pendingInvoices > 0) {
+                    HeaderChip(
+                        label = "Pend.",
+                        value = pendingInvoices.toString(),
+                        isCritical = true
+                    )
+                }
+            }
             if (!secondaryValue.isNullOrBlank()) {
                 Text(
                     text = secondaryValue,
@@ -1720,17 +1834,10 @@ fun CustomerItem(
                 )
             }
             Text(
-                text = "Facturas pendientes: $pendingInvoices",
+                text = statusLabel,
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                color = statusColor
             )
-            if (customer.mobileNo?.isNotEmpty() == true) {
-                Text(
-                    text = customer.mobileNo,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
         }
     }
 }
@@ -1927,6 +2034,7 @@ private fun CustomerOutstandingInvoicesContent(
 ) {
     val strings = LocalAppStrings.current
     val cashboxManager: CashBoxManager = koinInject()
+    val scrollState = rememberScrollState()
     var selectedInvoice by remember { mutableStateOf<SalesInvoiceBO?>(null) }
     var amountRaw by remember { mutableStateOf("") }
     var amountValue by remember { mutableStateOf(0.0) }
@@ -1985,12 +2093,16 @@ private fun CustomerOutstandingInvoicesContent(
     val outstandingInSelectedCurrency = rateBaseToPos?.let { rate ->
         bd(outstandingBase * rate).toDouble(0)
     }
-    val changeDue = outstandingInSelectedCurrency?.let { amountValue - it } ?: 0.0
+    val changeDue = outstandingInSelectedCurrency
+        ?.let { (amountValue - it).coerceAtLeast(0.0) } ?: 0.0
+    val amountToApply = outstandingInSelectedCurrency
+        ?.let { minOf(amountValue, it) } ?: amountValue
     val isSubmitEnabled =
         !paymentState.isSubmitting && selectedInvoice?.invoiceId?.isNotBlank() == true && selectedMode.isNotBlank() && amountValue > 0.0 && !conversionError
 
     Column(
-        modifier = modifier, verticalArrangement = Arrangement.spacedBy(16.dp)
+        modifier = modifier.verticalScroll(scrollState),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         Text(
             text = "${strings.customer.outstandingInvoicesTitle} - ${customer.customerName}",
@@ -2274,11 +2386,13 @@ private fun CustomerOutstandingInvoicesContent(
 //                    style = MaterialTheme.typography.bodySmall,
 //                    color = MaterialTheme.colorScheme.onSurfaceVariant
 //                ) if (changeDue > 0.0) {
-                Text(
-                    text = "Cambio: ${formatCurrency(selectedCurrency, changeDue)}",
-                    style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
-                    color = MaterialTheme.colorScheme.primary
-                )
+                if (changeDue > 0.0) {
+                    Text(
+                        text = "Cambio: ${formatCurrency(selectedCurrency, changeDue)}",
+                        style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
                 //}
             }
 
@@ -2288,7 +2402,7 @@ private fun CustomerOutstandingInvoicesContent(
                     onRegisterPayment(
                         invoiceId,
                         selectedMode,
-                        (amountValue - changeDue),
+                        amountToApply,
                         selectedCurrency,
                         referenceInput
                     )
@@ -3417,6 +3531,73 @@ private fun HistoryStatChip(
                 text = value,
                 style = MaterialTheme.typography.titleSmall,
                 fontWeight = FontWeight.SemiBold
+            )
+        }
+    }
+}
+
+@Composable
+private fun SummaryStatChip(
+    label: String,
+    value: String,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        modifier = modifier,
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+        shape = RoundedCornerShape(12.dp)
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalArrangement = Arrangement.spacedBy(2.dp)
+        ) {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Text(
+                text = value,
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold
+            )
+        }
+    }
+}
+
+@Composable
+private fun HeaderChip(
+    label: String,
+    value: String,
+    isCritical: Boolean,
+    modifier: Modifier = Modifier
+) {
+    val background = if (isCritical) {
+        MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.4f)
+    } else {
+        MaterialTheme.colorScheme.surfaceVariant
+    }
+    val textColor = if (isCritical) {
+        MaterialTheme.colorScheme.error
+    } else {
+        MaterialTheme.colorScheme.onSurfaceVariant
+    }
+    Surface(
+        modifier = modifier,
+        color = background,
+        shape = RoundedCornerShape(999.dp)
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(label, style = MaterialTheme.typography.labelSmall, color = textColor)
+            Text(
+                value,
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.SemiBold,
+                color = textColor
             )
         }
     }

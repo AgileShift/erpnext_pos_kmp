@@ -64,7 +64,7 @@ class RegisterInvoicePaymentOfflineUseCase(
         val newOutstanding = invoice.outstandingAmount - totalPayment
 
         invoice.outstandingAmount = newOutstanding
-        invoice.status = if (newOutstanding <= 0.0001f) "Paid" else "Unpaid"
+        invoice.status = if (newOutstanding <= 0.0001f) "Paid" else "Partly Paid"
         invoice.syncStatus = SyncStatus.PENDING
         invoice.updatedAt = Clock.System.now().epochSeconds
 

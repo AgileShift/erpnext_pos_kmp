@@ -21,27 +21,16 @@ import kotlin.time.ExperimentalTime
 
 fun SalesInvoiceWithItemsAndPayments.toDto(): SalesInvoiceDto {
     val invoiceName = invoice.invoiceName?.takeUnless { it.startsWith("LOCAL-") }
-    val fallbackPayments = if (payments.isEmpty() && !invoice.modeOfPayment.isNullOrBlank()) {
-        listOf(
-            SalesInvoicePaymentDto(
-                modeOfPayment = invoice.modeOfPayment!!,
-                amount = 0.0,
-                paymentReference = null,
-                type = "Receive"
-            )
-        )
+    val hasOutstanding = invoice.outstandingAmount > 0.0001
+    val paymentsToSend = payments.filter { it.amount > 0.0 }
+    val shouldSendAsPos = invoice.isPos && paymentsToSend.isNotEmpty() && !hasOutstanding
+    val resolvedPayments = if (shouldSendAsPos) {
+        paymentsToSend.map { it.toDto() }
     } else {
         emptyList()
     }
-    val resolvedPayments = if (invoice.isPos) {
-        if (payments.isNotEmpty()) {
-            payments.map { it.toDto() }
-        } else {
-            fallbackPayments
-        }
-    } else {
-        emptyList()
-    }
+    val resolvedIsPos = shouldSendAsPos
+    val resolvedDocType = if (shouldSendAsPos) "POS Invoice" else "Sales Invoice"
 
     return SalesInvoiceDto(
         name = invoiceName,
@@ -59,8 +48,8 @@ fun SalesInvoiceWithItemsAndPayments.toDto(): SalesInvoiceDto {
         items = items.map { it.toDto(invoice) },
         payments = resolvedPayments,
         remarks = invoice.remarks,
-        isPos = invoice.isPos,
-        doctype = if (invoice.isPos) "POS Invoice" else "Sales Invoice",
+        isPos = resolvedIsPos,
+        doctype = resolvedDocType,
         customerName = invoice.customerName ?: "CST",
         customerPhone = invoice.customerPhone,
         netTotal = invoice.netTotal,
@@ -122,6 +111,8 @@ fun SalesInvoiceDto.toEntity(): SalesInvoiceWithItemsAndPayments {
     }
 
     // Se asegura que la factura local conserve los montos pagados recibidos del servidor.
+    val headerWarehouse = items.firstOrNull { !it.warehouse.isNullOrBlank() }?.warehouse
+
     val invoiceEntity = SalesInvoiceEntity(
         invoiceName = name,
         profileId = posProfile,
@@ -162,7 +153,8 @@ fun SalesInvoiceDto.toEntity(): SalesInvoiceWithItemsAndPayments {
         createdAt = now,
         modifiedAt = now,
         remarks = remarks,
-        posOpeningEntry = posOpeningEntry
+        posOpeningEntry = posOpeningEntry,
+        warehouse = headerWarehouse
     )
 
     val itemsEntity = items.map { dto ->
@@ -189,7 +181,8 @@ fun SalesInvoiceDto.toEntity(): SalesInvoiceWithItemsAndPayments {
             modeOfPayment = dto.modeOfPayment,
             amount = dto.amount,
             enteredAmount = dto.amount,
-            paymentCurrency = partyAccountCurrency ?: currency,
+            // La moneda real del pago es la moneda de la factura; party_account_currency suele ser USD.
+            paymentCurrency = currency ?: partyAccountCurrency,
             paymentReference = dto.paymentReference,
             syncStatus = "Synced",
             createdAt = now

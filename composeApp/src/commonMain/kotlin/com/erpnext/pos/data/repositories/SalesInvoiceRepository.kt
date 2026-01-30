@@ -70,7 +70,20 @@ class SalesInvoiceRepository(
             AppLogger.warn("SalesInvoiceRepository: invoice_name vacío; se omite guardar items/pagos.")
             return
         }
-        localSource.saveInvoiceLocally(invoice, items, payments)
+        val ctx = context.getContext()
+        val ensuredProfile = invoice.profileId ?: ctx?.profileName
+        val ensuredWarehouse = invoice.warehouse ?: ctx?.warehouse
+
+        val normalizedInvoice = invoice.copy(
+            profileId = ensuredProfile,
+            warehouse = ensuredWarehouse
+        )
+        val normalizedItems = items.map { item ->
+            if (!item.warehouse.isNullOrBlank() || ensuredWarehouse.isNullOrBlank()) item
+            else item.copy(warehouse = ensuredWarehouse)
+        }
+
+        localSource.saveInvoiceLocally(normalizedInvoice, normalizedItems, payments)
         refreshCustomerSummaryWithRates(invoice.customer)
     }
 
@@ -114,7 +127,14 @@ class SalesInvoiceRepository(
         val invoiceId = requireNotNull(invoice.invoiceName) {
             "Invoice name is required to apply payments."
         }
-        val existingRefs = localSource.getPaymentsForInvoice(invoiceId)
+        val existingPayments = localSource.getPaymentsForInvoice(invoiceId)
+        // Si hay un pago fallido pendiente, no permitimos registrar uno nuevo hasta reintento.
+        if (existingPayments.any { it.syncStatus.equals("Failed", ignoreCase = true) }) {
+            throw IllegalStateException(
+                "Existe un pago fallido pendiente de sincronizar; reintenta antes de registrar otro."
+            )
+        }
+        val existingRefs = existingPayments
             .mapNotNull { it.paymentReference?.trim()?.uppercase() }
             .toSet()
         val uniquePayments = payments.filter { payment ->
@@ -123,7 +143,14 @@ class SalesInvoiceRepository(
         }
         if (uniquePayments.isEmpty()) return
 
-        val paidDeltaInvoice = uniquePayments.sumOf { it.amount }
+        val paidDeltaInvoice = uniquePayments.sumOf { payment ->
+            val rate = payment.exchangeRate
+            if (rate != null && rate > 0.0 && payment.enteredAmount > 0.0) {
+                payment.enteredAmount * rate
+            } else {
+                payment.amount
+            }
+        }
         val rateInvToRc = com.erpnext.pos.utils.CurrencyService.resolveInvoiceToReceivableRate(
             invoiceCurrency = invoice.currency,
             receivableCurrency = invoice.partyAccountCurrency,

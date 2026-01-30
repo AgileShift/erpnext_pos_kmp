@@ -10,6 +10,9 @@ import com.erpnext.pos.remoteSource.dto.v2.SalesInvoicePaymentCreateDto
 fun SalesInvoiceWithItemsAndPayments.toCreateDto(
     remoteCustomerId: String
 ): SalesInvoiceCreateDto {
+    val hasOutstanding = invoice.outstandingAmount > 0.0001
+    val paymentsToSend = payments.filter { it.amount > 0.0 }
+    val shouldSendAsPos = invoice.isPos && paymentsToSend.isNotEmpty() && !hasOutstanding
     return SalesInvoiceCreateDto(
         company = invoice.company,
         customerId = remoteCustomerId,
@@ -18,7 +21,7 @@ fun SalesInvoiceWithItemsAndPayments.toCreateDto(
         dueDate = invoice.dueDate,
         customerName = invoice.customerName,
         territory = invoice.territory,
-        isPos = invoice.isPos,
+        isPos = shouldSendAsPos,
         updateStock = invoice.updateStock,
         setWarehouse = invoice.setWarehouse,
         sellingPriceList = invoice.priceList,
@@ -30,7 +33,7 @@ fun SalesInvoiceWithItemsAndPayments.toCreateDto(
         totalTaxesAndCharges = invoice.totalTaxesAndCharges,
         grandTotal = invoice.grandTotal,
         items = items.map { it.toCreateDto() },
-        payments = payments.map { it.toCreateDto() }
+        payments = if (shouldSendAsPos) paymentsToSend.map { it.toCreateDto() } else emptyList()
     )
 }
 

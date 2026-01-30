@@ -165,7 +165,7 @@ import com.erpnext.pos.localSource.entities.v2.UserEntity as UserEntityV2
         SyncStateEntity::class,
         CustomerOutboxEntity::class
     ],
-    version = 34,
+    version = 35,
     exportSchema = true
 )
 @ConstructedBy(AppDatabaseConstructor::class)

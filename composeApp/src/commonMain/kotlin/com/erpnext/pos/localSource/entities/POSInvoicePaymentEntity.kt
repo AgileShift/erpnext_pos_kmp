@@ -47,6 +47,8 @@ data class POSInvoicePaymentEntity(
 
     @ColumnInfo(name = "payment_reference")
     var paymentReference: String? = null, // No. de recibo o transacción
+    @ColumnInfo(name = "remote_payment_entry")
+    var remotePaymentEntry: String? = null,
     @ColumnInfo(name = "payment_date")
     var paymentDate: String? = null,
     @ColumnInfo(name = "pos_opening_entry")

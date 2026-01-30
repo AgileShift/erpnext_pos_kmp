@@ -105,13 +105,21 @@ class CreateInvoiceOfflineUseCase(
         val dueDate = postingDate // TODO: payment terms
 
         val total = input.items.sumOf { it.qty * it.rate }
+        val paidAmount = input.payments.sumOf { it.amount }.coerceAtLeast(0.0)
+        val outstanding = (total - paidAmount).coerceAtLeast(0.0)
+        val status = when {
+            outstanding <= 0.0001 -> "Paid"
+            paidAmount <= 0.0001 -> "Unpaid"
+            else -> "Partly Paid"
+        }
+        val isPosInvoice = outstanding <= 0.0001
 
         val invoice = SalesInvoiceEntity(
             invoiceId = localInvoiceId,
             territoryId = input.territoryId,
             namingSeries = "POS-OFFLINE",
             docStatus = "Draft",
-            status = "Unpaid",
+            status = status,
             postingDate = postingDate,
             postingTime = postingTime,
             customerId = input.customerId,
@@ -125,8 +133,8 @@ class CreateInvoiceOfflineUseCase(
             totalTaxesAndCharges = 0f,
             grandTotal = total,
             roundedTotal = null,
-            outstandingAmount = total,
-            isPos = true,
+            outstandingAmount = outstanding,
+            isPos = isPosInvoice,
             dueDate = dueDate,
             paymentTerms = null,
             updateStock = true,
@@ -195,4 +203,3 @@ class CreateInvoiceOfflineUseCase(
         return localInvoiceId
     }
 }
-

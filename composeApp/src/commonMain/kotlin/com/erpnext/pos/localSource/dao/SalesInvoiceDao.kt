@@ -430,11 +430,17 @@ interface SalesInvoiceDao {
         """
         UPDATE tabSalesInvoicePayment
         SET sync_status = :status,
-            last_synced_at = :syncedAt
+            last_synced_at = :syncedAt,
+            remote_payment_entry = :remotePaymentEntry
         WHERE id = :paymentId
         """
     )
-    suspend fun updatePaymentSyncStatus(paymentId: Int, status: String, syncedAt: Long)
+    suspend fun updatePaymentSyncStatus(
+        paymentId: Int,
+        status: String,
+        syncedAt: Long,
+        remotePaymentEntry: String? = null
+    )
 
     @Query(
         """
@@ -566,6 +572,7 @@ interface SalesInvoiceDao {
           AND i.docstatus != 2
           AND i.is_return = 0
           AND i.is_deleted = 0
+          AND p.sync_status != 'Failed'
         """
     )
     suspend fun getShiftPayments(
@@ -590,6 +597,7 @@ interface SalesInvoiceDao {
           AND i.docstatus != 2
           AND i.is_return = 0
           AND i.is_deleted = 0
+          AND p.sync_status != 'Failed'
         """
     )
     suspend fun getPaymentsForOpeningEntry(openingEntryId: String): List<ShiftPaymentRow>

@@ -7,11 +7,12 @@ import com.erpnext.pos.utils.RepoTrace
 class PaymentEntryRepository(
     private val api: APIService
 ) {
-    suspend fun createPaymentEntry(entry: PaymentEntryCreateDto) {
+    suspend fun createPaymentEntry(entry: PaymentEntryCreateDto): String {
         RepoTrace.breadcrumb("PaymentEntryRepository", "createPaymentEntry")
-        runCatching {
+        return runCatching {
             val created = api.createPaymentEntry(entry)
             api.submitPaymentEntry(created.name)
+            created.name
         }
             .getOrElse {
                 RepoTrace.capture("PaymentEntryRepository", "createPaymentEntry", it)

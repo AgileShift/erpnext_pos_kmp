@@ -427,9 +427,13 @@ class CustomerViewModel(
                 val updatedCache = paymentResolved.exchangeRateByCurrency
                 paymentRateCache = updatedCache.toMutableMap()
 
+                val createdInvoiceDto = invoice.toDto().copy(
+                    isPos = invoice.isPos,
+                    doctype = if (invoice.isPos) "POS Invoice" else "Sales Invoice"
+                )
                 val paymentResult = paymentHandler.registerPayments(
                     paymentLines = listOf(fixedLine),
-                    createdInvoice = invoice.toDto(),
+                    createdInvoice = createdInvoiceDto,
                     invoiceNameForLocal = invoice.invoiceName ?: invoiceId,
                     postingDate = postingDate,
                     context = context,

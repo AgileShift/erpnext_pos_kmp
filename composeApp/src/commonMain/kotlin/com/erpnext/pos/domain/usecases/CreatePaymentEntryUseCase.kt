@@ -7,8 +7,8 @@ data class CreatePaymentEntryInput(val entry: PaymentEntryCreateDto)
 
 class CreatePaymentEntryUseCase(
     private val repository: PaymentEntryRepository
-) : UseCase<CreatePaymentEntryInput, Unit>() {
-    override suspend fun useCaseFunction(input: CreatePaymentEntryInput) {
-        repository.createPaymentEntry(input.entry)
+) : UseCase<CreatePaymentEntryInput, String>() {
+    override suspend fun useCaseFunction(input: CreatePaymentEntryInput): String {
+        return repository.createPaymentEntry(input.entry)
     }
 }

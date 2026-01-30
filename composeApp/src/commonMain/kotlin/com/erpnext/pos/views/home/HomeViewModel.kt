@@ -24,6 +24,7 @@ import com.erpnext.pos.sync.OpeningGate
 import com.erpnext.pos.views.CashBoxManager
 import com.erpnext.pos.views.PaymentModeWithAmount
 import com.erpnext.pos.views.home.HomeRefreshController
+import com.erpnext.pos.views.reconciliation.ReconciliationMode
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -162,11 +163,11 @@ class HomeViewModel(
     }
 
     fun openReconciliation() {
-        navManager.navigateTo(NavRoute.Reconciliation())
+        navManager.navigateTo(NavRoute.Reconciliation(ReconciliationMode.Close))
     }
 
     fun openCloseCashbox() {
-        navManager.navigateTo(NavRoute.Reconciliation(com.erpnext.pos.views.reconciliation.ReconciliationMode.Close))
+        navManager.navigateTo(NavRoute.Reconciliation(ReconciliationMode.Close))
     }
 
     fun onError(error: String) {

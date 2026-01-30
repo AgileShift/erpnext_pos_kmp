@@ -134,9 +134,12 @@ fun buildLocalPayments(
     invoiceId: String,
     postingDate: String,
     paymentLines: List<PaymentLine>,
-    posOpeningEntry: String?
+    posOpeningEntry: String?,
+    remotePaymentEntries: Map<String, String?> = emptyMap()
 ): List<POSInvoicePaymentEntity> {
     return paymentLines.map { line ->
+        val reference = line.referenceNumber?.takeIf { it.isNotBlank() }
+        val remoteEntry = reference?.let { remotePaymentEntries[it] }
         POSInvoicePaymentEntity(
             parentInvoice = invoiceId,
             modeOfPayment = line.modeOfPayment,
@@ -144,9 +147,11 @@ fun buildLocalPayments(
             enteredAmount = line.enteredAmount,
             paymentCurrency = line.currency,
             exchangeRate = line.exchangeRate,
-            paymentReference = line.referenceNumber?.takeIf { it.isNotBlank() },
+            paymentReference = reference,
+            remotePaymentEntry = remoteEntry,
             paymentDate = postingDate,
-            posOpeningEntry = posOpeningEntry
+            posOpeningEntry = posOpeningEntry,
+            syncStatus = if (remoteEntry != null) "Synced" else "Pending"
         )
     }
 }
@@ -194,6 +199,7 @@ suspend fun buildPaymentEntryDto(
     invoiceToReceivableRate: Double?,
     currencySpecs: Map<String, CurrencySpec>,
     paymentModeDetails: Map<String, ModeOfPaymentEntity>,
+    referenceDoctype: String = "Sales Invoice"
 ): PaymentEntryCreateDto {
 
     val paidFromResolved = paidFromAccount?.takeIf { it.isNotBlank() }
@@ -261,7 +267,7 @@ suspend fun buildPaymentEntryDto(
             else null,
             references = listOf(
                 PaymentEntryReferenceCreateDto(
-                    referenceDoctype = "Sales Invoice",
+                    referenceDoctype = referenceDoctype,
                     referenceName = invoiceId,
                     totalAmount = bd(invoiceTotalRc).moneyScale(rcSpec.minorUnits)
                         .toDouble(rcSpec.minorUnits),
@@ -326,7 +332,7 @@ suspend fun buildPaymentEntryDto(
         else null,
         references = listOf(
             PaymentEntryReferenceCreateDto(
-                referenceDoctype = "Sales Invoice",
+                referenceDoctype = referenceDoctype,
                 referenceName = invoiceId,
                 totalAmount = bd(invoiceTotalRc).moneyScale(rcSpec.minorUnits)
                     .toDouble(rcSpec.minorUnits),
@@ -366,6 +372,7 @@ suspend fun buildPaymentEntryDtoWithRateResolver(
     exchangeRateByCurrency: Map<String, Double>,
     currencySpecs: Map<String, CurrencySpec>,
     paymentModeDetails: Map<String, ModeOfPaymentEntity>,
+    referenceDoctype: String = "Sales Invoice",
 ): PaymentEntryCreateDto {
     // Reusa buildPaymentEntryDto internamente creando un API "virtual" via resolver.
     // Para mantener el comportamiento de cache de resolveRateToInvoiceCurrency, intentamos cache local primero.
@@ -435,7 +442,7 @@ suspend fun buildPaymentEntryDtoWithRateResolver(
             else null,
             references = listOf(
                 PaymentEntryReferenceCreateDto(
-                    referenceDoctype = "Sales Invoice",
+                    referenceDoctype = referenceDoctype,
                     referenceName = invoiceId,
                     totalAmount = bd(invoiceTotalRc).moneyScale(rcSpec.minorUnits)
                         .toDouble(rcSpec.minorUnits),
@@ -505,7 +512,7 @@ suspend fun buildPaymentEntryDtoWithRateResolver(
         else null,
         references = listOf(
             PaymentEntryReferenceCreateDto(
-                referenceDoctype = "Sales Invoice",
+                referenceDoctype = referenceDoctype,
                 referenceName = invoiceId,
                 totalAmount = bd(invoiceTotalRc).moneyScale(rcSpec.minorUnits)
                     .toDouble(rcSpec.minorUnits),

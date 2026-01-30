@@ -73,7 +73,7 @@ object NavGraph {
                 arguments = listOf(
                     navArgument("mode") {
                         type = NavType.StringType
-                        defaultValue = ReconciliationMode.Review.value
+                        defaultValue = ReconciliationMode.Close.value
                     }
                 )
             ) { entry ->

@@ -88,21 +88,51 @@ class PartialReturnUseCase(
         )
     }
 
-    private fun buildReturnItems(
+    private suspend fun buildReturnItems(
         invoice: SalesInvoiceWithItemsAndPayments,
         requested: Map<String, Double>
     ): List<SalesInvoiceItemDto> {
-        val remaining =
-            requested.mapValues { it.value.coerceAtLeast(0.0) }.toMutableMap()
         val parent = invoice.invoice
+        val remainingByItem = runCatching { buildRemainingByItem(invoice) }
+            .getOrElse { emptyMap() }
+        val requestedQty = requested.mapValues { it.value.coerceAtLeast(0.0) }
         return invoice.items.mapNotNull { item ->
-            val available = remaining[item.itemCode] ?: 0.0
-            if (available <= 0.0) return@mapNotNull null
-            val qtyToReturn = available.coerceAtMost(item.qty)
+            val remaining = remainingByItem[item.itemCode] ?: kotlin.math.abs(item.qty)
+            if (remaining <= 0.0) return@mapNotNull null
+            val desired = requestedQty[item.itemCode] ?: 0.0
+            if (desired <= 0.0) return@mapNotNull null
+            val qtyToReturn = desired.coerceAtMost(remaining)
             if (qtyToReturn <= 0.0) return@mapNotNull null
-            remaining[item.itemCode] = (available - qtyToReturn).coerceAtLeast(0.0)
             createReturnItem(item, parent, qtyToReturn)
         }.filter { it.qty != 0.0 }
+    }
+
+    private suspend fun buildRemainingByItem(
+        invoice: SalesInvoiceWithItemsAndPayments
+    ): Map<String, Double> {
+        val originalName = invoice.invoice.invoiceName ?: return emptyMap()
+        val returnInvoices = repository.fetchRemoteReturnInvoices(
+            returnAgainst = originalName,
+            isPos = invoice.invoice.isPos
+        )
+        if (returnInvoices.isEmpty()) {
+            return invoice.items.associate { item ->
+                item.itemCode to kotlin.math.abs(item.qty).coerceAtLeast(0.0)
+            }
+        }
+        val returnedByItem = mutableMapOf<String, Double>()
+        returnInvoices.forEach { credit ->
+            credit.items.forEach { item ->
+                val qty = kotlin.math.abs(item.qty)
+                if (qty <= 0.0) return@forEach
+                returnedByItem[item.itemCode] = (returnedByItem[item.itemCode] ?: 0.0) + qty
+            }
+        }
+        return invoice.items.associate { item ->
+            val sold = kotlin.math.abs(item.qty).coerceAtLeast(0.0)
+            val returned = returnedByItem[item.itemCode] ?: 0.0
+            item.itemCode to (sold - returned).coerceAtLeast(0.0)
+        }
     }
 
     private fun createReturnItem(

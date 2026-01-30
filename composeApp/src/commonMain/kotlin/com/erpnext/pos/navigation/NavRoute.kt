@@ -38,7 +38,7 @@ sealed class NavRoute(
     object SalesOrder : NavRoute("sales-order", "Orden de venta", Icons.Filled.ShoppingCart)
     object DeliveryNote : NavRoute("delivery-note", "Nota de entrega", Icons.Filled.LocalShipping)
     data class Reconciliation(
-        val mode: ReconciliationMode = ReconciliationMode.Review
+        val mode: ReconciliationMode = ReconciliationMode.Close
     ) : NavRoute(
         path = "reconciliation?mode=${mode.value}",
         title = "Reconciliation",

@@ -84,8 +84,8 @@ class LegacyPushSyncManager(
             val invoiceName = invoice.invoiceName ?: return@forEach
             if (invoiceName.startsWith("LOCAL-", ignoreCase = true)) return@forEach
             if (!invoice.syncStatus.equals("Synced", ignoreCase = true)) return@forEach
-            if (invoice.isPos) {
-                invoiceLocalSource.updatePaymentSyncStatus(payment.id, "Synced", now)
+            if (invoice.isPos && invoice.outstandingAmount <= 0.0001) {
+                invoiceLocalSource.updatePaymentSyncStatus(payment.id, "Synced", now, null)
                 hasChanges = true
                 return@forEach
             }
@@ -143,7 +143,8 @@ class LegacyPushSyncManager(
                     invoiceToReceivableRate = invoiceToReceivableRate,
                     exchangeRateByCurrency = exchangeRateCache,
                     currencySpecs = currencySpecs,
-                    paymentModeDetails = paymentModeDetails
+                    paymentModeDetails = paymentModeDetails,
+                    referenceDoctype = if (invoice.isPos) "POS Invoice" else "Sales Invoice"
                 )
             }.getOrNull()
 
@@ -152,21 +153,27 @@ class LegacyPushSyncManager(
                 return@forEach
             }
 
-            runCatching {
+            val createdResult = runCatching {
                 paymentEntryUseCase(CreatePaymentEntryInput(paymentEntry))
-            }.onFailure { err ->
+            }
+            createdResult.onFailure { err ->
                 AppSentry.capture(err, "LegacyPushSyncManager: payment ${payment.id} failed")
                 AppLogger.warn("LegacyPushSyncManager: payment ${payment.id} failed", err)
                 failedIds += payment.id
             }.onSuccess {
-                invoiceLocalSource.updatePaymentSyncStatus(payment.id, "Synced", now)
+                invoiceLocalSource.updatePaymentSyncStatus(
+                    payment.id,
+                    "Synced",
+                    now,
+                    createdResult.getOrNull()
+                )
                 hasChanges = true
             }
         }
 
         if (failedIds.isNotEmpty()) {
             failedIds.forEach { paymentId ->
-                invoiceLocalSource.updatePaymentSyncStatus(paymentId, "Failed", now)
+                invoiceLocalSource.updatePaymentSyncStatus(paymentId, "Failed", now, null)
             }
         }
 
