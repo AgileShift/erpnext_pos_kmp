@@ -53,9 +53,11 @@ import com.erpnext.pos.domain.models.SalesInvoiceBO
 import com.erpnext.pos.domain.usecases.InvoiceCancellationAction
 import com.erpnext.pos.utils.formatCurrency
 import com.erpnext.pos.utils.normalizeCurrency
+import com.erpnext.pos.views.CashBoxManager
 import com.erpnext.pos.views.invoice.components.EmptyState
 import com.erpnext.pos.views.invoice.components.ErrorState
 import com.erpnext.pos.views.invoice.components.LoadingState
+import org.koin.compose.koinInject
 
 @Composable
 fun InvoiceListScreen(action: InvoiceAction) {
@@ -272,6 +274,33 @@ fun InvoiceListScreen(action: InvoiceAction) {
      onClick: (SalesInvoiceBO) -> Unit,
      onCancelClick: (String, InvoiceCancellationAction) -> Unit
  ) {
+    val cashboxManager: CashBoxManager = koinInject()
+    val posCurrency = normalizeCurrency(cashboxManager.getContext()?.currency) ?: "USD"
+    val baseCurrency = normalizeCurrency(invoice.partyAccountCurrency) ?: posCurrency
+    val invoiceCurrency = normalizeCurrency(invoice.currency) ?: posCurrency
+    val invoiceToBaseRate = invoice.conversionRate
+    val baseTotal = invoice.baseGrandTotal ?: run {
+        if (invoiceCurrency.equals(baseCurrency, ignoreCase = true)) invoice.total
+        else if (invoiceToBaseRate != null && invoiceToBaseRate > 0.0)
+            invoice.total * invoiceToBaseRate
+        else invoice.total
+    }
+    val baseOutstanding = invoice.baseOutstandingAmount ?: invoice.outstandingAmount
+    var rateBaseToPos by remember { mutableStateOf<Double?>(null) }
+    LaunchedEffect(baseCurrency, posCurrency) {
+        rateBaseToPos = if (baseCurrency.equals(posCurrency, ignoreCase = true)) {
+            1.0
+        } else {
+            cashboxManager.resolveExchangeRateBetween(
+                fromCurrency = baseCurrency,
+                toCurrency = posCurrency,
+                allowNetwork = false
+            )
+        }
+    }
+    val posTotal = rateBaseToPos?.takeIf { it > 0.0 }?.let { baseTotal * it } ?: baseTotal
+    val posOutstanding =
+        rateBaseToPos?.takeIf { it > 0.0 }?.let { baseOutstanding * it } ?: baseOutstanding
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -295,18 +324,33 @@ fun InvoiceListScreen(action: InvoiceAction) {
             Text(invoice.postingDate, style = MaterialTheme.typography.bodySmall)
             Spacer(Modifier.height(8.dp))
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                val invoiceCurrency = normalizeCurrency(invoice.currency) ?: "USD"
-                val receivableCurrency =
-                    normalizeCurrency(invoice.partyAccountCurrency) ?: invoiceCurrency
-                Text(
-                    "Total: ${formatCurrency(invoiceCurrency, invoice.total)}",
-                    fontWeight = FontWeight.Medium
-                )
-                Spacer(Modifier.width(8.dp))
-                Text(
-                    "Pendiente: ${formatCurrency(receivableCurrency, invoice.outstandingAmount)}",
-                    fontWeight = FontWeight.Medium
-                )
+                Column(horizontalAlignment = Alignment.End) {
+                    Text(
+                        "Total: ${formatCurrency(posCurrency, posTotal)}",
+                        fontWeight = FontWeight.Medium
+                    )
+                    if (!baseCurrency.equals(posCurrency, ignoreCase = true)) {
+                        Text(
+                            formatCurrency(baseCurrency, baseTotal),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+                Spacer(Modifier.width(12.dp))
+                Column(horizontalAlignment = Alignment.End) {
+                    Text(
+                        "Pendiente: ${formatCurrency(posCurrency, posOutstanding)}",
+                        fontWeight = FontWeight.Medium
+                    )
+                    if (!baseCurrency.equals(posCurrency, ignoreCase = true)) {
+                        Text(
+                            formatCurrency(baseCurrency, baseOutstanding),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
                 Spacer(Modifier.width(8.dp))
                 val normalizedStatus = invoice.status?.trim()?.lowercase()
                 val hasPayments = invoice.paidAmount > 0.0 || invoice.payments.any { it.amount > 0.0 }

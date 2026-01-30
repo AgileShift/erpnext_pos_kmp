@@ -94,15 +94,9 @@ class SalesInvoiceRepository(
         if (entity.invoice.profileId.isNullOrBlank() || entity.invoice.posOpeningEntry.isNullOrBlank()) {
             throw IllegalStateException("Falta POS Profile o apertura de caja activa para crear la factura.")
         }
-        val providedRate = dto.conversionRate ?: dto.customExchangeRate
+        val providedRate = dto.conversionRate
         if (entity.invoice.conversionRate == null && providedRate != null && providedRate > 0.0) {
             entity.invoice.conversionRate = providedRate
-        }
-        if (entity.invoice.customExchangeRate == null &&
-            dto.customExchangeRate != null &&
-            dto.customExchangeRate > 0.0
-        ) {
-            entity.invoice.customExchangeRate = dto.customExchangeRate
         }
         entity.items.forEach { it.parentInvoice = localInvoiceName }
         entity.payments.forEach { it.parentInvoice = localInvoiceName }
@@ -134,7 +128,7 @@ class SalesInvoiceRepository(
             invoiceCurrency = invoice.currency,
             receivableCurrency = invoice.partyAccountCurrency,
             conversionRate = invoice.conversionRate,
-            customExchangeRate = invoice.customExchangeRate
+            customExchangeRate = null
         )
         val paidDelta = com.erpnext.pos.utils.CurrencyService.amountInvoiceToReceivable(
             paidDeltaInvoice,
@@ -242,6 +236,11 @@ class SalesInvoiceRepository(
         // El status se alinea con la fuente de verdad escogida.
         val resolvedStatus = if (remoteHasPayments) remote.status ?: "Draft"
         else localInvoice?.status ?: (remote.status ?: "Draft")
+        fun resolveBaseAmount(amount: Double?, baseAmount: Double?): Double? {
+            baseAmount?.let { return it }
+            val rate = remote.conversionRate?.takeIf { it > 0.0 } ?: return amount
+            return amount?.let { it * rate }
+        }
         localSource.updateFromRemote(
             oldName = localInvoiceName,
             newName = remoteName,
@@ -251,13 +250,31 @@ class SalesInvoiceRepository(
             dueDate = remote.dueDate,
             currency = remote.currency ?: "NIO",
             partyAccountCurrency = remote.partyAccountCurrency,
-            conversionRate = remote.conversionRate ?: remote.customExchangeRate,
+            conversionRate = remote.conversionRate,
             customExchangeRate = remote.customExchangeRate,
             netTotal = remote.netTotal,
             taxTotal = remote.totalTaxesAndCharges ?: 0.0,
+            discountAmount = remote.discountAmount ?: 0.0,
             grandTotal = remote.grandTotal,
             paidAmount = localPaidAmount,
             outstandingAmount = localOutstandingAmount,
+            baseTotal = resolveBaseAmount(remote.total ?: remote.netTotal, remote.baseTotal),
+            baseNetTotal = resolveBaseAmount(remote.netTotal, remote.baseNetTotal),
+            baseTotalTaxesAndCharges = resolveBaseAmount(
+                remote.totalTaxesAndCharges,
+                remote.baseTotalTaxesAndCharges
+            ),
+            baseGrandTotal = resolveBaseAmount(remote.grandTotal, remote.baseGrandTotal),
+            baseRoundingAdjustment = resolveBaseAmount(
+                remote.roundingAdjustment,
+                remote.baseRoundingAdjustment
+            ),
+            baseRoundedTotal = resolveBaseAmount(remote.roundedTotal, remote.baseRoundedTotal),
+            baseDiscountAmount = resolveBaseAmount(remote.discountAmount, remote.baseDiscountAmount),
+            basePaidAmount = resolveBaseAmount(remote.paidAmount, remote.basePaidAmount),
+            baseChangeAmount = resolveBaseAmount(remote.changeAmount, remote.baseChangeAmount),
+            baseWriteOffAmount = resolveBaseAmount(remote.writeOffAmount, remote.baseWriteOffAmount),
+            baseOutstandingAmount = remote.baseOutstandingAmount ?: remote.outstandingAmount,
             status = resolvedStatus,
             docstatus = remote.docStatus ?: resolveDocStatus(remote.status, null),
             modeOfPayment = remote.payments.firstOrNull()?.modeOfPayment,
@@ -435,7 +452,8 @@ class SalesInvoiceRepository(
         invoices.forEach { wrapper ->
             val invoice = wrapper.invoice
             val receivableCurrency = invoice.partyAccountCurrency ?: invoice.currency
-            val outstanding = invoice.outstandingAmount.coerceAtLeast(0.0)
+            val outstanding = (invoice.baseOutstandingAmount ?: invoice.outstandingAmount)
+                .coerceAtLeast(0.0)
             val rate = when {
                 receivableCurrency.equals(baseCurrency, ignoreCase = true) -> 1.0
                 else -> context.resolveExchangeRateBetween(
@@ -446,7 +464,7 @@ class SalesInvoiceRepository(
                     invoiceCurrency = invoice.currency,
                     receivableCurrency = receivableCurrency,
                     conversionRate = invoice.conversionRate,
-                    customExchangeRate = invoice.customExchangeRate
+                    customExchangeRate = null
                 ) ?: 1.0
             }
             totalPending += (outstanding * rate)

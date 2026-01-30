@@ -1,8 +1,8 @@
 {
   "formatVersion": 1,
   "database": {
-    "version": 33,
-    "identityHash": "60e6bed1af02582fc3a697df689cc8d8",
+    "version": 34,
+    "identityHash": "3460177350388596503bab14408c0528",
     "entities": [
       {
         "tableName": "tabUser",
@@ -1236,7 +1236,7 @@
       },
       {
         "tableName": "tabSalesInvoice",
-        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `profile_id` TEXT, `invoice_name` TEXT, `reference_no` TEXT, `route` TEXT, `customer` TEXT NOT NULL, `customer_name` TEXT, `customer_phone` TEXT, `company` TEXT NOT NULL, `branch` TEXT, `warehouse` TEXT, `currency` TEXT, `party_account_currency` TEXT, `conversion_rate` REAL, `custom_exchange_rate` REAL, `posting_date` TEXT NOT NULL, `due_date` TEXT, `net_total` REAL NOT NULL, `tax_total` REAL NOT NULL, `discount_amount` REAL NOT NULL, `grand_total` REAL NOT NULL, `paid_amount` REAL NOT NULL, `outstanding_amount` REAL NOT NULL, `base_total` REAL, `base_net_total` REAL, `base_total_taxes_and_charges` REAL, `base_grand_total` REAL, `base_rounding_adjustment` REAL, `base_rounded_total` REAL, `base_discount_amount` REAL, `base_paid_amount` REAL, `base_change_amount` REAL, `base_write_off_amount` REAL, `base_outstanding_amount` REAL, `price_list` TEXT, `pos_opening_entry` TEXT, `status` TEXT NOT NULL, `sync_status` TEXT NOT NULL, `docstatus` INTEGER NOT NULL, `is_return` INTEGER NOT NULL, `mode_of_payment` TEXT, `created_at` INTEGER NOT NULL, `modified_at` INTEGER NOT NULL, `remarks` TEXT, `is_pos` INTEGER NOT NULL, `debit_to` TEXT DEFAULT '', `is_deleted` INTEGER NOT NULL, `last_synced_at` INTEGER, FOREIGN KEY(`profile_id`) REFERENCES `tabPosProfile`(`profile_name`) ON UPDATE CASCADE ON DELETE SET NULL )",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `profile_id` TEXT, `invoice_name` TEXT, `reference_no` TEXT, `route` TEXT, `customer` TEXT NOT NULL, `customer_name` TEXT, `customer_phone` TEXT, `company` TEXT NOT NULL, `branch` TEXT, `warehouse` TEXT, `currency` TEXT NOT NULL, `party_account_currency` TEXT, `conversion_rate` REAL, `custom_exchange_rate` REAL, `posting_date` TEXT NOT NULL, `due_date` TEXT, `net_total` REAL NOT NULL, `tax_total` REAL NOT NULL, `discount_amount` REAL NOT NULL, `grand_total` REAL NOT NULL, `paid_amount` REAL NOT NULL, `outstanding_amount` REAL NOT NULL, `base_total` REAL, `base_net_total` REAL, `base_total_taxes_and_charges` REAL, `base_grand_total` REAL, `base_rounding_adjustment` REAL, `base_rounded_total` REAL, `base_discount_amount` REAL, `base_paid_amount` REAL, `base_change_amount` REAL, `base_write_off_amount` REAL, `base_outstanding_amount` REAL, `price_list` TEXT, `pos_opening_entry` TEXT, `status` TEXT NOT NULL, `sync_status` TEXT NOT NULL, `docstatus` INTEGER NOT NULL, `is_return` INTEGER NOT NULL, `mode_of_payment` TEXT, `created_at` INTEGER NOT NULL, `modified_at` INTEGER NOT NULL, `remarks` TEXT, `is_pos` INTEGER NOT NULL, `debit_to` TEXT DEFAULT '', `is_deleted` INTEGER NOT NULL, `last_synced_at` INTEGER, FOREIGN KEY(`profile_id`) REFERENCES `tabPosProfile`(`profile_name`) ON UPDATE CASCADE ON DELETE SET NULL )",
         "fields": [
           {
             "fieldPath": "id",
@@ -1299,7 +1299,8 @@
           {
             "fieldPath": "currency",
             "columnName": "currency",
-            "affinity": "TEXT"
+            "affinity": "TEXT",
+            "notNull": true
           },
           {
             "fieldPath": "partyAccountCurrency",
@@ -5923,7 +5924,7 @@
     ],
     "setupQueries": [
       "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
-      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '60e6bed1af02582fc3a697df689cc8d8')"
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '3460177350388596503bab14408c0528')"
     ]
   }
 }

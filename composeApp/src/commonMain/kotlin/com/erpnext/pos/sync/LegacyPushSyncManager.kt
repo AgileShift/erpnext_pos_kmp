@@ -95,14 +95,12 @@ class LegacyPushSyncManager(
                 ?: normalizeCurrency(invoice.currency)
                 ?: "USD"
             val invoiceCurrency = normalizeCurrency(invoice.currency) ?: receivableCurrency
-            val invoiceToReceivableRate = when {
-                invoiceCurrency.equals(receivableCurrency, ignoreCase = true) -> 1.0
-                invoice.conversionRate != null && (invoice.conversionRate ?: 0.0) > 0.0 ->
-                    invoice.conversionRate
-                invoice.customExchangeRate != null && (invoice.customExchangeRate ?: 0.0) > 0.0 ->
-                    invoice.customExchangeRate
-                else -> null
-            }
+            val invoiceToReceivableRate = com.erpnext.pos.utils.CurrencyService.resolveInvoiceToReceivableRate(
+                invoiceCurrency = invoiceCurrency,
+                receivableCurrency = receivableCurrency,
+                conversionRate = invoice.conversionRate,
+                customExchangeRate = null
+            )
 
             val enteredAmount = payment.enteredAmount.takeIf { it > 0.0 } ?: payment.amount
             val paymentCurrency = normalizeCurrency(payment.paymentCurrency)

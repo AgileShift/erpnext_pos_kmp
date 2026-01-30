@@ -37,7 +37,6 @@ import com.erpnext.pos.domain.usecases.v2.LoadSourceDocumentsInput
 import com.erpnext.pos.domain.usecases.v2.LoadSourceDocumentsUseCase
 import com.erpnext.pos.remoteSource.dto.SalesInvoicePaymentDto
 import com.erpnext.pos.views.CashBoxManager
-import com.erpnext.pos.views.billing.BillingResetController
 import com.erpnext.pos.views.POSContext
 import com.erpnext.pos.views.salesflow.SalesFlowContext
 import com.erpnext.pos.views.salesflow.SalesFlowContextStore
@@ -46,14 +45,12 @@ import com.erpnext.pos.domain.utils.UUIDGenerator
 import com.erpnext.pos.utils.normalizeCurrency
 import com.erpnext.pos.utils.requiresReference
 import com.erpnext.pos.utils.resolvePaymentStatus
-import com.erpnext.pos.utils.resolveExchangeRateBetween
 import androidx.lifecycle.viewModelScope
 import com.erpnext.pos.domain.models.BillingTotals
 import com.erpnext.pos.domain.models.POSCurrencyOption
 import com.erpnext.pos.utils.buildPaymentModeDetailMap
 import com.erpnext.pos.utils.calculateTotals
 import com.erpnext.pos.utils.resolveDiscountInfo
-import com.erpnext.pos.utils.resolveRateToInvoiceCurrency
 import com.erpnext.pos.utils.roundToCurrency
 import com.erpnext.pos.views.payment.PaymentHandler
 import kotlinx.coroutines.launch
@@ -133,8 +130,8 @@ class BillingViewModel(
                     products = i.filter { it.price > 0.0 && it.actualQty > 0.0 }
 
                     val invoiceCurrency = context.currency.trim()
-                    val baseCurrency = context.partyAccountCurrency?.trim()?.uppercase()
-                        ?.takeIf { it.isNotBlank() } ?: invoiceCurrency.trim().uppercase()
+                    val baseCurrency = context.partyAccountCurrency.trim().uppercase()
+                        .takeIf { it.isNotBlank() } ?: invoiceCurrency.trim().uppercase()
 
                     val modeDefinitions =
                         runCatching { modeOfPaymentDao.getAllModes(context.company) }
@@ -555,15 +552,13 @@ class BillingViewModel(
             return
         }
 
-        val context = contextProvider.requireContext()
-        val invoiceCurrency = normalizeCurrency(context.currency)
+        val invoiceCurrency = normalizeCurrency(current.currency)
 
         executeUseCase(
             action = {
                 val result = paymentHandler.resolvePaymentLine(
                     line = line,
                     invoiceCurrencyInput = invoiceCurrency,
-                    paymentModeCurrencyByMode = current.paymentModeCurrencyByMode,
                     paymentModeDetails = paymentModeDetails,
                     exchangeRateByCurrency = current.exchangeRateByCurrency,
                     round = ::roundToCurrency
@@ -594,7 +589,7 @@ class BillingViewModel(
 
     fun onPaymentCurrencySelected(currency: String) {
         val current = requireSuccessState() ?: return
-        val baseCurrency = normalizeCurrency(contextProvider.requireContext().currency)
+        val baseCurrency = normalizeCurrency(current.currency)
         val paymentCurrency = normalizeCurrency(currency)
         if (paymentCurrency.equals(baseCurrency, ignoreCase = true)) {
             _state.update {
@@ -823,7 +818,6 @@ class BillingViewModel(
                     customer = customer,
                     exchangeRateByCurrency = current.exchangeRateByCurrency,
                     paymentModeDetails = paymentModeDetails,
-                    baseAmountCurrency = baseCurrency,
                     posOpeningEntry = openingEntryId
                 )
                 invoiceNameForLocal = paymentResult.invoiceNameForLocal
@@ -1163,7 +1157,7 @@ class BillingViewModel(
             invoiceCurrency = baseCurrency,
             receivableCurrency = context.partyAccountCurrency,
             conversionRate = conversionRate,
-            customExchangeRate = conversionRate
+            customExchangeRate = null
         )
         val totalReceivable = com.erpnext.pos.utils.CurrencyService.amountInvoiceToReceivable(
             totals.total,
@@ -1194,7 +1188,7 @@ class BillingViewModel(
             paymentTerms = if (current.isCreditSale) current.selectedPaymentTerm?.name else null,
             posProfile = context.profileName,
             remarks = paymentMetadata,
-            customExchangeRate = conversionRate?.takeIf { it > 0.0 },
+            customExchangeRate = null,
             updateStock = true,
             docStatus = 0,
             isPos = usePosInvoice,
@@ -1307,8 +1301,8 @@ class BillingViewModel(
         invoiceCurrency: String,
         cache: Map<String, Double>
     ): Double {
-        val pay = normalizeCurrency(paymentCurrency) ?: return 1.0
-        val inv = normalizeCurrency(invoiceCurrency) ?: return 1.0
+        val pay = normalizeCurrency(paymentCurrency)
+        val inv = normalizeCurrency(invoiceCurrency)
         if (pay == inv) return 1.0
         cache[pay]?.takeIf { it > 0.0 }?.let { return it }
         val direct = contextProvider.resolveExchangeRateBetween(pay, inv, allowNetwork = false)

@@ -66,7 +66,6 @@ import kotlinx.datetime.DatePeriod
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.minus
-import kotlinx.datetime.toLocalDateTime
 
 @OptIn(FlowPreview::class, ExperimentalTime::class)
 /**
@@ -172,7 +171,8 @@ class CustomerViewModel(
         viewModelScope.launch {
             val groups = runCatching { fetchCustomerGroupsUseCase() }.getOrElse { emptyList() }
             val territories = runCatching { fetchTerritoriesUseCase() }.getOrElse { emptyList() }
-            val paymentTerms = runCatching { fetchPaymentTermsUseCase(null) }.getOrElse { emptyList() }
+            val paymentTerms =
+                runCatching { fetchPaymentTermsUseCase(null) }.getOrElse { emptyList() }
             val companies = runCatching {
                 companyDao.getAll().map {
                     CompanyBO(
@@ -300,7 +300,7 @@ class CustomerViewModel(
             action = {
                 val invoices = fetchOutstandingInvoicesUseCase.invoke(customerId)
 
-                val baseCurrency = normalizeCurrency(cashboxManager.getContext()?.currency) ?: "USD"
+                val baseCurrency = normalizeCurrency(cashboxManager.getContext()?.currency)
 
                 // Pre-caché para que la UI no dispare resolveExchangeRateBetween repetidamente.
                 val exchangeRates = mutableMapOf<String, Double>()
@@ -377,7 +377,6 @@ class CustomerViewModel(
 
                 val invoiceCurrency = normalizeCurrency(invoice.currency)
                 val receivableCurrency = normalizeCurrency(invoice.partyAccountCurrency)
-                    ?: normalizeCurrency(context.partyAccountCurrency)
 
 
                 val normalizedInvoiceCurrency = normalizeCurrency(invoiceCurrency)
@@ -420,8 +419,6 @@ class CustomerViewModel(
                 val paymentResolved = paymentHandler.resolvePaymentLine(
                     line = line,
                     invoiceCurrencyInput = invoiceCurrency,
-                    paymentModeCurrencyByMode = _paymentState.value.paymentModeCurrencyByMode
-                        ?: emptyMap(),
                     paymentModeDetails = paymentModeDetails,
                     exchangeRateByCurrency = paymentRateCache,
                     round = ::roundToCurrency
@@ -439,7 +436,6 @@ class CustomerViewModel(
                     customer = customer,
                     exchangeRateByCurrency = updatedCache,
                     paymentModeDetails = paymentModeDetails,
-                    baseAmountCurrency = invoiceCurrency,
                     posOpeningEntry = cashboxManager.getActiveCashboxWithDetails()
                         ?.cashbox?.openingEntryId
                 )
@@ -447,12 +443,8 @@ class CustomerViewModel(
                 val invoiceCurrencyResolved = normalizeCurrency(invoice.currency)
                 val invoiceToReceivableRate = when {
                     invoiceCurrencyResolved.equals(receivableCurrency, ignoreCase = true) -> 1.0
-                    invoice.conversionRate != null && (invoice.customExchangeRate ?: 0.0) > 0.0 ->
+                    invoice.conversionRate != null && (invoice.conversionRate ?: 0.0) > 0.0 ->
                         invoice.conversionRate
-
-                    invoice.customExchangeRate != null && (invoice.customExchangeRate
-                        ?: 0.0) > 0.0 ->
-                        invoice.customExchangeRate
 
                     else -> null
                 }

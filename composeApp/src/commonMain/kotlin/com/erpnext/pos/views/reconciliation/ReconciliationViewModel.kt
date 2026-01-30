@@ -394,7 +394,7 @@ class ReconciliationViewModel(
                 invoiceCurrency = invoiceCurrency,
                 receivableCurrency = receivableCurrency,
                 conversionRate = invoice?.conversionRate,
-                customExchangeRate = invoice?.customExchangeRate
+                customExchangeRate = null
             )
             val rowReceivable = com.erpnext.pos.utils.CurrencyService.amountInvoiceToReceivable(
                 row.amount,
@@ -524,7 +524,7 @@ class ReconciliationViewModel(
                 invoiceCurrency = invoiceCurrency,
                 receivableCurrency = receivableCurrency,
                 conversionRate = invoice?.conversionRate,
-                customExchangeRate = invoice?.customExchangeRate
+                customExchangeRate = null
             )
             val rowReceivable = com.erpnext.pos.utils.CurrencyService.amountInvoiceToReceivable(
                 row.amount,

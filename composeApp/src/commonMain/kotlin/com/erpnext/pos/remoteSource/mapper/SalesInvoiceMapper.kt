@@ -132,7 +132,7 @@ fun SalesInvoiceDto.toEntity(): SalesInvoiceWithItemsAndPayments {
         debitTo = debitTo,
         postingDate = postingDate,
         dueDate = dueDate,
-        currency = currency ?: "USD",
+        currency = currency ?: "NIO" ,
         partyAccountCurrency = partyAccountCurrency,
         conversionRate = conversionRate,
         customExchangeRate = customExchangeRate,

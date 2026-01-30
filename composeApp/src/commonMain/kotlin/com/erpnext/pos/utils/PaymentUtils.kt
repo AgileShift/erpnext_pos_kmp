@@ -7,7 +7,6 @@ import com.erpnext.pos.domain.models.CustomerBO
 import com.erpnext.pos.domain.models.POSPaymentModeOption
 import com.erpnext.pos.localSource.entities.POSInvoicePaymentEntity
 import com.erpnext.pos.remoteSource.api.APIService
-import com.erpnext.pos.remoteSource.dto.SalesInvoiceDto
 import com.erpnext.pos.remoteSource.dto.v2.PaymentEntryCreateDto
 import com.erpnext.pos.remoteSource.dto.v2.PaymentEntryReferenceCreateDto
 import com.erpnext.pos.utils.oauth.CurrencySpec
@@ -20,7 +19,6 @@ import com.erpnext.pos.utils.oauth.roundCashIfNeeded
 import com.erpnext.pos.utils.oauth.safeDiv
 import com.erpnext.pos.utils.oauth.safeMul
 import com.erpnext.pos.utils.oauth.toDouble
-import com.erpnext.pos.utils.toErpDateTime
 import com.erpnext.pos.views.POSContext
 import com.erpnext.pos.views.billing.PaymentLine
 import kotlin.time.Clock
@@ -28,69 +26,25 @@ import kotlin.math.pow
 import kotlin.time.ExperimentalTime
 
 
-fun normalizeCurrency(code: String?): String? {
+fun normalizeCurrency(code: String?): String {
     val normalized = code?.trim()?.uppercase()
-    return normalized?.takeIf { it.isNotBlank() }
+    return normalized?.takeIf { it.isNotBlank() } ?: "NIO"
 }
 
 fun resolvePaymentCurrencyForMode(
     modeOfPayment: String,
-    invoiceCurrency: String,
-    paymentModeCurrencyByMode: Map<String, String>?,
     paymentModeDetails: Map<String, ModeOfPaymentEntity>
 ): String {
-    val invoice = normalizeCurrency(invoiceCurrency) ?: "USD"
     val modeDefinition = paymentModeDetails[modeOfPayment]
-    normalizeCurrency(modeDefinition?.currency)?.let { return it }
-    normalizeCurrency(paymentModeCurrencyByMode?.get(modeOfPayment))?.let { return it }
-    return invoice
+    normalizeCurrency(modeDefinition?.currency).let { return it }
 }
 
 fun buildPaymentModeDetailMap(definitions: List<ModeOfPaymentEntity>): Map<String, ModeOfPaymentEntity> {
-    return definitions.fold(mutableMapOf<String, ModeOfPaymentEntity>()) { acc, definition ->
+    return definitions.fold(mutableMapOf()) { acc, definition ->
         acc[definition.modeOfPayment] = definition
         acc[definition.name] = definition
         acc
     }
-}
-
-fun buildPaymentModeCurrencyMap(definitions: List<ModeOfPaymentEntity>): Map<String, String> {
-    return definitions.fold(mutableMapOf<String, String>()) { acc, definition ->
-        definition.currency?.trim()?.uppercase()?.takeIf { it.isNotBlank() }?.let { currency ->
-            acc[definition.modeOfPayment] = currency
-            acc[definition.name] = currency
-        }
-        acc
-    }
-}
-
-// -----------------------------------------------------------------------------
-// Payment helpers (reusables para Billing, Customer, etc.)
-// -----------------------------------------------------------------------------
-
-suspend fun resolveRateToInvoiceCurrency(
-    api: APIService,
-    paymentCurrency: String,
-    invoiceCurrency: String,
-    cache: Map<String, Double>,
-    rateResolver: (suspend (fromCurrency: String?, toCurrency: String?) -> Double?)? = null
-): Double {
-    val pay = normalizeCurrency(paymentCurrency) ?: return 1.0
-    val inv = normalizeCurrency(invoiceCurrency) ?: return 1.0
-    if (pay == inv) return 1.0
-
-    cache[pay]?.takeIf { it > 0.0 }?.let { return it }
-
-    rateResolver?.invoke(pay, inv)?.takeIf { it > 0.0 }?.let { return it }
-
-    val direct = api.getExchangeRate(fromCurrency = pay, toCurrency = inv)?.takeIf { it > 0.0 }
-    if (direct != null) return direct
-
-    val reverse = api.getExchangeRate(fromCurrency = inv, toCurrency = pay)
-        ?.takeIf { it > 0.0 }
-        ?.let { 1 / it }
-
-    return reverse ?: error("No se pudo resolver tasa $pay -> $inv")
 }
 
 suspend fun resolveRateToInvoiceCurrency(
@@ -99,8 +53,8 @@ suspend fun resolveRateToInvoiceCurrency(
     cache: Map<String, Double>,
     rateResolver: suspend (fromCurrency: String, toCurrency: String) -> Double?
 ): Double {
-    val pay = normalizeCurrency(paymentCurrency) ?: return 1.0
-    val inv = normalizeCurrency(invoiceCurrency) ?: return 1.0
+    val pay = normalizeCurrency(paymentCurrency)
+    val inv = normalizeCurrency(invoiceCurrency)
     if (pay == inv) return 1.0
 
     cache[pay]?.takeIf { it > 0.0 }?.let { return it }
@@ -110,25 +64,6 @@ suspend fun resolveRateToInvoiceCurrency(
 
     val reverse = rateResolver(inv, pay)?.takeIf { it > 0.0 }?.let { 1 / it }
     return reverse ?: error("No se pudo resolver tasa $pay -> $inv")
-}
-
-suspend fun resolveRateToInvoiceCurrency(
-    api: APIService,
-    fromCurrency: String?,
-    toCurrency: String?,
-): Double? {
-    val from = normalizeCurrency(fromCurrency) ?: return null
-    val to = normalizeCurrency(toCurrency) ?: return null
-    if (from == to) return 1.0
-
-    val directRate = api.getExchangeRate(fromCurrency = from, toCurrency = to)?.takeIf { it > 0.0 }
-    if (directRate != null) return directRate
-
-    val reverseRate = api.getExchangeRate(fromCurrency = to, toCurrency = from)
-        ?.takeIf { it > 0.0 }
-        ?.let { 1 / it }
-
-    return reverseRate
 }
 
 /**
@@ -141,8 +76,8 @@ suspend fun resolveExchangeRateBetween(
     fromCurrency: String?,
     toCurrency: String?,
 ): Double? {
-    val from = normalizeCurrency(fromCurrency) ?: return null
-    val to = normalizeCurrency(toCurrency) ?: return null
+    val from = normalizeCurrency(fromCurrency)
+    val to = normalizeCurrency(toCurrency)
     if (from == to) return 1.0
 
     val directRate = api.getExchangeRate(fromCurrency = from, toCurrency = to)?.takeIf { it > 0.0 }
@@ -221,72 +156,6 @@ data class InvoiceReceivableAmounts(
     val totalRc: Double,
     val outstandingRc: Double
 )
-
-fun resolveInvoiceAmountsInReceivable(
-    created: SalesInvoiceDto,
-): InvoiceReceivableAmounts {
-    val invoiceCurrency = (created.currency ?: "").trim().uppercase()
-    val receivableCurrency = (created.partyAccountCurrency ?: created.currency ?: "")
-        .trim().uppercase()
-
-    if (receivableCurrency.isBlank()) {
-        error("No se pudo resolver party_account_currency de la factura creada.")
-    }
-
-    val invoiceTotalInv = created.grandTotal
-    val invoiceOutstandingInv = created.outstandingAmount ?: invoiceTotalInv
-
-    // Caso simple: invoice currency == receivable currency
-    if (invoiceCurrency.isNotBlank() && invoiceCurrency.equals(
-            receivableCurrency,
-            ignoreCase = true
-        )
-    ) {
-        return InvoiceReceivableAmounts(
-            receivableCurrency = receivableCurrency,
-            totalRc = invoiceTotalInv,
-            outstandingRc = invoiceOutstandingInv
-        )
-    }
-
-    val baseTotal = created.baseGrandTotal
-    if (baseTotal == null) {
-        val paidRc = created.paidAmount
-        val totalRc = if (paidRc > 0.0) paidRc + invoiceOutstandingInv else invoiceOutstandingInv
-        return InvoiceReceivableAmounts(
-            receivableCurrency = receivableCurrency,
-            totalRc = totalRc,
-            outstandingRc = invoiceOutstandingInv
-        )
-    }
-
-    if (invoiceTotalInv <= 0.0) {
-        error("grand_total inválido para inferir tasa invoice->receivable (grand_total=$invoiceTotalInv).")
-    }
-
-    // rate: (receivable per 1 invoice)
-    val rateInvToRc = baseTotal / invoiceTotalInv
-    if (rateInvToRc <= 0.0) {
-        error("Tasa invoice->receivable inválida. base_grand_total=$baseTotal, grand_total=$invoiceTotalInv")
-    }
-
-    val totalRc = invoiceTotalInv * rateInvToRc
-    val outstandingRc = invoiceOutstandingInv * rateInvToRc
-
-    return InvoiceReceivableAmounts(
-        receivableCurrency = receivableCurrency,
-        totalRc = totalRc,
-        outstandingRc = outstandingRc
-    )
-}
-
-fun isSameMoneyAmount(a: Double, b: Double, decimals: Int): Boolean {
-    val factor = decimals.toDouble().pow(10.0)
-    val ra = kotlin.math.round(a * factor) / factor
-    val rb = kotlin.math.round(b * factor) / factor
-    return ra == rb
-}
-
 fun resolvePaymentToReceivableRate(
     paymentCurrency: String?,
     invoiceCurrency: String?,
@@ -294,11 +163,11 @@ fun resolvePaymentToReceivableRate(
     paymentToInvoiceRate: Double?,
     invoiceToReceivableRate: Double?
 ): Double? {
-    val pay = normalizeCurrency(paymentCurrency) ?: return null
-    val rc = normalizeCurrency(receivableCurrency) ?: return null
+    val pay = normalizeCurrency(paymentCurrency)
+    val rc = normalizeCurrency(receivableCurrency)
     if (pay.equals(rc, ignoreCase = true)) return 1.0
 
-    val inv = normalizeCurrency(invoiceCurrency) ?: rc
+    val inv = normalizeCurrency(invoiceCurrency)
     val payToInv = paymentToInvoiceRate?.takeIf { it > 0.0 }
     val invToRc = invoiceToReceivableRate?.takeIf { it > 0.0 }
 
@@ -323,7 +192,6 @@ suspend fun buildPaymentEntryDto(
     partyAccountCurrency: String?,
     invoiceCurrency: String?,
     invoiceToReceivableRate: Double?,
-    exchangeRateByCurrency: Map<String, Double>,
     currencySpecs: Map<String, CurrencySpec>,
     paymentModeDetails: Map<String, ModeOfPaymentEntity>,
 ): PaymentEntryCreateDto {
@@ -344,8 +212,6 @@ suspend fun buildPaymentEntryDto(
         ?: error("No se pudo resolver moneda de paid_to"))
         .trim().uppercase()
     val invoiceCurrencyResolved = normalizeCurrency(invoiceCurrency)
-        ?: normalizeCurrency(line.currency)
-        ?: receivableCurrency
 
     val rcSpec = currencySpecs[receivableCurrency]
         ?: CurrencySpec(code = receivableCurrency, minorUnits = 2, cashScale = 2)
@@ -581,8 +447,6 @@ suspend fun buildPaymentEntryDtoWithRateResolver(
     }
 
     val invoiceCurrencyResolved = normalizeCurrency(invoiceCurrency)
-        ?: normalizeCurrency(line.currency)
-        ?: receivableCurrency
     // Caso 2: paid_to != receivable
     val rateFromInputs = resolvePaymentToReceivableRate(
         paymentCurrency = paidToCurrency,
@@ -671,40 +535,4 @@ fun resolveRateBetweenFromBaseRates(
     val baseToTo = if (to == base) 1.0 else baseRates[to]
     if (baseToFrom == null || baseToTo == null || baseToFrom <= 0.0 || baseToTo <= 0.0) return null
     return baseToFrom / baseToTo
-}
-
-fun formatPendingDual(
-    pendingInBase: Double,
-    posBaseCurrency: String,
-    customerCurrency: String?,
-    baseRates: Map<String, Double>?
-): Pair<String, String?> {
-    val base = normalizeCurrency(posBaseCurrency) ?: "USD"
-    val customer = normalizeCurrency(customerCurrency) ?: base
-
-    val baseSymbol = base.toCurrencySymbol().ifBlank { base }
-    val baseLabel = formatAmount(baseSymbol, pendingInBase)
-
-    if (customer.equals(base, ignoreCase = true)) {
-        return baseLabel to null
-    }
-
-    val customerSymbol = customer.toCurrencySymbol().ifBlank { customer }
-
-    val rate = if (baseRates.isNullOrEmpty()) {
-        null
-    } else {
-        resolveRateBetweenFromBaseRates(
-            fromCurrency = base,
-            toCurrency = customer,
-            baseCurrency = base,
-            baseRates = baseRates
-        )
-    }
-
-    val customerLabel = rate?.let { r ->
-        formatAmount(customerSymbol, pendingInBase * r)
-    } ?: "$customerSymbol --"
-
-    return baseLabel to customerLabel
 }

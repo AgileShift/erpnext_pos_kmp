@@ -46,17 +46,13 @@ class PaymentHandler(
     suspend fun resolvePaymentLine(
         line: PaymentLine,
         invoiceCurrencyInput: String,
-        paymentModeCurrencyByMode: Map<String, String>,
         paymentModeDetails: Map<String, ModeOfPaymentEntity>,
         exchangeRateByCurrency: Map<String, Double>,
         round: (Double) -> Double
     ): PaymentLineResult {
-        val invoiceCurrency = normalizeCurrency(invoiceCurrencyInput) ?: "USD"
-
+        val invoiceCurrency = normalizeCurrency(invoiceCurrencyInput)
         val paymentCurrency = resolvePaymentCurrencyForMode(
             modeOfPayment = line.modeOfPayment,
-            invoiceCurrency = invoiceCurrency,
-            paymentModeCurrencyByMode = paymentModeCurrencyByMode,
             paymentModeDetails = paymentModeDetails
         )
 
@@ -96,7 +92,6 @@ class PaymentHandler(
         customer: CustomerBO,
         exchangeRateByCurrency: Map<String, Double>,
         paymentModeDetails: Map<String, ModeOfPaymentEntity>,
-        baseAmountCurrency: String?,
         posOpeningEntry: String?
     ): PaymentRegistrationResult {
         if (paymentLines.isEmpty()) {
@@ -111,22 +106,19 @@ class PaymentHandler(
             createdInvoice?.doctype?.equals("POS Invoice", ignoreCase = true) == true
         val currencySpecs = buildCurrencySpecs()
         var resolvedReceivableCurrency = normalizeCurrency(createdInvoice?.partyAccountCurrency)
-            ?: normalizeCurrency(context.partyAccountCurrency)
-            ?: normalizeCurrency(createdInvoice?.currency)
-            ?: normalizeCurrency(context.currency)
-            ?: "USD"
         var resolvedInvoiceCurrency = normalizeCurrency(createdInvoice?.currency)
-            ?: normalizeCurrency(context.currency)
-            ?: "USD"
 
         val rateInvToRc = when {
             resolvedInvoiceCurrency.equals(resolvedReceivableCurrency, ignoreCase = true) -> 1.0
             createdInvoice?.conversionRate != null && createdInvoice.conversionRate > 0.0 ->
                 createdInvoice.conversionRate
-            createdInvoice?.customExchangeRate != null && createdInvoice.customExchangeRate > 0.0 ->
-                createdInvoice.customExchangeRate
+
+            createdInvoice?.conversionRate != null && createdInvoice.conversionRate > 0.0 ->
+                createdInvoice.conversionRate
+
             createdInvoice?.baseGrandTotal != null && createdInvoice.grandTotal > 0.0 ->
                 createdInvoice.baseGrandTotal / createdInvoice.grandTotal
+
             else -> resolveRateBetweenCurrencies(
                 fromCurrency = resolvedInvoiceCurrency,
                 toCurrency = resolvedReceivableCurrency,
@@ -140,6 +132,7 @@ class PaymentHandler(
             val totalRc = when {
                 resolvedInvoiceCurrency.equals(resolvedReceivableCurrency, ignoreCase = true) ->
                     invoiceTotalInv
+
                 it.baseGrandTotal != null && it.baseGrandTotal > 0.0 -> it.baseGrandTotal
                 rateInvToRc != null -> invoiceTotalInv * rateInvToRc
                 else -> invoiceTotalInv
@@ -147,14 +140,17 @@ class PaymentHandler(
             val outstandingRc = when {
                 resolvedInvoiceCurrency.equals(resolvedReceivableCurrency, ignoreCase = true) ->
                     invoiceOutstandingInv ?: totalRc
+
                 it.baseGrandTotal != null -> {
                     val basePaid = it.basePaidAmount ?: 0.0
                     (it.baseGrandTotal - basePaid).coerceAtLeast(0.0)
                 }
+
                 rateInvToRc != null -> {
                     val invOutstanding = invoiceOutstandingInv ?: invoiceTotalInv
                     (invOutstanding * rateInvToRc).coerceAtLeast(0.0)
                 }
+
                 else -> invoiceOutstandingInv ?: totalRc
             }
             InvoiceReceivableAmounts(
@@ -173,24 +169,25 @@ class PaymentHandler(
             val resolvedInvoice = if (createdInvoice.debitTo.isNullOrBlank() &&
                 !createdInvoice.name.isNullOrBlank()
             ) {
-                runCatching { api.getSalesInvoiceByName(createdInvoice.name!!) }
+                runCatching { api.getSalesInvoiceByName(createdInvoice.name) }
                     .getOrElse { createdInvoice }
             } else {
                 createdInvoice
             }
             resolvedInvoiceCurrency = normalizeCurrency(resolvedInvoice.currency)
-                ?: resolvedInvoiceCurrency
             resolvedReceivableCurrency = normalizeCurrency(resolvedInvoice.partyAccountCurrency)
-                ?: resolvedReceivableCurrency
 
             val rateInvToRcResolved = when {
                 resolvedInvoiceCurrency.equals(resolvedReceivableCurrency, ignoreCase = true) -> 1.0
                 resolvedInvoice.conversionRate != null && resolvedInvoice.conversionRate > 0.0 ->
                     resolvedInvoice.conversionRate
-                resolvedInvoice.customExchangeRate != null && resolvedInvoice.customExchangeRate > 0.0 ->
-                    resolvedInvoice.customExchangeRate
+
+                resolvedInvoice.conversionRate != null && resolvedInvoice.conversionRate > 0.0 ->
+                    resolvedInvoice.conversionRate
+
                 resolvedInvoice.baseGrandTotal != null && resolvedInvoice.grandTotal > 0.0 ->
                     resolvedInvoice.baseGrandTotal / resolvedInvoice.grandTotal
+
                 else -> resolveRateBetweenCurrencies(
                     fromCurrency = resolvedInvoiceCurrency,
                     toCurrency = resolvedReceivableCurrency,
@@ -201,8 +198,10 @@ class PaymentHandler(
             val totalRcResolved = when {
                 resolvedReceivableCurrency.equals(resolvedInvoiceCurrency, ignoreCase = true) ->
                     resolvedInvoice.grandTotal
+
                 resolvedInvoice.baseGrandTotal != null && resolvedInvoice.baseGrandTotal > 0.0 ->
                     resolvedInvoice.baseGrandTotal
+
                 rateInvToRcResolved != null -> resolvedInvoice.grandTotal * rateInvToRcResolved
                 else -> resolvedInvoice.grandTotal
             }
@@ -210,15 +209,18 @@ class PaymentHandler(
             val outstandingRcResolved = when {
                 resolvedReceivableCurrency.equals(resolvedInvoiceCurrency, ignoreCase = true) ->
                     resolvedInvoice.outstandingAmount ?: resolvedInvoice.grandTotal
+
                 resolvedInvoice.baseGrandTotal != null -> {
                     val basePaid = resolvedInvoice.basePaidAmount ?: 0.0
                     (resolvedInvoice.baseGrandTotal - basePaid).coerceAtLeast(0.0)
                 }
+
                 rateInvToRcResolved != null -> {
                     val invOutstanding =
                         resolvedInvoice.outstandingAmount ?: resolvedInvoice.grandTotal
                     (invOutstanding * rateInvToRcResolved).coerceAtLeast(0.0)
                 }
+
                 else -> resolvedInvoice.outstandingAmount ?: resolvedInvoice.grandTotal
             }
 
@@ -227,7 +229,7 @@ class PaymentHandler(
                 totalRc = totalRcResolved,
                 outstandingRc = outstandingRcResolved
             )
-            remainingOutstandingRc = receivableAmounts?.outstandingRc
+            remainingOutstandingRc = receivableAmounts.outstandingRc
 
             val paidFrom = resolvedInvoice.debitTo
             var remotePaymentFailed = false
@@ -245,7 +247,7 @@ class PaymentHandler(
                 if (remainingOutstandingRc != null && remainingOutstandingRc <= 0.0) return@forEach
                 val paidToCurrency = normalizeCurrency(
                     paymentModeDetails[line.modeOfPayment]?.currency
-                ) ?: normalizeCurrency(line.currency) ?: resolvedInvoiceCurrency
+                )
                 if (!paidToCurrency.equals(resolvedReceivableCurrency, ignoreCase = true)) {
                     if (cacheForReceivable[paidToCurrency] == null) {
                         resolveRateBetweenCurrencies(
@@ -265,13 +267,12 @@ class PaymentHandler(
                     customer = customer,
                     postingDate = postingDate,
                     invoiceId = resolvedInvoice.name ?: invoiceNameForLocal,
-                    invoiceTotalRc = receivableAmounts?.totalRc ?: resolvedInvoice.grandTotal,
+                    invoiceTotalRc = receivableAmounts.totalRc,
                     outstandingRc = remainingOutstandingRc ?: resolvedInvoice.grandTotal,
                     paidFromAccount = paidFrom,
                     partyAccountCurrency = resolvedReceivableCurrency,
                     invoiceCurrency = resolvedInvoiceCurrency,
                     invoiceToReceivableRate = rateInvToRcResolved,
-                    exchangeRateByCurrency = cacheForReceivable,
                     currencySpecs = currencySpecs,
                     paymentModeDetails = paymentModeDetails
                 )
@@ -307,8 +308,8 @@ class PaymentHandler(
                 line.baseAmount
             }
             if (remainingLocal == null) return@map line.copy(baseAmount = localAmount)
-            val allocated = minOf(localAmount, remainingLocal!!)
-            remainingLocal = (remainingLocal!! - allocated).coerceAtLeast(0.0)
+            val allocated = minOf(localAmount, remainingLocal)
+            remainingLocal = (remainingLocal - allocated).coerceAtLeast(0.0)
             line.copy(baseAmount = allocated)
         }
 
@@ -337,8 +338,8 @@ class PaymentHandler(
         toCurrency: String,
         context: POSContext
     ): Double? {
-        val from = normalizeCurrency(fromCurrency) ?: return null
-        val to = normalizeCurrency(toCurrency) ?: return null
+        val from = normalizeCurrency(fromCurrency)
+        val to = normalizeCurrency(toCurrency)
         if (from.equals(to, ignoreCase = true)) return 1.0
 
         exchangeRateRepository.getLocalRate(from, to)?.takeIf { it > 0.0 }?.let { return it }
@@ -346,7 +347,7 @@ class PaymentHandler(
 
         val ctxCurrency = normalizeCurrency(context.currency)
         val ctxRate = context.exchangeRate
-        if (ctxRate > 0.0 && ctxCurrency != null) {
+        if (ctxRate > 0.0) {
             if (from.equals(ctxCurrency, true) && to.equals("USD", true)) {
                 return 1 / ctxRate
             }

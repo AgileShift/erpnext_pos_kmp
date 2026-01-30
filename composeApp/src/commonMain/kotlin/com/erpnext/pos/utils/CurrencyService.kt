@@ -21,7 +21,6 @@ object CurrencyService {
         if (invoice.isNullOrBlank() || receivable.isNullOrBlank()) return null
         if (invoice.equals(receivable, ignoreCase = true)) return 1.0
         conversionRate?.takeIf { it > 0.0 }?.let { return it }
-        customExchangeRate?.takeIf { it > 0.0 }?.let { return it }
         return null
     }
 

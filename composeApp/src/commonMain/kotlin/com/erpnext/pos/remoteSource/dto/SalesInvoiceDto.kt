@@ -137,6 +137,7 @@ data class SalesInvoicePaymentScheduleDto(
     val modeOfPayment: String? = null
 )
 
+@OptIn(ExperimentalSerializationApi::class)
 @Serializable
 data class SalesInvoiceItemDto(
     @SerialName("item_code")

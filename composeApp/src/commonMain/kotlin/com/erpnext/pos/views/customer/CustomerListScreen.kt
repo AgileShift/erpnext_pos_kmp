@@ -118,7 +118,7 @@ fun CustomerListScreen(
     val snackbar: SnackbarController = koinInject()
     val cashboxManager: CashBoxManager = koinInject()
     val posContext = cashboxManager.getContext()
-    val posCurrency = normalizeCurrency(posContext?.currency) ?: "USD"
+    val posCurrency = normalizeCurrency(posContext?.currency)
     val partyCurrency = normalizeCurrency(paymentState.partyAccountCurrency)
     val supportedCurrencies = remember(
         posContext?.allowedCurrencies, posContext?.currency, paymentState.partyAccountCurrency
@@ -424,7 +424,6 @@ fun CustomerListScreen(
                 customer = customer,
                 invoicesState = invoicesState,
                 paymentState = paymentState,
-                supportedCurrencies = supportedCurrencies,
                 cashboxManager = cashboxManager,
                 onDismiss = { },
                 onActionSelected = { actionType ->
@@ -471,7 +470,6 @@ fun CustomerListScreen(
                 historyBusy = historyBusy,
                 paymentState = paymentState,
                 posBaseCurrency = posCurrency,
-                supportedCurrencies = supportedCurrencies,
                 cashboxManager = cashboxManager,
                 onAction = { invoiceId, action, refundMode, refundReference, applyRefund ->
                     actions.onInvoiceHistoryAction(
@@ -490,7 +488,7 @@ fun CustomerListScreen(
 
     if (showNewCustomerDialog) {
         NewCustomerDialog(
-            onDismiss = { showNewCustomerDialog = false },
+            onDismiss = { },
             onSubmit = { input -> actions.onCreateCustomer(input) },
             customerGroups = dialogDataState.customerGroups,
             territories = dialogDataState.territories,
@@ -849,7 +847,6 @@ private fun CustomerDetailPanel(
                 customer = customer,
                 invoices = invoicesState.invoices,
                 posBaseCurrency = posCurrency,
-                supportedCurrencies = supportedCurrencies,
                 cashboxManager = cashboxManager
             )
         }
@@ -954,7 +951,6 @@ private fun CustomerRightPanel(
                             historyBusy = historyBusy,
                             paymentState = paymentState,
                             posBaseCurrency = posBaseCurrency,
-                            supportedCurrencies = supportedCurrencies,
                             cashboxManager = cashboxManager,
                             onAction = onInvoiceHistoryAction,
                             loadLocalInvoice = loadLocalInvoice,
@@ -1854,7 +1850,6 @@ private fun CustomerQuickActionsSheet(
     customer: CustomerBO,
     invoicesState: CustomerInvoicesState,
     paymentState: CustomerPaymentState,
-    supportedCurrencies: List<String>,
     cashboxManager: CashBoxManager,
     onDismiss: () -> Unit,
     onActionSelected: (CustomerQuickActionType) -> Unit
@@ -1878,7 +1873,6 @@ private fun CustomerQuickActionsSheet(
                     invoicesState.invoices
                 } else emptyList(),
                 posBaseCurrency = paymentState.baseCurrency,
-                supportedCurrencies = supportedCurrencies,
                 cashboxManager = cashboxManager
             )
 
@@ -1934,9 +1928,8 @@ private fun CustomerOutstandingInvoicesContent(
     var amountRaw by remember { mutableStateOf("") }
     var amountValue by remember { mutableStateOf(0.0) }
     val posBaseCurrency = normalizeCurrency(paymentState.baseCurrency)
-    val baseCurrency = normalizeCurrency(selectedInvoice?.partyAccountCurrency) ?: posBaseCurrency
-    val invoiceCurrency = normalizeCurrency(selectedInvoice?.currency) ?: baseCurrency
-    val invoiceToBaseRate = selectedInvoice?.conversionRate ?: selectedInvoice?.customExchangeRate
+    val baseCurrency = normalizeCurrency(selectedInvoice?.partyAccountCurrency)
+    val invoiceCurrency = normalizeCurrency(selectedInvoice?.currency)
     val paymentModes = paymentState.paymentModes
     val modeOptions = remember(paymentModes) { paymentModes.map { it.modeOfPayment }.distinct() }
     val defaultMode = paymentModes.firstOrNull()?.modeOfPayment.orEmpty()
@@ -1955,8 +1948,6 @@ private fun CustomerOutstandingInvoicesContent(
     LaunchedEffect(selectedMode, invoiceCurrency) {
         selectedCurrency = resolvePaymentCurrencyForMode(
             modeOfPayment = selectedMode,
-            invoiceCurrency = invoiceCurrency,
-            paymentModeCurrencyByMode = paymentState.paymentModeCurrencyByMode,
             paymentModeDetails = paymentState.modeTypes ?: mapOf()
         )
     }
@@ -1974,8 +1965,8 @@ private fun CustomerOutstandingInvoicesContent(
 
     fun rateKey(from: String, to: String) = "${from.uppercase()}->${to.uppercase()}"
     fun resolveRateLocal(fromCurrency: String?, toCurrency: String?): Double? {
-        val from = normalizeCurrency(fromCurrency) ?: return null
-        val to = normalizeCurrency(toCurrency) ?: return null
+        val from = normalizeCurrency(fromCurrency)
+        val to = normalizeCurrency(toCurrency)
         if (from.equals(to, ignoreCase = true)) return 1.0
         resolveRateBetweenFromBaseRates(
             fromCurrency = from,
@@ -2077,11 +2068,7 @@ private fun CustomerOutstandingInvoicesContent(
                         items(invoicesState.invoices, key = { it.invoiceId }) { invoice ->
                             val isSelected = invoice.invoiceId == selectedInvoice?.invoiceId
                             val baseCurrency =
-                                normalizeCurrency(invoice.partyAccountCurrency) ?: posBaseCurrency
-                            val invoiceCurrency =
-                                normalizeCurrency(invoice.currency) ?: baseCurrency
-                            val invoiceToBaseRate =
-                                invoice.conversionRate ?: invoice.customExchangeRate
+                                normalizeCurrency(invoice.partyAccountCurrency)
                             val outstandingBase =
                                 invoice.baseOutstandingAmount ?: invoice.outstandingAmount
                             val rateBaseToPos = resolveRateBetweenFromBaseRates(
@@ -2193,7 +2180,7 @@ private fun CustomerOutstandingInvoicesContent(
                                     }
 
                                     Text(
-                                        text = "${strings.customer.outstandingLabel}: $baseLabel",
+                                        text = "${strings.customer.outstandingLabel}: $posLabel",
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.primary
                                     )
@@ -2249,8 +2236,6 @@ private fun CustomerOutstandingInvoicesContent(
                                 selectedMode = mode.name
                                 selectedCurrency = resolvePaymentCurrencyForMode(
                                     modeOfPayment = mode.modeOfPayment,
-                                    invoiceCurrency = invoiceCurrency,
-                                    paymentModeCurrencyByMode = paymentState.paymentModeCurrencyByMode,
                                     paymentModeDetails = paymentState.modeTypes ?: mapOf()
                                 )
                                 modeExpanded = false
@@ -2346,7 +2331,6 @@ private fun CustomerInvoiceHistorySheet(
     historyBusy: Boolean,
     paymentState: CustomerPaymentState,
     posBaseCurrency: String,
-    supportedCurrencies: List<String>,
     cashboxManager: CashBoxManager,
     onAction: (String, InvoiceCancellationAction, String?, String?, Boolean) -> Unit,
     onDismiss: () -> Unit,
@@ -2786,7 +2770,6 @@ private fun CustomerInvoiceHistorySheet(
             historyBusy = historyBusy,
             paymentState = paymentState,
             posBaseCurrency = posBaseCurrency,
-            supportedCurrencies = supportedCurrencies,
             cashboxManager = cashboxManager,
             onAction = onAction,
             loadLocalInvoice = loadLocalInvoice,
@@ -2804,7 +2787,6 @@ private fun CustomerInvoiceHistoryContent(
     historyBusy: Boolean,
     paymentState: CustomerPaymentState,
     posBaseCurrency: String,
-    supportedCurrencies: List<String>,
     cashboxManager: CashBoxManager,
     onAction: (String, InvoiceCancellationAction, String?, String?, Boolean) -> Unit,
     loadLocalInvoice: suspend (String) -> SalesInvoiceWithItemsAndPayments? = { null },
@@ -3393,7 +3375,6 @@ private fun CustomerInvoiceHistoryContent(
                     InvoiceHistorySummary(
                         invoices = invoices,
                         posBaseCurrency = posBaseCurrency,
-                        supportedCurrencies = supportedCurrencies,
                         cashboxManager = cashboxManager
                     )
                     LazyColumn(
@@ -3406,7 +3387,6 @@ private fun CustomerInvoiceHistoryContent(
                                 invoice = invoice,
                                 isBusy = historyBusy,
                                 posBaseCurrency = posBaseCurrency,
-                                supportedCurrencies = supportedCurrencies,
                                 cashboxManager = cashboxManager,
                                 onCancel = { invoiceId ->
                                     onAction(
@@ -3471,12 +3451,11 @@ private fun HistoryRangeChip(
 private fun InvoiceHistorySummary(
     invoices: List<SalesInvoiceBO>,
     posBaseCurrency: String,
-    supportedCurrencies: List<String>,
     cashboxManager: CashBoxManager
 ) {
     val posCurrency = normalizeCurrency(posBaseCurrency)
     val baseCurrency =
-        normalizeCurrency(invoices.firstOrNull()?.partyAccountCurrency) ?: posCurrency
+        normalizeCurrency(invoices.firstOrNull()?.partyAccountCurrency)
     val totalBase = invoices.sumOf { it.baseOutstandingAmount ?: it.outstandingAmount }
     var totalPos by remember { mutableStateOf<Double?>(null) }
 
@@ -3530,7 +3509,6 @@ private fun InvoiceHistoryRow(
     invoice: SalesInvoiceBO,
     isBusy: Boolean,
     posBaseCurrency: String,
-    supportedCurrencies: List<String>,
     cashboxManager: CashBoxManager,
     onCancel: (String) -> Unit,
     onReturnTotal: (String) -> Unit,
@@ -3538,9 +3516,9 @@ private fun InvoiceHistoryRow(
 ) {
     val posCurrency = normalizeCurrency(posBaseCurrency)
     val baseCurrency =
-        normalizeCurrency(invoice.partyAccountCurrency) ?: posCurrency
-    val invoiceCurrency = normalizeCurrency(invoice.currency) ?: posCurrency
-    val conversionRate = invoice.conversionRate ?: invoice.customExchangeRate
+        normalizeCurrency(invoice.partyAccountCurrency)
+    val invoiceCurrency = normalizeCurrency(invoice.currency)
+    val conversionRate = invoice.conversionRate
     val baseTotal = invoice.baseGrandTotal ?: toBaseAmount(
         amount = invoice.total,
         invoiceCurrency = invoiceCurrency,
@@ -3550,10 +3528,10 @@ private fun InvoiceHistoryRow(
     val baseOutstanding = invoice.baseOutstandingAmount ?: invoice.outstandingAmount
     var rateBaseToPos by remember { mutableStateOf<Double?>(null) }
     LaunchedEffect(baseCurrency, posCurrency) {
-        if (baseCurrency.equals(posCurrency, ignoreCase = true)) {
-            rateBaseToPos = 1.0
+        rateBaseToPos = if (baseCurrency.equals(posCurrency, ignoreCase = true)) {
+            1.0
         } else {
-            rateBaseToPos = cashboxManager.resolveExchangeRateBetween(
+            cashboxManager.resolveExchangeRateBetween(
                 fromCurrency = baseCurrency,
                 toCurrency = posCurrency,
                 allowNetwork = false
@@ -3717,13 +3695,6 @@ private fun toBaseAmount(
     return if (conversionRate != null && conversionRate > 0.0) amount * conversionRate else amount
 }
 
-private fun toInvoiceAmountFromBase(
-    baseAmount: Double, invoiceCurrency: String, baseCurrency: String, conversionRate: Double?
-): Double {
-    if (invoiceCurrency.equals(baseCurrency, ignoreCase = true)) return baseAmount
-    return if (conversionRate != null && conversionRate > 0.0) baseAmount / conversionRate else baseAmount
-}
-
 private enum class ReturnDestination(val label: String) {
     RETURN("Reembolso"), CREDIT("Crédito a favor")
 }
@@ -3733,13 +3704,12 @@ private fun CustomerOutstandingSummary(
     customer: CustomerBO,
     invoices: List<SalesInvoiceBO>,
     posBaseCurrency: String,
-    supportedCurrencies: List<String>,
     cashboxManager: CashBoxManager
 ) {
     val strings = LocalAppStrings.current
     val posCurrency = normalizeCurrency(posBaseCurrency)
     val baseCurrency =
-        normalizeCurrency(invoices.firstOrNull()?.partyAccountCurrency) ?: posCurrency
+        normalizeCurrency(invoices.firstOrNull()?.partyAccountCurrency)
     val totalBase = if (invoices.isNotEmpty()) {
         invoices.sumOf { it.baseOutstandingAmount ?: it.outstandingAmount }
     } else {

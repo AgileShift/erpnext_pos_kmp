@@ -59,7 +59,7 @@ data class SalesInvoiceEntity(
     var company: String,
     var branch: String? = null,
     var warehouse: String? = null,
-    var currency: String = "USD",
+    var currency: String = "NIO",
 
     @ColumnInfo(name = "party_account_currency")
     var partyAccountCurrency: String? = null,

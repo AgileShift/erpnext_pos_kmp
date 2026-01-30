@@ -205,7 +205,8 @@ class CustomerRepository(
         invoices.forEach { wrapper ->
             val invoice = wrapper.invoice
             val receivableCurrency = invoice.partyAccountCurrency ?: invoice.currency
-            val outstanding = invoice.outstandingAmount.coerceAtLeast(0.0)
+            val outstanding = (invoice.baseOutstandingAmount ?: invoice.outstandingAmount)
+                .coerceAtLeast(0.0)
             val rate = when {
                 receivableCurrency.equals(baseCurrency, ignoreCase = true) -> 1.0
                 else -> context.resolveExchangeRateBetween(
@@ -217,7 +218,7 @@ class CustomerRepository(
                         invoiceCurrency = invoice.currency,
                         receivableCurrency = receivableCurrency,
                         conversionRate = invoice.conversionRate,
-                        customExchangeRate = invoice.customExchangeRate
+                        customExchangeRate = null
                     )
                     ?: 1.0
             }
@@ -269,6 +270,9 @@ class CustomerRepository(
             startDate = startDate,
             endDate = endDate
         )
-        return invoices.toBO()
+        val invoicesBo = invoices.toBO()
+        return invoicesBo
     }
 }
+
+//TODO: Las facturas se estan guardando con currency USD, verificar
