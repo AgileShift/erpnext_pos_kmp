@@ -13,7 +13,18 @@ enum class AppLanguage(val code: String) {
     }
 }
 
+data class InvoiceStatusStrings(
+    val draft: String,
+    val unpaid: String,
+    val paid: String,
+    val partlyPaid: String,
+    val canceled: String,
+    val returned: String,
+    val creditNote: String
+)
+
 data class AppStrings(
+    val invoice: InvoiceStatusStrings,
     val billing: BillingStrings,
     val customer: CustomerStrings,
     val inventory: InventoryStrings,
@@ -568,6 +579,15 @@ object AppStringsFactory {
             differenceReviewBadge = "Revisar",
             onlineLabel = "En línea"
         ),
+        invoice = InvoiceStatusStrings(
+            draft = "Borrador",
+            unpaid = "Impagado",
+            paid = "Pagado",
+            partlyPaid = "Pago parcial",
+            canceled = "Canelada",
+            returned = "Retornada",
+            creditNote = "Nota de credito",
+        ),
         common = CommonStrings(
             back = "Atrás",
             retry = "Reintentar",
@@ -840,6 +860,15 @@ object AppStringsFactory {
             differenceAttentionBadge = "Needs attention",
             differenceReviewBadge = "Review",
             onlineLabel = "Online"
+        ),
+        invoice = InvoiceStatusStrings(
+            draft = "Draft",
+            unpaid = "Unpaid",
+            paid = "Paid",
+            partlyPaid = "Partly Paid",
+            canceled = "Cancelled",
+            returned = "Return",
+            creditNote = "Credit Note"
         ),
         common = CommonStrings(
             back = "Back",

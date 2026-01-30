@@ -66,6 +66,7 @@ import com.erpnext.pos.domain.usecases.CreateCustomerInput
 import com.erpnext.pos.domain.usecases.InvoiceCancellationAction
 import com.erpnext.pos.localSource.entities.SalesInvoiceWithItemsAndPayments
 import com.erpnext.pos.localization.LocalAppStrings
+import com.erpnext.pos.utils.CurrencyService
 import com.erpnext.pos.utils.QuickActions.customerQuickActions
 import com.erpnext.pos.utils.formatDoubleToString
 import com.erpnext.pos.utils.formatCurrency
@@ -77,6 +78,7 @@ import com.erpnext.pos.utils.view.SnackbarType
 import com.erpnext.pos.utils.oauth.bd
 import com.erpnext.pos.utils.oauth.moneyScale
 import com.erpnext.pos.utils.oauth.toDouble
+import com.erpnext.pos.utils.toCurrencySymbol
 import com.erpnext.pos.utils.view.SnackbarPosition
 import com.erpnext.pos.views.CashBoxManager
 import com.erpnext.pos.views.billing.AppTextField
@@ -748,7 +750,7 @@ private fun CustomerDetailPanel(
     val pendingAmount =
         bd(customer.totalPendingAmount ?: customer.currentBalance ?: 0.0).moneyScale(2).toDouble(2)
     val displayCurrencies = remember(supportedCurrencies, posCurrency, baseCurrency) {
-        com.erpnext.pos.utils.CurrencyService.resolveDisplayCurrencies(
+        CurrencyService.resolveDisplayCurrencies(
             supported = supportedCurrencies,
             invoiceCurrency = null,
             receivableCurrency = baseCurrency,
@@ -759,7 +761,7 @@ private fun CustomerDetailPanel(
     LaunchedEffect(displayCurrencies, baseCurrency, pendingAmount) {
         val resolved = mutableMapOf<String, Double>()
         displayCurrencies.forEach { currency ->
-            val converted = com.erpnext.pos.utils.CurrencyService.convertFromReceivable(
+            val converted = CurrencyService.convertFromReceivable(
                 amount = pendingAmount,
                 receivableCurrency = baseCurrency,
                 targetCurrency = currency,
@@ -1545,11 +1547,11 @@ fun CustomerItem(
     var isMenuExpanded by remember { mutableStateOf(false) }
     val quickActions = remember { customerQuickActions() }
     val avatarSize = if (isDesktop) 52.dp else 44.dp
-    val pendingAmountRaw = bd(customer.totalPendingAmount ?: 0.0).moneyScale(2)
+    val pendingAmountRaw = bd(customer.totalPendingAmount ?: 0.0).moneyScale(0)
     val pendingAmount = pendingAmountRaw.toDouble(2)
     val posCurr = normalizeCurrency(posCurrency)
     val displayCurrencies = remember(baseCurrency, posCurr, supportedCurrencies) {
-        com.erpnext.pos.utils.CurrencyService.resolveDisplayCurrencies(
+        CurrencyService.resolveDisplayCurrencies(
             supported = supportedCurrencies,
             invoiceCurrency = null,
             receivableCurrency = baseCurrency,
@@ -1560,7 +1562,7 @@ fun CustomerItem(
     LaunchedEffect(baseCurrency, displayCurrencies, pendingAmount) {
         val resolved = mutableMapOf<String, Double>()
         displayCurrencies.forEach { currency ->
-            val converted = com.erpnext.pos.utils.CurrencyService.convertFromReceivable(
+            val converted = CurrencyService.convertFromReceivable(
                 amount = pendingAmount,
                 receivableCurrency = baseCurrency,
                 targetCurrency = currency,
@@ -1576,6 +1578,7 @@ fun CustomerItem(
         }
         pendingByCurrency = resolved
     }
+    //TODO: Customer List <- Data
     val primaryCurrency = when {
         posCurr.isNotBlank() && pendingByCurrency.containsKey(posCurr) -> posCurr
         baseCurrency.isNotBlank() && pendingByCurrency.containsKey(baseCurrency) -> baseCurrency
@@ -1709,11 +1712,6 @@ fun CustomerItem(
                 color = if (emphasis) MaterialTheme.colorScheme.error
                 else MaterialTheme.colorScheme.onSurface
             )
-            Text(
-                text = "Facturas pendientes: $pendingInvoices",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
             if (!secondaryValue.isNullOrBlank()) {
                 Text(
                     text = secondaryValue,
@@ -1721,6 +1719,11 @@ fun CustomerItem(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
+            Text(
+                text = "Facturas pendientes: $pendingInvoices",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
             if (customer.mobileNo?.isNotEmpty() == true) {
                 Text(
                     text = customer.mobileNo,
@@ -1954,68 +1957,34 @@ private fun CustomerOutstandingInvoicesContent(
 
     var modeExpanded by remember { mutableStateOf(false) }
 
-    val fallbackRates = remember { mutableStateMapOf<String, Double>() }
-    val baseRates = remember(invoicesState) {
-        if (invoicesState is CustomerInvoicesState.Success) {
-            invoicesState.exchangeRateByCurrency
-        } else {
-            emptyMap()
-        }
+    var rateBaseToPos by remember { mutableStateOf<Double?>(null) }
+    LaunchedEffect(selectedCurrency, baseCurrency, posBaseCurrency) {
+        rateBaseToPos =
+            if (!selectedCurrency.equals(posBaseCurrency, ignoreCase = true)) {
+                1.0
+            } else {
+                cashboxManager.resolveExchangeRateBetween(
+                    fromCurrency = baseCurrency,
+                    toCurrency = posBaseCurrency,
+                    allowNetwork = false
+                )
+            }
     }
 
-    fun rateKey(from: String, to: String) = "${from.uppercase()}->${to.uppercase()}"
-    fun resolveRateLocal(fromCurrency: String?, toCurrency: String?): Double? {
-        val from = normalizeCurrency(fromCurrency)
-        val to = normalizeCurrency(toCurrency)
-        if (from.equals(to, ignoreCase = true)) return 1.0
-        resolveRateBetweenFromBaseRates(
-            fromCurrency = from,
-            toCurrency = to,
-            baseCurrency = posBaseCurrency,
-            baseRates = baseRates
-        )?.takeIf { it > 0.0 }?.let { return it }
-        fallbackRates[rateKey(from, to)]?.takeIf { it > 0.0 }?.let { return it }
-        val reverse = fallbackRates[rateKey(to, from)]?.takeIf { it > 0.0 }?.let { 1 / it }
-        return reverse
-    }
-
-    // Exchange rate de baseCurrency -> paymentCurrency usando baseRates/local
-    val exchangeRate = remember(selectedCurrency, baseCurrency, baseRates, fallbackRates) {
-        resolveRateLocal(baseCurrency, selectedCurrency)
-    }
-    LaunchedEffect(selectedCurrency, baseCurrency, baseRates) {
-        val from = normalizeCurrency(baseCurrency)
-        val to = normalizeCurrency(selectedCurrency)
-        if (from.equals(to, ignoreCase = true)) return@LaunchedEffect
-        if (resolveRateLocal(from, to) != null) return@LaunchedEffect
-        val fetched = cashboxManager.resolveExchangeRateBetween(
-            fromCurrency = from, toCurrency = to, allowNetwork = false
-        )
-        if (fetched != null && fetched > 0.0) {
-            fallbackRates[rateKey(from, to)] = fetched
-        }
-    }
-
-    val conversionError = exchangeRate == null
+    val conversionError = rateBaseToPos == null
 
     // Base amount = monto pagado convertido a moneda base de la factura
-    val baseAmount = exchangeRate?.let { rate ->
+    val baseAmount = rateBaseToPos?.let { rate ->
         if (rate <= 0.0) 0.0 else amountValue / rate
     } ?: 0.0
 
     val outstandingBase =
-        selectedInvoice?.baseOutstandingAmount ?: selectedInvoice?.outstandingAmount ?: 0.0
-    val posRate = resolveRateLocal(baseCurrency, posBaseCurrency)
-    val outstandingPos = when {
-        baseCurrency.equals(posBaseCurrency, ignoreCase = true) -> outstandingBase
-        posRate != null && posRate > 0.0 -> outstandingBase * posRate
-        else -> outstandingBase
+        bd(
+            selectedInvoice?.baseOutstandingAmount ?: selectedInvoice?.outstandingAmount ?: 0.0
+        ).toDouble(0)
+    val outstandingInSelectedCurrency = rateBaseToPos?.let { rate ->
+        bd(outstandingBase * rate).toDouble(0)
     }
-    val outstandingInSelectedCurrency = exchangeRate?.let { rate ->
-        outstandingBase * rate
-    }
-    val baseOutstandingLabel = formatCurrency(baseCurrency, outstandingBase)
-    val posOutstandingLabel = formatCurrency(posBaseCurrency, outstandingPos)
     val changeDue = outstandingInSelectedCurrency?.let { amountValue - it } ?: 0.0
     val isSubmitEnabled =
         !paymentState.isSubmitting && selectedInvoice?.invoiceId?.isNotBlank() == true && selectedMode.isNotBlank() && amountValue > 0.0 && !conversionError
@@ -2069,25 +2038,33 @@ private fun CustomerOutstandingInvoicesContent(
                             val isSelected = invoice.invoiceId == selectedInvoice?.invoiceId
                             val baseCurrency =
                                 normalizeCurrency(invoice.partyAccountCurrency)
-                            val outstandingBase =
+                            val baseOutstanding = bd(
                                 invoice.baseOutstandingAmount ?: invoice.outstandingAmount
-                            val rateBaseToPos = resolveRateBetweenFromBaseRates(
-                                fromCurrency = baseCurrency,
-                                toCurrency = posBaseCurrency,
-                                baseCurrency = posBaseCurrency,
-                                baseRates = invoicesState.exchangeRateByCurrency
-                            )
-                            val outstandingPos = when {
-                                baseCurrency.equals(posBaseCurrency, ignoreCase = true) ->
-                                    outstandingBase
-
-                                rateBaseToPos != null && rateBaseToPos > 0.0 ->
-                                    outstandingBase * rateBaseToPos
-
-                                else -> outstandingBase
+                            ).toDouble(0)
+                            var rateBaseToPos by remember { mutableStateOf<Double?>(null) }
+                            LaunchedEffect(baseCurrency, posBaseCurrency) {
+                                rateBaseToPos =
+                                    if (baseCurrency.equals(posBaseCurrency, ignoreCase = true)) {
+                                        1.0
+                                    } else {
+                                        cashboxManager.resolveExchangeRateBetween(
+                                            fromCurrency = baseCurrency,
+                                            toCurrency = posBaseCurrency,
+                                            allowNetwork = false
+                                        )
+                                    }
                             }
-                            val baseLabel = formatCurrency(baseCurrency, outstandingBase)
-                            val posLabel = formatCurrency(posBaseCurrency, outstandingPos)
+
+                            //TODO: Pendiente
+                            val baseLabel = formatCurrency(baseCurrency, baseOutstanding)
+                            var posLabel = ""
+                            if (baseCurrency != posBaseCurrency) {
+                                val posOutstanding =
+                                    bd(rateBaseToPos?.takeIf { it > 0.0 }
+                                        ?.let { baseOutstanding * it }
+                                        ?: baseOutstanding).toDouble(0)
+                                posLabel = formatCurrency(posBaseCurrency, posOutstanding)
+                            }
 
                             Card(
                                 modifier = Modifier.fillMaxWidth(),
@@ -2146,13 +2123,13 @@ private fun CustomerOutstandingInvoicesContent(
                                                 "Pending" -> {
                                                     AssistChip(
                                                         onClick = {},
-                                                        label = { Text("Pendiente sync") })
+                                                        label = { Text("Sincronizacion pendiente") })
                                                 }
 
                                                 "Failed" -> {
                                                     AssistChip(
                                                         onClick = {},
-                                                        label = { Text("Sync falló") },
+                                                        label = { Text("Sincronizacion falló") },
                                                         colors = AssistChipDefaults.assistChipColors(
                                                             containerColor = MaterialTheme.colorScheme.errorContainer,
                                                             labelColor = MaterialTheme.colorScheme.onErrorContainer
@@ -2184,13 +2161,11 @@ private fun CustomerOutstandingInvoicesContent(
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.primary
                                     )
-                                    if (!baseCurrency.equals(posBaseCurrency, ignoreCase = true)) {
-                                        Text(
-                                            text = "${strings.customer.baseCurrency}: $baseLabel",
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                    }
+                                    Text(
+                                        text = "${strings.customer.baseCurrency}: $baseLabel",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
                                 }
                             }
                         }
@@ -2274,52 +2249,60 @@ private fun CustomerOutstandingInvoicesContent(
                     supportingText = {
                         if (conversionError) {
                             Text(
-                                text = "Exchange rate unavailable for $selectedCurrency to $baseCurrency.",
+                                text = "Tasa de cambio no encontrada de $selectedCurrency a $baseCurrency.",
                                 color = MaterialTheme.colorScheme.error
                             )
-                        } else if (!selectedCurrency.equals(baseCurrency, ignoreCase = true)) {
-                            Text("Base: ${formatCurrency(baseCurrency, baseAmount)}")
+                        } else if (!selectedCurrency.equals(posBaseCurrency, ignoreCase = true)) {
+                            Text(
+                                "Valor en ${selectedCurrency.toCurrencySymbol()}: ${
+                                    formatCurrency(
+                                        baseCurrency,
+                                        baseAmount
+                                    )
+                                }"
+                            )
                         }
-                    })
-                Text(
-                    text = "${strings.customer.outstandingLabel}: $posOutstandingLabel",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    }
                 )
-                if (!baseCurrency.equals(posBaseCurrency, ignoreCase = true)) {
-                    Text(
-                        text = "${strings.customer.baseCurrency}: $baseOutstandingLabel",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
+//                Text(
+//                    text = "${strings.customer.outstandingLabel}: $posOutstandingLabel",
+//                    style = MaterialTheme.typography.bodySmall,
+//                    color = MaterialTheme.colorScheme.onSurfaceVariant
+//                )
+//                Text(
+//                    text = "${strings.customer.baseCurrency}: $baseOutstandingLabel",
+//                    style = MaterialTheme.typography.bodySmall,
+//                    color = MaterialTheme.colorScheme.onSurfaceVariant
+//                ) if (changeDue > 0.0) {
+                Text(
+                    text = "Cambio: ${formatCurrency(selectedCurrency, changeDue)}",
+                    style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
+                    color = MaterialTheme.colorScheme.primary
+                )
+                //}
+            }
 
-                if (changeDue > 0.0) {
-                    Text(
-                        text = "Cambio: ${formatCurrency(selectedCurrency, changeDue)}",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.primary
+            Button(
+                onClick = {
+                    val invoiceId = selectedInvoice?.invoiceId?.trim().orEmpty()
+                    onRegisterPayment(
+                        invoiceId,
+                        selectedMode,
+                        (amountValue - changeDue),
+                        selectedCurrency,
+                        referenceInput
                     )
-                }
-
-                Button(
-                    onClick = {
-                        val invoiceId = selectedInvoice?.invoiceId?.trim().orEmpty()
-                        onRegisterPayment(
-                            invoiceId, selectedMode, amountValue, selectedCurrency, referenceInput
-                        )
-                    }, enabled = isSubmitEnabled, modifier = Modifier.fillMaxWidth()
-                ) {
-                    Text(
-                        if (paymentState.isSubmitting) strings.customer.processing
-                        else strings.customer.registerPaymentButton
-                    )
-                }
+                }, enabled = isSubmitEnabled, modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(
+                    if (paymentState.isSubmitting) strings.customer.processing
+                    else strings.customer.registerPaymentButton
+                )
             }
         }
-
-        Spacer(modifier = Modifier.height(12.dp))
     }
+
+    Spacer(modifier = Modifier.height(12.dp))
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -3504,6 +3487,22 @@ private fun InvoiceHistorySummary(
     }
 }
 
+// TODO: Localizar los estados de las facturas
+@Composable
+private fun normalizedStatus(status: String?): String {
+    val strings = LocalAppStrings.current.invoice
+    return when (status) {
+        "draft" -> strings.draft
+        "unpaid" -> strings.unpaid
+        "paid" -> strings.paid
+        "partly paid" -> strings.partlyPaid
+        "canceled" -> strings.canceled
+        "credit note" -> strings.creditNote
+        "return" -> strings.returned
+        else -> strings.draft
+    }
+}
+
 @Composable
 private fun InvoiceHistoryRow(
     invoice: SalesInvoiceBO,
@@ -3525,7 +3524,7 @@ private fun InvoiceHistoryRow(
         baseCurrency = baseCurrency,
         conversionRate = conversionRate
     )
-    val baseOutstanding = invoice.baseOutstandingAmount ?: invoice.outstandingAmount
+    val baseOutstanding = bd(invoice.baseOutstandingAmount ?: invoice.outstandingAmount).toDouble(0)
     var rateBaseToPos by remember { mutableStateOf<Double?>(null) }
     LaunchedEffect(baseCurrency, posCurrency) {
         rateBaseToPos = if (baseCurrency.equals(posCurrency, ignoreCase = true)) {
@@ -3538,17 +3537,19 @@ private fun InvoiceHistoryRow(
             )
         }
     }
-    val posTotal = rateBaseToPos?.takeIf { it > 0.0 }?.let { baseTotal * it } ?: baseTotal
+    val posTotal =
+        bd(rateBaseToPos?.takeIf { it > 0.0 }?.let { baseTotal * it } ?: baseTotal).toDouble(0)
     val posOutstanding =
-        rateBaseToPos?.takeIf { it > 0.0 }?.let { baseOutstanding * it } ?: baseOutstanding
+        bd(rateBaseToPos?.takeIf { it > 0.0 }?.let { baseOutstanding * it }
+            ?: baseOutstanding).toDouble(0)
     val statusLabel = invoice.status ?: "Sin estado"
-    val normalizedStatus = invoice.status?.trim()?.lowercase()
+    val normalizedStatus = normalizedStatus(invoice.status?.trim()?.lowercase())
     val hasPayments = invoice.paidAmount > 0.0 || invoice.payments.any { it.amount > 0.0 }
     val isDraftOrUnpaid = normalizedStatus == "draft" || normalizedStatus == "unpaid"
     val isPaidOrPartly = normalizedStatus == "paid" || normalizedStatus == "partly paid"
     val allowCancel = isDraftOrUnpaid && !hasPayments
     val allowReturn = isPaidOrPartly || hasPayments
-    val (statusBg, statusText) = when (normalizedStatus) {
+    val (statusBg, statusText) = when (statusLabel.lowercase()) {
         "paid" -> MaterialTheme.colorScheme.primaryContainer to MaterialTheme.colorScheme.primary
         "partly paid" -> MaterialTheme.colorScheme.tertiaryContainer to MaterialTheme.colorScheme.tertiary
         "overdue" -> MaterialTheme.colorScheme.errorContainer to MaterialTheme.colorScheme.error
