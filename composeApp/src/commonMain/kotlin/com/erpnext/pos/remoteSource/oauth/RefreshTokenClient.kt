@@ -1,7 +1,6 @@
 package com.erpnext.pos.remoteSource.oauth
 
 import com.erpnext.pos.remoteSource.dto.TokenResponse
-import com.erpnext.pos.remoteSource.oauth.OAuthConfig
 import com.erpnext.pos.utils.AppLogger
 import com.erpnext.pos.utils.AppSentry
 import io.ktor.client.HttpClient
@@ -29,16 +28,24 @@ suspend fun refreshAuthToken(
         listOf("all", "openid")
     )
     try {
+        val params = Parameters.build {
+            append("grant_type", "refresh_token")
+            append("refresh_token", refreshToken)
+            append("client_id", oauthConfig.clientId)
+            oauthConfig.clientSecret.takeIf { it.isNotBlank() }?.let {
+                append("client_secret", it)
+            }
+            oauthConfig.redirectUrl.takeIf { it.isNotBlank() }?.let {
+                append("redirect_uri", it)
+            }
+            val scopes = oauthConfig.scopes
+            if (scopes.isNotEmpty()) {
+                append("scope", scopes.joinToString(" "))
+            }
+        }.formUrlEncode()
         return client.post(config.tokenUrl) {
             contentType(ContentType.Application.FormUrlEncoded)
-            setBody(
-                Parameters.build {
-                    append("grant_type", "refresh_token")
-                    append("refresh_token", refreshToken)
-                    append("client_id", oauthConfig.clientId)
-                    append("client_secret", oauthConfig.clientSecret)
-                }.formUrlEncode()
-            )
+            setBody(params)
         }.body()
     } catch (e: Throwable) {
         AppSentry.capture(e, "refreshAuthToken failed")

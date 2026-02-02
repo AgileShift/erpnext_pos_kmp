@@ -47,6 +47,7 @@ class BillingCoordinator(val viewModel: BillingViewModel) {
     fun onClearSource() = viewModel.clearSourceDocument()
     fun onLoadSourceDocuments(sourceType: SalesFlowSource) =
         viewModel.loadSourceDocuments(sourceType)
+    fun onSyncExchangeRates() = viewModel.onSyncExchangeRates()
 }
 
 @Composable

@@ -64,7 +64,7 @@ data class SalesInvoiceEntity(
     @ColumnInfo(name = "party_account_currency")
     var partyAccountCurrency: String? = null,
     @ColumnInfo(name = "conversion_rate")
-    var conversionRate: Double? = null,
+    var conversionRate: Double? = 0.0,
     @ColumnInfo(name = "custom_exchange_rate")
     var customExchangeRate: Double? = null,
     // 📅 Fechas clave

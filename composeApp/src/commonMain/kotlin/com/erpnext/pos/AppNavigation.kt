@@ -673,9 +673,12 @@ fun AppNavigation() {
                                 LaunchedEffect(Unit) {
                                     navManager.navigationEvents.collect { event ->
                                         when (event) {
-                                            is NavRoute.Login -> navController.navigateSingle(
-                                                NavRoute.Login.path
-                                            )
+                                            is NavRoute.Login -> {
+                                                val route = navController.currentBackStackEntry?.destination?.route
+                                                if (route != NavRoute.Login.path) {
+                                                    navController.navigateSingle(NavRoute.Login.path)
+                                                }
+                                            }
 
                                             is NavRoute.Home -> navController.navigateTopLevel(
                                                 NavRoute.Home.path

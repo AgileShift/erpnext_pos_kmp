@@ -266,7 +266,7 @@ class CashBoxManager(
             allowedCurrencies = allowedCurrencies,
             paymentModes = paymentModes,
             cashier = user.toBO(),
-            partyAccountCurrency = company?.defaultCurrency ?: profile.currency,
+            partyAccountCurrency = profile.currency ?: company?.defaultCurrency ?: "",
         )
         _contextFlow.value = currentContext
         currentContext!!
@@ -304,6 +304,15 @@ class CashBoxManager(
             startMillis = startMillis,
             endMillis = endMillis
         )
+        val resolvedInvoices = if (isOnline) {
+            reconcileRemoteInvoicesForClosing(
+                openingEntryId = openingEntryId,
+                posProfile = ctx.profileName,
+                invoices = shiftInvoices
+            )
+        } else {
+            shiftInvoices
+        }
         val endDate = getTimeMillis().toErpDateTime()
         val dto = buildClosingEntryDto(
             cashbox = entry.cashbox,
@@ -311,7 +320,7 @@ class CashBoxManager(
             postingDate = endDate,
             periodEndDate = endDate,
             balanceDetails = entry.details,
-            invoices = shiftInvoices
+            invoices = resolvedInvoices
         )
         if (!remoteOpeningEntryId.isNullOrBlank()) {
             val existing = openingDao.getByName(remoteOpeningEntryId)
@@ -353,10 +362,63 @@ class CashBoxManager(
         currentContext
     }
 
+    private suspend fun reconcileRemoteInvoicesForClosing(
+        openingEntryId: String,
+        posProfile: String,
+        invoices: List<SalesInvoiceEntity>
+    ): List<SalesInvoiceEntity> {
+        if (invoices.isEmpty()) return invoices
+        val resolved = mutableListOf<SalesInvoiceEntity>()
+        invoices.forEach { invoice ->
+            val name = invoice.invoiceName?.trim().orEmpty()
+            if (name.isBlank() || name.startsWith("LOCAL-", ignoreCase = true)) return@forEach
+            if (!invoice.isPos || invoice.docstatus != 1) return@forEach
+            val posInvoice = runCatching { api.getPOSInvoiceByName(name) }.getOrNull()
+            val remote = posInvoice ?: runCatching { api.getSalesInvoiceByName(name) }.getOrNull()
+            if (remote == null) {
+                AppLogger.warn("closeCashBox: remote invoice missing for $name")
+                return@forEach
+            }
+            val matches = remote.posOpeningEntry == openingEntryId &&
+                remote.posProfile == posProfile
+            if (matches) {
+                resolved += invoice
+                return@forEach
+            }
+            val updated = runCatching {
+                val doctype = if (remote.doctype.equals("POS Invoice", ignoreCase = true) || remote.isPos) {
+                    "POS Invoice"
+                } else {
+                    com.erpnext.pos.remoteSource.sdk.ERPDocType.SalesInvoice.path
+                }
+                api.setValue(doctype, name, "pos_opening_entry", openingEntryId)
+                api.setValue(doctype, name, "pos_profile", posProfile)
+                true
+            }.getOrElse {
+                AppLogger.warn("closeCashBox: set_value failed for $name", it)
+                false
+            }
+            if (updated) {
+                resolved += invoice
+            } else {
+                AppLogger.warn(
+                    "closeCashBox: remote invoice $name without opening entry $openingEntryId"
+                )
+            }
+        }
+        return resolved
+    }
+
     fun getContext(): POSContext? = currentContext
 
     fun requireContext(): POSContext =
         currentContext ?: error("POS context not initialized. Call initializeContext() first.")
+
+    fun clearContext() {
+        currentContext = null
+        _contextFlow.value = null
+        _cashboxState.update { false }
+    }
 
     fun activeCashboxStart(): Flow<String?> = flow {
         val ctx = currentContext ?: initializeContext()

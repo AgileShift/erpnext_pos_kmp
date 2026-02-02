@@ -43,8 +43,17 @@ class PartialReturnUseCase(
     private val networkMonitor: NetworkMonitor
 ) : UseCase<PartialReturnInput, PartialReturnResult>() {
     override suspend fun useCaseFunction(input: PartialReturnInput): PartialReturnResult {
-        val invoice = repository.getInvoiceByName(input.invoiceName)
+        var invoice = repository.getInvoiceByName(input.invoiceName)
             ?: throw IllegalArgumentException("Factura no encontrada: ${input.invoiceName}")
+        if (invoice.items.isEmpty()) {
+            repository.refreshInvoiceFromRemote(input.invoiceName)
+            invoice = repository.getInvoiceByName(input.invoiceName)
+                ?: throw IllegalArgumentException("Factura no encontrada: ${input.invoiceName}")
+        }
+        if (invoice.items.isEmpty()) {
+            throw IllegalStateException("La factura no tiene items cargados para devolución.")
+        }
+        val originalOutstanding = invoice.invoice.outstandingAmount
 
         val isOnline = networkMonitor.isConnected.firstOrNull() == true
         if (!isOnline) {
@@ -67,7 +76,15 @@ class PartialReturnUseCase(
             payments = entity.payments
         )
 
-        invoice.invoice.invoiceName?.let { repository.refreshInvoiceFromRemote(it) }
+        val returnTotal = kotlin.math.abs(created.grandTotal)
+        invoice.invoice.invoiceName?.let { name ->
+            repository.refreshInvoiceFromRemote(name)
+            val refreshed = repository.getInvoiceByName(name)?.invoice
+            val expectedOutstanding = (originalOutstanding - returnTotal).coerceAtLeast(0.0)
+            if (refreshed != null && refreshed.outstandingAmount > expectedOutstanding + 0.01) {
+                repository.applyLocalReturnAdjustment(name, returnTotal)
+            }
+        }
 
         val refundCreated = if (input.applyRefund) {
             input.refundModeOfPayment?.takeIf { it.isNotBlank() }?.let { mode ->

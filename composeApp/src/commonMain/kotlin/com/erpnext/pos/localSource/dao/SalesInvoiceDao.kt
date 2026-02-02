@@ -74,6 +74,21 @@ interface SalesInvoiceDao {
     @Query("SELECT * FROM tabSalesInvoice WHERE is_deleted = 0 AND invoice_name = :invoiceName LIMIT 1")
     suspend fun getInvoiceByName(invoiceName: String): SalesInvoiceWithItemsAndPayments?
 
+    @Query(
+        """
+        SELECT i.invoice_name
+        FROM tabSalesInvoice i
+        LEFT JOIN tabSalesInvoiceItem it
+          ON it.parent_invoice = i.invoice_name
+        WHERE i.is_deleted = 0
+          AND i.profile_id = :profileId
+        GROUP BY i.invoice_name
+        HAVING COUNT(it.id) = 0
+        LIMIT :limit
+        """
+    )
+    suspend fun getInvoiceNamesMissingItems(profileId: String, limit: Int = 50): List<String>
+
     @Transaction
     @Query("SELECT * FROM tabSalesInvoice WHERE is_deleted = 0 AND sync_status = 'Pending'")
     suspend fun getPendingSyncInvoices(): List<SalesInvoiceWithItemsAndPayments>

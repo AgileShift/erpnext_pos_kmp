@@ -24,8 +24,10 @@ fun ReconciliationRoute(
         viewModel.reload()
     }
 
-    LaunchedEffect(closeState.isClosed, mode) {
-        if (mode == ReconciliationMode.Close && closeState.isClosed) {
+    LaunchedEffect(closeState.isClosed, mode, state) {
+        if (mode == ReconciliationMode.Close &&
+            (closeState.isClosed || (state is ReconciliationState.Empty && !closeState.isClosing))
+        ) {
             navManager.navigateTo(com.erpnext.pos.navigation.NavRoute.Home)
         }
     }

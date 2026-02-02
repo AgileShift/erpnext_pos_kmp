@@ -33,10 +33,27 @@ fun normalizeCurrency(code: String?): String {
 
 fun resolvePaymentCurrencyForMode(
     modeOfPayment: String,
-    paymentModeDetails: Map<String, ModeOfPaymentEntity>
+    paymentModeDetails: Map<String, ModeOfPaymentEntity>,
+    preferredCurrency: String? = null,
+    invoiceCurrency: String? = null
 ): String {
+    val preferred = preferredCurrency?.trim()?.uppercase()
+    if (!preferred.isNullOrBlank()) return preferred
     val modeDefinition = paymentModeDetails[modeOfPayment]
-    normalizeCurrency(modeDefinition?.currency).let { return it }
+    val fromMode = modeDefinition?.currency?.trim()?.uppercase()
+    if (!fromMode.isNullOrBlank()) return fromMode
+    val inferred = inferCurrencyFromModeName(modeOfPayment)
+    if (!inferred.isNullOrBlank()) return inferred
+    return normalizeCurrency(invoiceCurrency)
+}
+
+private fun inferCurrencyFromModeName(modeOfPayment: String): String? {
+    val upper = modeOfPayment.trim().uppercase()
+    return when {
+        upper.contains("USD") || upper.contains("DOLAR") -> "USD"
+        upper.contains("NIO") || upper.contains("CORDO") -> "NIO"
+        else -> null
+    }
 }
 
 fun buildPaymentModeDetailMap(definitions: List<ModeOfPaymentEntity>): Map<String, ModeOfPaymentEntity> {
@@ -217,12 +234,12 @@ suspend fun buildPaymentEntryDto(
         ?: line.currency.takeIf { it.isNotBlank() }
         ?: error("No se pudo resolver moneda de paid_to"))
         .trim().uppercase()
-    val invoiceCurrencyResolved = normalizeCurrency(invoiceCurrency)
-
     val rcSpec = currencySpecs[receivableCurrency]
         ?: CurrencySpec(code = receivableCurrency, minorUnits = 2, cashScale = 2)
     val toSpec = currencySpecs[paidToCurrency]
         ?: CurrencySpec(code = paidToCurrency, minorUnits = 2, cashScale = 2)
+    val invoiceCurrencyResolved = normalizeCurrency(invoiceCurrency)
+    val rateInvToRc = invoiceToReceivableRate?.takeIf { it > 0.0 }
 
     val outstanding = bd(outstandingRc)
         .moneyScale(rcSpec.minorUnits)
@@ -245,7 +262,6 @@ suspend fun buildPaymentEntryDto(
         } else {
             minOfBd(entered, outstanding).moneyScale(rcSpec.minorUnits)
         }
-
         return PaymentEntryCreateDto(
             company = context.company,
             postingDate = postingDate,
@@ -306,7 +322,6 @@ suspend fun buildPaymentEntryDto(
     } else {
         minOfBd(deliveredRc, outstanding).moneyScale(rcSpec.minorUnits)
     }
-
     val receivedEffective = allocatedRc
         .safeDiv(rate, scale = 8)
         .let { roundCashIfNeeded(it, toSpec) }

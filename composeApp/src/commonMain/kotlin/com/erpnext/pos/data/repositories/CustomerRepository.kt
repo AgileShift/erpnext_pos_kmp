@@ -7,6 +7,7 @@ import com.erpnext.pos.domain.models.CustomerBO
 import com.erpnext.pos.domain.models.SalesInvoiceBO
 import com.erpnext.pos.domain.repositories.ICustomerRepository
 import com.erpnext.pos.localSource.datasources.CustomerLocalSource
+import com.erpnext.pos.localSource.entities.SalesInvoiceWithItemsAndPayments
 import com.erpnext.pos.remoteSource.datasources.CustomerRemoteSource
 import com.erpnext.pos.remoteSource.dto.CustomerCreditLimitDto
 import com.erpnext.pos.remoteSource.dto.CustomerDto
@@ -55,7 +56,8 @@ class CustomerRepository(
         }, saveFetchResult = { remoteData ->
             val profileId = context.requireContext().profileName
             val invoices = remoteSource.fetchInvoices(profileId).toEntities()
-            localSource.saveInvoices(invoices)
+            localSource.saveInvoices(invoices.map { mergeLocalInvoiceFields(it) })
+            backfillMissingInvoiceItems(profileId)
 
             // Fetch all outstanding invoices once
             val allOutstanding = remoteSource.fetchAllOutstandingInvoices(profileId)
@@ -127,7 +129,8 @@ class CustomerRepository(
         }, saveFetchResult = { remoteData ->
             val profileId = context.requireContext().profileName
             val invoices = remoteSource.fetchInvoices(profileId).toEntities()
-            localSource.saveInvoices(invoices)
+            localSource.saveInvoices(invoices.map { mergeLocalInvoiceFields(it) })
+            backfillMissingInvoiceItems(profileId)
 
             // Fetch all outstanding invoices once
             val allOutstanding = remoteSource.fetchAllOutstandingInvoices(profileId)
@@ -214,11 +217,16 @@ class CustomerRepository(
                     baseCurrency,
                     allowNetwork = false
                 )
-                    ?: com.erpnext.pos.utils.CurrencyService.resolveReceivableToInvoiceRate(
+                    ?: com.erpnext.pos.utils.CurrencyService.resolveReceivableToInvoiceRateUnified(
                         invoiceCurrency = invoice.currency,
                         receivableCurrency = receivableCurrency,
                         conversionRate = invoice.conversionRate,
-                        customExchangeRate = null
+                        customExchangeRate = invoice.customExchangeRate,
+                        posCurrency = ctx?.currency,
+                        posExchangeRate = ctx?.exchangeRate,
+                        rateResolver = { from, to ->
+                            context.resolveExchangeRateBetween(from, to, allowNetwork = false)
+                        }
                     )
                     ?: 1.0
             }
@@ -237,6 +245,31 @@ class CustomerRepository(
             availableCredit = availableCredit?.let { roundToCurrency(it) },
             state = state
         )
+    }
+
+    private suspend fun mergeLocalInvoiceFields(
+        payload: SalesInvoiceWithItemsAndPayments
+    ): SalesInvoiceWithItemsAndPayments {
+        val invoiceName = payload.invoice.invoiceName?.trim().orEmpty()
+        if (invoiceName.isBlank()) return payload
+        val local = localSource.getInvoiceByName(invoiceName)?.invoice ?: return payload
+        val mergedInvoice = payload.invoice.copy(
+            profileId = payload.invoice.profileId?.takeIf { it.isNotBlank() } ?: local.profileId,
+            posOpeningEntry = payload.invoice.posOpeningEntry?.takeIf { it.isNotBlank() }
+                ?: local.posOpeningEntry,
+            warehouse = payload.invoice.warehouse?.takeIf { it.isNotBlank() } ?: local.warehouse
+        )
+        return payload.copy(invoice = mergedInvoice)
+    }
+
+    private suspend fun backfillMissingInvoiceItems(profileId: String, limit: Int = 50) {
+        val missing = localSource.getInvoiceNamesMissingItems(profileId, limit)
+        if (missing.isEmpty()) return
+        missing.forEach { invoiceName ->
+            val remote = remoteSource.fetchInvoiceByName(invoiceName) ?: return@forEach
+            val merged = mergeLocalInvoiceFields(remote.toEntity())
+            localSource.saveInvoices(listOf(merged))
+        }
     }
 
     suspend fun fetchInvoicesForCustomerPeriod(

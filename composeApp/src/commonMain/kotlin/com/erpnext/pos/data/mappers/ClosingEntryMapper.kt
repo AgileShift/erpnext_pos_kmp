@@ -42,6 +42,7 @@ private fun buildClosingInvoiceRows(
         if (!seen.add(rawName)) return@mapNotNull null
         POSClosingInvoiceDto(
             salesInvoice = rawName,
+            posInvoice = rawName.takeIf { invoice.isPos },
             postingDate = invoice.postingDate,
             customer = invoice.customer,
             grandTotal = invoice.grandTotal,

@@ -25,7 +25,6 @@ import com.erpnext.pos.navigation.NavigationManager
 import com.erpnext.pos.remoteSource.dto.SalesInvoiceDto
 import com.erpnext.pos.remoteSource.dto.SalesInvoiceItemDto
 import com.erpnext.pos.remoteSource.dto.SalesInvoicePaymentScheduleDto
-import com.erpnext.pos.remoteSource.api.APIService
 import com.erpnext.pos.remoteSource.sdk.toUserMessage
 import com.erpnext.pos.utils.toCurrencySymbol
 import com.erpnext.pos.utils.view.DateTimeProvider
@@ -58,6 +57,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.update
+import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
 
 class BillingViewModel(
@@ -75,7 +75,6 @@ class BillingViewModel(
     private val createSalesInvoiceRemoteOnlyUseCase: CreateSalesInvoiceRemoteOnlyUseCase,
     private val updateLocalInvoiceFromRemoteUseCase: UpdateLocalInvoiceFromRemoteUseCase,
     private val markSalesInvoiceSyncedUseCase: MarkSalesInvoiceSyncedUseCase,
-    private val api: APIService,
     private val paymentHandler: PaymentHandler,
     private val billingResetController: BillingResetController,
 ) : BaseViewModel() {
@@ -700,7 +699,8 @@ class BillingViewModel(
             current.copy(
                 successMessage = null,
                 successDialogMessage = null,
-                successDialogInvoice = null
+                successDialogInvoice = null,
+                successDialogId = 0L
             )
         }
     }
@@ -755,6 +755,11 @@ class BillingViewModel(
                     receivableCurrency = receivableCurrency,
                     context = context
                 )
+                if (!invoiceCurrency.equals(receivableCurrency, ignoreCase = true) &&
+                    (conversionRate == null || conversionRate == 1.0)
+                ) {
+                    error("No se pudo resolver la tasa de cambio $invoiceCurrency -> ${receivableCurrency}.")
+                }
 
                 val activeCashbox = runCatching {
                     contextProvider.getActiveCashboxWithDetails()?.cashbox
@@ -774,6 +779,7 @@ class BillingViewModel(
                     conversionRate = conversionRate,
                     postingDate = postingDate,
                     dueDate = dueDate,
+                    posOpeningEntry = openingEntryId,
                     usePosInvoice = usePosInvoice
                 )
 
@@ -918,6 +924,7 @@ class BillingViewModel(
                             else -> "Venta registrada correctamente"
                         },
                         successDialogInvoice = created?.name ?: localInvoiceName,
+                        successDialogId = Clock.System.now().toEpochMilliseconds(),
                         sourceDocument = null,
                         isSourceDocumentApplied = false
                     )
@@ -927,12 +934,50 @@ class BillingViewModel(
                 _state.update { currentState ->
                     val previous = currentState as? BillingState.Success
                     val errorMessage = buildFinalizeErrorMessage(previous, e)
-                    BillingState.Error(errorMessage, previous)
+                    BillingState.Error(
+                        errorMessage,
+                        previous,
+                        showSyncRates = shouldSuggestRateSync(e)
+                    )
                 }
             }, finallyHandler = {
                 setFinalizingSale(false)
             })
         }
+    }
+
+    fun onSyncExchangeRates() {
+        val current = _state.value
+        val base = (current as? BillingState.Success)
+            ?: (current as? BillingState.Error)?.previous
+            ?: return
+        val ctx = contextProvider.getContext() ?: return
+        val invoiceCurrency = normalizeCurrency(base.currency ?: ctx.currency)
+        val receivableCurrency = normalizeCurrency(ctx.partyAccountCurrency)
+        executeUseCase(
+            action = {
+                val rate = contextProvider.resolveExchangeRateBetween(
+                    invoiceCurrency,
+                    receivableCurrency,
+                    allowNetwork = true
+                )
+                if (!invoiceCurrency.equals(receivableCurrency, ignoreCase = true) &&
+                    (rate == null || rate <= 0.0 || rate == 1.0)
+                ) {
+                    error("No se pudo sincronizar la tasa $invoiceCurrency -> $receivableCurrency.")
+                }
+                val updated = base.copy(
+                    exchangeRateByCurrency = base.exchangeRateByCurrency
+                        .plus(invoiceCurrency to 1.0)
+                        .plus(receivableCurrency to (rate ?: 1.0))
+                )
+                _state.value = updated
+            },
+            exceptionHandler = { e ->
+                val message = e.toUserMessage("No se pudo sincronizar tasas de cambio.")
+                _state.value = BillingState.Error(message, base, showSyncRates = true)
+            }
+        )
     }
 
     private fun setFinalizingSale(active: Boolean) {
@@ -982,7 +1027,16 @@ class BillingViewModel(
             append(" | Pagado: ").append(paidInfo)
             append(" | Pagos: ").append(linesInfo)
             append(" | Crédito: ").append(creditInfo)
+            if (shouldSuggestRateSync(error)) {
+                append(" | Sugerencia: sincroniza tasas de cambio e intenta de nuevo")
+            }
         }
+    }
+
+    private fun shouldSuggestRateSync(error: Throwable): Boolean {
+        val message = error.message ?: return false
+        return message.contains("tasa de cambio", ignoreCase = true) ||
+                message.contains("exchange rate", ignoreCase = true)
     }
 
     private suspend fun buildExchangeRateMap(
@@ -1003,7 +1057,8 @@ class BillingViewModel(
 
         for (code in allCodes) {
             if (code == base) continue
-            val direct = contextProvider.resolveExchangeRateBetween(code, base, allowNetwork = false)
+            val direct =
+                contextProvider.resolveExchangeRateBetween(code, base, allowNetwork = false)
             val rate = when {
                 direct != null && direct > 0.0 -> direct
                 else -> contextProvider.resolveExchangeRateBetween(base, code, allowNetwork = false)
@@ -1131,6 +1186,7 @@ class BillingViewModel(
         conversionRate: Double?,
         postingDate: String,
         dueDate: String,
+        posOpeningEntry: String?,
         usePosInvoice: Boolean
     ): SalesInvoiceDto {
         val items = buildInvoiceItems(current, context, discountPercent, discountAmount)
@@ -1187,6 +1243,7 @@ class BillingViewModel(
             paymentSchedule = paymentSchedule,
             paymentTerms = if (current.isCreditSale) current.selectedPaymentTerm?.name else null,
             posProfile = context.profileName,
+            posOpeningEntry = posOpeningEntry,
             remarks = paymentMetadata,
             customExchangeRate = null,
             updateStock = true,
@@ -1278,22 +1335,17 @@ class BillingViewModel(
         receivableCurrency: String,
         context: POSContext
     ): Double? {
-        val invoice = normalizeCurrency(invoiceCurrency)
-        val receivable = normalizeCurrency(receivableCurrency)
-        if (invoice.equals(receivable, ignoreCase = true)) return 1.0
-
-        val ctxCurrency = normalizeCurrency(context.currency)
-        val ctxRate = context.exchangeRate
-        if (ctxRate > 0.0) {
-            if (invoice.equals(ctxCurrency, true) && receivable.equals("USD", true)) {
-                return 1 / ctxRate
+        return com.erpnext.pos.utils.CurrencyService.resolveInvoiceToReceivableRateUnified(
+            invoiceCurrency = invoiceCurrency,
+            receivableCurrency = receivableCurrency,
+            conversionRate = null,
+            customExchangeRate = null,
+            posCurrency = context.currency,
+            posExchangeRate = context.exchangeRate,
+            rateResolver = { from, to ->
+                contextProvider.resolveExchangeRateBetween(from, to, allowNetwork = false)
             }
-            if (invoice.equals("USD", true) && receivable.equals(ctxCurrency, true)) {
-                return ctxRate
-            }
-        }
-
-        return contextProvider.resolveExchangeRateBetween(invoice, receivable, allowNetwork = false)
+        )
     }
 
     private suspend fun resolveRateToInvoiceCurrencyLocal(

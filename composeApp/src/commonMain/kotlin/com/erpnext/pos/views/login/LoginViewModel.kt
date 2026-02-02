@@ -26,7 +26,9 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
 import kotlin.time.Clock
+import kotlin.time.ExperimentalTime
 
+@OptIn(ExperimentalTime::class)
 class LoginViewModel(
     private val authNavigator: AuthNavigator,
     private val oauthService: APIService,
@@ -56,7 +58,7 @@ class LoginViewModel(
 
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                AppLogger.info("LoginViewModel.onAuthCodeReceived")
+                AppLogger.info("LoginViewModel.onAuthCodeReceived start")
                 val oAuthConfigBase = authStore.loadAuthInfoByUrl().toOAuthConfig()
                 val redirectUri = transientAuthStore.loadRedirectUri()
                 val oAuthConfig = if (!redirectUri.isNullOrBlank()) {
@@ -65,13 +67,16 @@ class LoginViewModel(
                     oAuthConfigBase
                 }
                 val authRequest = buildAuthorizeRequest(oAuthConfig)
-                val tokens = oauthService.exchangeCode(
-                    oAuthConfig,
-                    code,
-                    authRequest.pkce,
-                    authRequest.state,
-                    authRequest.state
-                )
+                AppLogger.info("LoginViewModel.onAuthCodeReceived -> exchanging code")
+                val tokens = withTimeout(30_000) {
+                    oauthService.exchangeCode(
+                        oAuthConfig,
+                        code,
+                        authRequest.pkce,
+                        authRequest.state,
+                        authRequest.state
+                    )
+                }
                 if (tokens != null) {
                     AppLogger.info("LoginViewModel.onAuthCodeReceived -> tokens OK")
                     isAuthenticated(tokens)
@@ -85,9 +90,12 @@ class LoginViewModel(
             } catch (e: Exception) {
                 AppLogger.warn("LoginViewModel.onAuthCodeReceived -> error", e)
                 _stateFlow.update {
-                    LoginState.Error(
+                    val message = if (e is kotlinx.coroutines.TimeoutCancellationException) {
+                        "Tiempo de espera al autenticar. Intenta de nuevo."
+                    } else {
                         e.message ?: "Error durante la autenticación"
-                    )
+                    }
+                    LoginState.Error(message)
                 }
                 transientAuthStore.clearRedirectUri()
                 transientAuthStore.clearPkceVerifier()
@@ -132,7 +140,10 @@ class LoginViewModel(
                             receiver?.start(DESKTOP_REDIRECT_URI) ?: DESKTOP_REDIRECT_URI
                         }
                     }.onFailure {
-                        AppLogger.warn("OAuthCallbackReceiver.start failed, using default redirect", it)
+                        AppLogger.warn(
+                            "OAuthCallbackReceiver.start failed, using default redirect",
+                            it
+                        )
                     }.getOrElse { DESKTOP_REDIRECT_URI }
                     transientAuthStore.saveRedirectUri(redirectUri)
                     buildAuthorizeRequest(oauthConfig.copy(redirectUrl = redirectUri))
@@ -143,6 +154,7 @@ class LoginViewModel(
                 doLogin(request.url)
                 if (isDesktop) {
                     val code = runCatching {
+                        AppLogger.info("LoginViewModel.onSiteSelected -> waiting auth code")
                         withTimeout(120_000) {
                             receiver?.awaitCode(request.state) ?: ""
                         }
@@ -155,6 +167,7 @@ class LoginViewModel(
                             LoginState.Error("No se recibió el código de autenticación.")
                         }
                     } else {
+                        AppLogger.info("LoginViewModel.onSiteSelected -> auth code received")
                         onAuthCodeReceived(code)
                     }
                 }

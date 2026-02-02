@@ -53,7 +53,9 @@ class PaymentHandler(
         val invoiceCurrency = normalizeCurrency(invoiceCurrencyInput)
         val paymentCurrency = resolvePaymentCurrencyForMode(
             modeOfPayment = line.modeOfPayment,
-            paymentModeDetails = paymentModeDetails
+            paymentModeDetails = paymentModeDetails,
+            preferredCurrency = line.currency,
+            invoiceCurrency = invoiceCurrency
         )
 
         val rate = resolveRateToInvoiceCurrency(
@@ -109,23 +111,17 @@ class PaymentHandler(
         var resolvedReceivableCurrency = normalizeCurrency(createdInvoice?.partyAccountCurrency)
         var resolvedInvoiceCurrency = normalizeCurrency(createdInvoice?.currency)
 
-        val rateInvToRc = when {
-            resolvedInvoiceCurrency.equals(resolvedReceivableCurrency, ignoreCase = true) -> 1.0
-            createdInvoice?.conversionRate != null && createdInvoice.conversionRate > 0.0 ->
-                createdInvoice.conversionRate
-
-            createdInvoice?.conversionRate != null && createdInvoice.conversionRate > 0.0 ->
-                createdInvoice.conversionRate
-
-            createdInvoice?.baseGrandTotal != null && createdInvoice.grandTotal > 0.0 ->
-                createdInvoice.baseGrandTotal / createdInvoice.grandTotal
-
-            else -> resolveRateBetweenCurrencies(
-                fromCurrency = resolvedInvoiceCurrency,
-                toCurrency = resolvedReceivableCurrency,
-                context = context
-            )
-        }?.takeIf { it > 0.0 }
+        val rateInvToRc = com.erpnext.pos.utils.CurrencyService.resolveInvoiceToReceivableRateUnified(
+            invoiceCurrency = resolvedInvoiceCurrency,
+            receivableCurrency = resolvedReceivableCurrency,
+            conversionRate = createdInvoice?.conversionRate,
+            customExchangeRate = createdInvoice?.customExchangeRate,
+            posCurrency = context.currency,
+            posExchangeRate = context.exchangeRate,
+            rateResolver = { from, to ->
+                resolveRateBetweenCurrencies(fromCurrency = from, toCurrency = to, context = context)
+            }
+        )?.takeIf { it > 0.0 }
 
         var receivableAmounts: InvoiceReceivableAmounts? = createdInvoice?.let {
             val invoiceTotalInv = it.grandTotal
@@ -185,23 +181,17 @@ class PaymentHandler(
             resolvedInvoiceCurrency = normalizeCurrency(resolvedInvoice.currency)
             resolvedReceivableCurrency = normalizeCurrency(resolvedInvoice.partyAccountCurrency)
 
-            val rateInvToRcResolved = when {
-                resolvedInvoiceCurrency.equals(resolvedReceivableCurrency, ignoreCase = true) -> 1.0
-                resolvedInvoice.conversionRate != null && resolvedInvoice.conversionRate > 0.0 ->
-                    resolvedInvoice.conversionRate
-
-                resolvedInvoice.conversionRate != null && resolvedInvoice.conversionRate > 0.0 ->
-                    resolvedInvoice.conversionRate
-
-                resolvedInvoice.baseGrandTotal != null && resolvedInvoice.grandTotal > 0.0 ->
-                    resolvedInvoice.baseGrandTotal / resolvedInvoice.grandTotal
-
-                else -> resolveRateBetweenCurrencies(
-                    fromCurrency = resolvedInvoiceCurrency,
-                    toCurrency = resolvedReceivableCurrency,
-                    context = context
-                )
-            }?.takeIf { it > 0.0 }
+            val rateInvToRcResolved = com.erpnext.pos.utils.CurrencyService.resolveInvoiceToReceivableRateUnified(
+                invoiceCurrency = resolvedInvoiceCurrency,
+                receivableCurrency = resolvedReceivableCurrency,
+                conversionRate = resolvedInvoice.conversionRate,
+                customExchangeRate = resolvedInvoice.customExchangeRate,
+                posCurrency = context.currency,
+                posExchangeRate = context.exchangeRate,
+                rateResolver = { from, to ->
+                    resolveRateBetweenCurrencies(fromCurrency = from, toCurrency = to, context = context)
+                }
+            )?.takeIf { it > 0.0 }
 
             val totalRcResolved = when {
                 resolvedReceivableCurrency.equals(resolvedInvoiceCurrency, ignoreCase = true) ->

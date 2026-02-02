@@ -17,7 +17,6 @@ class TokenHeartbeat(
     private val scope: CoroutineScope,
     private val sessionRefresher: SessionRefresher,
     private val networkMonitor: NetworkMonitor,
-    private val tokenStore: TokenStore,
     private val lifecycleObserver: AppLifecycleObserver
 ) {
     fun start(intervalMinutes: Long = 5) {

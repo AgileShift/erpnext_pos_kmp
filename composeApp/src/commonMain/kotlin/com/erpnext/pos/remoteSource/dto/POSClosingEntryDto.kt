@@ -11,6 +11,19 @@ data class POSClosingEntryResponse(
 )
 
 @Serializable
+data class POSClosingEntrySummaryDto(
+    @SerialName("name")
+    val name: String,
+    @SerialName("pos_opening_entry")
+    val posOpeningEntry: String? = null,
+    @SerialName("period_end_date")
+    val periodEndDate: String? = null,
+    @SerialName("posting_date")
+    val postingDate: String? = null,
+    val docstatus: Int? = null
+)
+
+@Serializable
 data class POSClosingEntryDto(
     @SerialName("pos_profile")
     val posProfile: String,
@@ -38,6 +51,9 @@ data class POSClosingEntryDto(
 data class POSClosingInvoiceDto(
     @SerialName("sales_invoice")
     val salesInvoice: String,
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    @SerialName("pos_invoice")
+    val posInvoice: String? = null,
     @SerialName("posting_date")
     val postingDate: String? = null,
     val customer: String? = null,

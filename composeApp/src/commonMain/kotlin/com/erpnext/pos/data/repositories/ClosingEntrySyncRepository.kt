@@ -41,6 +41,14 @@ class ClosingEntrySyncRepository(
             if (periodEnd.isNullOrBlank()) return@forEach
             val startMillis = parseErpDateTimeToEpochMillis(cashbox.periodStartDate) ?: return@forEach
             val endMillis = parseErpDateTimeToEpochMillis(periodEnd) ?: return@forEach
+            val remoteClosing = runCatching {
+                api.getPOSClosingEntriesForOpening(remoteOpeningName).firstOrNull()
+            }.onFailure {
+                AppLogger.warn(
+                    "ClosingEntrySyncRepository: lookup remote closing failed for opening $remoteOpeningName",
+                    it
+                )
+            }.getOrNull()
             val shiftInvoices = cashbox.openingEntryId?.takeIf { it.isNotBlank() }?.let {
                 salesInvoiceDao.getInvoicesForOpeningEntry(it)
             } ?: salesInvoiceDao.getInvoicesForShift(
@@ -57,6 +65,31 @@ class ClosingEntrySyncRepository(
                 balanceDetails = wrapper.details,
                 invoices = shiftInvoices
             )
+
+            if (remoteClosing != null) {
+                val submitOk = if (remoteClosing.docstatus == 1) {
+                    true
+                } else {
+                    runCatching { api.submitPOSClosingEntry(remoteClosing.name) }
+                        .onFailure { AppLogger.warn("ClosingEntrySyncRepository submit failed", it) }
+                        .getOrNull() != null
+                }
+                val pendingSync = !submitOk
+                val resolvedEndDate = remoteClosing.periodEndDate ?: periodEnd
+                cashboxDao.updateStatus(
+                    cashbox.localId,
+                    status = false,
+                    pceId = remoteClosing.name,
+                    endDate = resolvedEndDate,
+                    pendingSync = pendingSync
+                )
+                closingDao.insert(dto.toEntity(remoteClosing.name, pendingSync = pendingSync))
+                if (localClosingName?.startsWith("LOCAL-", ignoreCase = true) == true) {
+                    closingDao.delete(localClosingName)
+                }
+                hasChanges = true
+                return@forEach
+            }
 
             val existingRemote = localClosingName
                 ?.takeIf { it.isNotBlank() && !it.startsWith("LOCAL-", ignoreCase = true) }

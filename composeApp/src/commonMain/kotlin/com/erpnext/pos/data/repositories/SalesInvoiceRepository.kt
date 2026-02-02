@@ -87,6 +87,53 @@ class SalesInvoiceRepository(
         refreshCustomerSummaryWithRates(invoice.customer)
     }
 
+    suspend fun applyLocalReturnAdjustment(
+        invoiceName: String,
+        returnTotal: Double
+    ) {
+        if (returnTotal <= 0.0) return
+        val local = localSource.getInvoiceByName(invoiceName)?.invoice ?: return
+        val originalOutstanding = local.outstandingAmount
+        val newOutstanding = (originalOutstanding - returnTotal).coerceAtLeast(0.0)
+        if (newOutstanding >= originalOutstanding - 0.005) return
+
+        val rate = when {
+            local.conversionRate != null && (local.conversionRate
+                ?: 0.0) > 0.0 -> local.conversionRate
+
+            local.baseGrandTotal != null && local.grandTotal > 0.0 ->
+                (local.baseGrandTotal ?: 0.0) / local.grandTotal
+
+            else -> null
+        }
+        val baseOutstanding = when {
+            rate != null -> roundToCurrency(newOutstanding * rate)
+            local.baseOutstandingAmount != null ->
+                roundToCurrency(
+                    ((local.baseOutstandingAmount ?: 0.0) - returnTotal).coerceAtLeast(
+                        0.0
+                    )
+                )
+
+            else -> null
+        }
+        val newStatus = when {
+            newOutstanding <= 0.0001 -> "Paid"
+            local.paidAmount > 0.0 -> "Partly Paid"
+            else -> local.status
+        }
+        val now = Clock.System.now().toEpochMilliseconds()
+        localSource.updateInvoice(
+            local.copy(
+                outstandingAmount = roundToCurrency(newOutstanding),
+                baseOutstandingAmount = baseOutstanding,
+                status = newStatus,
+                modifiedAt = now
+            )
+        )
+        refreshCustomerSummaryWithRates(local.customer)
+    }
+
     suspend fun saveInvoiceLocallyPending(
         localInvoiceName: String,
         dto: SalesInvoiceDto
@@ -145,34 +192,40 @@ class SalesInvoiceRepository(
 
         val paidDeltaInvoice = uniquePayments.sumOf { payment ->
             val rate = payment.exchangeRate
-            if (rate != null && rate > 0.0 && payment.enteredAmount > 0.0) {
+            if (rate > 0.0 && payment.enteredAmount > 0.0) {
                 payment.enteredAmount * rate
             } else {
                 payment.amount
             }
         }
-        val rateInvToRc = com.erpnext.pos.utils.CurrencyService.resolveInvoiceToReceivableRate(
-            invoiceCurrency = invoice.currency,
-            receivableCurrency = invoice.partyAccountCurrency,
-            conversionRate = invoice.conversionRate,
-            customExchangeRate = null
-        )
-        val paidDelta = com.erpnext.pos.utils.CurrencyService.amountInvoiceToReceivable(
-            paidDeltaInvoice,
-            rateInvToRc
-        )
         val totalBefore = invoice.paidAmount + invoice.outstandingAmount
-        val totalPaid = roundToCurrency((invoice.paidAmount + paidDelta).coerceAtLeast(0.0))
+        val totalPaid = roundToCurrency((invoice.paidAmount + paidDeltaInvoice).coerceAtLeast(0.0))
         var newOutstanding =
-            roundToCurrency((invoice.outstandingAmount - paidDelta).coerceAtLeast(0.0))
+            roundToCurrency((invoice.outstandingAmount - paidDeltaInvoice).coerceAtLeast(0.0))
         val roundingTolerance = 0.05
         val epsilon = 0.0001
         if (newOutstanding <= roundingTolerance) {
             newOutstanding = 0.0
         }
 
+        val rateToBase = when {
+            invoice.conversionRate != null && (invoice.conversionRate
+                ?: 0.0) > 0.0 -> invoice.conversionRate
+
+            invoice.baseGrandTotal != null && invoice.grandTotal > 0.0 ->
+                invoice.baseGrandTotal?.let {
+                    it / invoice.grandTotal
+                }
+
+            else -> null
+        }
+        val cappedPaid = totalPaid.coerceAtMost(totalBefore)
         invoice.outstandingAmount = newOutstanding
-        invoice.paidAmount = totalPaid.coerceAtMost(totalBefore)
+        invoice.paidAmount = cappedPaid
+        invoice.basePaidAmount = rateToBase?.let { roundToCurrency(cappedPaid * it) }
+            ?: invoice.basePaidAmount
+        invoice.baseOutstandingAmount = rateToBase?.let { roundToCurrency(newOutstanding * it) }
+            ?: invoice.baseOutstandingAmount
         invoice.status = when {
             newOutstanding <= 0.0 -> "Paid"
             totalPaid <= epsilon -> "Unpaid"
@@ -224,7 +277,10 @@ class SalesInvoiceRepository(
         }
     }
 
-    suspend fun fetchRemoteReturnInvoices(returnAgainst: String, isPos: Boolean): List<SalesInvoiceDto> {
+    suspend fun fetchRemoteReturnInvoices(
+        returnAgainst: String,
+        isPos: Boolean
+    ): List<SalesInvoiceDto> {
         val posProfile = context.requireContext().profileName
         return remoteSource.fetchReturnInvoices(returnAgainst, isPos, posProfile)
     }
@@ -263,6 +319,7 @@ class SalesInvoiceRepository(
         // El status se alinea con la fuente de verdad escogida.
         val resolvedStatus = if (remoteHasPayments) remote.status ?: "Draft"
         else localInvoice?.status ?: (remote.status ?: "Draft")
+
         fun resolveBaseAmount(amount: Double?, baseAmount: Double?): Double? {
             baseAmount?.let { return it }
             val rate = remote.conversionRate?.takeIf { it > 0.0 } ?: return amount
@@ -297,10 +354,16 @@ class SalesInvoiceRepository(
                 remote.baseRoundingAdjustment
             ),
             baseRoundedTotal = resolveBaseAmount(remote.roundedTotal, remote.baseRoundedTotal),
-            baseDiscountAmount = resolveBaseAmount(remote.discountAmount, remote.baseDiscountAmount),
+            baseDiscountAmount = resolveBaseAmount(
+                remote.discountAmount,
+                remote.baseDiscountAmount
+            ),
             basePaidAmount = resolveBaseAmount(remote.paidAmount, remote.basePaidAmount),
             baseChangeAmount = resolveBaseAmount(remote.changeAmount, remote.baseChangeAmount),
-            baseWriteOffAmount = resolveBaseAmount(remote.writeOffAmount, remote.baseWriteOffAmount),
+            baseWriteOffAmount = resolveBaseAmount(
+                remote.writeOffAmount,
+                remote.baseWriteOffAmount
+            ),
             baseOutstandingAmount = remote.baseOutstandingAmount ?: remote.outstandingAmount,
             status = resolvedStatus,
             docstatus = remote.docStatus ?: resolveDocStatus(remote.status, null),
@@ -317,7 +380,13 @@ class SalesInvoiceRepository(
     }
 
     override suspend fun createRemoteInvoice(invoice: SalesInvoiceDto): SalesInvoiceDto {
-        val draft = ensureDraftDocStatus(enrichPaymentsWithAccount(ensurePosProfile(invoice)))
+        val draft = ensureDraftDocStatus(
+            enrichPaymentsWithAccount(
+                ensurePosOpeningEntry(
+                    ensurePosProfile(invoice)
+                )
+            )
+        )
         val created = if (isPosInvoice(draft)) {
             remoteSource.createPosInvoice(draft)
         } else {
@@ -335,10 +404,11 @@ class SalesInvoiceRepository(
     override suspend fun updateRemoteInvoice(
         invoiceName: String, invoice: SalesInvoiceDto
     ): SalesInvoiceDto {
-        return if (isPosInvoice(invoice)) {
-            remoteSource.updatePosInvoice(invoiceName, invoice)
+        val ensured = ensurePosOpeningEntry(ensurePosProfile(invoice))
+        return if (isPosInvoice(ensured)) {
+            remoteSource.updatePosInvoice(invoiceName, ensured)
         } else {
-            remoteSource.updateInvoice(invoiceName, invoice)
+            remoteSource.updateInvoice(invoiceName, ensured)
         }
     }
 
@@ -372,7 +442,11 @@ class SalesInvoiceRepository(
             try {
                 when {
                     invoice.invoice.docstatus == 2 -> handleCancelledInvoice(invoice)
-                    invoice.invoice.invoiceName?.startsWith("LOCAL-", ignoreCase = true) == true -> handleLocalInvoice(invoice)
+                    invoice.invoice.invoiceName?.startsWith(
+                        "LOCAL-",
+                        ignoreCase = true
+                    ) == true -> handleLocalInvoice(invoice)
+
                     else -> handleRemoteInvoice(invoice)
                 }
             } catch (e: Exception) {
@@ -487,11 +561,16 @@ class SalesInvoiceRepository(
                     receivableCurrency,
                     baseCurrency,
                     allowNetwork = false
-                ) ?: com.erpnext.pos.utils.CurrencyService.resolveReceivableToInvoiceRate(
+                ) ?: com.erpnext.pos.utils.CurrencyService.resolveReceivableToInvoiceRateUnified(
                     invoiceCurrency = invoice.currency,
                     receivableCurrency = receivableCurrency,
                     conversionRate = invoice.conversionRate,
-                    customExchangeRate = null
+                    customExchangeRate = invoice.customExchangeRate,
+                    posCurrency = ctx?.currency,
+                    posExchangeRate = ctx?.exchangeRate,
+                    rateResolver = { from, to ->
+                        context.resolveExchangeRateBetween(from, to, allowNetwork = false)
+                    }
                 ) ?: 1.0
             }
             totalPending += (outstanding * rate)
@@ -543,18 +622,18 @@ class SalesInvoiceRepository(
                 /*val first = localSource.getOldestItem()
                 first == null || SyncTTL.isExpired(first.lastSyncedAt)*/
             },
-            saveFetchResult = { it ->
+            saveFetchResult = {
                 val profileId = context.requireContext().profileName
-                val remoteNames = it.mapNotNull { dto -> dto.name }
                 it.toEntities().forEach { payload ->
                     val ensured = ensureProfileId(payload, profileId)
+                    val merged = mergeLocalInvoiceFields(ensured)
                     localSource.saveInvoiceLocally(
-                        ensured.invoice,
-                        ensured.items,
-                        ensured.payments
+                        merged.invoice,
+                        merged.items,
+                        merged.payments
                     )
                 }
-                localSource.softDeleteMissingForProfile(profileId, remoteNames)
+                backfillMissingInvoiceItems(profileId)
                 reconcileOutstandingWithRemote(it)
             },
             onFetchFailed = { e ->
@@ -621,9 +700,45 @@ class SalesInvoiceRepository(
         return payload
     }
 
+    private suspend fun backfillMissingInvoiceItems(profileId: String, limit: Int = 50) {
+        val missing = localSource.getInvoiceNamesMissingItems(profileId, limit)
+        if (missing.isEmpty()) return
+        missing.forEach { invoiceName ->
+            val remote = fetchRemoteInvoice(invoiceName) ?: return@forEach
+            val ensured = ensureProfileId(remote.toEntity(), profileId)
+            val merged = mergeLocalInvoiceFields(ensured)
+            localSource.saveInvoiceLocally(merged.invoice, merged.items, merged.payments)
+        }
+    }
+
+    private suspend fun mergeLocalInvoiceFields(
+        payload: SalesInvoiceWithItemsAndPayments
+    ): SalesInvoiceWithItemsAndPayments {
+        val invoiceName = payload.invoice.invoiceName?.trim().orEmpty()
+        if (invoiceName.isBlank()) return payload
+        val local = localSource.getInvoiceByName(invoiceName)?.invoice ?: return payload
+        val mergedInvoice = payload.invoice.copy(
+            profileId = payload.invoice.profileId?.takeIf { it.isNotBlank() } ?: local.profileId,
+            posOpeningEntry = payload.invoice.posOpeningEntry?.takeIf { it.isNotBlank() }
+                ?: local.posOpeningEntry,
+            warehouse = payload.invoice.warehouse?.takeIf { it.isNotBlank() } ?: local.warehouse
+        )
+        return payload.copy(invoice = mergedInvoice)
+    }
+
     private fun ensurePosProfile(dto: SalesInvoiceDto): SalesInvoiceDto {
         if (!dto.posProfile.isNullOrBlank()) return dto
         val profileId = context.getContext()?.profileName?.takeIf { it.isNotBlank() } ?: return dto
         return dto.copy(posProfile = profileId)
+    }
+
+    private suspend fun ensurePosOpeningEntry(dto: SalesInvoiceDto): SalesInvoiceDto {
+        if (!dto.posOpeningEntry.isNullOrBlank()) return dto
+        val openingEntryId = context.getActiveCashboxWithDetails()
+            ?.cashbox
+            ?.openingEntryId
+            ?.takeIf { it.isNotBlank() }
+            ?: return dto
+        return dto.copy(posOpeningEntry = openingEntryId)
     }
 }

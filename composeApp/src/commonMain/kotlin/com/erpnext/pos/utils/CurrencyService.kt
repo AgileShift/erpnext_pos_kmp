@@ -24,6 +24,67 @@ object CurrencyService {
         return null
     }
 
+    /**
+     * Unified resolver for invoice -> receivable rate.
+     * - If currencies match, returns 1.0.
+     * - If a non-1 conversionRate is provided, use it.
+     * - Otherwise, try local resolver (offline-first).
+     * - Finally, fallback to POS context rate for USD <-> POS currency.
+     */
+    suspend fun resolveInvoiceToReceivableRateUnified(
+        invoiceCurrency: String?,
+        receivableCurrency: String?,
+        conversionRate: Double?,
+        customExchangeRate: Double?,
+        posCurrency: String?,
+        posExchangeRate: Double?,
+        rateResolver: suspend (from: String, to: String) -> Double?
+    ): Double? {
+        val invoice = normalize(invoiceCurrency)
+        val receivable = normalize(receivableCurrency)
+        if (invoice.isNullOrBlank() || receivable.isNullOrBlank()) return null
+        if (invoice.equals(receivable, ignoreCase = true)) return 1.0
+
+        val candidate = conversionRate?.takeIf { it > 0.0 && it != 1.0 }
+            ?: customExchangeRate?.takeIf { it > 0.0 && it != 1.0 }
+        if (candidate != null) return candidate
+
+        val direct = rateResolver(invoice, receivable)?.takeIf { it > 0.0 }
+            ?.takeIf { it != 1.0 }
+        if (direct != null) return direct
+
+        val pos = normalize(posCurrency)
+        val ctxRate = posExchangeRate?.takeIf { it > 0.0 && it != 1.0 }
+        if (pos != null && ctxRate != null) {
+            if (invoice.equals(pos, true) && receivable.equals("USD", true)) return 1.0 / ctxRate
+            if (invoice.equals("USD", true) && receivable.equals(pos, true)) return ctxRate
+        }
+
+        return null
+    }
+
+    suspend fun resolveReceivableToInvoiceRateUnified(
+        invoiceCurrency: String?,
+        receivableCurrency: String?,
+        conversionRate: Double?,
+        customExchangeRate: Double?,
+        posCurrency: String?,
+        posExchangeRate: Double?,
+        rateResolver: suspend (from: String, to: String) -> Double?
+    ): Double? {
+        val invToRc = resolveInvoiceToReceivableRateUnified(
+            invoiceCurrency = invoiceCurrency,
+            receivableCurrency = receivableCurrency,
+            conversionRate = conversionRate,
+            customExchangeRate = customExchangeRate,
+            posCurrency = posCurrency,
+            posExchangeRate = posExchangeRate,
+            rateResolver = rateResolver
+        )
+        if (invToRc == null || invToRc == 0.0) return null
+        return 1.0 / invToRc
+    }
+
     fun resolveReceivableToInvoiceRate(
         invoiceCurrency: String?,
         receivableCurrency: String?,

@@ -87,7 +87,6 @@ import com.erpnext.pos.localSource.preferences.LanguagePreferences
 import com.erpnext.pos.localSource.preferences.OpeningSessionPreferences
 import com.erpnext.pos.localSource.preferences.SyncPreferences
 import com.erpnext.pos.localSource.preferences.ThemePreferences
-import com.erpnext.pos.navigation.NavigationManager
 import com.erpnext.pos.remoteSource.api.APIService
 import com.erpnext.pos.remoteSource.api.defaultEngine
 import com.erpnext.pos.remoteSource.api.v2.APIServiceV2
@@ -232,8 +231,12 @@ val appModule = module {
                             }.getOrElse { throwable ->
                                 AppSentry.capture(throwable, "loadTokens refresh failed")
                                 AppLogger.warn("loadTokens refresh failed", throwable)
-                                tokenStore.clear()
-                                return@loadTokens null
+                                return@loadTokens if (TokenUtils.isValid(currentTokens.id_token)) {
+                                    currentTokens.toBearerToken()
+                                } else {
+                                    tokenStore.clear()
+                                    null
+                                }
                             }
                             tokenStore.save(refreshed)
                             BearerTokens(
@@ -250,8 +253,12 @@ val appModule = module {
                             }.getOrElse { throwable ->
                                 AppSentry.capture(throwable, "refreshTokens failed")
                                 AppLogger.warn("refreshTokens failed", throwable)
-                                tokenStore.clear()
-                                return@refreshTokens null
+                                return@refreshTokens if (TokenUtils.isValid(currentTokens.id_token)) {
+                                    currentTokens.toBearerToken()
+                                } else {
+                                    tokenStore.clear()
+                                    null
+                                }
                             }
                             tokenStore.save(refreshed)
                             BearerTokens(
@@ -287,16 +294,16 @@ val appModule = module {
             tokenStore = get(),
             apiService = get(named("apiService")),
             navigationManager = get(),
-            networkMonitor = get()
+            networkMonitor = get(),
+            cashBoxManager = lazy { get<CashBoxManager>() }
         )
     }
     single { AppLifecycleObserver() }
-    single {
+    single(createdAtStart = true) {
         TokenHeartbeat(
             scope = get(),
             sessionRefresher = get(),
             networkMonitor = get(),
-            tokenStore = get(),
             lifecycleObserver = get()
         ).apply { start(intervalMinutes = 1) }
     }
@@ -353,20 +360,8 @@ val appModule = module {
     }
 
     //region Reconciliation
-    single {
-        ReconciliationViewModel(
-            get(),
-            get(),
-            get(),
-            get(),
-            get(),
-            get(),
-            get(),
-            get()
-        )
-    }
+    single { ReconciliationViewModel(get(), get(), get()) }
     //endregion
-
 
     single { SyncContextProvider(get(), get()) }
     single<SyncManager> {
@@ -444,7 +439,9 @@ val appModule = module {
             openingEntryDao = get(),
             openingEntryLinkDao = get(),
             cashboxDao = get(),
-            salesInvoiceDao = get()
+            salesInvoiceDao = get(),
+            invoiceLocalSource = get(),
+            salesInvoiceRemoteSource = get()
         )
     }
     single {
@@ -527,7 +524,8 @@ val appModule = module {
             loadHomeMetricsUseCase = get(),
             posProfileGate = get(),
             openingGate = get(),
-            homeRefreshController = get()
+            homeRefreshController = get(),
+            sessionRefresher = get()
         )
     }
     single<IUserRepository> { UserRepository(get(), get()) }
@@ -581,7 +579,6 @@ val appModule = module {
             createSalesInvoiceRemoteOnlyUseCase = get(),
             updateLocalInvoiceFromRemoteUseCase = get(),
             markSalesInvoiceSyncedUseCase = get(),
-            api = get(named("apiService")),
             paymentHandler = get(),
             billingResetController = get()
         )

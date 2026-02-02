@@ -88,6 +88,12 @@ class SyncManager(
     override fun fullSync(ttlHours: Int) {
         if (_state.value is SyncState.SYNCING) return
 
+        if (!cashBoxManager.cashboxState.value) {
+            AppLogger.info("SyncManager.fullSync skipped: cashbox is closed")
+            _state.value = SyncState.IDLE
+            return
+        }
+
         /* TODO: Agregar POS Profiles con sus detalles, esto lo vamos a remover en la v2
             Porque los perfiles ya vendran en el initial data y solo los que pertenecen al usuario
          */
@@ -298,8 +304,12 @@ class SyncManager(
     }
 
     private suspend fun runPushQueue() {
+        if (!cashBoxManager.cashboxState.value) {
+            AppLogger.warn("SyncManager: push queue skipped because cashbox is closed")
+            return
+        }
         val ctx = syncContextProvider.buildContext() ?: run {
-            val base = cashBoxManager.getContext() ?: cashBoxManager.initializeContext()
+            val base = cashBoxManager.getContext()
             if (base == null) {
                 AppLogger.warn("SyncManager: push queue skipped because context is not ready")
                 return

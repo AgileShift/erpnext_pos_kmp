@@ -74,6 +74,7 @@ sealed interface BillingState {
         val successMessage: String? = null,
         val successDialogMessage: String? = null,
         val successDialogInvoice: String? = null,
+        val successDialogId: Long = 0L,
         val isFinalizingSale: Boolean = false
     ) : BillingState {
         fun recalculatePaymentTotals(): Success {
@@ -94,7 +95,8 @@ sealed interface BillingState {
 
     data class Error(
         val message: String,
-        val previous: Success? = null
+        val previous: Success? = null,
+        val showSyncRates: Boolean = false
     ) : BillingState
 
     object Empty : BillingState
@@ -122,5 +124,6 @@ data class BillingAction(
     val onResetSale: () -> Unit = {},
     val onLinkSource: (SalesFlowSource, String) -> Unit = { _, _ -> },
     val onClearSource: () -> Unit = {},
-    val onLoadSourceDocuments: (SalesFlowSource) -> Unit = {}
+    val onLoadSourceDocuments: (SalesFlowSource) -> Unit = {},
+    val onSyncExchangeRates: () -> Unit = {}
 )

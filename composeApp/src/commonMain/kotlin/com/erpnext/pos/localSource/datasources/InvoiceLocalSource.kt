@@ -41,6 +41,7 @@ interface IInvoiceLocalSource {
         syncedAt: Long,
         remotePaymentEntry: String? = null
     )
+    suspend fun getInvoiceNamesMissingItems(profileId: String, limit: Int = 50): List<String>
     suspend fun getPaymentsForInvoice(invoiceName: String): List<POSInvoicePaymentEntity>
     suspend fun refreshCustomerSummary(customerId: String)
     suspend fun getOutstandingInvoiceNamesForProfile(profileId: String): List<String>
@@ -139,6 +140,13 @@ class InvoiceLocalSource(
         remotePaymentEntry: String?
     ) {
         salesInvoiceDao.updatePaymentSyncStatus(paymentId, status, syncedAt, remotePaymentEntry)
+    }
+
+    override suspend fun getInvoiceNamesMissingItems(
+        profileId: String,
+        limit: Int
+    ): List<String> {
+        return salesInvoiceDao.getInvoiceNamesMissingItems(profileId, limit)
     }
 
     override suspend fun getPaymentsForInvoice(invoiceName: String): List<POSInvoicePaymentEntity> {

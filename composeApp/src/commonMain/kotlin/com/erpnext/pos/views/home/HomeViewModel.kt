@@ -10,6 +10,7 @@ import com.erpnext.pos.domain.usecases.FetchUserInfoUseCase
 import com.erpnext.pos.domain.usecases.HomeMetricInput
 import com.erpnext.pos.domain.usecases.LoadHomeMetricsUseCase
 import com.erpnext.pos.domain.usecases.LogoutUseCase
+import com.erpnext.pos.auth.SessionRefresher
 import com.erpnext.pos.localSource.dao.POSProfileDao
 import com.erpnext.pos.data.repositories.PosProfilePaymentMethodLocalRepository
 import com.erpnext.pos.navigation.NavRoute
@@ -23,7 +24,6 @@ import com.erpnext.pos.sync.PosProfileGate
 import com.erpnext.pos.sync.OpeningGate
 import com.erpnext.pos.views.CashBoxManager
 import com.erpnext.pos.views.PaymentModeWithAmount
-import com.erpnext.pos.views.home.HomeRefreshController
 import com.erpnext.pos.views.reconciliation.ReconciliationMode
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -49,7 +49,8 @@ class HomeViewModel(
     private val loadHomeMetricsUseCase: LoadHomeMetricsUseCase,
     private val posProfileGate: PosProfileGate,
     private val openingGate: OpeningGate,
-    private val homeRefreshController: HomeRefreshController
+    private val homeRefreshController: HomeRefreshController,
+    private val sessionRefresher: SessionRefresher
 ) : BaseViewModel() {
     private val _stateFlow: MutableStateFlow<HomeState> = MutableStateFlow(HomeState.Loading)
     val stateFlow = _stateFlow.asStateFlow()
@@ -102,19 +103,28 @@ class HomeViewModel(
     fun startInitialSync() {
         if (!_syncSettings.value.autoSync) return
         executeUseCase(
-            action = { syncManager.fullSync() },
+            action = {
+                if (sessionRefresher.ensureValidSession()) {
+                    syncManager.fullSync()
+                }
+            },
             exceptionHandler = { it.printStackTrace() })
     }
 
     fun syncNow() {
         executeUseCase(
-            action = { syncManager.fullSync() },
+            action = {
+                if (sessionRefresher.ensureValidSession()) {
+                    syncManager.fullSync()
+                }
+            },
             exceptionHandler = { it.printStackTrace() })
     }
 
     fun loadInitialData() {
         _stateFlow.update { HomeState.Loading }
         executeUseCase(action = {
+            if (!sessionRefresher.ensureValidSession()) return@executeUseCase
             userInfo = fetchUserInfoUseCase.invoke(null)
             when (val gate = posProfileGate.ensureReady(userInfo.email)) {
                 is GateResult.Failed -> error(gate.reason)

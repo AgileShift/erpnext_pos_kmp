@@ -295,7 +295,19 @@ private fun LoginCard(
                 }
 
                 is LoginState.Authenticated -> {
-                    actions.isAuthenticated(state.tokens)
+                    LaunchedEffect(state.tokens) {
+                        actions.isAuthenticated(state.tokens)
+                    }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(28.dp),
+                            color = MaterialTheme.colorScheme.primary,
+                            strokeWidth = 3.dp
+                        )
+                    }
                 }
 
                 is LoginState.Error -> {

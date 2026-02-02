@@ -27,6 +27,7 @@ import com.erpnext.pos.remoteSource.dto.ModeOfPaymentDto
 import com.erpnext.pos.remoteSource.dto.OutstandingInfo
 import com.erpnext.pos.remoteSource.dto.POSClosingEntryDto
 import com.erpnext.pos.remoteSource.dto.POSClosingEntryResponse
+import com.erpnext.pos.remoteSource.dto.POSClosingEntrySummaryDto
 import com.erpnext.pos.remoteSource.dto.POSOpeningEntryDto
 import com.erpnext.pos.remoteSource.dto.POSOpeningEntryResponseDto
 import com.erpnext.pos.remoteSource.dto.POSOpeningEntrySummaryDto
@@ -463,6 +464,37 @@ class APIService(
         return cancelDoc("POS Invoice", name, "cancelPOSInvoice")
     }
 
+    suspend fun setValue(
+        doctype: String,
+        name: String,
+        fieldname: String,
+        value: String
+    ) {
+        val url = authStore.getCurrentSite()
+        if (url.isNullOrBlank()) throw Exception("URL Invalida")
+        val endpoint = url.trimEnd('/') + "/api/method/frappe.client.set_value"
+        val response = withRetries {
+            client.post {
+                url { takeFrom(endpoint) }
+                contentType(ContentType.Application.FormUrlEncoded)
+                setBody(
+                    FormDataContent(
+                        Parameters.build {
+                            append("doctype", doctype)
+                            append("name", name)
+                            append("fieldname", fieldname)
+                            append("value", value)
+                        }
+                    )
+                )
+            }
+        }
+        if (!response.status.isSuccess()) {
+            val bodyText = response.bodyAsText()
+            throw Exception("Error en setValue: ${response.status} - $bodyText")
+        }
+    }
+
     private suspend fun submitDoc(
         doctype: String,
         name: String,
@@ -599,6 +631,29 @@ class APIService(
         )
     }
 
+    suspend fun getPOSClosingEntriesForOpening(
+        openingEntryName: String
+    ): List<POSClosingEntrySummaryDto> {
+        val url = authStore.getCurrentSite()
+        return client.getERPList(
+            ERPDocType.POSClosingEntry.path,
+            fields = listOf(
+                "name",
+                "pos_opening_entry",
+                "period_end_date",
+                "posting_date",
+                "docstatus"
+            ),
+            baseUrl = url,
+            limit = 1,
+            orderBy = "period_end_date",
+            orderType = "desc",
+            filters = filters {
+                "pos_opening_entry" eq openingEntryName
+            }
+        )
+    }
+
     suspend fun getPOSProfileDetails(profileId: String): POSProfileDto {
         val url = authStore.getCurrentSite()
         val fields = ERPDocType.POSProfileDetails.getFields()
@@ -630,7 +685,7 @@ class APIService(
 
     //TODO: Cuando tenga el API lo cambiamos
     //TODO: Tenemos que discriminar desde el API la plataforma
-    suspend fun getLoginWithSite(site: String): LoginInfo {
+    fun getLoginWithSite(site: String): LoginInfo {
         return if (getPlatformName() == "Desktop") {
             LoginInfo(
                 BuildKonfig.BASE_URL,
@@ -983,14 +1038,18 @@ class APIService(
                 filters = filters {
                     "pos_profile" eq posProfile
                     "status" `in` listOf(
+                        "Draft",
                         "Unpaid",
                         "Overdue",
+                        "Paid",
                         "Partly Paid",
                         "Overdue and Discounted",
                         "Unpaid and Discounted",
-                        "Partly Paid and Discounted"
+                        "Partly Paid and Discounted",
+                        "Cancelled",
+                        "Credit Note Issued",
+                        "Return"
                     )
-                    "outstanding_amount" gt 0.0
                 })
         } catch (e: Exception) {
             e.printStackTrace()

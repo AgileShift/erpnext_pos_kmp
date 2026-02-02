@@ -38,11 +38,11 @@ fun epochMillisToErpDateTime(
 ): String {
     val ldt = Instant.fromEpochMilliseconds(epochMillis).toLocalDateTime(tz)
     val year = ldt.date.year
-    val month = ldt.date.month.number
-    val day = ldt.date.day
-    val hour = ldt.hour
-    val minute = ldt.minute
-    val second = ldt.second
+    val month = ldt.date.month.number.toString().padStart(2, '0')
+    val day = ldt.date.day.toString().padStart(2, '0')
+    val hour = ldt.hour.toString().padStart(2, '0')
+    val minute = ldt.minute.toString().padStart(2, '0')
+    val second = ldt.second.toString().padStart(2, '0')
 
     return "$year-$month-$day $hour:$minute:$second"
 }
@@ -55,8 +55,8 @@ fun epochMillisToErpDate(
 ): String {
     val ldt = kotlin.time.Instant.fromEpochMilliseconds(epochMillis).toLocalDateTime(tz)
     val year = ldt.date.year
-    val month = ldt.date.month.number
-    val day = ldt.date.day
+    val month = ldt.date.month.number.toString().padStart(2, '0')
+    val day = ldt.date.day.toString().padStart(2, '0')
 
     return "$year-$month-$day"
 }

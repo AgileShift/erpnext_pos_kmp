@@ -122,6 +122,7 @@ fun BillingScreen(
     val successMessage = (state as? BillingState.Success)?.successMessage
     val successDialogMessage = (state as? BillingState.Success)?.successDialogMessage
     val successDialogInvoice = (state as? BillingState.Success)?.successDialogInvoice
+    val successDialogId = (state as? BillingState.Success)?.successDialogId ?: 0L
     var popupMessage by rememberSaveable { mutableStateOf<String?>(null) }
     var popupInvoice by rememberSaveable { mutableStateOf<String?>(null) }
     val topBarController = LocalTopBarController.current
@@ -135,13 +136,17 @@ fun BillingScreen(
     // Si salimos de Success, regresamos al primer paso.
     LaunchedEffect(state) {
         if (state !is BillingState.Success) {
+            popupMessage = null
+            popupInvoice = null
+            action.onClearSuccessMessage()
             step = LabCheckoutStep.Cart
         } else if (state.selectedCustomer == null && state.cartItems.isEmpty() && step != LabCheckoutStep.Cart) {
             step = LabCheckoutStep.Cart
         }
     }
 
-    LaunchedEffect(successMessage, successDialogMessage, successDialogInvoice) {
+    LaunchedEffect(successDialogId) {
+        if (successDialogId == 0L) return@LaunchedEffect
         val message = (successDialogMessage ?: successMessage)
             ?.takeIf { it.isNotBlank() } ?: return@LaunchedEffect
         popupMessage = message
@@ -285,8 +290,27 @@ fun BillingScreen(
                         modifier = Modifier.fillMaxSize().padding(paddingValues),
                         contentAlignment = Alignment.Center
                     ) {
-                        snackbar.dismiss()
-                        snackbar.show(state.message, SnackbarType.Error, SnackbarPosition.Top)
+                        Card(
+                            shape = RoundedCornerShape(16.dp),
+                            colors = CardDefaults.cardColors(containerColor = colors.surfaceVariant)
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(16.dp),
+                                verticalArrangement = Arrangement.spacedBy(10.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Text(
+                                    text = state.message,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = colors.onSurface
+                                )
+                                if (state.showSyncRates) {
+                                    Button(onClick = action.onSyncExchangeRates) {
+                                        Text("Sincronizar tasas de cambio")
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
 
@@ -357,7 +381,11 @@ fun BillingScreen(
 
         if (!popupMessage.isNullOrBlank()) {
             Dialog(
-                onDismissRequest = {},
+                onDismissRequest = {
+                    popupMessage = null
+                    popupInvoice = null
+                    action.onClearSuccessMessage()
+                },
                 properties = DialogProperties(dismissOnClickOutside = false)
             ) {
                 Surface(
@@ -421,14 +449,17 @@ private fun BillingLabContent(
     val leftPanelBg = colors.surfaceVariant
     val invoiceCurrency = state.currency?.trim()?.uppercase().orEmpty().ifBlank { "USD" }
     val baseCurrency = state.baseCurrency?.trim()?.uppercase().orEmpty().ifBlank { invoiceCurrency }
-    val rateBaseToInvoice = when {
-        baseCurrency.equals(invoiceCurrency, ignoreCase = true) -> 1.0
-        else -> state.exchangeRateByCurrency[baseCurrency]?.takeIf { it > 0.0 }
-    }
-    fun toBase(amount: Double): Double? {
-        if (rateBaseToInvoice == null || rateBaseToInvoice <= 0.0) return null
-        if (baseCurrency.equals(invoiceCurrency, ignoreCase = true)) return null
-        return amount / rateBaseToInvoice
+    val secondaryCurrency = resolveSecondaryCurrency(
+        invoiceCurrency = invoiceCurrency,
+        baseCurrency = baseCurrency,
+        exchangeRateByCurrency = state.exchangeRateByCurrency
+    )
+    fun toSecondary(amount: Double): Double? {
+        return convertToSecondary(
+            amount = amount,
+            secondaryCurrency = secondaryCurrency,
+            exchangeRateByCurrency = state.exchangeRateByCurrency
+        )
     }
 
     val categories =
@@ -611,16 +642,16 @@ private fun BillingLabContent(
                                 "Subtotal",
                                 invoiceCurrency,
                                 state.subtotal,
-                                secondaryCurrencyCode = baseCurrency,
-                                secondaryAmount = toBase(state.subtotal)
+                                secondaryCurrencyCode = secondaryCurrency,
+                                secondaryAmount = toSecondary(state.subtotal)
                             )
                             if (state.taxes > 0.0) {
                                 PaymentTotalsRow(
                                     "Impuestos",
                                     invoiceCurrency,
                                     state.taxes,
-                                    secondaryCurrencyCode = baseCurrency,
-                                    secondaryAmount = toBase(state.taxes)
+                                    secondaryCurrencyCode = secondaryCurrency,
+                                    secondaryAmount = toSecondary(state.taxes)
                                 )
                             }
                             if (state.discount > 0.0) {
@@ -628,8 +659,8 @@ private fun BillingLabContent(
                                     "Descuento",
                                     invoiceCurrency,
                                     -state.discount,
-                                    secondaryCurrencyCode = baseCurrency,
-                                    secondaryAmount = toBase(-state.discount)
+                                    secondaryCurrencyCode = secondaryCurrency,
+                                    secondaryAmount = toSecondary(-state.discount)
                                 )
                             }
                             if (state.shippingAmount > 0.0) {
@@ -637,16 +668,16 @@ private fun BillingLabContent(
                                     "Envío",
                                     invoiceCurrency,
                                     state.shippingAmount,
-                                    secondaryCurrencyCode = baseCurrency,
-                                    secondaryAmount = toBase(state.shippingAmount)
+                                    secondaryCurrencyCode = secondaryCurrency,
+                                    secondaryAmount = toSecondary(state.shippingAmount)
                                 )
                             }
                             PaymentTotalsRow(
                                 "Total",
                                 invoiceCurrency,
                                 state.total,
-                                secondaryCurrencyCode = baseCurrency,
-                                secondaryAmount = toBase(state.total)
+                                secondaryCurrencyCode = secondaryCurrency,
+                                secondaryAmount = toSecondary(state.total)
                             )
                         }
                     }
@@ -690,14 +721,17 @@ private fun BillingLabCheckoutStep(
     val colors = MaterialTheme.colorScheme
     val invoiceCurrency = state.currency?.trim()?.uppercase().orEmpty().ifBlank { "USD" }
     val baseCurrency = state.baseCurrency?.trim()?.uppercase().orEmpty().ifBlank { invoiceCurrency }
-    val rateBaseToInvoice = when {
-        baseCurrency.equals(invoiceCurrency, ignoreCase = true) -> 1.0
-        else -> state.exchangeRateByCurrency[baseCurrency]?.takeIf { it > 0.0 }
-    }
-    fun toBase(amount: Double): Double? {
-        if (rateBaseToInvoice == null || rateBaseToInvoice <= 0.0) return null
-        if (baseCurrency.equals(invoiceCurrency, ignoreCase = true)) return null
-        return amount / rateBaseToInvoice
+    val secondaryCurrency = resolveSecondaryCurrency(
+        invoiceCurrency = invoiceCurrency,
+        baseCurrency = baseCurrency,
+        exchangeRateByCurrency = state.exchangeRateByCurrency
+    )
+    fun toSecondary(amount: Double): Double? {
+        return convertToSecondary(
+            amount = amount,
+            secondaryCurrency = secondaryCurrency,
+            exchangeRateByCurrency = state.exchangeRateByCurrency
+        )
     }
     Column(modifier = modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
         // Encabezado principal del checkout.
@@ -744,38 +778,38 @@ private fun BillingLabCheckoutStep(
                         "Pagado",
                         invoiceCurrency,
                         state.paidAmountBase,
-                        secondaryCurrencyCode = baseCurrency,
-                        secondaryAmount = toBase(state.paidAmountBase)
+                        secondaryCurrencyCode = secondaryCurrency,
+                        secondaryAmount = toSecondary(state.paidAmountBase)
                     )
                     PaymentTotalsRow(
                         "Pendiente",
                         invoiceCurrency,
                         state.balanceDueBase,
-                        secondaryCurrencyCode = baseCurrency,
-                        secondaryAmount = toBase(state.balanceDueBase)
+                        secondaryCurrencyCode = secondaryCurrency,
+                        secondaryAmount = toSecondary(state.balanceDueBase)
                     )
                     PaymentTotalsRow(
                         "Cambio",
                         invoiceCurrency,
                         state.changeDueBase,
-                        secondaryCurrencyCode = baseCurrency,
-                        secondaryAmount = toBase(state.changeDueBase)
+                        secondaryCurrencyCode = secondaryCurrency,
+                        secondaryAmount = toSecondary(state.changeDueBase)
                     )
                     HorizontalDivider(color = colors.outlineVariant, thickness = (1.2).dp)
                     PaymentTotalsRow(
                         "Subtotal",
                         invoiceCurrency,
                         state.subtotal,
-                        secondaryCurrencyCode = baseCurrency,
-                        secondaryAmount = toBase(state.subtotal)
+                        secondaryCurrencyCode = secondaryCurrency,
+                        secondaryAmount = toSecondary(state.subtotal)
                     )
                     if (state.taxes > 0.0) {
                         PaymentTotalsRow(
                             "Impuestos",
                             invoiceCurrency,
                             state.taxes,
-                            secondaryCurrencyCode = baseCurrency,
-                            secondaryAmount = toBase(state.taxes)
+                            secondaryCurrencyCode = secondaryCurrency,
+                            secondaryAmount = toSecondary(state.taxes)
                         )
                     }
                     if (state.discount > 0.0) {
@@ -783,8 +817,8 @@ private fun BillingLabCheckoutStep(
                             "Descuento",
                             invoiceCurrency,
                             -state.discount,
-                            secondaryCurrencyCode = baseCurrency,
-                            secondaryAmount = toBase(-state.discount)
+                            secondaryCurrencyCode = secondaryCurrency,
+                            secondaryAmount = toSecondary(-state.discount)
                         )
                     }
                     if (state.shippingAmount > 0.0) {
@@ -792,8 +826,8 @@ private fun BillingLabCheckoutStep(
                             "Envío",
                             invoiceCurrency,
                             state.shippingAmount,
-                            secondaryCurrencyCode = baseCurrency,
-                            secondaryAmount = toBase(state.shippingAmount)
+                            secondaryCurrencyCode = secondaryCurrency,
+                            secondaryAmount = toSecondary(state.shippingAmount)
                         )
                     }
                 }
@@ -1384,6 +1418,43 @@ private fun PaymentTotalsRow(
     }
 }
 
+private fun resolveSecondaryCurrency(
+    invoiceCurrency: String,
+    baseCurrency: String?,
+    exchangeRateByCurrency: Map<String, Double>
+): String? {
+    val invoice = invoiceCurrency.trim().uppercase()
+    val preferred = when (invoice) {
+        "USD" -> "NIO"
+        "NIO" -> "USD"
+        else -> baseCurrency?.trim()?.uppercase()
+    }
+    if (preferred.isNullOrBlank() || preferred == invoice) return null
+    return preferred.takeIf { exchangeRateByCurrency[it]?.let { rate -> rate > 0.0 } == true }
+}
+
+private fun convertToSecondary(
+    amount: Double,
+    secondaryCurrency: String?,
+    exchangeRateByCurrency: Map<String, Double>
+): Double? {
+    if (secondaryCurrency.isNullOrBlank()) return null
+    val rate = exchangeRateByCurrency[secondaryCurrency]?.takeIf { it > 0.0 } ?: return null
+    return amount / rate
+}
+
+private fun inferCurrencyFromModeName(
+    modeOfPayment: String,
+    fallback: String
+): String {
+    val upper = modeOfPayment.trim().uppercase()
+    return when {
+        upper.contains("USD") || upper.contains("DOLAR") -> "USD"
+        upper.contains("NIO") || upper.contains("CORDO") -> "NIO"
+        else -> fallback
+    }
+}
+
 @Composable
 private fun PaymentSection(
     state: BillingState,
@@ -1405,19 +1476,22 @@ private fun PaymentSection(
     val requiresReference = remember(selectedModeOption) {
         requiresReference(selectedModeOption)
     }
+    val inferredCurrency = remember(selectedMode, baseCurrency) {
+        inferCurrencyFromModeName(selectedMode, baseCurrency)
+    }
     val modeCurrency = remember(state, selectedMode) {
         (state as? BillingState.Success)?.paymentModeCurrencyByMode?.get(selectedMode)
     }
     var selectedCurrency by remember(selectedMode, baseCurrency) {
-        mutableStateOf(modeCurrency ?: baseCurrency)
+        mutableStateOf(modeCurrency ?: inferredCurrency)
     }
     var amountInput by remember { mutableStateOf("") }
     var amountValue by remember { mutableStateOf(0.0) }
     var rateInput by remember { mutableStateOf("1.0") }
     var referenceInput by remember { mutableStateOf("") }
 
-    LaunchedEffect(selectedMode, modeCurrency, baseCurrency) {
-        selectedCurrency = modeCurrency?.trim()?.uppercase() ?: baseCurrency
+    LaunchedEffect(selectedMode, modeCurrency, inferredCurrency) {
+        selectedCurrency = modeCurrency?.trim()?.uppercase() ?: inferredCurrency
     }
 
     LaunchedEffect(selectedCurrency, exchangeRateByCurrency) {

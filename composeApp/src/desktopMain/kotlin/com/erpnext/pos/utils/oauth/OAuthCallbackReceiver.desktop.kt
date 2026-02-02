@@ -1,6 +1,7 @@
 package com.erpnext.pos.utils.oauth
 
 import com.sun.net.httpserver.HttpServer
+import com.erpnext.pos.utils.AppLogger
 import kotlinx.coroutines.CompletableDeferred
 import java.net.InetSocketAddress
 import java.net.URI
@@ -17,9 +18,11 @@ actual class OAuthCallbackReceiver {
 
         deferred = CompletableDeferred()
 
+        AppLogger.info("OAuthCallbackReceiver.start -> $REDIRECT_URL")
         val s = HttpServer.create(InetSocketAddress(HOST, PORT), 0)
         s.createContext(PATH) { ex ->
             val params = parseQuery(ex.requestURI.rawQuery.orEmpty())
+            AppLogger.info("OAuthCallbackReceiver.callback -> $params")
             val html = """
                 <!doctype html>
                 <html lang="es">
@@ -118,6 +121,7 @@ actual class OAuthCallbackReceiver {
             deferred?.complete(params)
         }
         s.start()
+        AppLogger.info("OAuthCallbackReceiver started on $HOST:$PORT$PATH")
 
         server = s
         redirect = REDIRECT_URL
@@ -126,9 +130,11 @@ actual class OAuthCallbackReceiver {
     }
 
     actual suspend fun awaitCode(expectedState: String): String {
+        AppLogger.info("OAuthCallbackReceiver.awaitCode -> waiting state=$expectedState")
         val params = deferred?.await() ?: error("Receiver no iniciado")
         val state = params["state"]
         require(state == expectedState) { "State mismatch" }
+        AppLogger.info("OAuthCallbackReceiver.awaitCode -> code received")
         return params["code"] ?: error("No llegó 'code' en callback: $params")
     }
 

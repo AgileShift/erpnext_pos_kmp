@@ -5,6 +5,9 @@ import com.erpnext.pos.localSource.dao.CashboxDao
 import com.erpnext.pos.localSource.dao.POSOpeningEntryDao
 import com.erpnext.pos.localSource.dao.POSOpeningEntryLinkDao
 import com.erpnext.pos.localSource.dao.SalesInvoiceDao
+import com.erpnext.pos.localSource.datasources.InvoiceLocalSource
+import com.erpnext.pos.remoteSource.datasources.SalesInvoiceRemoteSource
+import com.erpnext.pos.remoteSource.mapper.toDto
 import com.erpnext.pos.utils.AppLogger
 
 class OpeningEntrySyncRepository(
@@ -12,7 +15,9 @@ class OpeningEntrySyncRepository(
     private val openingEntryDao: POSOpeningEntryDao,
     private val openingEntryLinkDao: POSOpeningEntryLinkDao,
     private val cashboxDao: CashboxDao,
-    private val salesInvoiceDao: SalesInvoiceDao
+    private val salesInvoiceDao: SalesInvoiceDao,
+    private val invoiceLocalSource: InvoiceLocalSource,
+    private val salesInvoiceRemoteSource: SalesInvoiceRemoteSource
 ) {
     suspend fun pushPending(): Boolean {
         repairActiveOpenings()
@@ -111,7 +116,34 @@ class OpeningEntrySyncRepository(
 
     private suspend fun updateOpeningEntryRefs(localName: String, remoteName: String) {
         if (localName == remoteName) return
+        val affected = salesInvoiceDao.getInvoicesForOpeningEntry(localName)
         salesInvoiceDao.updateInvoicesOpeningEntry(localName, remoteName)
         salesInvoiceDao.updatePaymentsOpeningEntry(localName, remoteName)
+        if (affected.isEmpty()) return
+
+        affected.forEach { invoice ->
+            val invoiceName = invoice.invoiceName?.trim().orEmpty()
+            if (invoiceName.isBlank()) return@forEach
+            if (invoiceName.startsWith("LOCAL-", ignoreCase = true)) return@forEach
+            if (!invoice.syncStatus.equals("Synced", ignoreCase = true)) return@forEach
+            val wrapper = invoiceLocalSource.getInvoiceByName(invoiceName) ?: return@forEach
+            val baseDto = wrapper.toDto()
+            val dto = baseDto.copy(
+                posOpeningEntry = remoteName,
+                posProfile = wrapper.invoice.profileId ?: baseDto.posProfile
+            )
+            runCatching {
+                if (dto.isPos || dto.doctype.equals("POS Invoice", ignoreCase = true)) {
+                    salesInvoiceRemoteSource.updatePosInvoice(invoiceName, dto)
+                } else {
+                    salesInvoiceRemoteSource.updateInvoice(invoiceName, dto)
+                }
+            }.onFailure { error ->
+                AppLogger.warn(
+                    "OpeningEntrySyncRepository: update remote invoice $invoiceName failed",
+                    error
+                )
+            }
+        }
     }
 }

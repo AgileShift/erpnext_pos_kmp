@@ -18,12 +18,15 @@ class SessionRefresher(
     private val tokenStore: TokenStore,
     private val apiService: APIService,
     private val navigationManager: NavigationManager,
-    private val networkMonitor: NetworkMonitor
+    private val networkMonitor: NetworkMonitor,
+    private val cashBoxManager: Lazy<Any>? = null
 ) {
     private val mutex = Mutex()
-    private val refreshThresholdSeconds = 10 * 60L // 10 minutos
+    private val refreshThresholdSeconds = 30 * 60L // 30 minutos
+    private var invalidated = false
 
     suspend fun ensureValidSession(): Boolean = mutex.withLock {
+        AppLogger.info("SessionRefresher.ensureValidSession start")
         val isOnline = networkMonitor.isConnected.first()
         val tokens = tokenStore.load() ?: return if (isOnline) invalidateSession() else true
 
@@ -35,22 +38,38 @@ class SessionRefresher(
             return true
         }
 
-        if (TokenUtils.isValid(tokens.id_token) && !isNearExpiry) return true
+        if (TokenUtils.isValid(tokens.id_token) && !isNearExpiry) {
+            AppLogger.info("SessionRefresher: token valid, skip refresh")
+            invalidated = false
+            return true
+        }
         val refreshToken = tokens.refresh_token ?: return invalidateSession()
 
         return try {
+            AppLogger.info("SessionRefresher: refreshing token")
             val refreshed = apiService.refreshToken(refreshToken)
             tokenStore.save(refreshed)
+            invalidated = false
             true
         } catch (t: Throwable) {
             AppSentry.capture(t, "SessionRefresher.refresh failed")
             AppLogger.warn("SessionRefresher: refresh failed", t)
-            invalidateSession()
+            if (TokenUtils.isValid(tokens.id_token)) {
+                AppLogger.info("SessionRefresher: refresh failed but token still valid")
+                invalidated = false
+                true
+            } else {
+                invalidateSession()
+            }
         }
     }
 
     private suspend fun invalidateSession(): Boolean {
+        if (invalidated) return false
+        invalidated = true
+        AppLogger.warn("SessionRefresher: invalidating session -> Login")
         tokenStore.clear()
+        (cashBoxManager?.value as? com.erpnext.pos.views.CashBoxManager)?.clearContext()
         navigationManager.navigateTo(NavRoute.Login)
         return false
     }

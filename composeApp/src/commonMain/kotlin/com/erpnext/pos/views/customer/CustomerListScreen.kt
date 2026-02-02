@@ -783,7 +783,7 @@ private fun CustomerDetailPanel(
         modifier = Modifier.fillMaxSize().padding(20.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        Row(
+        /*Row(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
@@ -820,13 +820,13 @@ private fun CustomerDetailPanel(
             value = formatCurrency(primaryCurrency, primaryAmount),
             secondaryValue = secondaryValue,
             isCritical = (customer.pendingInvoices ?: 0) > 0
-        )
+        )*/
 
         val historyInvoices =
             (historyState as? CustomerInvoiceHistoryState.Success)?.invoices.orEmpty()
         val recentInvoices = historyInvoices.filter { isWithinDays(it.postingDate, 90) }
         val totalSpentBase = recentInvoices.sumOf {
-            val invoiceCurrency = normalizeCurrency(it.currency) ?: baseCurrency
+            val invoiceCurrency = normalizeCurrency(it.currency)
             toBaseAmount(it.total, invoiceCurrency, baseCurrency, it.conversionRate)
         }
         val avgTicket = if (recentInvoices.isNotEmpty()) {
@@ -2059,7 +2059,8 @@ private fun CustomerOutstandingInvoicesContent(
     LaunchedEffect(selectedMode, invoiceCurrency) {
         selectedCurrency = resolvePaymentCurrencyForMode(
             modeOfPayment = selectedMode,
-            paymentModeDetails = paymentState.modeTypes ?: mapOf()
+            paymentModeDetails = paymentState.modeTypes ?: mapOf(),
+            invoiceCurrency = invoiceCurrency
         )
     }
 
@@ -2323,7 +2324,8 @@ private fun CustomerOutstandingInvoicesContent(
                                 selectedMode = mode.name
                                 selectedCurrency = resolvePaymentCurrencyForMode(
                                     modeOfPayment = mode.modeOfPayment,
-                                    paymentModeDetails = paymentState.modeTypes ?: mapOf()
+                                    paymentModeDetails = paymentState.modeTypes ?: mapOf(),
+                                    invoiceCurrency = invoiceCurrency
                                 )
                                 modeExpanded = false
                             })

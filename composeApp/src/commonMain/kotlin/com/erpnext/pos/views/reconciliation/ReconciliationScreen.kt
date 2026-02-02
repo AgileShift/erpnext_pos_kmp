@@ -278,13 +278,13 @@ private fun ReconciliationHeader(
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = onBack) {
+                /*IconButton(onClick = onBack) {
                     Icon(
                         imageVector = Icons.AutoMirrored.Default.ArrowBack,
                         contentDescription = backLabel
                     )
                 }
-                Spacer(modifier = Modifier.width(8.dp))
+                Spacer(modifier = Modifier.width(8.dp))*/
                 Box(
                     modifier = Modifier
                         .size(40.dp)

@@ -59,7 +59,8 @@ fun rememberBillingActions(coordinator: BillingCoordinator): BillingAction {
             onBack = coordinator::onBack,
             onLinkSource = coordinator::onLinkSource,
             onClearSource = coordinator::onClearSource,
-            onLoadSourceDocuments = coordinator::onLoadSourceDocuments
+            onLoadSourceDocuments = coordinator::onLoadSourceDocuments,
+            onSyncExchangeRates = coordinator::onSyncExchangeRates
         )
     }
 }
