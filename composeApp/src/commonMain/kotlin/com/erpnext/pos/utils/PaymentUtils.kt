@@ -166,6 +166,22 @@ fun buildCurrencySpecs(): Map<String, CurrencySpec> {
     )
 }
 
+fun resolveMinorUnits(
+    currency: String?,
+    specs: Map<String, CurrencySpec> = buildCurrencySpecs()
+): Int {
+    val code = normalizeCurrency(currency)
+    return specs[code]?.minorUnits ?: 2
+}
+
+fun resolveMinorUnitTolerance(
+    currency: String?,
+    specs: Map<String, CurrencySpec> = buildCurrencySpecs()
+): Double {
+    val units = resolveMinorUnits(currency, specs)
+    return 1.0 / 10.0.pow(units)
+}
+
 fun buildLocalPayments(
     invoiceId: String,
     postingDate: String,

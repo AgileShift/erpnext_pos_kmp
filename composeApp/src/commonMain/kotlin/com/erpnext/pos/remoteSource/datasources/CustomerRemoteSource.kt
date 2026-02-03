@@ -5,6 +5,7 @@ import com.erpnext.pos.remoteSource.dto.ContactChildDto
 import com.erpnext.pos.remoteSource.dto.CustomerDto
 import com.erpnext.pos.remoteSource.dto.OutstandingInfo
 import com.erpnext.pos.remoteSource.dto.SalesInvoiceDto
+import com.erpnext.pos.utils.isLikelyPosInvoiceName
 
 class CustomerRemoteSource(
     private val api: APIService,
@@ -51,5 +52,27 @@ class CustomerRemoteSource(
 
     suspend fun fetchInvoiceByName(invoiceName: String): SalesInvoiceDto? {
         return runCatching { api.getSalesInvoiceByName(invoiceName) }.getOrNull()
+    }
+
+    suspend fun fetchInvoiceDetail(invoice: SalesInvoiceDto): SalesInvoiceDto? {
+        val name = invoice.name ?: return null
+        return runCatching {
+            val isPosHint =
+                invoice.doctype.equals("POS Invoice", ignoreCase = true) || invoice.isPos
+            val likelyPos = isPosHint || isLikelyPosInvoiceName(name)
+            if (likelyPos) api.getPOSInvoiceByName(name) else api.getSalesInvoiceByName(name)
+        }.getOrNull() ?: runCatching { api.getSalesInvoiceByName(name) }.getOrNull()
+            ?: runCatching { api.getPOSInvoiceByName(name) }.getOrNull()
+    }
+
+    suspend fun fetchInvoiceByNameSmart(invoiceName: String, isPosHint: Boolean? = null): SalesInvoiceDto? {
+        val likelyPos = isPosHint == true || isLikelyPosInvoiceName(invoiceName)
+        return if (likelyPos) {
+            runCatching { api.getPOSInvoiceByName(invoiceName) }.getOrNull()
+                ?: runCatching { api.getSalesInvoiceByName(invoiceName) }.getOrNull()
+        } else {
+            runCatching { api.getSalesInvoiceByName(invoiceName) }.getOrNull()
+                ?: runCatching { api.getPOSInvoiceByName(invoiceName) }.getOrNull()
+        }
     }
 }

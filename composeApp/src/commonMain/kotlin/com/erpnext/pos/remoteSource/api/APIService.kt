@@ -33,7 +33,9 @@ import com.erpnext.pos.remoteSource.dto.POSOpeningEntrySummaryDto
 import com.erpnext.pos.remoteSource.dto.POSProfileDto
 import com.erpnext.pos.remoteSource.dto.POSProfileSimpleDto
 import com.erpnext.pos.remoteSource.dto.PaymentTermDto
+import com.erpnext.pos.remoteSource.dto.PaymentEntryDto
 import com.erpnext.pos.remoteSource.dto.SalesInvoiceDto
+import com.erpnext.pos.remoteSource.dto.StockSettingsDto
 import com.erpnext.pos.remoteSource.dto.SubmitResponseDto
 import com.erpnext.pos.remoteSource.dto.TokenResponse
 import com.erpnext.pos.remoteSource.dto.UserDto
@@ -59,6 +61,7 @@ import com.erpnext.pos.remoteSource.sdk.getFields
 import com.erpnext.pos.remoteSource.sdk.postERP
 import com.erpnext.pos.remoteSource.sdk.putERP
 import com.erpnext.pos.remoteSource.sdk.withRetries
+import com.erpnext.pos.utils.view.DateTimeProvider
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.engine.HttpClientEngine
@@ -91,11 +94,24 @@ class APIService(
     private val authStore: AuthInfoStore,
     private val tokenClient: HttpClient
 ) {
+    private companion object {
+        const val DEFAULT_INVOICE_SYNC_DAYS = 90
+    }
     suspend fun getCompanyInfo(): List<CompanyDto> {
         val url = authStore.getCurrentSite()
         return client.getERPSingle(
             doctype = ERPDocType.Company.path,
             fields = ERPDocType.Company.getFields(),
+            name = "",
+            baseUrl = url,
+        )
+    }
+
+    suspend fun getStockSettings(): List<StockSettingsDto> {
+        val url = authStore.getCurrentSite()
+        return client.getERPSingle(
+            doctype = ERPDocType.StockSettings.path,
+            fields = ERPDocType.StockSettings.getFields(),
             name = "",
             baseUrl = url,
         )
@@ -949,12 +965,15 @@ class APIService(
     // Batch method for all outstanding invoices
     suspend fun getAllOutstandingInvoices(posProfile: String): List<SalesInvoiceDto> {
         val url = authStore.getCurrentSite()
+        val today = DateTimeProvider.todayDate()
+        val startDate = DateTimeProvider.addDays(today, -DEFAULT_INVOICE_SYNC_DAYS)
         return client.getERPList<SalesInvoiceDto>(
             doctype = ERPDocType.SalesInvoice.path,
             fields = ERPDocType.SalesInvoice.getFields(),
             baseUrl = url,
             filters = filters {
                 "pos_profile" eq posProfile
+                "posting_date" gte startDate
                 "status" `in` listOf(
                     "Unpaid",
                     "Overdue",
@@ -972,6 +991,8 @@ class APIService(
     ): List<SalesInvoiceDto> {
         return try {
             val url = authStore.getCurrentSite()
+            val today = DateTimeProvider.todayDate()
+            val startDate = DateTimeProvider.addDays(today, -DEFAULT_INVOICE_SYNC_DAYS)
             client.getERPList(
                 doctype = ERPDocType.SalesInvoice.path,
                 fields = ERPDocType.SalesInvoice.getFields(),
@@ -980,6 +1001,7 @@ class APIService(
                 baseUrl = url,
                 filters = filters {
                     "pos_profile" eq posProfile
+                    "posting_date" gte startDate
                     "status" `in` listOf(
                         "Draft",
                         "Unpaid",
@@ -1000,6 +1022,42 @@ class APIService(
             AppLogger.warn("fetchAllInvoices failed", e)
             emptyList()
         }
+    }
+
+    suspend fun fetchPaymentEntries(fromDate: String): List<PaymentEntryDto> {
+        val url = authStore.getCurrentSite()
+        return client.getERPList(
+            doctype = ERPDocType.PaymentEntry.path,
+            fields = listOf(
+                "name",
+                "posting_date",
+                "party",
+                "party_type",
+                "payment_type",
+                "mode_of_payment",
+                "paid_amount",
+                "received_amount",
+                "paid_from_account_currency",
+                "paid_to_account_currency"
+            ),
+            orderBy = "posting_date desc",
+            baseUrl = url,
+            filters = filters {
+                "posting_date" gte fromDate
+                "docstatus" eq 1
+                "party_type" eq "Customer"
+                "payment_type" eq "Receive"
+            }
+        )
+    }
+
+    suspend fun getPaymentEntryByName(name: String): PaymentEntryDto {
+        val url = authStore.getCurrentSite()
+        return client.getERPSingle(
+            doctype = ERPDocType.PaymentEntry.path,
+            name = name,
+            baseUrl = url
+        )
     }
 
     suspend fun fetchReturnInvoiceNames(

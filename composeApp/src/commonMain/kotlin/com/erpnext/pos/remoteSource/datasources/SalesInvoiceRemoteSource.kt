@@ -7,8 +7,10 @@ import androidx.paging.PagingData
 import com.erpnext.pos.localSource.dao.SalesInvoiceDao
 import com.erpnext.pos.localSource.entities.SalesInvoiceWithItemsAndPayments
 import com.erpnext.pos.remoteSource.api.APIService
+import com.erpnext.pos.remoteSource.dto.PaymentEntryDto
 import com.erpnext.pos.remoteSource.dto.SalesInvoiceDto
 import com.erpnext.pos.remoteSource.paging.InvoiceRemoteMediator
+import com.erpnext.pos.utils.isLikelyPosInvoiceName
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.onStart
 
@@ -27,6 +29,12 @@ class SalesInvoiceRemoteSource(
 
     suspend fun fetchPosInvoice(name: String): SalesInvoiceDto? =
         runCatching { apiService.getPOSInvoiceByName(name) }.getOrNull()
+
+    suspend fun fetchInvoiceSmart(name: String, isPosHint: Boolean? = null): SalesInvoiceDto? {
+        val likelyPos = isPosHint == true || isLikelyPosInvoiceName(name)
+        return if (likelyPos) fetchPosInvoice(name) ?: fetchInvoice(name)
+        else fetchInvoice(name) ?: fetchPosInvoice(name)
+    }
     //apiService.getInvoiceDetail(name, baseUrl, headers)
 
     suspend fun fetchOutstandingInvoicesForCustomer(
@@ -71,6 +79,12 @@ class SalesInvoiceRemoteSource(
 
     suspend fun cancelPosInvoice(name: String) =
         apiService.cancelPOSInvoice(name)
+
+    suspend fun fetchPaymentEntries(fromDate: String): List<PaymentEntryDto> =
+        apiService.fetchPaymentEntries(fromDate)
+
+    suspend fun fetchPaymentEntry(name: String): PaymentEntryDto? =
+        runCatching { apiService.getPaymentEntryByName(name) }.getOrNull()
 
     suspend fun deleteInvoice(name: String) = null
     //apiService.delete(name, baseUrl, headers)

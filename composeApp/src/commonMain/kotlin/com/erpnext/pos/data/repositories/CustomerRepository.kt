@@ -55,7 +55,9 @@ class CustomerRepository(
             remoteSource.fetchCustomers(territory)
         }, saveFetchResult = { remoteData ->
             val profileId = context.requireContext().profileName
-            val invoices = remoteSource.fetchInvoices(profileId).toEntities()
+            val invoices = remoteSource.fetchInvoices(profileId)
+                .map { remoteSource.fetchInvoiceDetail(it) ?: it }
+                .toEntities()
             localSource.saveInvoices(invoices.map { mergeLocalInvoiceFields(it) })
             backfillMissingInvoiceItems(profileId)
 
@@ -128,8 +130,14 @@ class CustomerRepository(
                             .toLong())*/
         }, saveFetchResult = { remoteData ->
             val profileId = context.requireContext().profileName
-            val invoices = remoteSource.fetchInvoices(profileId).toEntities()
-            localSource.saveInvoices(invoices.map { mergeLocalInvoiceFields(it) })
+            val invoices = remoteSource.fetchInvoices(profileId)
+            val detailed = coroutineScope {
+                invoices.map { dto ->
+                    async { remoteSource.fetchInvoiceDetail(dto) ?: dto }
+                }.awaitAll()
+            }
+            val entities = detailed.toEntities()
+            localSource.saveInvoices(entities.map { mergeLocalInvoiceFields(it) })
             backfillMissingInvoiceItems(profileId)
 
             // Fetch all outstanding invoices once
@@ -141,7 +149,7 @@ class CustomerRepository(
             missingOutstanding.forEach { invoiceName ->
                 val local = localSource.getInvoiceByName(invoiceName)
                 val customerId = local?.invoice?.customer
-                val remote = remoteSource.fetchInvoiceByName(invoiceName)
+                val remote = remoteSource.fetchInvoiceByNameSmart(invoiceName)
                 if (remote != null) {
                     localSource.saveInvoices(listOf(remote.toEntity()))
                 } else {

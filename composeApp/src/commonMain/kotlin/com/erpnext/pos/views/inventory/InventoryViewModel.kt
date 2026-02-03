@@ -92,6 +92,7 @@ class InventoryViewModel(
                 val baseCurrency = current.currency
                 val exchangeRate = current.exchangeRate
 
+                val allowNegativeStock = current.allowNegativeStock
                 val itemsFlow: Flow<PagingData<ItemBO>> = combine(
                     searchFilter.debounce(300),
                     categoryFilter.debounce(300)
@@ -110,7 +111,8 @@ class InventoryViewModel(
                                             category == "Todos los grupos de artículos" ||
                                             item.itemGroup.equals(category, ignoreCase = true)
 
-                                    matchesQuery && matchesCategory
+                                    val hasStock = allowNegativeStock || item.actualQty > 0.0
+                                    matchesQuery && matchesCategory && hasStock
                                 }
                             }
                     }

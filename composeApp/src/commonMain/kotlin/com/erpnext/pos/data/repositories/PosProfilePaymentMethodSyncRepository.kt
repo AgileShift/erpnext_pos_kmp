@@ -87,7 +87,7 @@ class PosProfilePaymentMethodSyncRepository(
                 mopName = payment.modeOfPayment,
                 idx = index,
                 isDefault = payment.default,
-                allowInReturns = false,
+                allowInReturns = payment.allowInReturns,
                 enabledInProfile = true,
                 lastSyncedAt = now
             )

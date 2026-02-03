@@ -21,12 +21,16 @@ import com.erpnext.pos.remoteSource.mapper.toEntity
 import com.erpnext.pos.utils.RepoTrace
 import com.erpnext.pos.utils.AppLogger
 import com.erpnext.pos.utils.buildPaymentModeDetailMap
+import com.erpnext.pos.utils.buildCurrencySpecs
 import com.erpnext.pos.utils.roundToCurrency
+import com.erpnext.pos.utils.resolveMinorUnitTolerance
+import com.erpnext.pos.utils.view.DateTimeProvider
 import com.erpnext.pos.views.CashBoxManager
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
 import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
+import kotlin.math.abs
 
 @OptIn(ExperimentalTime::class)
 class SalesInvoiceRepository(
@@ -270,11 +274,7 @@ class SalesInvoiceRepository(
 
     suspend fun fetchRemoteInvoice(name: String): SalesInvoiceDto? {
         val local = localSource.getInvoiceByName(name)?.invoice
-        return if (local?.isPos == true) {
-            remoteSource.fetchPosInvoice(name)
-        } else {
-            remoteSource.fetchInvoice(name)
-        }
+        return remoteSource.fetchInvoiceSmart(name, local?.isPos)
     }
 
     suspend fun fetchRemoteReturnInvoices(
@@ -640,7 +640,14 @@ class SalesInvoiceRepository(
             },
             saveFetchResult = {
                 val profileId = context.requireContext().profileName
-                it.toEntities().forEach { payload ->
+                val detailed = it.map { dto ->
+                    val name = dto.name
+                    if (name.isNullOrBlank()) dto
+                    else runCatching {
+                        remoteSource.fetchInvoiceSmart(name, dto.isPos)
+                    }.getOrNull() ?: dto
+                }
+                detailed.toEntities().forEach { payload ->
                     val ensured = ensureProfileId(payload, profileId)
                     val merged = mergeLocalInvoiceFields(ensured)
                     localSource.saveInvoiceLocally(
@@ -650,7 +657,8 @@ class SalesInvoiceRepository(
                     )
                 }
                 backfillMissingInvoiceItems(profileId)
-                reconcileOutstandingWithRemote(it)
+                reconcileOutstandingWithRemote(detailed)
+                syncPaymentEntriesForPeriod()
             },
             onFetchFailed = { e ->
                 RepoTrace.capture("SalesInvoiceRepository", "sync", e)
@@ -742,6 +750,78 @@ class SalesInvoiceRepository(
                 ?: local.partyAccountCurrency
         )
         return payload.copy(invoice = mergedInvoice)
+    }
+
+    private suspend fun syncPaymentEntriesForPeriod(days: Int = 90) {
+        val today = DateTimeProvider.todayDate()
+        val startDate = DateTimeProvider.addDays(today, -days)
+        val currencySpecs = buildCurrencySpecs()
+        val entries = runCatching { remoteSource.fetchPaymentEntries(startDate) }.getOrNull()
+            ?: emptyList()
+        if (entries.isEmpty()) return
+
+        entries.forEach { entry ->
+            val entryName = entry.name ?: return@forEach
+            val detailed =
+                runCatching { remoteSource.fetchPaymentEntry(entryName) }.getOrNull() ?: entry
+            if (detailed.references.isEmpty()) return@forEach
+
+            detailed.references.forEach { ref ->
+                val invoiceName = ref.referenceName?.trim().orEmpty()
+                if (invoiceName.isBlank()) return@forEach
+                val doctype = ref.referenceDoctype?.trim().orEmpty()
+                if (!doctype.equals("Sales Invoice", true) && !doctype.equals("POS Invoice", true)) {
+                    return@forEach
+                }
+
+                val localInvoice = localSource.getInvoiceByName(invoiceName)?.invoice
+                    ?: return@forEach
+                val payments = localSource.getPaymentsForInvoice(invoiceName)
+                if (payments.any { it.remotePaymentEntry == entryName }) return@forEach
+
+                val currency = localInvoice.currency ?: localInvoice.partyAccountCurrency
+                val tolerance = resolveMinorUnitTolerance(currency, currencySpecs)
+                val amount = ref.allocatedAmount
+                val mode = detailed.modeOfPayment?.trim()
+
+                val match = payments.firstOrNull { payment ->
+                    val amountMatch = abs(payment.amount - amount) <= tolerance
+                    val modeMatch = mode.isNullOrBlank() ||
+                        payment.modeOfPayment.equals(mode, ignoreCase = true)
+                    val currencyMatch = payment.paymentCurrency.isNullOrBlank() ||
+                        payment.paymentCurrency.equals(currency, ignoreCase = true)
+                    amountMatch && modeMatch && currencyMatch
+                }
+
+                val now = Clock.System.now().toEpochMilliseconds()
+                if (match != null) {
+                    localSource.updatePaymentSyncStatus(
+                        paymentId = match.id,
+                        status = "Synced",
+                        syncedAt = now,
+                        remotePaymentEntry = entryName
+                    )
+                } else {
+                    val fallbackMode = mode?.takeIf { it.isNotBlank() } ?: "Payment"
+                    val newPayment = POSInvoicePaymentEntity(
+                        parentInvoice = invoiceName,
+                        modeOfPayment = fallbackMode,
+                        amount = amount,
+                        enteredAmount = amount,
+                        paymentCurrency = currency,
+                        exchangeRate = 1.0,
+                        paymentReference = entryName,
+                        remotePaymentEntry = entryName,
+                        paymentDate = detailed.postingDate,
+                        posOpeningEntry = localInvoice.posOpeningEntry,
+                        syncStatus = "Synced",
+                        createdAt = now,
+                        lastSyncedAt = now
+                    )
+                    localSource.upsertPayments(listOf(newPayment))
+                }
+            }
+        }
     }
 
     private fun ensurePosProfile(dto: SalesInvoiceDto): SalesInvoiceDto {

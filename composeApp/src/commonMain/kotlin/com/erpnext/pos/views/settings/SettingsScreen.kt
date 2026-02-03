@@ -76,7 +76,8 @@ fun SettingsScreenPreview() {
                 taxesIncluded = false,
                 offlineMode = true,
                 printerEnabled = true,
-                cashDrawerEnabled = true
+                cashDrawerEnabled = true,
+                allowNegativeStock = false
             ),
             syncSettings = SyncSettings(
                 autoSync = true,
@@ -171,6 +172,19 @@ fun PosSettingsScreen(
                             checked = state.settings.offlineMode,
                             onCheckedChange = action.onOfflineModeChanged
                         )
+                        Column {
+                            SettingToggle(
+                                label = "Permitir venta con stock negativo",
+                                checked = state.settings.allowNegativeStock,
+                                onCheckedChange = {},
+                                enabled = false
+                            )
+                            Text(
+                                text = "Controlado por ERPNext (Desk).",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
                     }
 
                     SettingSection(title = strings.settings.hardwareTitle) {
@@ -439,7 +453,8 @@ private fun SettingItem(
 private fun SettingToggle(
     label: String,
     checked: Boolean,
-    onCheckedChange: (Boolean) -> Unit
+    onCheckedChange: (Boolean) -> Unit,
+    enabled: Boolean = true
 ) {
     Row(
         modifier = Modifier
@@ -452,6 +467,7 @@ private fun SettingToggle(
         Switch(
             checked = checked,
             onCheckedChange = onCheckedChange,
+            enabled = enabled,
             colors = androidx.compose.material3.SwitchDefaults.colors(
                 checkedThumbColor = MaterialTheme.colorScheme.primary,
                 uncheckedThumbColor = MaterialTheme.colorScheme.onSurface

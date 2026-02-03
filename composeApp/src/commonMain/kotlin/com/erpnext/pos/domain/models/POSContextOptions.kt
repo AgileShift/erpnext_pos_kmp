@@ -11,4 +11,5 @@ data class POSPaymentModeOption(
     val name: String,
     val modeOfPayment: String,
     val type: String? = null,
+    val allowInReturns: Boolean = true,
 )

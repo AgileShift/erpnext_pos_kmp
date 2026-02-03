@@ -41,4 +41,7 @@ data class PaymentModesDto(
     val name: String,
     @Serializable(with = IntAsBooleanSerializer::class) val default: Boolean,
     @SerialName("mode_of_payment") val modeOfPayment: String,
+    @SerialName("allow_in_returns")
+    @Serializable(with = IntAsBooleanSerializer::class)
+    val allowInReturns: Boolean
 )

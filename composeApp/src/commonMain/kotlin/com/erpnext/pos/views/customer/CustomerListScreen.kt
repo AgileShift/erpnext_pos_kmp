@@ -1978,11 +1978,13 @@ private fun CustomerOutstandingInvoicesContent(
         referenceInput = ""
     }
 
+    val preferredCurrencyByMode = paymentState.paymentModeCurrencyByMode ?: mapOf()
     var selectedCurrency by remember { mutableStateOf(invoiceCurrency) }
     LaunchedEffect(selectedMode, invoiceCurrency) {
         selectedCurrency = resolvePaymentCurrencyForMode(
             modeOfPayment = selectedMode,
             paymentModeDetails = paymentState.modeTypes ?: mapOf(),
+            preferredCurrency = preferredCurrencyByMode[selectedMode],
             invoiceCurrency = invoiceCurrency
         )
     }
@@ -2225,6 +2227,7 @@ private fun CustomerOutstandingInvoicesContent(
                                 selectedCurrency = resolvePaymentCurrencyForMode(
                                     modeOfPayment = mode.modeOfPayment,
                                     paymentModeDetails = paymentState.modeTypes ?: mapOf(),
+                                    preferredCurrency = preferredCurrencyByMode[mode.name],
                                     invoiceCurrency = invoiceCurrency
                                 )
                                 modeExpanded = false
@@ -2350,7 +2353,10 @@ private fun CustomerInvoiceHistorySheet(
     var fullReturnDestination by remember { mutableStateOf(ReturnDestination.RETURN) }
 
     val refundOptions = remember(paymentState.paymentModes) {
-        paymentState.paymentModes.mapNotNull { it.modeOfPayment.ifBlank { null } }.distinct()
+        paymentState.paymentModes
+            .filter { it.allowInReturns }
+            .mapNotNull { it.modeOfPayment.ifBlank { null } }
+            .distinct()
     }
 
     fun canConfirmReturn(): Boolean = qtyByItemCode.values.any { it > 0.0 }
@@ -3587,10 +3593,23 @@ private fun InvoiceHistoryRow(
     val posTotal = bd(display.totalInvoice).toDouble(0)
     val posOutstanding = bd(display.outstandingInvoice).toDouble(0)
     val statusLabel = invoice.status ?: "Sin estado"
-    val normalizedStatus = normalizedStatus(invoice.status?.trim()?.lowercase())
+    val statusKey = invoice.status?.trim()?.lowercase()
+    val localizedStatus = normalizedStatus(statusKey)
     val hasPayments = invoice.paidAmount > 0.0 || invoice.payments.any { it.amount > 0.0 }
-    val isDraftOrUnpaid = normalizedStatus == "draft" || normalizedStatus == "unpaid"
-    val isPaidOrPartly = normalizedStatus == "paid" || normalizedStatus == "partly paid"
+    val unpaidStatuses = setOf(
+        "draft",
+        "unpaid",
+        "overdue",
+        "overdue and discounted",
+        "unpaid and discounted"
+    )
+    val paidStatuses = setOf(
+        "paid",
+        "partly paid",
+        "partly paid and discounted"
+    )
+    val isDraftOrUnpaid = statusKey in unpaidStatuses
+    val isPaidOrPartly = statusKey in paidStatuses
     val allowCancel = isDraftOrUnpaid && !hasPayments
     val allowReturn = isPaidOrPartly || hasPayments
     val (statusBg, statusText) = when (statusLabel.lowercase()) {
@@ -3634,7 +3653,7 @@ private fun InvoiceHistoryRow(
                         color = statusBg, shape = RoundedCornerShape(10.dp)
                     ) {
                         Text(
-                            text = statusLabel,
+                            text = localizedStatus,
                             modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
                             style = MaterialTheme.typography.labelSmall,
                             color = statusText

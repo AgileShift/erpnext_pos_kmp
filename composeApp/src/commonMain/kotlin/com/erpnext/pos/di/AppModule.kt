@@ -26,6 +26,7 @@ import com.erpnext.pos.data.repositories.TerritoryRepository
 import com.erpnext.pos.data.repositories.PosOpeningRepository
 import com.erpnext.pos.data.repositories.UserRepository
 import com.erpnext.pos.data.repositories.ExchangeRateRepository
+import com.erpnext.pos.data.repositories.StockSettingsRepository
 import com.erpnext.pos.domain.repositories.IPOSRepository
 import com.erpnext.pos.domain.repositories.IUserRepository
 import com.erpnext.pos.domain.usecases.AdjustLocalInventoryUseCase
@@ -323,6 +324,7 @@ val appModule = module {
     single { OpeningSessionPreferences(get()) }
     single { SyncPreferences(get()) }
     single { ThemePreferences(get()) }
+    single { StockSettingsRepository(get(named("apiService")), get()) }
     single<DatePolicy> { DefaultPolicy(PolicyInput()) }
     single<CashBoxManager> {
         CashBoxManager(
@@ -339,6 +341,7 @@ val appModule = module {
             openingEntrySyncRepository = get(),
             paymentMethodLocalRepository = get(),
             salesInvoiceDao = get(),
+            generalPreferences = get(),
             sessionRefresher = get(),
             networkMonitor = get()
         )
@@ -371,6 +374,7 @@ val appModule = module {
             inventoryRepo = get(),
             modeOfPaymentRepo = get(),
             posProfilePaymentMethodSyncRepository = get(),
+            stockSettingsRepository = get(),
             paymentTermsRepo = get(),
             deliveryChargesRepo = get(),
             contactRepo = get(),

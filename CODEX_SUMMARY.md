@@ -13,4 +13,4 @@
   - Posibilidad de vender inventario negativo (Reserva)
 
 
-codex resume 019c110b-cad4-7840-9106-7cc5a4baefd0
+codex resume 019c20cd-2c22-73a0-bb2b-cef30097f83c

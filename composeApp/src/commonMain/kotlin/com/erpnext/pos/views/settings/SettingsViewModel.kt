@@ -44,7 +44,8 @@ class SettingsViewModel(
                 generalPreferences.taxesIncluded,
                 generalPreferences.offlineMode,
                 generalPreferences.printerEnabled,
-                generalPreferences.cashDrawerEnabled
+                generalPreferences.cashDrawerEnabled,
+                generalPreferences.allowNegativeStock
             ) { args: Array<Any?> ->
                 val ctx = args[0] as POSContext
                 val syncSettings = args[1] as SyncSettings
@@ -56,6 +57,7 @@ class SettingsViewModel(
                 val offline = args[7] as Boolean
                 val printer = args[8] as Boolean
                 val drawer = args[9] as Boolean
+                val allowNegativeStock = args[10] as Boolean
                 POSSettingState.Success(
                     settings = POSSettingBO(
                         company = ctx.company,
@@ -65,7 +67,8 @@ class SettingsViewModel(
                         taxesIncluded = taxes,
                         offlineMode = offline,
                         printerEnabled = printer,
-                        cashDrawerEnabled = drawer
+                        cashDrawerEnabled = drawer,
+                        allowNegativeStock = allowNegativeStock
                     ),
                     syncSettings = syncSettings,
                     syncState = syncState,

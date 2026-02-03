@@ -129,7 +129,10 @@ class BillingViewModel(
             customersUseCase.invoke(null).collectLatest { c ->
                 customers = c
                 itemsUseCase.invoke(null).collectLatest { i ->
-                    products = i.filter { it.price > 0.0 && it.actualQty > 0.0 }
+                    val allowNegativeStock = context.allowNegativeStock
+                    products = i.filter {
+                        it.price > 0.0 && (allowNegativeStock || it.actualQty > 0.0)
+                    }
 
                     val invoiceCurrency = context.currency.trim()
                     val baseCurrency = context.companyCurrency.trim().uppercase()
@@ -158,6 +161,7 @@ class BillingViewModel(
                                 name = mode.name,
                                 modeOfPayment = mode.modeOfPayment,
                                 type = modeTypes[mode.modeOfPayment]?.type,
+                                allowInReturns = true,
                             )
                         }
                     }
@@ -868,7 +872,10 @@ class BillingViewModel(
                     val sold = soldByCode[p.itemCode] ?: 0.0
                     if (sold <= 0.0) p
                     else p.copy(actualQty = (p.actualQty - sold).coerceAtLeast(0.0))
-                }.filter { it.price > 0.0 && it.actualQty > 0.0 }
+                }.filter {
+                    val allowNegativeStock = contextProvider.getContext()?.allowNegativeStock == true
+                    it.price > 0.0 && (allowNegativeStock || it.actualQty > 0.0)
+                }
 
                 val q = current.productSearchQuery
                 val refreshedResults = if (q.isBlank()) products else products.filter {
@@ -1483,10 +1490,11 @@ class BillingViewModel(
         current.cartItems.forEach { item ->
             val product = products.firstOrNull { it.itemCode == item.itemCode }
             val available = product?.actualQty ?: 0.0
-            if (available <= 0.0) {
+            val allowNegativeStock = contextProvider.getContext()?.allowNegativeStock == true
+            if (!allowNegativeStock && available <= 0.0) {
                 return "El artículo ${item.name} no tiene stock disponible."
             }
-            if (item.quantity > available) {
+            if (!allowNegativeStock && item.quantity > available) {
                 return buildQtyErrorMessage(item.name, available)
             }
         }

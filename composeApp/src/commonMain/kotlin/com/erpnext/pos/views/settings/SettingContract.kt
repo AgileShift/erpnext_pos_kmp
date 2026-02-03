@@ -14,7 +14,8 @@ data class POSSettingBO(
     val taxesIncluded: Boolean,
     val offlineMode: Boolean,
     val printerEnabled: Boolean,
-    val cashDrawerEnabled: Boolean
+    val cashDrawerEnabled: Boolean,
+    val allowNegativeStock: Boolean
 )
 
 sealed class POSSettingState {

@@ -6,6 +6,7 @@ enum class ERPDocType(val path: String) {
     Item("Item"),
     PaymentEntry("Payment Entry"),
     Company("Company"),
+    StockSettings("Stock Settings"),
     ModeOfPayment("Mode of Payment"),
     Account("Account"),
     Category("Item Group"),
@@ -32,6 +33,10 @@ val fields: List<DocTypeFields> = listOf(
     DocTypeFields(
         ERPDocType.Company,
         listOf("default_currency", "country", "tax_id", "name")
+    ),
+    DocTypeFields(
+        ERPDocType.StockSettings,
+        listOf("allow_negative_stock")
     ),
     DocTypeFields(
         ERPDocType.ModeOfPayment,

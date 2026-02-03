@@ -55,6 +55,7 @@ data class POSContext(
     val profileName: String,
     val company: String,
     val companyCurrency: String,
+    val allowNegativeStock: Boolean,
     val warehouse: String?,
     val route: String?,
     val territory: String?,
@@ -85,6 +86,7 @@ class CashBoxManager(
     private val openingEntrySyncRepository: OpeningEntrySyncRepository,
     private val paymentMethodLocalRepository: PosProfilePaymentMethodLocalRepository,
     private val salesInvoiceDao: SalesInvoiceDao,
+    private val generalPreferences: com.erpnext.pos.localSource.preferences.GeneralPreferences,
     private val sessionRefresher: SessionRefresher,
     private val networkMonitor: NetworkMonitor
 ) {
@@ -126,6 +128,7 @@ class CashBoxManager(
             profileName = profile.profileName,
             company = company?.companyName ?: profile.company,
             companyCurrency = company?.defaultCurrency ?: profile.currency,
+            allowNegativeStock = generalPreferences.allowNegativeStock.firstOrNull() == true,
             partyAccountCurrency = company?.defaultCurrency ?: profile.currency,
             warehouse = profile.warehouse,
             route = profile.route,
@@ -178,6 +181,7 @@ class CashBoxManager(
                 profileName = entry.name,
                 company = company?.companyName ?: profile.company,
                 companyCurrency = company?.defaultCurrency ?: profile.currency,
+                allowNegativeStock = generalPreferences.allowNegativeStock.firstOrNull() == true,
                 warehouse = profile.warehouse,
                 route = profile.route,
                 territory = profile.route,
@@ -255,6 +259,7 @@ class CashBoxManager(
             profileName = entry.name,
             company = company?.companyName ?: profile.company,
             companyCurrency = company?.defaultCurrency ?: profile.currency,
+            allowNegativeStock = generalPreferences.allowNegativeStock.firstOrNull() == true,
             warehouse = profile.warehouse,
             route = profile.route,
             territory = profile.route,
@@ -503,6 +508,7 @@ class CashBoxManager(
                     name = method.mopName,
                     modeOfPayment = method.mopName,
                     type = method.type,
+                    allowInReturns = method.allowInReturns,
                 )
             }
     }

@@ -55,6 +55,7 @@ class SyncManager(
     private val inventoryRepo: InventoryRepository,
     private val modeOfPaymentRepo: ModeOfPaymentRepository,
     private val posProfilePaymentMethodSyncRepository: PosProfilePaymentMethodSyncRepository,
+    private val stockSettingsRepository: com.erpnext.pos.data.repositories.StockSettingsRepository,
     private val paymentTermsRepo: PaymentTermsRepository,
     private val deliveryChargesRepo: DeliveryChargesRepository,
     private val contactRepo: ContactRepository,
@@ -256,6 +257,14 @@ class SyncManager(
                             AppLogger.warn(
                                 "Sync: company info failed", error
                             )
+                        }
+                    }, async {
+                        _state.value = SyncState.SYNCING("Stock settings...")
+                        runCatching {
+                            stockSettingsRepository.sync()
+                        }.onFailure { error ->
+                            AppSentry.capture(error, "Sync: stock settings failed")
+                            AppLogger.warn("Sync: stock settings failed", error)
                         }
                     }, async {
                         _state.value = SyncState.SYNCING("Tasas de cambio...")
