@@ -109,6 +109,28 @@ object CurrencyService {
         return if (rateInvToRc != null && rateInvToRc > 0.0) amount / rateInvToRc else amount
     }
 
+    suspend fun amountInvoiceToReceivableUnified(
+        amount: Double,
+        invoiceCurrency: String?,
+        receivableCurrency: String?,
+        conversionRate: Double?,
+        customExchangeRate: Double?,
+        posCurrency: String?,
+        posExchangeRate: Double?,
+        rateResolver: suspend (from: String, to: String) -> Double?
+    ): Double? {
+        val rate = resolveInvoiceToReceivableRateUnified(
+            invoiceCurrency = invoiceCurrency,
+            receivableCurrency = receivableCurrency,
+            conversionRate = conversionRate,
+            customExchangeRate = customExchangeRate,
+            posCurrency = posCurrency,
+            posExchangeRate = posExchangeRate,
+            rateResolver = rateResolver
+        )
+        return if (rate != null && rate > 0.0) amount * rate else null
+    }
+
     fun resolveDisplayCurrencies(
         supported: List<String>,
         invoiceCurrency: String?,

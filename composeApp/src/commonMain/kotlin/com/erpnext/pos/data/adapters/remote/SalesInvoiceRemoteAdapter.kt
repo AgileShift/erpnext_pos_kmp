@@ -2,7 +2,6 @@ package com.erpnext.pos.data.adapters.remote
 
 import com.erpnext.pos.domain.ports.remote.SalesInvoiceRemotePort
 import com.erpnext.pos.remoteSource.api.APIService
-import com.erpnext.pos.remoteSource.dto.SalesInvoiceCreatedDto
 import com.erpnext.pos.remoteSource.dto.SalesInvoiceDto
 
 class SalesInvoiceRemoteAdapter(

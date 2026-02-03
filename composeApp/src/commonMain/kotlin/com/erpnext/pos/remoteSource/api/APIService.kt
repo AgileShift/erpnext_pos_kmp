@@ -17,7 +17,6 @@ import com.erpnext.pos.remoteSource.dto.ContactCreateDto
 import com.erpnext.pos.remoteSource.dto.DocNameResponseDto
 import com.erpnext.pos.remoteSource.dto.DeliveryChargeDto
 import com.erpnext.pos.remoteSource.dto.ExchangeRateResponse
-import com.erpnext.pos.remoteSource.dto.ItemDetailDto
 import com.erpnext.pos.remoteSource.dto.ItemDto
 import com.erpnext.pos.remoteSource.dto.ItemPriceDto
 import com.erpnext.pos.remoteSource.dto.LoginInfo
@@ -831,62 +830,6 @@ class APIService(
     val json = Json {
         ignoreUnknownKeys = true
         encodeDefaults = true
-    }
-
-    suspend fun getItemStockAndPrice(
-        itemCode: String, warehouse: String, priceList: String = "Standard Selling"
-    ): ItemDetailDto {
-        val url = authStore.getCurrentSite() ?: throw Exception("URL Invalida")
-        val endpoint = "$url/api/method/erpnext.stock.get_item_details"
-
-        val response = client.post(endpoint) {
-            contentType(ContentType.Application.Json)
-            setBody(
-                mapOf(
-                    "args" to mapOf(
-                        "item_code" to itemCode,
-                        "warehouse" to warehouse,
-                        "price_list" to priceList,
-                        "qty" to 1,
-                        "transaction_type" to "selling",
-                        "doctype" to "POS Invoice",
-                        "set_basic_rate" to 1,
-                        "ignore_pricing_rule" to 0
-                    )
-                )
-            )
-        }
-
-        val bodyText = response.bodyAsText()
-        if (!response.status.isSuccess()) {
-            try {
-                val err = json.decodeFromString<FrappeErrorResponse>(bodyText)
-                throw FrappeException(err.exception ?: "Error: ${response.status}", err)
-            } catch (e: Exception) {
-                throw Exception("Error en get_item_details: ${response.status} - $bodyText", e)
-            }
-        }
-
-        val parsed = json.parseToJsonElement(bodyText).jsonObject
-        val messageElement =
-            parsed["message"] ?: throw FrappeException("No 'message' en respuesta: $bodyText")
-
-        val details = json.decodeFromJsonElement<ItemDetailDto>(messageElement)
-
-        // Procesamiento post-fetch: Ajusta fields según reglas de negocios
-        val processedBarcode = ""  // No en response; default ""
-        val processedIsStocked = details.isStocked  // De is_stock_item si en response
-        val processedIsService = !processedIsStocked || (details.itemGroup == "COMPLEMENTARIOS")
-
-        return details.copy(
-            itemCode = details.itemCode ?: itemCode,
-            price = details.price,
-            name = details.name,
-            barcode = processedBarcode,
-            discount = 0.0,
-            isStocked = processedIsStocked,
-            isService = processedIsService
-        )
     }
 
     suspend fun getCustomers(territory: String?): List<CustomerDto> {

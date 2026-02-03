@@ -299,21 +299,30 @@ class SalesInvoiceRepository(
         remote: SalesInvoiceDto
     ) {
         // Se lee la factura local para no perder pagos locales en modo offline-first.
-        val localInvoice = localSource.getInvoiceByName(localInvoiceName)?.invoice
+        val localWithDetails = localSource.getInvoiceByName(localInvoiceName)
+        val localInvoice = localWithDetails?.invoice
         val remoteName = remote.name ?: return
         val now = Clock.System.now().toEpochMilliseconds()
         // Se valida si el servidor trae montos pagados reales o si aún están en cero.
-        val remoteOutstanding = remote.outstandingAmount
-        val remotePaid = remote.paidAmount
+        val remotePaid = when {
+            remote.paidAmount > 0.0001 -> remote.paidAmount
+            remote.payments.isNotEmpty() -> remote.payments.sumOf { it.amount }
+            else -> remote.paidAmount
+        }
+        val remoteOutstanding = remote.outstandingAmount ?: (remote.grandTotal - remotePaid)
         val remoteTotal = remote.grandTotal
         val localPaid = localInvoice?.paidAmount ?: 0.0
         val localOutstanding = localInvoice?.outstandingAmount ?: 0.0
+        val shouldDefaultOutstanding =
+            remotePaid <= 0.0001 && remote.payments.isEmpty() && remote.isReturn != 1 &&
+                remoteTotal > 0.0 && remoteOutstanding < remoteTotal - 0.01
+        val normalizedOutstanding = if (shouldDefaultOutstanding) remoteTotal else remoteOutstanding
         val remoteHasPayments =
-            remotePaid > 0.0 || (remoteOutstanding != null && remoteOutstanding < remoteTotal - 0.01)
+            remotePaid > 0.0 || (normalizedOutstanding < remoteTotal - 0.01)
         // Si el servidor aún no refleja pagos, preservamos lo local.
         val resolvedPaidAmount = if (remoteHasPayments) remotePaid else localPaid
         val resolvedOutstandingAmount =
-            if (remoteHasPayments) (remoteOutstanding ?: 0.0) else localOutstanding
+            if (remoteHasPayments) normalizedOutstanding else localOutstanding
         val localPaidAmount = roundToCurrency(resolvedPaidAmount)
         val localOutstandingAmount = roundToCurrency(resolvedOutstandingAmount)
         // El status se alinea con la fuente de verdad escogida.
@@ -321,9 +330,15 @@ class SalesInvoiceRepository(
         else localInvoice?.status ?: (remote.status ?: "Draft")
 
         fun resolveBaseAmount(amount: Double?, baseAmount: Double?): Double? {
-            baseAmount?.let { return it }
-            val rate = remote.conversionRate?.takeIf { it > 0.0 } ?: return amount
-            return amount?.let { it * rate }
+            if (amount == null) return baseAmount
+            val rate = remote.conversionRate?.takeIf { it > 0.0 && it != 1.0 }
+            if (baseAmount != null && rate != null) {
+                val approxEqual = kotlin.math.abs(baseAmount - amount) <= 0.0001
+                if (approxEqual) return amount * rate
+                return baseAmount
+            }
+            if (rate == null) return baseAmount ?: amount
+            return baseAmount ?: (amount * rate)
         }
         localSource.updateFromRemote(
             oldName = localInvoiceName,
@@ -364,7 +379,8 @@ class SalesInvoiceRepository(
                 remote.writeOffAmount,
                 remote.baseWriteOffAmount
             ),
-            baseOutstandingAmount = remote.baseOutstandingAmount ?: remote.outstandingAmount,
+            baseOutstandingAmount = resolveBaseAmount(resolvedOutstandingAmount, remote.baseOutstandingAmount)
+                ?: resolvedOutstandingAmount,
             status = resolvedStatus,
             docstatus = remote.docStatus ?: resolveDocStatus(remote.status, null),
             modeOfPayment = remote.payments.firstOrNull()?.modeOfPayment,
@@ -548,7 +564,7 @@ class SalesInvoiceRepository(
             return
         }
         val ctx = context.getContext()
-        val baseCurrency = ctx?.partyAccountCurrency ?: ctx?.currency ?: "NIO"
+        val baseCurrency = ctx?.companyCurrency ?: ctx?.currency ?: "NIO"
         var totalPending = 0.0
         invoices.forEach { wrapper ->
             val invoice = wrapper.invoice
@@ -721,7 +737,9 @@ class SalesInvoiceRepository(
             profileId = payload.invoice.profileId?.takeIf { it.isNotBlank() } ?: local.profileId,
             posOpeningEntry = payload.invoice.posOpeningEntry?.takeIf { it.isNotBlank() }
                 ?: local.posOpeningEntry,
-            warehouse = payload.invoice.warehouse?.takeIf { it.isNotBlank() } ?: local.warehouse
+            warehouse = payload.invoice.warehouse?.takeIf { it.isNotBlank() } ?: local.warehouse,
+            partyAccountCurrency = payload.invoice.partyAccountCurrency?.takeIf { it.isNotBlank() }
+                ?: local.partyAccountCurrency
         )
         return payload.copy(invoice = mergedInvoice)
     }

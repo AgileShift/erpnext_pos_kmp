@@ -142,8 +142,27 @@ fun requiresReference(mode: POSPaymentModeOption?): Boolean {
 fun buildCurrencySpecs(): Map<String, CurrencySpec> {
     // Ajusta aquí si agregas más monedas/escala por país.
     return mapOf(
-        "NIO" to CurrencySpec(code = "NIO", minorUnits = 2, cashScale = 0),
+        // USA
+        "NIO" to CurrencySpec(code = "NIO", minorUnits = 2, cashScale = 2),
         "USD" to CurrencySpec(code = "USD", minorUnits = 2, cashScale = 2),
+        // LATAM (continental)
+        "MXN" to CurrencySpec(code = "MXN", minorUnits = 2, cashScale = 2),
+        "GTQ" to CurrencySpec(code = "GTQ", minorUnits = 2, cashScale = 2),
+        "HNL" to CurrencySpec(code = "HNL", minorUnits = 2, cashScale = 2),
+        "CRC" to CurrencySpec(code = "CRC", minorUnits = 2, cashScale = 2),
+        "PAB" to CurrencySpec(code = "PAB", minorUnits = 2, cashScale = 2),
+        "BZD" to CurrencySpec(code = "BZD", minorUnits = 2, cashScale = 2),
+        "ARS" to CurrencySpec(code = "ARS", minorUnits = 2, cashScale = 2),
+        "BOB" to CurrencySpec(code = "BOB", minorUnits = 2, cashScale = 2),
+        "BRL" to CurrencySpec(code = "BRL", minorUnits = 2, cashScale = 2),
+        "CLP" to CurrencySpec(code = "CLP", minorUnits = 0, cashScale = 0),
+        "COP" to CurrencySpec(code = "COP", minorUnits = 2, cashScale = 2),
+        "PEN" to CurrencySpec(code = "PEN", minorUnits = 2, cashScale = 2),
+        "PYG" to CurrencySpec(code = "PYG", minorUnits = 0, cashScale = 0),
+        "UYU" to CurrencySpec(code = "UYU", minorUnits = 2, cashScale = 2),
+        "VES" to CurrencySpec(code = "VES", minorUnits = 2, cashScale = 2),
+        "GYD" to CurrencySpec(code = "GYD", minorUnits = 2, cashScale = 2),
+        "SRD" to CurrencySpec(code = "SRD", minorUnits = 2, cashScale = 2),
     )
 }
 

@@ -1,8 +1,6 @@
 package com.erpnext.pos.auth
 
-import com.erpnext.pos.auth.AppLifecycleObserver
 import com.erpnext.pos.utils.NetworkMonitor
-import com.erpnext.pos.remoteSource.oauth.TokenStore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first

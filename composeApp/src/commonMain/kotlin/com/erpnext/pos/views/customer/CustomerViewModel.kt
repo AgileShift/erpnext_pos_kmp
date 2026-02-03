@@ -141,7 +141,7 @@ class CustomerViewModel(
             isSubmitting = isSubmitting,
             errorMessage = errorMessage,
             successMessage = successMessage,
-            baseCurrency = context?.currency ?: "USD",
+            baseCurrency = context?.companyCurrency ?: (context?.currency ?: "USD"),
             partyAccountCurrency = context?.partyAccountCurrency ?: (context?.currency ?: "USD"),
             allowedCurrencies = context?.allowedCurrencies ?: emptyList(),
             paymentModes = context?.paymentModes ?: emptyList(),
@@ -300,7 +300,7 @@ class CustomerViewModel(
             action = {
                 val invoices = fetchOutstandingInvoicesUseCase.invoke(customerId)
 
-                val baseCurrency = normalizeCurrency(cashboxManager.getContext()?.currency)
+                val baseCurrency = normalizeCurrency(cashboxManager.getContext()?.companyCurrency)
 
                 // Pre-caché para que la UI no dispare resolveExchangeRateBetween repetidamente.
                 val exchangeRates = mutableMapOf<String, Double>()

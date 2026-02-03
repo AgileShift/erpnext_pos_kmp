@@ -52,6 +52,7 @@ import androidx.paging.compose.itemKey
 import com.erpnext.pos.domain.models.SalesInvoiceBO
 import com.erpnext.pos.domain.usecases.InvoiceCancellationAction
 import com.erpnext.pos.utils.formatCurrency
+import com.erpnext.pos.utils.resolveInvoiceDisplayAmounts
 import com.erpnext.pos.utils.normalizeCurrency
 import com.erpnext.pos.views.CashBoxManager
 import com.erpnext.pos.views.invoice.components.EmptyState
@@ -275,32 +276,13 @@ fun InvoiceListScreen(action: InvoiceAction) {
      onCancelClick: (String, InvoiceCancellationAction) -> Unit
  ) {
     val cashboxManager: CashBoxManager = koinInject()
-    val posCurrency = normalizeCurrency(cashboxManager.getContext()?.currency) ?: "USD"
-    val baseCurrency = normalizeCurrency(invoice.partyAccountCurrency) ?: posCurrency
-    val invoiceCurrency = normalizeCurrency(invoice.currency) ?: posCurrency
-    val invoiceToBaseRate = invoice.conversionRate
-    val baseTotal = invoice.baseGrandTotal ?: run {
-        if (invoiceCurrency.equals(baseCurrency, ignoreCase = true)) invoice.total
-        else if (invoiceToBaseRate != null && invoiceToBaseRate > 0.0)
-            invoice.total * invoiceToBaseRate
-        else invoice.total
-    }
-    val baseOutstanding = invoice.baseOutstandingAmount ?: invoice.outstandingAmount
-    var rateBaseToPos by remember { mutableStateOf<Double?>(null) }
-    LaunchedEffect(baseCurrency, posCurrency) {
-        rateBaseToPos = if (baseCurrency.equals(posCurrency, ignoreCase = true)) {
-            1.0
-        } else {
-            cashboxManager.resolveExchangeRateBetween(
-                fromCurrency = baseCurrency,
-                toCurrency = posCurrency,
-                allowNetwork = false
-            )
-        }
-    }
-    val posTotal = rateBaseToPos?.takeIf { it > 0.0 }?.let { baseTotal * it } ?: baseTotal
-    val posOutstanding =
-        rateBaseToPos?.takeIf { it > 0.0 }?.let { baseOutstanding * it } ?: baseOutstanding
+    val companyCurrency = normalizeCurrency(cashboxManager.getContext()?.companyCurrency)
+        ?: normalizeCurrency(cashboxManager.getContext()?.currency)
+        ?: "USD"
+    val display = resolveInvoiceDisplayAmounts(
+        invoice = invoice,
+        companyCurrency = companyCurrency
+    )
     Card(
         modifier = Modifier
             .fillMaxWidth()
@@ -326,12 +308,12 @@ fun InvoiceListScreen(action: InvoiceAction) {
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                 Column(horizontalAlignment = Alignment.End) {
                     Text(
-                        "Total: ${formatCurrency(posCurrency, posTotal)}",
+                        "Total: ${formatCurrency(display.companyCurrency, display.totalCompany)}",
                         fontWeight = FontWeight.Medium
                     )
-                    if (!baseCurrency.equals(posCurrency, ignoreCase = true)) {
+                    if (!display.invoiceCurrency.equals(display.companyCurrency, ignoreCase = true)) {
                         Text(
-                            formatCurrency(baseCurrency, baseTotal),
+                            formatCurrency(display.invoiceCurrency, display.totalInvoice),
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -340,12 +322,12 @@ fun InvoiceListScreen(action: InvoiceAction) {
                 Spacer(Modifier.width(12.dp))
                 Column(horizontalAlignment = Alignment.End) {
                     Text(
-                        "Pendiente: ${formatCurrency(posCurrency, posOutstanding)}",
+                        "Pendiente: ${formatCurrency(display.companyCurrency, display.outstandingCompany)}",
                         fontWeight = FontWeight.Medium
                     )
-                    if (!baseCurrency.equals(posCurrency, ignoreCase = true)) {
+                    if (!display.invoiceCurrency.equals(display.companyCurrency, ignoreCase = true)) {
                         Text(
-                            formatCurrency(baseCurrency, baseOutstanding),
+                            formatCurrency(display.invoiceCurrency, display.outstandingInvoice),
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )

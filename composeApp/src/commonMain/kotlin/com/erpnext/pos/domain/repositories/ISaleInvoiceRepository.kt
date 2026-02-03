@@ -9,7 +9,6 @@ import com.erpnext.pos.localSource.entities.POSInvoicePaymentEntity
 import com.erpnext.pos.localSource.entities.SalesInvoiceEntity
 import com.erpnext.pos.localSource.entities.SalesInvoiceItemEntity
 import com.erpnext.pos.localSource.entities.SalesInvoiceWithItemsAndPayments
-import com.erpnext.pos.remoteSource.dto.SalesInvoiceCreatedDto
 import com.erpnext.pos.remoteSource.dto.SalesInvoiceDto
 import kotlinx.coroutines.flow.Flow
 

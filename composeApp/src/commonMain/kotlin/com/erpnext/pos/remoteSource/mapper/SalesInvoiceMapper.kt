@@ -4,7 +4,6 @@ package com.erpnext.pos.remoteSource.mapper
 
 import com.erpnext.pos.localSource.entities.BalanceDetailsEntity
 import com.erpnext.pos.localSource.entities.POSInvoicePaymentEntity
-import com.erpnext.pos.localSource.entities.POSProfileEntity
 import com.erpnext.pos.localSource.entities.SalesInvoiceEntity
 import com.erpnext.pos.localSource.entities.SalesInvoiceItemEntity
 import com.erpnext.pos.localSource.entities.SalesInvoiceWithItemsAndPayments
@@ -12,6 +11,7 @@ import com.erpnext.pos.remoteSource.dto.BalanceDetailsDto
 import com.erpnext.pos.remoteSource.dto.SalesInvoiceDto
 import com.erpnext.pos.remoteSource.dto.SalesInvoiceItemDto
 import com.erpnext.pos.remoteSource.dto.SalesInvoicePaymentDto
+import com.erpnext.pos.utils.normalizeCurrency
 import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
 
@@ -29,7 +29,6 @@ fun SalesInvoiceWithItemsAndPayments.toDto(): SalesInvoiceDto {
     } else {
         emptyList()
     }
-    val resolvedIsPos = shouldSendAsPos
     val resolvedDocType = if (shouldSendAsPos) "POS Invoice" else "Sales Invoice"
 
     return SalesInvoiceDto(
@@ -39,8 +38,10 @@ fun SalesInvoiceWithItemsAndPayments.toDto(): SalesInvoiceDto {
         postingDate = invoice.postingDate,
         dueDate = invoice.dueDate,
         currency = invoice.currency,
+        conversionRate = invoice.conversionRate,
         debitTo = invoice.debitTo,
         partyAccountCurrency = invoice.partyAccountCurrency,
+        customExchangeRate = invoice.customExchangeRate,
         status = invoice.status,
         grandTotal = invoice.grandTotal,
         outstandingAmount = invoice.outstandingAmount,
@@ -48,7 +49,7 @@ fun SalesInvoiceWithItemsAndPayments.toDto(): SalesInvoiceDto {
         items = items.map { it.toDto(invoice) },
         payments = resolvedPayments,
         remarks = invoice.remarks,
-        isPos = resolvedIsPos,
+        isPos = shouldSendAsPos,
         doctype = resolvedDocType,
         customerName = invoice.customerName ?: "CST",
         customerPhone = invoice.customerPhone,
@@ -106,10 +107,31 @@ fun SalesInvoiceDto.toEntity(): SalesInvoiceWithItemsAndPayments {
     val now = Clock.System.now().toEpochMilliseconds()
     val resolvedIsPos = doctype.equals("POS Invoice", ignoreCase = true) || isPos
     fun resolveBaseAmount(amount: Double?, baseAmount: Double?): Double? {
-        baseAmount?.let { return it }
-        val rate = conversionRate?.takeIf { it > 0.0 } ?: return amount
-        return amount?.let { it * rate }
+        if (amount == null) return baseAmount
+        val invoiceCurrency = normalizeCurrency(currency)
+        val receivableCurrency = normalizeCurrency(partyAccountCurrency)
+        if (invoiceCurrency.equals(receivableCurrency, ignoreCase = true)) {
+            return baseAmount ?: amount
+        }
+        val rate = conversionRate?.takeIf { it > 0.0 && it != 1.0 }
+        if (baseAmount != null && rate != null) {
+            val approxEqual = kotlin.math.abs(baseAmount - amount) <= 0.0001
+            if (approxEqual) return amount * rate
+        }
+        if (rate == null) return baseAmount
+        return baseAmount ?: (amount * rate)
     }
+
+    val paidResolved = when {
+        paidAmount > 0.0001 -> paidAmount
+        payments.isNotEmpty() -> payments.sumOf { it.amount }
+        else -> paidAmount
+    }
+    val rawOutstanding = outstandingAmount ?: (grandTotal - paidResolved)
+    val shouldDefaultOutstanding =
+        paidResolved <= 0.0001 && payments.isEmpty() && isReturn != 1 &&
+            grandTotal > 0.0 && rawOutstanding < grandTotal - 0.01
+    val outstandingResolved = if (shouldDefaultOutstanding) grandTotal else rawOutstanding
 
     // Se asegura que la factura local conserve los montos pagados recibidos del servidor.
     val headerWarehouse = items.firstOrNull { !it.warehouse.isNullOrBlank() }?.warehouse
@@ -131,7 +153,7 @@ fun SalesInvoiceDto.toEntity(): SalesInvoiceWithItemsAndPayments {
         netTotal = netTotal,
         taxTotal = totalTaxesAndCharges ?: 0.0,
         grandTotal = grandTotal,
-        outstandingAmount = outstandingAmount ?: 0.0,
+        outstandingAmount = outstandingResolved,
         baseTotal = resolveBaseAmount(total ?: netTotal, baseTotal),
         baseNetTotal = resolveBaseAmount(netTotal, baseNetTotal),
         baseTotalTaxesAndCharges = resolveBaseAmount(totalTaxesAndCharges, baseTotalTaxesAndCharges),
@@ -139,12 +161,13 @@ fun SalesInvoiceDto.toEntity(): SalesInvoiceWithItemsAndPayments {
         baseRoundingAdjustment = resolveBaseAmount(roundingAdjustment, baseRoundingAdjustment),
         baseRoundedTotal = resolveBaseAmount(roundedTotal, baseRoundedTotal),
         baseDiscountAmount = resolveBaseAmount(discountAmount, baseDiscountAmount),
-        basePaidAmount = resolveBaseAmount(paidAmount, basePaidAmount),
+        basePaidAmount = resolveBaseAmount(paidResolved, basePaidAmount),
         baseChangeAmount = resolveBaseAmount(changeAmount, baseChangeAmount),
         baseWriteOffAmount = resolveBaseAmount(writeOffAmount, baseWriteOffAmount),
-        baseOutstandingAmount = baseOutstandingAmount ?: outstandingAmount,
+        baseOutstandingAmount = resolveBaseAmount(outstandingResolved, baseOutstandingAmount)
+            ?: outstandingResolved,
         // El paid_amount remoto es la fuente de verdad para reconciliación y BI.
-        paidAmount = paidAmount,
+        paidAmount = paidResolved,
         status = status ?: "Draft",
         syncStatus = "Synced",
         docstatus = resolveDocStatus(status, docStatus),

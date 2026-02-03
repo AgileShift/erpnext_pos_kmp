@@ -19,7 +19,6 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material.icons.filled.ArrowUpward
@@ -36,7 +35,6 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -157,9 +155,7 @@ fun ReconciliationScreen(
         topBar = {
             ReconciliationHeader(
                 state = state,
-                onBack = actions.onBack,
                 strings = strings,
-                backLabel = appStrings.common.back
             )
         },
         bottomBar = {
@@ -260,9 +256,7 @@ fun ReconciliationScreen(
 @Composable
 private fun ReconciliationHeader(
     state: ReconciliationState,
-    onBack: () -> Unit,
     strings: ReconciliationStrings,
-    backLabel: String
 ) {
     if (state !is ReconciliationState.Success) {
         return

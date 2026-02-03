@@ -1,6 +1,5 @@
 package com.erpnext.pos.domain.ports.remote
 
-import com.erpnext.pos.remoteSource.dto.SalesInvoiceCreatedDto
 import com.erpnext.pos.remoteSource.dto.SalesInvoiceDto
 
 interface SalesInvoiceRemotePort {

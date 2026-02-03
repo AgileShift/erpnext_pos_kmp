@@ -203,7 +203,7 @@ class CustomerRepository(
             return
         }
         val ctx = context.getContext()
-        val baseCurrency = ctx?.partyAccountCurrency ?: ctx?.currency ?: "NIO"
+        val baseCurrency = ctx?.companyCurrency ?: ctx?.currency ?: "NIO"
         var totalPending = 0.0
         invoices.forEach { wrapper ->
             val invoice = wrapper.invoice
@@ -257,7 +257,9 @@ class CustomerRepository(
             profileId = payload.invoice.profileId?.takeIf { it.isNotBlank() } ?: local.profileId,
             posOpeningEntry = payload.invoice.posOpeningEntry?.takeIf { it.isNotBlank() }
                 ?: local.posOpeningEntry,
-            warehouse = payload.invoice.warehouse?.takeIf { it.isNotBlank() } ?: local.warehouse
+            warehouse = payload.invoice.warehouse?.takeIf { it.isNotBlank() } ?: local.warehouse,
+            partyAccountCurrency = payload.invoice.partyAccountCurrency?.takeIf { it.isNotBlank() }
+                ?: local.partyAccountCurrency
         )
         return payload.copy(invoice = mergedInvoice)
     }

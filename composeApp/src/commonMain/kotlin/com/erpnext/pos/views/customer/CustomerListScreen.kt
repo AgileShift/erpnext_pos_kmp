@@ -71,7 +71,8 @@ import com.erpnext.pos.utils.QuickActions.customerQuickActions
 import com.erpnext.pos.utils.formatDoubleToString
 import com.erpnext.pos.utils.formatCurrency
 import com.erpnext.pos.utils.normalizeCurrency
-import com.erpnext.pos.utils.resolveRateBetweenFromBaseRates
+import com.erpnext.pos.utils.resolveInvoiceDisplayAmounts
+import com.erpnext.pos.utils.resolveCompanyToTargetAmount
 import com.erpnext.pos.utils.resolvePaymentCurrencyForMode
 import com.erpnext.pos.utils.view.SnackbarController
 import com.erpnext.pos.utils.view.SnackbarType
@@ -121,13 +122,13 @@ fun CustomerListScreen(
     val cashboxManager: CashBoxManager = koinInject()
     val posContext = cashboxManager.getContext()
     val posCurrency = normalizeCurrency(posContext?.currency)
-    val partyCurrency = normalizeCurrency(paymentState.partyAccountCurrency)
+    val companyCurrency = normalizeCurrency(paymentState.baseCurrency)
     val supportedCurrencies = remember(
-        posContext?.allowedCurrencies, posContext?.currency, paymentState.partyAccountCurrency
+        posContext?.allowedCurrencies, posContext?.currency, paymentState.baseCurrency
     ) {
         val fromModes = posContext?.allowedCurrencies?.map { it.code }.orEmpty()
         val merged = (fromModes + listOfNotNull(
-            posContext?.currency, paymentState.partyAccountCurrency
+            posContext?.currency, paymentState.baseCurrency
         )).map { normalizeCurrency(it) }.distinct()
         merged.ifEmpty { listOf(posCurrency) }
     }
@@ -304,7 +305,7 @@ fun CustomerListScreen(
                                             CustomerListContent(
                                                 customers = filtered,
                                                 posCurrency = posCurrency,
-                                                partyAccountCurrency = partyCurrency,
+                                                companyCurrency = companyCurrency,
                                                 cashboxManager = cashboxManager,
                                                 supportedCurrencies = supportedCurrencies,
                                                 isWideLayout = false,
@@ -351,7 +352,7 @@ fun CustomerListScreen(
                                                 historyBusy = historyBusy,
                                                 supportedCurrencies = supportedCurrencies,
                                                 cashboxManager = cashboxManager,
-                                                posBaseCurrency = posCurrency,
+                                                posBaseCurrency = companyCurrency,
                                                 onRegisterPayment = { invoiceId, mode, enteredAmount, enteredCurrency, referenceNumber ->
                                                     actions.registerPayment(
                                                         selectedCustomer?.name.orEmpty(),
@@ -381,7 +382,7 @@ fun CustomerListScreen(
                                     CustomerListContent(
                                         customers = filtered,
                                         posCurrency = posCurrency,
-                                        partyAccountCurrency = partyCurrency,
+                                        companyCurrency = companyCurrency,
                                         cashboxManager = cashboxManager,
                                         supportedCurrencies = supportedCurrencies,
                                         isWideLayout = isWideLayout,
@@ -463,7 +464,7 @@ fun CustomerListScreen(
                 historyMessage = historyMessage,
                 historyBusy = historyBusy,
                 paymentState = paymentState,
-                posBaseCurrency = posCurrency,
+                posBaseCurrency = companyCurrency,
                 cashboxManager = cashboxManager,
                 onAction = { invoiceId, action, refundMode, refundReference, applyRefund ->
                     actions.onInvoiceHistoryAction(
@@ -670,7 +671,7 @@ fun SearchTextField(
 private fun CustomerListContent(
     customers: List<CustomerBO>,
     posCurrency: String,
-    partyAccountCurrency: String,
+    companyCurrency: String,
     cashboxManager: CashBoxManager,
     supportedCurrencies: List<String>,
     isWideLayout: Boolean,
@@ -692,7 +693,7 @@ private fun CustomerListContent(
                 CustomerItem(
                     customer = customer,
                     posCurrency = posCurrency,
-                    partyAccountCurrency = partyAccountCurrency,
+                    companyCurrency = companyCurrency,
                     supportedCurrencies = supportedCurrencies,
                     isDesktop = isDesktop,
                     onSelect = onSelect,
@@ -712,7 +713,7 @@ private fun CustomerListContent(
                 CustomerItem(
                     customer = customer,
                     posCurrency = posCurrency,
-                    partyAccountCurrency = partyAccountCurrency,
+                    companyCurrency = companyCurrency,
                     supportedCurrencies = supportedCurrencies,
                     isDesktop = isDesktop,
                     onSelect = onSelect,
@@ -735,25 +736,24 @@ private fun CustomerDetailPanel(
     supportedCurrencies: List<String>,
     cashboxManager: CashBoxManager
 ) {
-    val posCurrency = normalizeCurrency(paymentState.baseCurrency)
-    val baseCurrency = posCurrency
+    val companyCurrency = normalizeCurrency(paymentState.baseCurrency)
     val pendingAmount =
         bd(customer.totalPendingAmount ?: customer.currentBalance ?: 0.0).moneyScale(2).toDouble(2)
-    val displayCurrencies = remember(supportedCurrencies, posCurrency, baseCurrency) {
+    val displayCurrencies = remember(supportedCurrencies, companyCurrency) {
         CurrencyService.resolveDisplayCurrencies(
             supported = supportedCurrencies,
             invoiceCurrency = null,
-            receivableCurrency = baseCurrency,
-            posCurrency = posCurrency
+            receivableCurrency = companyCurrency,
+            posCurrency = companyCurrency
         )
     }
-    var pendingByCurrency by remember { mutableStateOf<Map<String, Double>>(emptyMap()) }
-    LaunchedEffect(displayCurrencies, baseCurrency, pendingAmount) {
+
+    LaunchedEffect(displayCurrencies, companyCurrency, pendingAmount) {
         val resolved = mutableMapOf<String, Double>()
         displayCurrencies.forEach { currency ->
             val converted = CurrencyService.convertFromReceivable(
                 amount = pendingAmount,
-                receivableCurrency = baseCurrency,
+                receivableCurrency = companyCurrency,
                 targetCurrency = currency,
                 invoiceCurrency = null,
                 conversionRate = null,
@@ -765,19 +765,7 @@ private fun CustomerDetailPanel(
                 resolved[currency] = converted
             }
         }
-        pendingByCurrency = resolved
     }
-    val primaryCurrency = when {
-        pendingByCurrency.containsKey(posCurrency) -> posCurrency
-        pendingByCurrency.containsKey(baseCurrency) -> baseCurrency
-        else -> displayCurrencies.firstOrNull() ?: "USD"
-    }
-    val primaryAmount = pendingByCurrency[primaryCurrency] ?: pendingAmount
-    val secondaryValue =
-        pendingByCurrency.filterKeys { !it.equals(primaryCurrency, ignoreCase = true) }
-            .map { (currency, amount) ->
-                formatCurrency(currency, amount)
-            }.takeIf { it.isNotEmpty() }?.joinToString(" · ")
 
     Column(
         modifier = Modifier.fillMaxSize().padding(20.dp),
@@ -827,7 +815,7 @@ private fun CustomerDetailPanel(
         val recentInvoices = historyInvoices.filter { isWithinDays(it.postingDate, 90) }
         val totalSpentBase = recentInvoices.sumOf {
             val invoiceCurrency = normalizeCurrency(it.currency)
-            toBaseAmount(it.total, invoiceCurrency, baseCurrency, it.conversionRate)
+            toBaseAmount(it.total, invoiceCurrency, companyCurrency, it.conversionRate)
         }
         val avgTicket = if (recentInvoices.isNotEmpty()) {
             totalSpentBase / recentInvoices.size
@@ -846,15 +834,13 @@ private fun CustomerDetailPanel(
             LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 item {
                     SummaryStatChip(
-                        label = "Compras 90d",
-                        value = recentInvoices.size.toString()
+                        label = "Compras 90d", value = recentInvoices.size.toString()
                     )
                 }
                 item {
                     SummaryStatChip(
-                        label = "Total 90d",
-                        value = if (recentInvoices.isNotEmpty()) {
-                            formatCurrency(baseCurrency, totalSpentBase)
+                        label = "Total 90d", value = if (recentInvoices.isNotEmpty()) {
+                            formatCurrency(companyCurrency, totalSpentBase)
                         } else {
                             "—"
                         }
@@ -862,9 +848,8 @@ private fun CustomerDetailPanel(
                 }
                 item {
                     SummaryStatChip(
-                        label = "Ticket prom.",
-                        value = if (recentInvoices.isNotEmpty()) {
-                            formatCurrency(baseCurrency, avgTicket)
+                        label = "Ticket prom.", value = if (recentInvoices.isNotEmpty()) {
+                            formatCurrency(companyCurrency, avgTicket)
                         } else {
                             "—"
                         }
@@ -872,15 +857,13 @@ private fun CustomerDetailPanel(
                 }
                 item {
                     SummaryStatChip(
-                        label = "Última compra",
-                        value = lastPurchase ?: "—"
+                        label = "Última compra", value = lastPurchase ?: "—"
                     )
                 }
                 item {
                     SummaryStatChip(
                         label = "Crédito disp.",
-                        value = creditAvailable?.let { formatCurrency(baseCurrency, it) } ?: "—"
-                    )
+                        value = creditAvailable?.let { formatCurrency(companyCurrency, it) } ?: "—")
                 }
             }
         }
@@ -889,7 +872,7 @@ private fun CustomerDetailPanel(
             CustomerOutstandingSummary(
                 customer = customer,
                 invoices = invoicesState.invoices,
-                posBaseCurrency = posCurrency,
+                posBaseCurrency = companyCurrency,
                 cashboxManager = cashboxManager
             )
         }
@@ -927,8 +910,9 @@ private fun CustomerRightPanel(
     Column(modifier = Modifier.fillMaxSize()) {
         CustomerPanelHeader(
             customer = customer,
+            invoicesState = invoicesState,
             cashboxManager = cashboxManager,
-            baseCurrency = paymentState.partyAccountCurrency
+            baseCurrency = paymentState.baseCurrency
         )
 
         PrimaryScrollableTabRow(
@@ -1013,40 +997,38 @@ private fun CustomerRightPanel(
 }
 
 @Composable
+@Suppress("UNUSED_PARAMETER")
 private fun CustomerPanelHeader(
     customer: CustomerBO?,
+    invoicesState: CustomerInvoicesState,
     cashboxManager: CashBoxManager,
     baseCurrency: String
 ) {
-    val normalizedBase = normalizeCurrency(baseCurrency)
-    val pendingAmountRaw =
-        bd(customer?.totalPendingAmount ?: customer?.currentBalance ?: 0.0).moneyScale(2).toDouble(2)
-    val targetCurrencies = remember {
-        listOf("NIO", "USD").distinct()
+    val companyCurrency = normalizeCurrency(baseCurrency)
+    val pendingInvoices = remember(invoicesState) {
+        if (invoicesState is CustomerInvoicesState.Success) {
+            filterPendingInvoices(invoicesState.invoices)
+        } else {
+            emptyList()
+        }
     }
-    var pendingByCurrency by remember { mutableStateOf<Map<String, Double>>(emptyMap()) }
-    LaunchedEffect(customer?.name, normalizedBase, pendingAmountRaw) {
-        if (customer == null) {
-            pendingByCurrency = emptyMap()
-            return@LaunchedEffect
+    val pendingCount = if (pendingInvoices.isNotEmpty()) {
+        pendingInvoices.size
+    } else {
+        customer?.pendingInvoices ?: 0
+    }
+    val invoiceCurrency = normalizeCurrency(pendingInvoices.firstOrNull()?.currency)
+    val pendingInvoiceAmount = if (pendingInvoices.isNotEmpty()) {
+        pendingInvoices.sumOf { it.outstandingAmount }
+    } else {
+        0.0
+    }
+    val pendingCompanyAmount = if (pendingInvoices.isNotEmpty()) {
+        pendingInvoices.sumOf {
+            resolveInvoiceDisplayAmounts(it, companyCurrency).outstandingCompany
         }
-        val resolved = mutableMapOf<String, Double>()
-        targetCurrencies.forEach { currency ->
-            val target = normalizeCurrency(currency)
-            val converted = if (normalizedBase.equals(target, ignoreCase = true)) {
-                pendingAmountRaw
-            } else {
-                cashboxManager.resolveExchangeRateBetween(
-                    fromCurrency = normalizedBase,
-                    toCurrency = target,
-                    allowNetwork = false
-                )?.takeIf { it > 0.0 }?.let { rate -> pendingAmountRaw * rate }
-            }
-            if (converted != null) {
-                resolved[target] = converted
-            }
-        }
-        pendingByCurrency = resolved
+    } else {
+        customer?.totalPendingAmount ?: customer?.currentBalance ?: 0.0
     }
     Surface(
         color = MaterialTheme.colorScheme.surface, tonalElevation = 0.dp
@@ -1083,7 +1065,6 @@ private fun CustomerPanelHeader(
             }
 
             if (customer != null) {
-                val pendingCount = customer.pendingInvoices ?: 0
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically
@@ -1093,13 +1074,18 @@ private fun CustomerPanelHeader(
                         value = pendingCount.toString(),
                         isCritical = pendingCount > 0
                     )
-                    pendingByCurrency.forEach { (currency, amount) ->
+                    if (invoiceCurrency.isNotBlank()) {
                         HeaderChip(
-                            label = currency,
-                            value = formatCurrency(currency, amount),
+                            label = invoiceCurrency,
+                            value = formatCurrency(invoiceCurrency, pendingInvoiceAmount),
                             isCritical = pendingCount > 0
                         )
                     }
+                    HeaderChip(
+                        label = companyCurrency,
+                        value = formatCurrency(companyCurrency, pendingCompanyAmount),
+                        isCritical = pendingCount > 0
+                    )
                 }
             } else {
                 Spacer(Modifier.width(8.dp))
@@ -1621,10 +1607,11 @@ private fun NewCustomerDialog(
 }
 
 @Composable
+@Suppress("UNUSED_PARAMETER")
 fun CustomerItem(
     customer: CustomerBO,
     posCurrency: String,
-    partyAccountCurrency: String,
+    companyCurrency: String,
     cashboxManager: CashBoxManager,
     supportedCurrencies: List<String>,
     isDesktop: Boolean,
@@ -1636,57 +1623,31 @@ fun CustomerItem(
     val strings = LocalAppStrings.current
     val isOverLimit = (customer.availableCredit ?: 0.0) < 0 || (customer.currentBalance ?: 0.0) > 0
     val pendingInvoices = customer.pendingInvoices ?: 0
-    val baseCurrency = normalizeCurrency(posCurrency)
     var isMenuExpanded by remember { mutableStateOf(false) }
     val quickActions = remember { customerQuickActions() }
     val avatarSize = if (isDesktop) 48.dp else 40.dp
-    val pendingAmountRaw = bd(customer.totalPendingAmount ?: 0.0).moneyScale(0)
-    val pendingAmount = pendingAmountRaw.toDouble(2)
+    val companyCurr = normalizeCurrency(companyCurrency)
     val posCurr = normalizeCurrency(posCurrency)
-    val displayCurrencies = remember(baseCurrency, posCurr, supportedCurrencies) {
-        CurrencyService.resolveDisplayCurrencies(
-            supported = supportedCurrencies,
-            invoiceCurrency = null,
-            receivableCurrency = baseCurrency,
-            posCurrency = posCurr
-        )
-    }
-    var pendingByCurrency by remember { mutableStateOf<Map<String, Double>>(emptyMap()) }
-    LaunchedEffect(baseCurrency, displayCurrencies, pendingAmount) {
-        val resolved = mutableMapOf<String, Double>()
-        displayCurrencies.forEach { currency ->
-            val converted = CurrencyService.convertFromReceivable(
-                amount = pendingAmount,
-                receivableCurrency = baseCurrency,
-                targetCurrency = currency,
-                invoiceCurrency = null,
-                conversionRate = null,
-                customExchangeRate = null,
+    val pendingCompany =
+        bd(customer.totalPendingAmount ?: customer.currentBalance ?: 0.0).toDouble(2)
+    var pendingPos by remember { mutableStateOf<Double?>(null) }
+    LaunchedEffect(pendingCompany, companyCurr, posCurr) {
+        pendingPos = if (posCurr.equals(companyCurr, ignoreCase = true)) {
+            pendingCompany
+        } else {
+            resolveCompanyToTargetAmount(
+                amountCompany = pendingCompany,
+                companyCurrency = companyCurr,
+                targetCurrency = posCurr,
                 rateResolver = { from, to ->
                     cashboxManager.resolveExchangeRateBetween(from, to, allowNetwork = false)
-                })
-            if (converted != null) {
-                resolved[currency] = converted
-            }
+                }
+            )
         }
-        pendingByCurrency = resolved
     }
-    //TODO: Customer List <- Data
-    val primaryCurrency = when {
-        posCurr.isNotBlank() && pendingByCurrency.containsKey(posCurr) -> posCurr
-        baseCurrency.isNotBlank() && pendingByCurrency.containsKey(baseCurrency) -> baseCurrency
-        else -> displayCurrencies.firstOrNull() ?: "USD"
-    }
-    val primaryAmount = pendingByCurrency[primaryCurrency] ?: pendingAmount
-    val secondaryLabels =
-        pendingByCurrency.filterKeys { !it.equals(primaryCurrency, ignoreCase = true) }
-            .map { (currency, amount) ->
-                formatCurrency(currency, amount)
-            }
-    val secondaryValue = secondaryLabels.takeIf { it.isNotEmpty() }?.joinToString(" · ")
     val statusLabel = when {
         isOverLimit -> strings.customer.overdueLabel
-        pendingInvoices > 0 || pendingAmount > 0.0 -> strings.customer.pendingLabel
+        pendingInvoices > 0 || pendingCompany > 0.0 -> strings.customer.pendingLabel
         else -> strings.customer.activeLabel
     }
     val statusColor = when {
@@ -1704,17 +1665,17 @@ fun CustomerItem(
     )
     Card(
         modifier = Modifier.fillMaxWidth().heightIn(min = 104.dp).clip(cardShape)
-            .clickable { onSelect(customer) }.pointerInput(customer.name, isDesktop) {
-                if (!isDesktop) {
-                    val totalDrag = 0f
-                    detectHorizontalDragGestures(onDragEnd = {
-                        if (kotlin.math.abs(totalDrag) > 64) {
-                            onOpenQuickActions()
-                        }
-                    }, onHorizontalDrag = { _, _ ->
-                    })
-                }
-            },
+        .clickable { onSelect(customer) }.pointerInput(customer.name, isDesktop) {
+            if (!isDesktop) {
+                val totalDrag = 0f
+                detectHorizontalDragGestures(onDragEnd = {
+                    if (kotlin.math.abs(totalDrag) > 64) {
+                        onOpenQuickActions()
+                    }
+                }, onHorizontalDrag = { _, _ ->
+                })
+            }
+        },
         //.clickable { onClick() },
         // elevation = CardDefaults.cardElevation(defaultElevation = cardElevation),
         shape = cardShape,
@@ -1756,8 +1717,7 @@ fun CustomerItem(
                 }
 
                 Column(
-                    modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(2.dp)
+                    modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)
                 ) {
                     Text(
                         customer.customerName,
@@ -1812,31 +1772,29 @@ fun CustomerItem(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    text = formatCurrency(primaryCurrency, primaryAmount),
-                    style = MaterialTheme.typography.titleSmall,
-                    color = if (emphasis) MaterialTheme.colorScheme.error
-                    else MaterialTheme.colorScheme.onSurface
-                )
+                Column {
+                    Text(
+                        text = formatCurrency(companyCurr, pendingCompany),
+                        style = MaterialTheme.typography.titleSmall,
+                        color = if (emphasis) MaterialTheme.colorScheme.error
+                        else MaterialTheme.colorScheme.onSurface
+                    )
+                    if (pendingPos != null && !posCurr.equals(companyCurr, ignoreCase = true)) {
+                        Text(
+                            text = formatCurrency(posCurr, pendingPos ?: pendingCompany),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
                 if (pendingInvoices > 0) {
                     HeaderChip(
-                        label = "Pend.",
-                        value = pendingInvoices.toString(),
-                        isCritical = true
+                        label = "Pend.", value = pendingInvoices.toString(), isCritical = true
                     )
                 }
             }
-            if (!secondaryValue.isNullOrBlank()) {
-                Text(
-                    text = secondaryValue,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
             Text(
-                text = statusLabel,
-                style = MaterialTheme.typography.bodySmall,
-                color = statusColor
+                text = statusLabel, style = MaterialTheme.typography.bodySmall, color = statusColor
             )
         }
     }
@@ -1863,40 +1821,6 @@ private fun StatusPill(label: String, isCritical: Boolean) {
             color = textColor,
             modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
         )
-    }
-}
-
-@Composable
-fun MetricBlock(
-    label: String, value: String, secondaryValue: String? = null, isCritical: Boolean
-) {
-    val background = if (isCritical) {
-        MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.33f)
-    } else {
-        MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.33f)
-    }
-    val textColor = if (isCritical) {
-        MaterialTheme.colorScheme.error
-    } else {
-        MaterialTheme.colorScheme.onSecondaryContainer
-    }
-    Surface(
-        color = background, shape = RoundedCornerShape(12.dp), tonalElevation = 0.dp
-    ) {
-        Column(
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(2.dp)
-        ) {
-            Text(label, style = MaterialTheme.typography.labelSmall, color = textColor)
-            Text(value, style = MaterialTheme.typography.titleSmall, color = textColor)
-            if (!secondaryValue.isNullOrBlank()) {
-                Text(
-                    secondaryValue,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-        }
     }
 }
 
@@ -2038,8 +1962,7 @@ private fun CustomerOutstandingInvoicesContent(
     var selectedInvoice by remember { mutableStateOf<SalesInvoiceBO?>(null) }
     var amountRaw by remember { mutableStateOf("") }
     var amountValue by remember { mutableStateOf(0.0) }
-    val posBaseCurrency = normalizeCurrency(paymentState.baseCurrency)
-    val baseCurrency = normalizeCurrency(selectedInvoice?.partyAccountCurrency)
+    val companyCurrency = normalizeCurrency(paymentState.baseCurrency)
     val invoiceCurrency = normalizeCurrency(selectedInvoice?.currency)
     val paymentModes = paymentState.paymentModes
     val modeOptions = remember(paymentModes) { paymentModes.map { it.modeOfPayment }.distinct() }
@@ -2067,17 +1990,16 @@ private fun CustomerOutstandingInvoicesContent(
     var modeExpanded by remember { mutableStateOf(false) }
 
     var rateBaseToPos by remember { mutableStateOf<Double?>(null) }
-    LaunchedEffect(selectedCurrency, baseCurrency, posBaseCurrency) {
-        rateBaseToPos =
-            if (!selectedCurrency.equals(posBaseCurrency, ignoreCase = true)) {
-                1.0
-            } else {
-                cashboxManager.resolveExchangeRateBetween(
-                    fromCurrency = baseCurrency,
-                    toCurrency = posBaseCurrency,
-                    allowNetwork = false
-                )
-            }
+    LaunchedEffect(selectedCurrency, companyCurrency) {
+        rateBaseToPos = if (!selectedCurrency.equals(companyCurrency, ignoreCase = true)) {
+            cashboxManager.resolveExchangeRateBetween(
+                fromCurrency = companyCurrency,
+                toCurrency = selectedCurrency,
+                allowNetwork = false
+            )
+        } else {
+            1.0
+        }
     }
 
     val conversionError = rateBaseToPos == null
@@ -2087,17 +2009,15 @@ private fun CustomerOutstandingInvoicesContent(
         if (rate <= 0.0) 0.0 else amountValue / rate
     } ?: 0.0
 
-    val outstandingBase =
-        bd(
-            selectedInvoice?.baseOutstandingAmount ?: selectedInvoice?.outstandingAmount ?: 0.0
-        ).toDouble(0)
+    val outstandingBase = bd(
+        selectedInvoice?.baseOutstandingAmount ?: selectedInvoice?.outstandingAmount ?: 0.0
+    ).toDouble(0)
     val outstandingInSelectedCurrency = rateBaseToPos?.let { rate ->
         bd(outstandingBase * rate).toDouble(0)
     }
-    val changeDue = outstandingInSelectedCurrency
-        ?.let { (amountValue - it).coerceAtLeast(0.0) } ?: 0.0
-    val amountToApply = outstandingInSelectedCurrency
-        ?.let { minOf(amountValue, it) } ?: amountValue
+    val changeDue =
+        outstandingInSelectedCurrency?.let { (amountValue - it).coerceAtLeast(0.0) } ?: 0.0
+    val amountToApply = outstandingInSelectedCurrency?.let { minOf(amountValue, it) } ?: amountValue
     val isSubmitEnabled =
         !paymentState.isSubmitting && selectedInvoice?.invoiceId?.isNotBlank() == true && selectedMode.isNotBlank() && amountValue > 0.0 && !conversionError
 
@@ -2137,7 +2057,8 @@ private fun CustomerOutstandingInvoicesContent(
             }
 
             is CustomerInvoicesState.Success -> {
-                if (invoicesState.invoices.isEmpty()) {
+                val visibleInvoices = filterPendingInvoices(invoicesState.invoices)
+                if (visibleInvoices.isEmpty()) {
                     Text(
                         text = strings.customer.emptyOsInvoices,
                         style = MaterialTheme.typography.bodyMedium
@@ -2147,37 +2068,18 @@ private fun CustomerOutstandingInvoicesContent(
                         modifier = Modifier.fillMaxWidth().heightIn(max = 320.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        items(invoicesState.invoices, key = { it.invoiceId }) { invoice ->
+                        items(visibleInvoices, key = { it.invoiceId }) { invoice ->
                             val isSelected = invoice.invoiceId == selectedInvoice?.invoiceId
-                            val baseCurrency =
-                                normalizeCurrency(invoice.partyAccountCurrency)
-                            val baseOutstanding = bd(
-                                invoice.baseOutstandingAmount ?: invoice.outstandingAmount
-                            ).toDouble(0)
-                            var rateBaseToPos by remember { mutableStateOf<Double?>(null) }
-                            LaunchedEffect(baseCurrency, posBaseCurrency) {
-                                rateBaseToPos =
-                                    if (baseCurrency.equals(posBaseCurrency, ignoreCase = true)) {
-                                        1.0
-                                    } else {
-                                        cashboxManager.resolveExchangeRateBetween(
-                                            fromCurrency = baseCurrency,
-                                            toCurrency = posBaseCurrency,
-                                            allowNetwork = false
-                                        )
-                                    }
-                            }
+                            val display = resolveInvoiceDisplayAmounts(
+                                invoice = invoice,
+                                companyCurrency = companyCurrency
+                            )
+                            val baseOutstanding = bd(display.outstandingCompany).toDouble(0)
 
-                            //TODO: Pendiente
-                            val baseLabel = formatCurrency(baseCurrency, baseOutstanding)
-                            var posLabel = ""
-                            if (baseCurrency != posBaseCurrency) {
-                                val posOutstanding =
-                                    bd(rateBaseToPos?.takeIf { it > 0.0 }
-                                        ?.let { baseOutstanding * it }
-                                        ?: baseOutstanding).toDouble(0)
-                                posLabel = formatCurrency(posBaseCurrency, posOutstanding)
-                            }
+                            val baseLabel = formatCurrency(display.companyCurrency, baseOutstanding)
+                            val posLabel = formatCurrency(
+                                display.invoiceCurrency, bd(display.outstandingInvoice).toDouble(0)
+                            )
 
                             Card(
                                 modifier = Modifier.fillMaxWidth(),
@@ -2197,15 +2099,15 @@ private fun CustomerOutstandingInvoicesContent(
                                 Column(
                                     modifier = Modifier.fillMaxWidth().clickable {
                                         selectedInvoice = invoice
-                                        val rateBaseToSelected = resolveRateBetweenFromBaseRates(
-                                            fromCurrency = baseCurrency,
-                                            toCurrency = selectedCurrency,
-                                            baseCurrency = posBaseCurrency,
-                                            baseRates = invoicesState.exchangeRateByCurrency
-                                        )
-                                        val amountToUse = rateBaseToSelected?.let { rate ->
-                                            outstandingBase * rate
-                                        } ?: outstandingBase
+                                        val amountToUse = if (selectedCurrency.equals(
+                                                display.companyCurrency,
+                                                ignoreCase = true
+                                            )
+                                        ) {
+                                            display.outstandingCompany
+                                        } else {
+                                            display.outstandingInvoice
+                                        }
                                         amountRaw = amountToUse.toString()
                                     }.padding(12.dp),
                                     verticalArrangement = Arrangement.spacedBy(6.dp)
@@ -2253,17 +2155,15 @@ private fun CustomerOutstandingInvoicesContent(
                                             RadioButton(
                                                 selected = isSelected, onClick = {
                                                     selectedInvoice = invoice
-                                                    val rateBaseToSelected =
-                                                        resolveRateBetweenFromBaseRates(
-                                                            fromCurrency = baseCurrency,
-                                                            toCurrency = selectedCurrency,
-                                                            baseCurrency = posBaseCurrency,
-                                                            baseRates = invoicesState.exchangeRateByCurrency
+                                                    val amountToUse = if (selectedCurrency.equals(
+                                                            display.companyCurrency,
+                                                            ignoreCase = true
                                                         )
-                                                    val amountToUse =
-                                                        rateBaseToSelected?.let { rate ->
-                                                            outstandingBase * rate
-                                                        } ?: outstandingBase
+                                                    ) {
+                                                        display.outstandingCompany
+                                                    } else {
+                                                        display.outstandingInvoice
+                                                    }
                                                     amountRaw = amountToUse.toString()
                                                 })
                                         }
@@ -2359,25 +2259,23 @@ private fun CustomerOutstandingInvoicesContent(
                     rawValue = amountRaw,
                     onRawValueChange = { amountRaw = it },
                     label = strings.customer.amountLabel,
-                    onAmountChanged = { amountValue = it },
+                    onAmountChanged = { },
                     supportingText = {
                         if (conversionError) {
                             Text(
-                                text = "Tasa de cambio no encontrada de $selectedCurrency a $baseCurrency.",
+                                text = "Tasa de cambio no encontrada de $selectedCurrency a $companyCurrency.",
                                 color = MaterialTheme.colorScheme.error
                             )
-                        } else if (!selectedCurrency.equals(posBaseCurrency, ignoreCase = true)) {
+                        } else if (!selectedCurrency.equals(companyCurrency, ignoreCase = true)) {
                             Text(
                                 "Valor en ${selectedCurrency.toCurrencySymbol()}: ${
                                     formatCurrency(
-                                        baseCurrency,
-                                        baseAmount
+                                        companyCurrency, baseAmount
                                     )
                                 }"
                             )
                         }
-                    }
-                )
+                    })
 //                Text(
 //                    text = "${strings.customer.outstandingLabel}: $posOutstandingLabel",
 //                    style = MaterialTheme.typography.bodySmall,
@@ -2402,11 +2300,7 @@ private fun CustomerOutstandingInvoicesContent(
                 onClick = {
                     val invoiceId = selectedInvoice?.invoiceId?.trim().orEmpty()
                     onRegisterPayment(
-                        invoiceId,
-                        selectedMode,
-                        amountToApply,
-                        selectedCurrency,
-                        referenceInput
+                        invoiceId, selectedMode, amountToApply, selectedCurrency, referenceInput
                     )
                 }, enabled = isSubmitEnabled, modifier = Modifier.fillMaxWidth()
             ) {
@@ -3540,9 +3434,7 @@ private fun HistoryStatChip(
 
 @Composable
 private fun SummaryStatChip(
-    label: String,
-    value: String,
-    modifier: Modifier = Modifier
+    label: String, value: String, modifier: Modifier = Modifier
 ) {
     Surface(
         modifier = modifier,
@@ -3569,10 +3461,7 @@ private fun SummaryStatChip(
 
 @Composable
 private fun HeaderChip(
-    label: String,
-    value: String,
-    isCritical: Boolean,
-    modifier: Modifier = Modifier
+    label: String, value: String, isCritical: Boolean, modifier: Modifier = Modifier
 ) {
     val background = if (isCritical) {
         MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.4f)
@@ -3585,9 +3474,7 @@ private fun HeaderChip(
         MaterialTheme.colorScheme.onSurfaceVariant
     }
     Surface(
-        modifier = modifier,
-        color = background,
-        shape = RoundedCornerShape(999.dp)
+        modifier = modifier, color = background, shape = RoundedCornerShape(999.dp)
     ) {
         Row(
             modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
@@ -3614,31 +3501,20 @@ private fun HistoryRangeChip(
 }
 
 @Composable
+@Suppress("UNUSED_PARAMETER")
 private fun InvoiceHistorySummary(
-    invoices: List<SalesInvoiceBO>,
-    posBaseCurrency: String,
-    cashboxManager: CashBoxManager
+    invoices: List<SalesInvoiceBO>, posBaseCurrency: String, cashboxManager: CashBoxManager
 ) {
-    val posCurrency = normalizeCurrency(posBaseCurrency)
-    val baseCurrency =
-        normalizeCurrency(invoices.firstOrNull()?.partyAccountCurrency)
-    val totalBase = invoices.sumOf { it.baseOutstandingAmount ?: it.outstandingAmount }
-    var totalPos by remember { mutableStateOf<Double?>(null) }
-
-    LaunchedEffect(baseCurrency, posCurrency, totalBase) {
-        if (baseCurrency.equals(posCurrency, ignoreCase = true)) {
-            totalPos = totalBase
-        } else {
-            val rate = cashboxManager.resolveExchangeRateBetween(
-                fromCurrency = baseCurrency,
-                toCurrency = posCurrency,
-                allowNetwork = false
-            )
-            totalPos = rate?.takeIf { it > 0.0 }?.let { totalBase * it }
-        }
+    val companyCurrency = normalizeCurrency(posBaseCurrency)
+    val invoiceCurrency = normalizeCurrency(invoices.firstOrNull()?.currency)
+    val totalBase = invoices.sumOf {
+        resolveInvoiceDisplayAmounts(it, companyCurrency).outstandingCompany
+    }
+    val totalPos = invoices.sumOf {
+        resolveInvoiceDisplayAmounts(it, companyCurrency).outstandingInvoice
     }
 
-    if (totalBase > 0.0 || (totalPos != null && totalPos!! > 0.0)) {
+    if (totalBase > 0.0 || totalPos > 0.0) {
         Column(
             modifier = Modifier.fillMaxWidth().background(
                 MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
@@ -3648,23 +3524,28 @@ private fun InvoiceHistorySummary(
             Row(
                 modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Text(posCurrency, style = MaterialTheme.typography.labelSmall)
-                Text(
-                    formatCurrency(posCurrency, totalPos ?: totalBase),
-                    style = MaterialTheme.typography.labelMedium
-                )
-            }
-            if (!baseCurrency.equals(posCurrency, ignoreCase = true)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Text(baseCurrency, style = MaterialTheme.typography.labelSmall)
+                if (invoiceCurrency.isNotBlank()) {
+                    Text(invoiceCurrency, style = MaterialTheme.typography.labelSmall)
                     Text(
-                        formatCurrency(baseCurrency, totalBase),
+                        formatCurrency(invoiceCurrency, totalPos),
+                        style = MaterialTheme.typography.labelMedium
+                    )
+                } else {
+                    Text(companyCurrency, style = MaterialTheme.typography.labelSmall)
+                    Text(
+                        formatCurrency(companyCurrency, totalBase),
                         style = MaterialTheme.typography.labelMedium
                     )
                 }
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(companyCurrency, style = MaterialTheme.typography.labelSmall)
+                Text(
+                    formatCurrency(companyCurrency, totalBase),
+                    style = MaterialTheme.typography.labelMedium
+                )
             }
         }
     }
@@ -3687,6 +3568,7 @@ private fun normalizedStatus(status: String?): String {
 }
 
 @Composable
+@Suppress("UNUSED_PARAMETER")
 private fun InvoiceHistoryRow(
     invoice: SalesInvoiceBO,
     isBusy: Boolean,
@@ -3696,35 +3578,14 @@ private fun InvoiceHistoryRow(
     onReturnTotal: (String) -> Unit,
     onPartialReturn: (String) -> Unit = {}
 ) {
-    val posCurrency = normalizeCurrency(posBaseCurrency)
-    val baseCurrency =
-        normalizeCurrency(invoice.partyAccountCurrency)
-    val invoiceCurrency = normalizeCurrency(invoice.currency)
-    val conversionRate = invoice.conversionRate
-    val baseTotal = invoice.baseGrandTotal ?: toBaseAmount(
-        amount = invoice.total,
-        invoiceCurrency = invoiceCurrency,
-        baseCurrency = baseCurrency,
-        conversionRate = conversionRate
+    val display = resolveInvoiceDisplayAmounts(
+        invoice = invoice,
+        companyCurrency = normalizeCurrency(posBaseCurrency)
     )
-    val baseOutstanding = bd(invoice.baseOutstandingAmount ?: invoice.outstandingAmount).toDouble(0)
-    var rateBaseToPos by remember { mutableStateOf<Double?>(null) }
-    LaunchedEffect(baseCurrency, posCurrency) {
-        rateBaseToPos = if (baseCurrency.equals(posCurrency, ignoreCase = true)) {
-            1.0
-        } else {
-            cashboxManager.resolveExchangeRateBetween(
-                fromCurrency = baseCurrency,
-                toCurrency = posCurrency,
-                allowNetwork = false
-            )
-        }
-    }
-    val posTotal =
-        bd(rateBaseToPos?.takeIf { it > 0.0 }?.let { baseTotal * it } ?: baseTotal).toDouble(0)
-    val posOutstanding =
-        bd(rateBaseToPos?.takeIf { it > 0.0 }?.let { baseOutstanding * it }
-            ?: baseOutstanding).toDouble(0)
+    val baseTotal = bd(display.totalCompany).toDouble(0)
+    val baseOutstanding = bd(display.outstandingCompany).toDouble(0)
+    val posTotal = bd(display.totalInvoice).toDouble(0)
+    val posOutstanding = bd(display.outstandingInvoice).toDouble(0)
     val statusLabel = invoice.status ?: "Sin estado"
     val normalizedStatus = normalizedStatus(invoice.status?.trim()?.lowercase())
     val hasPayments = invoice.paidAmount > 0.0 || invoice.payments.any { it.amount > 0.0 }
@@ -3792,11 +3653,11 @@ private fun InvoiceHistoryRow(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Text(
-                        formatCurrency(posCurrency, posTotal),
+                        formatCurrency(display.invoiceCurrency, posTotal),
                         style = MaterialTheme.typography.titleSmall
                     )
                     Text(
-                        formatCurrency(baseCurrency, baseTotal),
+                        formatCurrency(display.companyCurrency, baseTotal),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -3808,13 +3669,13 @@ private fun InvoiceHistoryRow(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Text(
-                        formatCurrency(posCurrency, posOutstanding),
+                        formatCurrency(display.invoiceCurrency, posOutstanding),
                         style = MaterialTheme.typography.titleSmall,
                         color = if (invoice.outstandingAmount > 0.0) MaterialTheme.colorScheme.error
                         else MaterialTheme.colorScheme.onSurface
                     )
                     Text(
-                        formatCurrency(baseCurrency, baseOutstanding),
+                        formatCurrency(display.companyCurrency, baseOutstanding),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -3879,11 +3740,20 @@ private fun toBaseAmount(
     return if (conversionRate != null && conversionRate > 0.0) amount * conversionRate else amount
 }
 
+private fun isPaidStatus(status: String?): Boolean {
+    return status?.trim()?.equals("paid", ignoreCase = true) == true
+}
+
+private fun filterPendingInvoices(invoices: List<SalesInvoiceBO>): List<SalesInvoiceBO> {
+    return invoices.filter { it.outstandingAmount > 0.0 && !isPaidStatus(it.status) }
+}
+
 private enum class ReturnDestination(val label: String) {
     RETURN("Reembolso"), CREDIT("Crédito a favor")
 }
 
 @Composable
+@Suppress("UNUSED_PARAMETER")
 private fun CustomerOutstandingSummary(
     customer: CustomerBO,
     invoices: List<SalesInvoiceBO>,
@@ -3891,32 +3761,26 @@ private fun CustomerOutstandingSummary(
     cashboxManager: CashBoxManager
 ) {
     val strings = LocalAppStrings.current
-    val posCurrency = normalizeCurrency(posBaseCurrency)
-    val baseCurrency =
-        normalizeCurrency(invoices.firstOrNull()?.partyAccountCurrency)
+    val companyCurrency = normalizeCurrency(posBaseCurrency)
+    val invoiceCurrency = normalizeCurrency(invoices.firstOrNull()?.currency)
     val totalBase = if (invoices.isNotEmpty()) {
-        invoices.sumOf { it.baseOutstandingAmount ?: it.outstandingAmount }
+        invoices.sumOf {
+            resolveInvoiceDisplayAmounts(it, companyCurrency).outstandingCompany
+        }
     } else {
         customer.totalPendingAmount ?: customer.currentBalance ?: 0.0
     }
-    var totalPos by remember { mutableStateOf<Double?>(null) }
-    LaunchedEffect(baseCurrency, posCurrency, totalBase) {
-        if (baseCurrency.equals(posCurrency, ignoreCase = true)) {
-            totalPos = totalBase
-        } else {
-            val rate = cashboxManager.resolveExchangeRateBetween(
-                fromCurrency = baseCurrency,
-                toCurrency = posCurrency,
-                allowNetwork = false
-            )
-            totalPos = rate?.takeIf { it > 0.0 }?.let { totalBase * it }
+    val totalPos = if (invoices.isNotEmpty()) {
+        invoices.sumOf {
+            resolveInvoiceDisplayAmounts(it, companyCurrency).outstandingInvoice
         }
+    } else {
+        totalBase
     }
 
     Column(
         modifier = Modifier.fillMaxWidth().background(
-            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-            RoundedCornerShape(12.dp)
+            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f), RoundedCornerShape(12.dp)
         ).padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         Text(
@@ -3928,7 +3792,7 @@ private fun CustomerOutstandingSummary(
             modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween
         ) {
             Text(strings.customer.outstandingSummaryInvoicesLabel)
-            Text("${customer.pendingInvoices ?: 0}")
+            Text("${invoices.size}")
         }
         if (totalBase <= 0.0) {
             Text(strings.customer.outstandingSummaryAmountLabel)
@@ -3936,17 +3800,19 @@ private fun CustomerOutstandingSummary(
             Row(
                 modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Text(posCurrency)
-                Text(formatCurrency(posCurrency, totalPos ?: totalBase))
-            }
-            if (!baseCurrency.equals(posCurrency, ignoreCase = true)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Text(baseCurrency)
-                    Text(formatCurrency(baseCurrency, totalBase))
+                if (invoiceCurrency.isNotBlank()) {
+                    Text(invoiceCurrency)
+                    Text(formatCurrency(invoiceCurrency, totalPos))
+                } else {
+                    Text(companyCurrency)
+                    Text(formatCurrency(companyCurrency, totalBase))
                 }
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(companyCurrency)
+                Text(formatCurrency(companyCurrency, totalBase))
             }
         }
     }

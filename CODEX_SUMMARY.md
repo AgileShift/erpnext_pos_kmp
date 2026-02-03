@@ -8,4 +8,9 @@
 - [ ] Tenemos que crear politicas de sincronizacion, en cuantoa  tiempo los Customer, Items y Invoices deben de sincronizarse mas seguido que la tasa de cambio, informacion de empresa, etc
 - [ ] Cuando es pago multimoneda y queda en credito el dialogo de exito no aparece, por favor verificar ese escenario por favor
 
+
+- Features
+  - Posibilidad de vender inventario negativo (Reserva)
+
+
 codex resume 019c110b-cad4-7840-9106-7cc5a4baefd0

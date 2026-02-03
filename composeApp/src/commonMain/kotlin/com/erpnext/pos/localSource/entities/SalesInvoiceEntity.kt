@@ -140,7 +140,7 @@ data class SalesInvoiceEntity(
     var isPos: Boolean = true,
 
     @ColumnInfo(name = "debit_to", defaultValue = "")
-    @Serializable()
+    @Serializable
     var debitTo: String? = null,
 
     @ColumnInfo(name = "is_deleted")

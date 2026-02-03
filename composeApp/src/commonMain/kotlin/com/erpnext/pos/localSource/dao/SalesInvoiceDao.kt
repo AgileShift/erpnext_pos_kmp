@@ -1,6 +1,5 @@
 package com.erpnext.pos.localSource.dao
 
-import androidx.paging.PagingData
 import androidx.paging.PagingSource
 import androidx.room.*
 import com.erpnext.pos.localSource.entities.POSInvoicePaymentEntity
@@ -350,6 +349,7 @@ interface SalesInvoiceDao {
         SELECT * FROM tabSalesInvoice
         WHERE customer = :customerName
           AND outstanding_amount > 0
+          AND (status IS NULL OR lower(status) NOT IN ('paid','cancelled','canceled'))
           AND docstatus != 2
           AND is_deleted = 0
         ORDER BY posting_date DESC

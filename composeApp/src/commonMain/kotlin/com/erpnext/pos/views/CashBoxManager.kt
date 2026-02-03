@@ -43,7 +43,6 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.flow.firstOrNull
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 data class PaymentModeWithAmount(
@@ -55,6 +54,7 @@ data class POSContext(
     val username: String,
     val profileName: String,
     val company: String,
+    val companyCurrency: String,
     val warehouse: String?,
     val route: String?,
     val territory: String?,
@@ -125,6 +125,7 @@ class CashBoxManager(
             username = user.username ?: "",
             profileName = profile.profileName,
             company = company?.companyName ?: profile.company,
+            companyCurrency = company?.defaultCurrency ?: profile.currency,
             partyAccountCurrency = company?.defaultCurrency ?: profile.currency,
             warehouse = profile.warehouse,
             route = profile.route,
@@ -176,6 +177,7 @@ class CashBoxManager(
                 username = user.username ?: user.name,
                 profileName = entry.name,
                 company = company?.companyName ?: profile.company,
+                companyCurrency = company?.defaultCurrency ?: profile.currency,
                 warehouse = profile.warehouse,
                 route = profile.route,
                 territory = profile.route,
@@ -252,6 +254,7 @@ class CashBoxManager(
             username = user.username ?: user.name,
             profileName = entry.name,
             company = company?.companyName ?: profile.company,
+            companyCurrency = company?.defaultCurrency ?: profile.currency,
             warehouse = profile.warehouse,
             route = profile.route,
             territory = profile.route,
@@ -266,7 +269,7 @@ class CashBoxManager(
             allowedCurrencies = allowedCurrencies,
             paymentModes = paymentModes,
             cashier = user.toBO(),
-            partyAccountCurrency = profile.currency ?: company?.defaultCurrency ?: "",
+            partyAccountCurrency = profile.currency,
         )
         _contextFlow.value = currentContext
         currentContext!!
@@ -284,7 +287,7 @@ class CashBoxManager(
         val user = userDao.getUserInfo() ?: return@withContext null
 
         val entry = cashboxDao.getActiveEntry(user.email, ctx.profileName).firstOrNull()
-        if (entry == null) return@withContext null
+            ?: return@withContext null
         val endMillis = getTimeMillis()
         val startMillis = parseErpDateTimeToEpochMillis(entry.cashbox.periodStartDate)
             ?: endMillis
@@ -336,7 +339,7 @@ class CashBoxManager(
         } else {
             null
         }
-        val submitOk = pce?.let {
+        val submitOk = pce?.let { it ->
             runCatching { api.submitPOSClosingEntry(it.name) }
                 .onFailure { AppLogger.warn("closeCashBox: submit closing failed", it) }
                 .getOrNull()
@@ -502,11 +505,6 @@ class CashBoxManager(
                     type = method.type,
                 )
             }
-    }
-
-    suspend fun updateManualExchangeRate(rate: Double) {
-        exchangeRatePreferences.saveManualRate(rate)
-        currentContext = currentContext?.copy(exchangeRate = rate)
     }
 
     suspend fun updateClosingAmounts(

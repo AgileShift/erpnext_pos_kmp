@@ -5,22 +5,11 @@ import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
-enum class SyncStatus(status: String) {
-    Pending("Pending"),
-    Synced("Synced"),
-    Failed("Failed")
+enum class SyncStatus() {
+    Pending,
+    Synced,
+    Failed
 }
-
-enum class DocStatus(status: String) {
-    Draft("Draft"),
-    Unpaid("Unpaid"),
-    Paid("Paid"),
-    Overdue("Overdue")
-}
-
-@Serializable
-data class SalesInvoiceCreatedDto(@SerialName("name") val name: String)
-
 @OptIn(ExperimentalSerializationApi::class)
 @Serializable
 data class SalesInvoiceDto(
@@ -164,14 +153,6 @@ data class SalesInvoiceItemDto(
     val deliveryNoteItem: String? = null,
     @SerialName("cost_center")
     val costCenter: String? = null
-)
-
-@Serializable
-data class InvoiceTax(
-    @SerialName("charge_type") val chargeType: String = "On Net Total",
-    @SerialName("account_head") val accountHead: String,
-    val rate: Double,
-    @SerialName("description") val description: String? = null
 )
 
 @Serializable
