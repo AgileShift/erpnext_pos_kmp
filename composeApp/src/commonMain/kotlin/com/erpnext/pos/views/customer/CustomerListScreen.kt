@@ -307,7 +307,6 @@ fun CustomerListScreen(
                                                 posCurrency = posCurrency,
                                                 companyCurrency = companyCurrency,
                                                 cashboxManager = cashboxManager,
-                                                supportedCurrencies = supportedCurrencies,
                                                 isWideLayout = false,
                                                 isDesktop = isDesktop,
                                                 onOpenQuickActions = {
@@ -384,7 +383,6 @@ fun CustomerListScreen(
                                         posCurrency = posCurrency,
                                         companyCurrency = companyCurrency,
                                         cashboxManager = cashboxManager,
-                                        supportedCurrencies = supportedCurrencies,
                                         isWideLayout = isWideLayout,
                                         isDesktop = isDesktop,
                                         onOpenQuickActions = { quickActionsCustomer = it },
@@ -673,7 +671,6 @@ private fun CustomerListContent(
     posCurrency: String,
     companyCurrency: String,
     cashboxManager: CashBoxManager,
-    supportedCurrencies: List<String>,
     isWideLayout: Boolean,
     isDesktop: Boolean,
     onOpenQuickActions: (CustomerBO) -> Unit,
@@ -694,7 +691,6 @@ private fun CustomerListContent(
                     customer = customer,
                     posCurrency = posCurrency,
                     companyCurrency = companyCurrency,
-                    supportedCurrencies = supportedCurrencies,
                     isDesktop = isDesktop,
                     onSelect = onSelect,
                     onOpenQuickActions = { onOpenQuickActions(customer) },
@@ -714,10 +710,8 @@ private fun CustomerListContent(
                     customer = customer,
                     posCurrency = posCurrency,
                     companyCurrency = companyCurrency,
-                    supportedCurrencies = supportedCurrencies,
                     isDesktop = isDesktop,
                     onSelect = onSelect,
-                    //onClick = { actions.toDetails(customer.name) },
                     onOpenQuickActions = { onOpenQuickActions(customer) },
                     onQuickAction = { actionType -> onQuickAction(customer, actionType) },
                     cashboxManager = cashboxManager
@@ -1018,11 +1012,6 @@ private fun CustomerPanelHeader(
         customer?.pendingInvoices ?: 0
     }
     val invoiceCurrency = normalizeCurrency(pendingInvoices.firstOrNull()?.currency)
-    val pendingInvoiceAmount = if (pendingInvoices.isNotEmpty()) {
-        pendingInvoices.sumOf { it.outstandingAmount }
-    } else {
-        0.0
-    }
     val pendingCompanyAmount = if (pendingInvoices.isNotEmpty()) {
         pendingInvoices.sumOf {
             resolveInvoiceDisplayAmounts(it, companyCurrency).outstandingCompany
@@ -1030,6 +1019,25 @@ private fun CustomerPanelHeader(
     } else {
         customer?.totalPendingAmount ?: customer?.currentBalance ?: 0.0
     }
+
+    val pendingCompany =
+        bd(customer?.totalPendingAmount ?: customer?.currentBalance ?: 0.0).toDouble(2)
+    var pendingPos by remember { mutableStateOf<Double?>(null) }
+    LaunchedEffect(pendingCompany, companyCurrency, invoiceCurrency) {
+        pendingPos = if (invoiceCurrency.equals(companyCurrency, ignoreCase = true)) {
+            pendingCompany
+        } else {
+            resolveCompanyToTargetAmount(
+                amountCompany = pendingCompany,
+                companyCurrency = companyCurrency,
+                targetCurrency = invoiceCurrency,
+                rateResolver = { from, to ->
+                    cashboxManager.resolveExchangeRateBetween(from, to, allowNetwork = false)
+                }
+            )
+        }
+    }
+
     Surface(
         color = MaterialTheme.colorScheme.surface, tonalElevation = 0.dp
     ) {
@@ -1074,13 +1082,11 @@ private fun CustomerPanelHeader(
                         value = pendingCount.toString(),
                         isCritical = pendingCount > 0
                     )
-                    if (invoiceCurrency.isNotBlank()) {
-                        HeaderChip(
-                            label = invoiceCurrency,
-                            value = formatCurrency(invoiceCurrency, pendingInvoiceAmount),
-                            isCritical = pendingCount > 0
-                        )
-                    }
+                    HeaderChip(
+                        label = invoiceCurrency,
+                        value = formatCurrency(invoiceCurrency, bd(pendingPos ?: 0.0).toDouble(0)),
+                        isCritical = pendingCount > 0
+                    )
                     HeaderChip(
                         label = companyCurrency,
                         value = formatCurrency(companyCurrency, pendingCompanyAmount),
@@ -1607,16 +1613,13 @@ private fun NewCustomerDialog(
 }
 
 @Composable
-@Suppress("UNUSED_PARAMETER")
 fun CustomerItem(
     customer: CustomerBO,
     posCurrency: String,
     companyCurrency: String,
     cashboxManager: CashBoxManager,
-    supportedCurrencies: List<String>,
     isDesktop: Boolean,
     onSelect: (CustomerBO) -> Unit,
-    //onClick: () -> Unit,
     onOpenQuickActions: () -> Unit,
     onQuickAction: (CustomerQuickActionType) -> Unit
 ) {
@@ -1665,17 +1668,17 @@ fun CustomerItem(
     )
     Card(
         modifier = Modifier.fillMaxWidth().heightIn(min = 104.dp).clip(cardShape)
-        .clickable { onSelect(customer) }.pointerInput(customer.name, isDesktop) {
-            if (!isDesktop) {
-                val totalDrag = 0f
-                detectHorizontalDragGestures(onDragEnd = {
-                    if (kotlin.math.abs(totalDrag) > 64) {
-                        onOpenQuickActions()
-                    }
-                }, onHorizontalDrag = { _, _ ->
-                })
-            }
-        },
+            .clickable { onSelect(customer) }.pointerInput(customer.name, isDesktop) {
+                if (!isDesktop) {
+                    val totalDrag = 0f
+                    detectHorizontalDragGestures(onDragEnd = {
+                        if (kotlin.math.abs(totalDrag) > 64) {
+                            onOpenQuickActions()
+                        }
+                    }, onHorizontalDrag = { _, _ ->
+                    })
+                }
+            },
         //.clickable { onClick() },
         // elevation = CardDefaults.cardElevation(defaultElevation = cardElevation),
         shape = cardShape,
@@ -1774,14 +1777,14 @@ fun CustomerItem(
             ) {
                 Column {
                     Text(
-                        text = formatCurrency(companyCurr, pendingCompany),
+                        text = formatCurrency(posCurr, pendingPos ?: pendingCompany),
                         style = MaterialTheme.typography.titleSmall,
                         color = if (emphasis) MaterialTheme.colorScheme.error
                         else MaterialTheme.colorScheme.onSurface
                     )
                     if (pendingPos != null && !posCurr.equals(companyCurr, ignoreCase = true)) {
                         Text(
-                            text = formatCurrency(posCurr, pendingPos ?: pendingCompany),
+                            text = formatCurrency(companyCurr, pendingCompany),
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -1979,26 +1982,46 @@ private fun CustomerOutstandingInvoicesContent(
     }
 
     val preferredCurrencyByMode = paymentState.paymentModeCurrencyByMode ?: mapOf()
-    var selectedCurrency by remember { mutableStateOf(invoiceCurrency) }
-    LaunchedEffect(selectedMode, invoiceCurrency) {
-        selectedCurrency = resolvePaymentCurrencyForMode(
+    var selectedCurrency by remember { mutableStateOf(invoiceCurrency.ifBlank { companyCurrency }) }
+    LaunchedEffect(selectedMode, invoiceCurrency, companyCurrency) {
+        val resolved = resolvePaymentCurrencyForMode(
             modeOfPayment = selectedMode,
             paymentModeDetails = paymentState.modeTypes ?: mapOf(),
             preferredCurrency = preferredCurrencyByMode[selectedMode],
             invoiceCurrency = invoiceCurrency
         )
+        selectedCurrency = resolved.ifBlank { companyCurrency }
     }
 
     var modeExpanded by remember { mutableStateOf(false) }
 
+    val cachedRates = (invoicesState as? CustomerInvoicesState.Success)
+        ?.exchangeRateByCurrency
+        .orEmpty()
     var rateBaseToPos by remember { mutableStateOf<Double?>(null) }
-    LaunchedEffect(selectedCurrency, companyCurrency) {
-        rateBaseToPos = if (!selectedCurrency.equals(companyCurrency, ignoreCase = true)) {
-            cashboxManager.resolveExchangeRateBetween(
-                fromCurrency = companyCurrency,
-                toCurrency = selectedCurrency,
-                allowNetwork = false
-            )
+    LaunchedEffect(
+        selectedCurrency,
+        companyCurrency,
+        cachedRates,
+        selectedInvoice?.conversionRate
+    ) {
+        rateBaseToPos = if (selectedCurrency.isBlank()) {
+            1.0
+        } else if (!selectedCurrency.equals(companyCurrency, ignoreCase = true)) {
+            cachedRates[selectedCurrency]
+                ?: selectedInvoice?.conversionRate?.takeIf { it > 0.0 }
+                    ?.let { rate ->
+                        if (selectedCurrency.equals(invoiceCurrency, ignoreCase = true)) {
+                            1.0 / rate
+                        } else {
+                            null
+                        }
+                    }
+                ?: cashboxManager.resolveExchangeRateBetween(
+                    fromCurrency = companyCurrency,
+                    toCurrency = selectedCurrency,
+                    allowNetwork = false
+                )
         } else {
             1.0
         }
@@ -2262,7 +2285,7 @@ private fun CustomerOutstandingInvoicesContent(
                     rawValue = amountRaw,
                     onRawValueChange = { amountRaw = it },
                     label = strings.customer.amountLabel,
-                    onAmountChanged = { },
+                    onAmountChanged = { amountValue = it },
                     supportingText = {
                         if (conversionError) {
                             Text(
@@ -2305,7 +2328,7 @@ private fun CustomerOutstandingInvoicesContent(
                     onRegisterPayment(
                         invoiceId, selectedMode, amountToApply, selectedCurrency, referenceInput
                     )
-                }, enabled = isSubmitEnabled, modifier = Modifier.fillMaxWidth()
+                },enabled = isSubmitEnabled, modifier = Modifier.fillMaxWidth()
             ) {
                 Text(
                     if (paymentState.isSubmitting) strings.customer.processing

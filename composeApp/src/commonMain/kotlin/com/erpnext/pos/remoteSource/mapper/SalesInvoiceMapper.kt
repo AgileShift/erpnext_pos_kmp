@@ -108,11 +108,6 @@ fun SalesInvoiceDto.toEntity(): SalesInvoiceWithItemsAndPayments {
     val resolvedIsPos = doctype.equals("POS Invoice", ignoreCase = true) || isPos
     fun resolveBaseAmount(amount: Double?, baseAmount: Double?): Double? {
         if (amount == null) return baseAmount
-        val invoiceCurrency = normalizeCurrency(currency)
-        val receivableCurrency = normalizeCurrency(partyAccountCurrency)
-        if (invoiceCurrency.equals(receivableCurrency, ignoreCase = true)) {
-            return baseAmount ?: amount
-        }
         val rate = conversionRate?.takeIf { it > 0.0 && it != 1.0 }
         if (baseAmount != null && rate != null) {
             val approxEqual = kotlin.math.abs(baseAmount - amount) <= 0.0001
@@ -129,8 +124,12 @@ fun SalesInvoiceDto.toEntity(): SalesInvoiceWithItemsAndPayments {
     }
     val rawOutstanding = outstandingAmount ?: (grandTotal - paidResolved)
     val shouldDefaultOutstanding =
-        paidResolved <= 0.0001 && payments.isEmpty() && isReturn != 1 &&
-            grandTotal > 0.0 && rawOutstanding < grandTotal - 0.01
+        outstandingAmount == null &&
+            paidResolved <= 0.0001 &&
+            payments.isEmpty() &&
+            isReturn != 1 &&
+            grandTotal > 0.0 &&
+            rawOutstanding < grandTotal - 0.01
     val outstandingResolved = if (shouldDefaultOutstanding) grandTotal else rawOutstanding
 
     // Se asegura que la factura local conserve los montos pagados recibidos del servidor.

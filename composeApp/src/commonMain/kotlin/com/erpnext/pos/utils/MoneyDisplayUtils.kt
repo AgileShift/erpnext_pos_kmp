@@ -17,6 +17,7 @@ fun resolveInvoiceDisplayAmounts(
 ): InvoiceDisplayAmounts {
     val invoiceCurrency = normalizeCurrency(invoice.currency) ?: normalizeCurrency(companyCurrency) ?: "USD"
     val company = normalizeCurrency(companyCurrency) ?: invoiceCurrency
+    val receivable = normalizeCurrency(invoice.partyAccountCurrency) ?: company
     val totalInvoice = invoice.total
     val outstandingInvoice = invoice.outstandingAmount
     val totalCompany = invoice.baseGrandTotal ?: computeBaseAmount(
@@ -25,18 +26,24 @@ fun resolveInvoiceDisplayAmounts(
         companyCurrency = company,
         conversionRate = invoice.conversionRate
     )
-    val outstandingCompany = invoice.baseOutstandingAmount ?: computeBaseAmount(
-        amount = outstandingInvoice,
-        invoiceCurrency = invoiceCurrency,
-        companyCurrency = company,
-        conversionRate = invoice.conversionRate
-    )
+    val rateInvToRc = invoice.conversionRate?.takeIf { it > 0.0 }
+    val outstandingInvoiceResolved = when {
+        receivable.equals(invoiceCurrency, ignoreCase = true) -> outstandingInvoice
+        rateInvToRc != null -> outstandingInvoice / rateInvToRc
+        else -> outstandingInvoice
+    }
+    val outstandingCompany = when {
+        invoice.baseOutstandingAmount != null -> invoice.baseOutstandingAmount
+        receivable.equals(company, ignoreCase = true) -> outstandingInvoice
+        company.equals(invoiceCurrency, ignoreCase = true) -> outstandingInvoiceResolved
+        else -> outstandingInvoice
+    }
     return InvoiceDisplayAmounts(
         invoiceCurrency = invoiceCurrency,
         companyCurrency = company,
         totalInvoice = totalInvoice,
         totalCompany = totalCompany,
-        outstandingInvoice = outstandingInvoice,
+        outstandingInvoice = outstandingInvoiceResolved,
         outstandingCompany = outstandingCompany
     )
 }
@@ -64,4 +71,3 @@ suspend fun resolveCompanyToTargetAmount(
     val rate = rateResolver(from, to)?.takeIf { it > 0.0 } ?: return null
     return amountCompany * rate
 }
-

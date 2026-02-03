@@ -57,7 +57,13 @@ class HomeViewModel(
 
     val syncState: StateFlow<SyncState> = syncManager.state
     private val _syncSettings = MutableStateFlow(
-        SyncSettings(autoSync = true, syncOnStartup = true, wifiOnly = false, lastSyncAt = null)
+        SyncSettings(
+            autoSync = true,
+            syncOnStartup = true,
+            wifiOnly = false,
+            lastSyncAt = null,
+            useTtl = false
+        )
     )
     val syncSettings: StateFlow<SyncSettings> = _syncSettings.asStateFlow()
     private val _homeMetrics = MutableStateFlow(HomeMetrics())
@@ -68,6 +74,7 @@ class HomeViewModel(
 
     private var userInfo: UserBO = UserBO()
     private var posProfiles: List<POSProfileSimpleBO> = emptyList()
+    private var lastInventoryProfile: String? = null
 
     init {
         viewModelScope.launch {
@@ -82,6 +89,13 @@ class HomeViewModel(
             isCashboxOpen().collectLatest {
                 if (it && _syncSettings.value.syncOnStartup) {
                     startInitialSync()
+                }
+                if (it) {
+                    val profile = contextManager.getContext()?.profileName
+                    if (!profile.isNullOrBlank() && profile != lastInventoryProfile) {
+                        lastInventoryProfile = profile
+                        syncManager.syncInventory(force = true)
+                    }
                 }
             }
         }
@@ -105,7 +119,7 @@ class HomeViewModel(
         executeUseCase(
             action = {
                 if (sessionRefresher.ensureValidSession()) {
-                    syncManager.fullSync()
+                    syncManager.fullSync(force = false)
                 }
             },
             exceptionHandler = { it.printStackTrace() })
@@ -115,7 +129,7 @@ class HomeViewModel(
         executeUseCase(
             action = {
                 if (sessionRefresher.ensureValidSession()) {
-                    syncManager.fullSync()
+                    syncManager.fullSync(force = true)
                 }
             },
             exceptionHandler = { it.printStackTrace() })

@@ -26,6 +26,7 @@ interface IInvoiceLocalSource {
     suspend fun markAsFailed(invoiceName: String)
     suspend fun getPendingSyncInvoices(): List<SalesInvoiceWithItemsAndPayments>
     suspend fun countAllPendingSync(): Int
+    suspend fun countAllInvoices(): Int
     suspend fun getOldestItem(): SalesInvoiceEntity?
     suspend fun deleteByInvoiceId(name: String)
     suspend fun softDeleteByInvoiceId(name: String)
@@ -105,6 +106,8 @@ class InvoiceLocalSource(
     override suspend fun getOldestItem(): SalesInvoiceEntity? = salesInvoiceDao.getOldestItem()
 
     override suspend fun countAllPendingSync(): Int = salesInvoiceDao.countAllSyncPending()
+
+    override suspend fun countAllInvoices(): Int = salesInvoiceDao.countAll()
 
     override suspend fun deleteByInvoiceId(name: String) =
         salesInvoiceDao.deleteInvoiceWithChildren(name)

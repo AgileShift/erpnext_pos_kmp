@@ -83,7 +83,7 @@ class SettingsViewModel(
     }
 
     fun onSyncNow() {
-        viewModelScope.launch { syncManager.fullSync() }
+        viewModelScope.launch { syncManager.fullSync(force = true) }
     }
 
     fun setAutoSync(enabled: Boolean) {
@@ -96,6 +96,10 @@ class SettingsViewModel(
 
     fun setWifiOnly(enabled: Boolean) {
         viewModelScope.launch { syncPreferences.setWifiOnly(enabled) }
+    }
+
+    fun setUseTtl(enabled: Boolean) {
+        viewModelScope.launch { syncPreferences.setUseTtl(enabled) }
     }
 
     fun setTaxesIncluded(enabled: Boolean) {

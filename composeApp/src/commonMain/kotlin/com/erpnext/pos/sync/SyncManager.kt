@@ -46,7 +46,8 @@ import kotlin.time.ExperimentalTime
 
 interface ISyncManager {
     val state: StateFlow<SyncState>
-    fun fullSync(ttlHours: Int = SyncTTL.DEFAULT_TTL_HOURS)
+    fun fullSync(ttlHours: Int = SyncTTL.DEFAULT_TTL_HOURS, force: Boolean = false)
+    fun syncInventory(force: Boolean = false)
 }
 
 class SyncManager(
@@ -75,7 +76,15 @@ class SyncManager(
 
     private val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
     private var syncSettingsCache =
-        SyncSettings(autoSync = true, syncOnStartup = true, wifiOnly = false, lastSyncAt = null)
+        SyncSettings(
+            autoSync = true,
+            syncOnStartup = true,
+            wifiOnly = false,
+            lastSyncAt = null,
+            useTtl = false
+        )
+    private var lastSyncAttemptAt: Long? = null
+    private val minSyncIntervalMillis = 2 * 60 * 1000L
 
     private val _state = MutableStateFlow<SyncState>(SyncState.IDLE)
     override val state: StateFlow<SyncState> = _state.asStateFlow()
@@ -86,7 +95,7 @@ class SyncManager(
     }
 
     @OptIn(ExperimentalTime::class)
-    override fun fullSync(ttlHours: Int) {
+    override fun fullSync(ttlHours: Int, force: Boolean) {
         if (_state.value is SyncState.SYNCING) return
 
         if (!cashBoxManager.cashboxState.value) {
@@ -94,6 +103,21 @@ class SyncManager(
             _state.value = SyncState.IDLE
             return
         }
+        val now = Clock.System.now().toEpochMilliseconds()
+        if (!force) {
+            val lastAttempt = lastSyncAttemptAt
+            if (lastAttempt != null && now - lastAttempt < minSyncIntervalMillis) {
+                AppLogger.info("SyncManager.fullSync skipped: within min interval")
+                return
+            }
+            if (syncSettingsCache.useTtl &&
+                !SyncTTL.isExpired(syncSettingsCache.lastSyncAt, ttlHours)
+            ) {
+                AppLogger.info("SyncManager.fullSync skipped: TTL not expired")
+                return
+            }
+        }
+        lastSyncAttemptAt = now
 
         /* TODO: Agregar POS Profiles con sus detalles, esto lo vamos a remover en la v2
             Porque los perfiles ya vendran en el initial data y solo los que pertenecen al usuario
@@ -307,6 +331,56 @@ class SyncManager(
                 _state.value = SyncState.ERROR("Error durante la sincronización: ${e.message}")
             } finally {
                 delay(5000)
+                _state.value = SyncState.IDLE
+            }
+        }
+    }
+
+    @OptIn(ExperimentalTime::class)
+    override fun syncInventory(force: Boolean) {
+        if (_state.value is SyncState.SYNCING) return
+        if (!cashBoxManager.cashboxState.value) {
+            AppLogger.info("SyncManager.syncInventory skipped: cashbox is closed")
+            return
+        }
+        val now = Clock.System.now().toEpochMilliseconds()
+        if (!force) {
+            val lastAttempt = lastSyncAttemptAt
+            if (lastAttempt != null && now - lastAttempt < minSyncIntervalMillis) {
+                AppLogger.info("SyncManager.syncInventory skipped: within min interval")
+                return
+            }
+        }
+        lastSyncAttemptAt = now
+
+        scope.launch {
+            AppSentry.breadcrumb("SyncManager.syncInventory start")
+            val isOnline = networkMonitor.isConnected.first()
+            if (!isOnline) {
+                AppLogger.warn("SyncManager.syncInventory aborted: offline")
+                return@launch
+            }
+            if (!sessionRefresher.ensureValidSession()) {
+                AppLogger.warn("SyncManager.syncInventory aborted: invalid session")
+                return@launch
+            }
+            try {
+                _state.value = SyncState.SYNCING("Inventario...")
+                val result = inventoryRepo.sync().filter { it !is Resource.Loading }.first()
+                if (result is Resource.Error) {
+                    val error = Exception(
+                        result.message ?: "Error al sincronizar inventario"
+                    )
+                    AppSentry.capture(error, "Sync: inventory only failed")
+                    AppLogger.warn("Sync: inventory only failed", error)
+                }
+                _state.value = SyncState.SUCCESS
+            } catch (e: Exception) {
+                AppSentry.capture(e, "SyncManager.syncInventory failed")
+                AppLogger.warn("SyncManager.syncInventory failed", e)
+                _state.value = SyncState.ERROR("Error al sincronizar inventario: ${e.message}")
+            } finally {
+                delay(2000)
                 _state.value = SyncState.IDLE
             }
         }

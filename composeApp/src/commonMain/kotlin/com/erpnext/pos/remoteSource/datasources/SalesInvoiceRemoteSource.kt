@@ -10,7 +10,9 @@ import com.erpnext.pos.remoteSource.api.APIService
 import com.erpnext.pos.remoteSource.dto.PaymentEntryDto
 import com.erpnext.pos.remoteSource.dto.SalesInvoiceDto
 import com.erpnext.pos.remoteSource.paging.InvoiceRemoteMediator
+import com.erpnext.pos.remoteSource.sdk.ERPDocType
 import com.erpnext.pos.utils.isLikelyPosInvoiceName
+import com.erpnext.pos.utils.isLikelySalesInvoiceName
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.onStart
 
@@ -21,8 +23,32 @@ class SalesInvoiceRemoteSource(
 ) {
 
     suspend fun fetchInvoices(
-        posProfile: String
-    ): List<SalesInvoiceDto> = apiService.fetchAllInvoices(posProfile)
+        posProfile: String,
+        recentPaidOnly: Boolean = false
+    ): List<SalesInvoiceDto> =
+        apiService.fetchAllInvoicesCombined(posProfile, recentPaidOnly = recentPaidOnly)
+
+    suspend fun fetchStockForItems(
+        warehouse: String,
+        itemCodes: List<String>
+    ): Map<String, Double> = apiService.fetchStockForItems(warehouse, itemCodes)
+
+    suspend fun findExistingInvoiceName(
+        isPos: Boolean,
+        posOpeningEntry: String?,
+        postingDate: String?,
+        customer: String?,
+        grandTotal: Double?
+    ): String? {
+        val doctype = if (isPos) "POS Invoice" else ERPDocType.SalesInvoice.path
+        return apiService.findInvoiceBySignature(
+            doctype = doctype,
+            posOpeningEntry = posOpeningEntry,
+            postingDate = postingDate,
+            customer = customer,
+            grandTotal = grandTotal
+        )
+    }
 
     suspend fun fetchInvoice(name: String): SalesInvoiceDto? =
         runCatching { apiService.getSalesInvoiceByName(name) }.getOrNull()
@@ -31,9 +57,19 @@ class SalesInvoiceRemoteSource(
         runCatching { apiService.getPOSInvoiceByName(name) }.getOrNull()
 
     suspend fun fetchInvoiceSmart(name: String, isPosHint: Boolean? = null): SalesInvoiceDto? {
-        val likelyPos = isPosHint == true || isLikelyPosInvoiceName(name)
-        return if (likelyPos) fetchPosInvoice(name) ?: fetchInvoice(name)
-        else fetchInvoice(name) ?: fetchPosInvoice(name)
+        val likelyPosName = isLikelyPosInvoiceName(name)
+        val likelySalesName = isLikelySalesInvoiceName(name)
+        val resolvedPos = when {
+            likelyPosName -> true
+            likelySalesName -> false
+            isPosHint != null -> isPosHint
+            else -> null
+        }
+        return when (resolvedPos) {
+            true -> fetchPosInvoice(name) ?: fetchInvoice(name)
+            false -> fetchInvoice(name) ?: fetchPosInvoice(name)
+            null -> fetchInvoice(name) ?: fetchPosInvoice(name)
+        }
     }
     //apiService.getInvoiceDetail(name, baseUrl, headers)
 

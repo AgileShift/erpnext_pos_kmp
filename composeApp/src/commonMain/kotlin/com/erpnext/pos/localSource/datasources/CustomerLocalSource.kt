@@ -29,6 +29,7 @@ interface ICustomerLocalSource {
     suspend fun getOutstandingInvoiceNames(): List<String>
     suspend fun getInvoiceByName(invoiceName: String): SalesInvoiceWithItemsAndPayments?
     suspend fun getInvoiceNamesMissingItems(profileId: String, limit: Int = 50): List<String>
+    suspend fun countInvoices(): Int
     suspend fun deleteInvoiceById(invoiceName: String)
     suspend fun updateSummary(
         customerId: String,
@@ -116,6 +117,10 @@ class CustomerLocalSource(private val dao: CustomerDao, private val invoiceDao: 
         limit: Int
     ): List<String> {
         return invoiceDao.getInvoiceNamesMissingItems(profileId, limit)
+    }
+
+    override suspend fun countInvoices(): Int {
+        return invoiceDao.countAll()
     }
 
     override suspend fun deleteInvoiceById(invoiceName: String) {

@@ -13,6 +13,7 @@ class SyncPreferences(
         private const val syncOnStartupKey = "sync_on_startup"
         private const val wifiOnlyKey = "sync_wifi_only"
         private const val lastSyncAtKey = "sync_last_at"
+        private const val useTtlKey = "sync_use_ttl"
     }
 
     private fun observeBoolean(key: String, default: Boolean) =
@@ -25,9 +26,10 @@ class SyncPreferences(
         observeBoolean(autoSyncKey, true),
         observeBoolean(syncOnStartupKey, true),
         observeBoolean(wifiOnlyKey, false),
-        observeLong(lastSyncAtKey)
-    ) { autoSync, syncOnStartup, wifiOnly, lastSyncAt ->
-        SyncSettings(autoSync, syncOnStartup, wifiOnly, lastSyncAt)
+        observeLong(lastSyncAtKey),
+        observeBoolean(useTtlKey, false)
+    ) { autoSync, syncOnStartup, wifiOnly, lastSyncAt, useTtl ->
+        SyncSettings(autoSync, syncOnStartup, wifiOnly, lastSyncAt, useTtl)
     }
 
     suspend fun setAutoSync(enabled: Boolean) {
@@ -45,11 +47,16 @@ class SyncPreferences(
     suspend fun setLastSyncAt(epochMillis: Long) {
         store.saveRaw(lastSyncAtKey, epochMillis.toString())
     }
+
+    suspend fun setUseTtl(enabled: Boolean) {
+        store.saveRaw(useTtlKey, enabled.toString())
+    }
 }
 
 data class SyncSettings(
     val autoSync: Boolean,
     val syncOnStartup: Boolean,
     val wifiOnly: Boolean,
-    val lastSyncAt: Long?
+    val lastSyncAt: Long?,
+    val useTtl: Boolean
 )

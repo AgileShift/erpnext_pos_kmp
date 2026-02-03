@@ -122,6 +122,7 @@ class CustomerViewModel(
     val historyActionBusy = _historyActionBusy.asStateFlow()
 
     private var historyCustomerId: String? = null
+    private var outstandingCustomerId: String? = null
 
     private var paymentModeDetails: Map<String, ModeOfPaymentEntity> = emptyMap()
     private var customersJob: kotlinx.coroutines.Job? = null
@@ -241,6 +242,8 @@ class CustomerViewModel(
 
     fun onRefresh() {
         fetchAllCustomers(searchFilter, selectedState)
+        historyCustomerId?.let { loadInvoiceHistory(it) }
+        outstandingCustomerId?.let { loadOutstandingInvoices(it) }
     }
 
     fun checkCredit(customerId: String, amount: Double, onResult: (Boolean, String) -> Unit) {
@@ -265,6 +268,7 @@ class CustomerViewModel(
         successMessage: String? = null,
         errorMessage: String? = null
     ) {
+        outstandingCustomerId = customerId
         _invoicesState.value = CustomerInvoicesState.Loading
 
         viewModelScope.launch {
@@ -338,6 +342,7 @@ class CustomerViewModel(
     }
 
     fun clearOutstandingInvoices() {
+        outstandingCustomerId = null
         _invoicesState.value = CustomerInvoicesState.Idle
         _paymentState.value = buildPaymentState()
     }

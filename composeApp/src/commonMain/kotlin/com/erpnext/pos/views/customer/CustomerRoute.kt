@@ -2,6 +2,7 @@ package com.erpnext.pos.views.customer
 
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -28,6 +29,10 @@ fun CustomerRoute(
     val navManager: NavigationManager = koinInject()
     val salesFlowStore: SalesFlowContextStore = koinInject()
     val actions = rememberCustomerActions(coordinator, navManager, salesFlowStore)
+
+    LaunchedEffect(Unit) {
+        actions.fetchAll()
+    }
 
     CustomerListScreen(
         state = uiState,

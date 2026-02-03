@@ -83,7 +83,8 @@ fun SettingsScreenPreview() {
                 autoSync = true,
                 syncOnStartup = true,
                 wifiOnly = false,
-                lastSyncAt = null
+                lastSyncAt = null,
+                useTtl = false
             ),
             syncState = SyncState.IDLE,
             language = AppLanguage.Spanish,
@@ -158,6 +159,7 @@ fun PosSettingsScreen(
                         onAutoSyncChanged = action.onAutoSyncChanged,
                         onSyncOnStartupChanged = action.onSyncOnStartupChanged,
                         onWifiOnlyChanged = action.onWifiOnlyChanged,
+                        onUseTtlChanged = action.onUseTtlChanged,
                         onSyncNow = action.onSyncNow,
                     )
 
@@ -483,6 +485,7 @@ private fun SyncSection(
     onAutoSyncChanged: (Boolean) -> Unit,
     onSyncOnStartupChanged: (Boolean) -> Unit,
     onWifiOnlyChanged: (Boolean) -> Unit,
+    onUseTtlChanged: (Boolean) -> Unit,
     onSyncNow: () -> Unit,
 ) {
     val strings = LocalAppStrings.current
@@ -491,9 +494,11 @@ private fun SyncSection(
             autoSync = syncSettings.autoSync,
             syncOnStartup = syncSettings.syncOnStartup,
             wifiOnly = syncSettings.wifiOnly,
+            useTtl = syncSettings.useTtl,
             onAutoSyncChanged = onAutoSyncChanged,
             onSyncOnStartupChanged = onSyncOnStartupChanged,
             onWifiOnlyChanged = onWifiOnlyChanged,
+            onUseTtlChanged = onUseTtlChanged,
         )
         Spacer(modifier = Modifier.height(12.dp))
         Text(
@@ -528,9 +533,11 @@ private fun SyncTogglesRow(
     autoSync: Boolean,
     syncOnStartup: Boolean,
     wifiOnly: Boolean,
+    useTtl: Boolean,
     onAutoSyncChanged: (Boolean) -> Unit,
     onSyncOnStartupChanged: (Boolean) -> Unit,
-    onWifiOnlyChanged: (Boolean) -> Unit
+    onWifiOnlyChanged: (Boolean) -> Unit,
+    onUseTtlChanged: (Boolean) -> Unit
 ) {
     val strings = LocalAppStrings.current
 
@@ -549,6 +556,11 @@ private fun SyncTogglesRow(
             label = strings.settings.wifiOnlyLabel,
             checked = wifiOnly,
             onCheckedChange = onWifiOnlyChanged
+        )
+        SettingToggle(
+            label = strings.settings.useTtlLabel,
+            checked = useTtl,
+            onCheckedChange = onUseTtlChanged
         )
     }
 }

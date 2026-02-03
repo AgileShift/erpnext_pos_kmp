@@ -23,7 +23,13 @@ data class HomeAction(
     val sync: () -> Unit = {},
     val syncState: StateFlow<SyncState> = MutableStateFlow(SyncState.IDLE),
     val syncSettings: StateFlow<SyncSettings> = MutableStateFlow(
-        SyncSettings(autoSync = true, syncOnStartup = true, wifiOnly = false, lastSyncAt = null)
+        SyncSettings(
+            autoSync = true,
+            syncOnStartup = true,
+            wifiOnly = false,
+            lastSyncAt = null,
+            useTtl = false
+        )
     ),
     val homeMetrics: StateFlow<HomeMetrics> = MutableStateFlow(HomeMetrics()),
     val openingState: StateFlow<CashboxOpeningProfileState> =

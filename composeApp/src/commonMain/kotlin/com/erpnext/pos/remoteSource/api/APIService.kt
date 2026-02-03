@@ -96,6 +96,26 @@ class APIService(
 ) {
     private companion object {
         const val DEFAULT_INVOICE_SYNC_DAYS = 90
+        const val RECENT_PAID_INVOICE_DAYS = 7
+    }
+
+    private suspend fun fetchInvoicesByStatus(
+        doctype: String,
+        posProfile: String,
+        startDate: String,
+        statuses: List<String>
+    ): List<SalesInvoiceDto> {
+        val url = authStore.getCurrentSite()
+        return client.getERPList(
+            doctype = doctype,
+            fields = ERPDocType.SalesInvoice.getFields(),
+            baseUrl = url,
+            filters = filters {
+                "pos_profile" eq posProfile
+                "posting_date" gte startDate
+                "status" `in` statuses
+            }
+        )
     }
     suspend fun getCompanyInfo(): List<CompanyDto> {
         val url = authStore.getCurrentSite()
@@ -733,7 +753,8 @@ class APIService(
         limit: Int? = null,
     ): List<WarehouseItemDto> {
         val url = authStore.getCurrentSite() ?: throw Exception("URL Invalida")
-        require(!warehouse.isNullOrEmpty()) { "Bodega es requerida para la carga de productos" }
+        val warehouseId = warehouse?.trim().orEmpty()
+        require(warehouseId.isNotEmpty()) { "Bodega es requerida para la carga de productos" }
 
         val chunkSize = 50
         val pageSize = limit ?: 50
@@ -742,16 +763,14 @@ class APIService(
         suspend fun fetchBins(batchOffset: Int, batchLimit: Int): List<BinDto> {
             return client.getERPList<BinDto>(
                 doctype = ERPDocType.Bin.path,
-                fields = ERPDocType.Bin.getFields(),
+                fields = listOf("item_code", "warehouse", "stock_uom", "actual_qty", "valuation_rate"),
                 limit = batchLimit,
                 offset = batchOffset,
                 orderBy = "item_code",
                 baseUrl = url
             ) {
-                if (warehouse.isNotEmpty())
-                    "warehouse" eq warehouse
+                "warehouse" eq warehouseId
                 "actual_qty" gt 0.0
-                "valuation_rate" gt 0.0
             }
         }
 
@@ -760,12 +779,25 @@ class APIService(
             if (itemCodes.isEmpty()) return emptyList()
 
             // Fetch Items batch con fields extras (chunked to avoid URL length limits)
+            val itemFields = listOf(
+                "item_code",
+                "item_name",
+                "item_group",
+                "description",
+                "brand",
+                "image",
+                "stock_uom",
+                "standard_rate",
+                "is_stock_item",
+                "is_sales_item",
+                "disabled"
+            )
             val items = itemCodes
                 .chunked(chunkSize)
                 .flatMap { codes ->
                     client.getERPList<ItemDto>(
                         doctype = ERPDocType.Item.path,
-                        fields = ERPDocType.Item.getFields(),
+                        fields = itemFields,
                         limit = codes.size,
                         baseUrl = url
                     ) {
@@ -795,9 +827,12 @@ class APIService(
             val priceCurrency = prices.associate { it.itemCode to it.currency }
 
             // Combina todo en WarehouseItemDto
-            return bins.map { bin ->
+            return bins.mapNotNull { bin ->
                 val item = itemMap[bin.itemCode]
-                    ?: throw FrappeException("Item no encontrado: ${bin.itemCode}")
+                if (item == null) {
+                    AppLogger.warn("Inventario: item no encontrado ${bin.itemCode}")
+                    return@mapNotNull null
+                }
                 val price = priceMap[bin.itemCode] ?: item.standardRate
                 val currency = priceCurrency[bin.itemCode] ?: ""
                 val barcode = ""  // No en JSON; "" default
@@ -841,6 +876,52 @@ class APIService(
             currentOffset += pageSize
         }
         return results
+    }
+
+    suspend fun fetchStockForItems(
+        warehouse: String,
+        itemCodes: List<String>
+    ): Map<String, Double> {
+        if (itemCodes.isEmpty()) return emptyMap()
+        val url = authStore.getCurrentSite() ?: throw Exception("URL Invalida")
+        val bins = client.getERPList<BinDto>(
+            doctype = ERPDocType.Bin.path,
+            fields = listOf("item_code", "warehouse", "stock_uom", "actual_qty"),
+            limit = itemCodes.size,
+            baseUrl = url
+        ) {
+            "warehouse" eq warehouse
+            "item_code" `in` itemCodes
+        }
+        return bins.associate { it.itemCode to it.actualQty }
+    }
+
+    suspend fun findInvoiceBySignature(
+        doctype: String,
+        posOpeningEntry: String?,
+        postingDate: String?,
+        customer: String?,
+        grandTotal: Double?
+    ): String? {
+        if (posOpeningEntry.isNullOrBlank() ||
+            postingDate.isNullOrBlank() ||
+            customer.isNullOrBlank() ||
+            grandTotal == null
+        ) return null
+        val url = authStore.getCurrentSite()
+        return client.getERPList<SalesInvoiceDto>(
+            doctype = doctype,
+            fields = listOf("name", "docstatus"),
+            baseUrl = url,
+            limit = 1,
+            orderBy = "modified desc",
+            filters = filters {
+                "pos_opening_entry" eq posOpeningEntry
+                "posting_date" eq postingDate
+                "customer" eq customer
+                "grand_total" eq grandTotal
+            }
+        ).firstOrNull()?.name
     }
 
     val json = Json {
@@ -918,6 +999,26 @@ class APIService(
         return client.getERPList(
             ERPDocType.SalesInvoice.path,
             ERPDocType.SalesInvoice.getFields(),
+            baseUrl = url,
+            orderBy = "posting_date desc",
+            filters = filters {
+                "customer" eq customer
+                "pos_profile" eq posProfile
+                "posting_date" gte startDate
+                "posting_date" lte endDate
+            })
+    }
+
+    suspend fun fetchCustomerPosInvoicesForPeriod(
+        customer: String,
+        startDate: String,
+        endDate: String,
+        posProfile: String
+    ): List<SalesInvoiceDto> {
+        val url = authStore.getCurrentSite()
+        return client.getERPList(
+            doctype = "POS Invoice",
+            fields = ERPDocType.SalesInvoice.getFields(),
             baseUrl = url,
             orderBy = "posting_date desc",
             filters = filters {
@@ -1022,6 +1123,138 @@ class APIService(
             AppLogger.warn("fetchAllInvoices failed", e)
             emptyList()
         }
+    }
+
+    suspend fun fetchAllInvoicesSmart(
+        posProfile: String,
+        paidDays: Int = RECENT_PAID_INVOICE_DAYS
+    ): List<SalesInvoiceDto> {
+        return try {
+            val today = DateTimeProvider.todayDate()
+            val startDate = DateTimeProvider.addDays(today, -DEFAULT_INVOICE_SYNC_DAYS)
+            val paidStartDate = DateTimeProvider.addDays(today, -paidDays)
+            val openStatuses = listOf(
+                "Draft",
+                "Unpaid",
+                "Overdue",
+                "Partly Paid",
+                "Overdue and Discounted",
+                "Unpaid and Discounted",
+                "Partly Paid and Discounted",
+                "Cancelled",
+                "Credit Note Issued",
+                "Return"
+            )
+            val openInvoices = fetchInvoicesByStatus(
+                doctype = ERPDocType.SalesInvoice.path,
+                posProfile = posProfile,
+                startDate = startDate,
+                statuses = openStatuses
+            )
+            val paidInvoices = fetchInvoicesByStatus(
+                doctype = ERPDocType.SalesInvoice.path,
+                posProfile = posProfile,
+                startDate = paidStartDate,
+                statuses = listOf("Paid")
+            )
+            (openInvoices + paidInvoices).distinctBy { it.name }
+        } catch (e: Exception) {
+            e.printStackTrace()
+            AppSentry.capture(e, "fetchAllInvoicesSmart failed")
+            AppLogger.warn("fetchAllInvoicesSmart failed", e)
+            emptyList()
+        }
+    }
+
+    suspend fun fetchAllPosInvoices(
+        posProfile: String, offset: Int = 0, limit: Int = Int.MAX_VALUE
+    ): List<SalesInvoiceDto> {
+        return try {
+            val url = authStore.getCurrentSite()
+            val today = DateTimeProvider.todayDate()
+            val startDate = DateTimeProvider.addDays(today, -DEFAULT_INVOICE_SYNC_DAYS)
+            client.getERPList(
+                doctype = "POS Invoice",
+                fields = ERPDocType.SalesInvoice.getFields(),
+                offset = offset,
+                limit = limit,
+                baseUrl = url,
+                filters = filters {
+                    "pos_profile" eq posProfile
+                    "posting_date" gte startDate
+                    "status" `in` listOf(
+                        "Draft",
+                        "Unpaid",
+                        "Overdue",
+                        "Paid",
+                        "Partly Paid",
+                        "Overdue and Discounted",
+                        "Unpaid and Discounted",
+                        "Partly Paid and Discounted",
+                        "Cancelled",
+                        "Credit Note Issued",
+                        "Return"
+                    )
+                })
+        } catch (e: Exception) {
+            e.printStackTrace()
+            AppSentry.capture(e, "fetchAllPosInvoices failed")
+            AppLogger.warn("fetchAllPosInvoices failed", e)
+            emptyList()
+        }
+    }
+
+    suspend fun fetchAllPosInvoicesSmart(
+        posProfile: String,
+        paidDays: Int = RECENT_PAID_INVOICE_DAYS
+    ): List<SalesInvoiceDto> {
+        return try {
+            val today = DateTimeProvider.todayDate()
+            val startDate = DateTimeProvider.addDays(today, -DEFAULT_INVOICE_SYNC_DAYS)
+            val paidStartDate = DateTimeProvider.addDays(today, -paidDays)
+            val openStatuses = listOf(
+                "Draft",
+                "Unpaid",
+                "Overdue",
+                "Partly Paid",
+                "Overdue and Discounted",
+                "Unpaid and Discounted",
+                "Partly Paid and Discounted",
+                "Cancelled",
+                "Credit Note Issued",
+                "Return"
+            )
+            val openInvoices = fetchInvoicesByStatus(
+                doctype = "POS Invoice",
+                posProfile = posProfile,
+                startDate = startDate,
+                statuses = openStatuses
+            )
+            val paidInvoices = fetchInvoicesByStatus(
+                doctype = "POS Invoice",
+                posProfile = posProfile,
+                startDate = paidStartDate,
+                statuses = listOf("Paid")
+            )
+            (openInvoices + paidInvoices).distinctBy { it.name }
+        } catch (e: Exception) {
+            e.printStackTrace()
+            AppSentry.capture(e, "fetchAllPosInvoicesSmart failed")
+            AppLogger.warn("fetchAllPosInvoicesSmart failed", e)
+            emptyList()
+        }
+    }
+
+    suspend fun fetchAllInvoicesCombined(
+        posProfile: String,
+        recentPaidOnly: Boolean = false,
+        paidDays: Int = RECENT_PAID_INVOICE_DAYS
+    ): List<SalesInvoiceDto> {
+        val sales = if (recentPaidOnly) fetchAllInvoicesSmart(posProfile, paidDays)
+        else fetchAllInvoices(posProfile)
+        val pos = if (recentPaidOnly) fetchAllPosInvoicesSmart(posProfile, paidDays)
+        else fetchAllPosInvoices(posProfile)
+        return (sales + pos).distinctBy { it.name }
     }
 
     suspend fun fetchPaymentEntries(fromDate: String): List<PaymentEntryDto> {

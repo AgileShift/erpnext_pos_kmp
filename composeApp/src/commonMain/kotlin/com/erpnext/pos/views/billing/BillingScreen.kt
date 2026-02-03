@@ -119,10 +119,15 @@ fun BillingScreen(
     val uiSnackbar = snackbar.snackbar.collectAsState().value
     val colors = MaterialTheme.colorScheme
     var step by rememberSaveable { mutableStateOf(LabCheckoutStep.Cart) }
-    val successMessage = (state as? BillingState.Success)?.successMessage
-    val successDialogMessage = (state as? BillingState.Success)?.successDialogMessage
-    val successDialogInvoice = (state as? BillingState.Success)?.successDialogInvoice
-    val successDialogId = (state as? BillingState.Success)?.successDialogId ?: 0L
+    val successState = when (state) {
+        is BillingState.Success -> state
+        is BillingState.Error -> state.previous
+        else -> null
+    }
+    val successMessage = successState?.successMessage
+    val successDialogMessage = successState?.successDialogMessage
+    val successDialogInvoice = successState?.successDialogInvoice
+    val successDialogId = successState?.successDialogId ?: 0L
     var popupMessage by rememberSaveable { mutableStateOf<String?>(null) }
     var popupInvoice by rememberSaveable { mutableStateOf<String?>(null) }
     val topBarController = LocalTopBarController.current
@@ -134,18 +139,18 @@ fun BillingScreen(
                     state.paymentLines.isNotEmpty())
 
     // Si salimos de Success, regresamos al primer paso.
-    LaunchedEffect(state) {
-        if (state !is BillingState.Success) {
+    LaunchedEffect(state, successState) {
+        if (successState == null) {
             popupMessage = null
             popupInvoice = null
             action.onClearSuccessMessage()
             step = LabCheckoutStep.Cart
-        } else if (state.selectedCustomer == null && state.cartItems.isEmpty() && step != LabCheckoutStep.Cart) {
+        } else if (successState.selectedCustomer == null && successState.cartItems.isEmpty() && step != LabCheckoutStep.Cart) {
             step = LabCheckoutStep.Cart
         }
     }
 
-    LaunchedEffect(successDialogId) {
+    LaunchedEffect(successDialogId, successDialogMessage, successMessage) {
         if (successDialogId == 0L) return@LaunchedEffect
         val message = (successDialogMessage ?: successMessage)
             ?.takeIf { it.isNotBlank() } ?: return@LaunchedEffect

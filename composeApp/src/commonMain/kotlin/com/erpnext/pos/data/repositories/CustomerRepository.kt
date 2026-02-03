@@ -55,15 +55,13 @@ class CustomerRepository(
             remoteSource.fetchCustomers(territory)
         }, saveFetchResult = { remoteData ->
             val profileId = context.requireContext().profileName
-            val invoices = remoteSource.fetchInvoices(profileId)
-                .map { remoteSource.fetchInvoiceDetail(it) ?: it }
-                .toEntities()
-            localSource.saveInvoices(invoices.map { mergeLocalInvoiceFields(it) })
+            val recentPaidOnly = localSource.countInvoices() > 0
+            val invoices = remoteSource.fetchInvoices(profileId, recentPaidOnly).toEntities()
+            localSource.saveInvoices(invoices.map { normalizeBaseOutstanding(mergeLocalInvoiceFields(it)) })
             backfillMissingInvoiceItems(profileId)
 
             // Fetch all outstanding invoices once
             val allOutstanding = remoteSource.fetchAllOutstandingInvoices(profileId)
-            val outstandingByCustomer = allOutstanding.groupBy { it.customer }
             val remoteOutstandingNames = allOutstanding.mapNotNull { it.name }.toSet()
             val localOutstanding = localSource.getOutstandingInvoiceNames()
             val missingOutstanding = localOutstanding.filterNot { remoteOutstandingNames.contains(it) }
@@ -83,20 +81,15 @@ class CustomerRepository(
                 val contextCompany = context.requireContext().company
                 val entities = remoteData.map { dto ->
                     async {
-                        val customerInvoices = outstandingByCustomer[dto.name] ?: emptyList()
-                        val totalOutstanding = customerInvoices.sumOf { invoice ->
-                            invoice.outstandingAmount ?: (invoice.grandTotal - invoice.paidAmount)
-                        }
                         val resolvedLimit = dto.creditLimitForCompany(contextCompany)
                         val creditLimit = resolvedLimit.creditLimit
-                        val availableCredit = creditLimit?.let { it - totalOutstanding }
-
+                        val availableCredit = creditLimit
                         dto.toEntity(
                             creditLimit = creditLimit,
                             availableCredit = availableCredit,
-                            pendingInvoicesCount = customerInvoices.size,
-                            totalPendingAmount = totalOutstanding,
-                            state = if (totalOutstanding > 0) "Pendientes" else "Sin Pendientes",
+                            pendingInvoicesCount = 0,
+                            totalPendingAmount = 0.0,
+                            state = "Sin Pendientes",
                         )
                     }
                 }.awaitAll()
@@ -130,19 +123,14 @@ class CustomerRepository(
                             .toLong())*/
         }, saveFetchResult = { remoteData ->
             val profileId = context.requireContext().profileName
-            val invoices = remoteSource.fetchInvoices(profileId)
-            val detailed = coroutineScope {
-                invoices.map { dto ->
-                    async { remoteSource.fetchInvoiceDetail(dto) ?: dto }
-                }.awaitAll()
-            }
-            val entities = detailed.toEntities()
-            localSource.saveInvoices(entities.map { mergeLocalInvoiceFields(it) })
+            val recentPaidOnly = localSource.countInvoices() > 0
+            val invoices = remoteSource.fetchInvoices(profileId, recentPaidOnly)
+            val entities = invoices.toEntities()
+            localSource.saveInvoices(entities.map { normalizeBaseOutstanding(mergeLocalInvoiceFields(it)) })
             backfillMissingInvoiceItems(profileId)
 
             // Fetch all outstanding invoices once
             val allOutstanding = remoteSource.fetchAllOutstandingInvoices(profileId)
-            val outstandingByCustomer = allOutstanding.groupBy { it.customer }
             val remoteOutstandingNames = allOutstanding.mapNotNull { it.name }.toSet()
             val localOutstanding = localSource.getOutstandingInvoiceNames()
             val missingOutstanding = localOutstanding.filterNot { remoteOutstandingNames.contains(it) }
@@ -161,23 +149,19 @@ class CustomerRepository(
             coroutineScope {
                 val entities = remoteData.map { dto ->
                     async {
-                        val customerInvoices = outstandingByCustomer[dto.name] ?: emptyList()
-                        val totalOutstanding = customerInvoices.sumOf { invoice ->
-                            invoice.outstandingAmount ?: (invoice.grandTotal - invoice.paidAmount)
-                        }
                         val creditLimit = dto.creditLimits
                         val available =
                             if (creditLimit.isNotEmpty()) (creditLimit.firstOrNull()?.creditLimit
-                                ?: 0.0) - totalOutstanding else 0.0
+                                ?: 0.0) else 0.0
                         //val address = remoteSource.getCustomerAddress(dto.name)
                         //val contact = remoteSource.getCustomerContact(dto.name)
 
                         dto.toEntity(
                             creditLimit = if (creditLimit.isNotEmpty()) creditLimit[0].creditLimit else 0.0,
                             availableCredit = available, //availableCredit,
-                            pendingInvoicesCount = customerInvoices.size,
-                            totalPendingAmount = totalOutstanding,
-                            state = if (totalOutstanding > 0) "Pendientes" else "Sin Pendientes",
+                            pendingInvoicesCount = 0,
+                            totalPendingAmount = 0.0,
+                            state = "Sin Pendientes",
                             //address = null, //address ?: "",
                             //contact = null
                         )
@@ -276,10 +260,23 @@ class CustomerRepository(
         val missing = localSource.getInvoiceNamesMissingItems(profileId, limit)
         if (missing.isEmpty()) return
         missing.forEach { invoiceName ->
-            val remote = remoteSource.fetchInvoiceByName(invoiceName) ?: return@forEach
-            val merged = mergeLocalInvoiceFields(remote.toEntity())
+            val remote = remoteSource.fetchInvoiceByNameSmart(invoiceName) ?: return@forEach
+            val merged = normalizeBaseOutstanding(mergeLocalInvoiceFields(remote.toEntity()))
             localSource.saveInvoices(listOf(merged))
         }
+    }
+
+    private fun normalizeBaseOutstanding(
+        payload: SalesInvoiceWithItemsAndPayments
+    ): SalesInvoiceWithItemsAndPayments {
+        val companyCurrency = context.getContext()?.companyCurrency ?: return payload
+        val partyCurrency = payload.invoice.partyAccountCurrency ?: return payload
+        if (!partyCurrency.equals(companyCurrency, ignoreCase = true)) return payload
+        val invoice = payload.invoice.copy(
+            baseOutstandingAmount = payload.invoice.outstandingAmount,
+            basePaidAmount = payload.invoice.paidAmount
+        )
+        return payload.copy(invoice = invoice)
     }
 
     suspend fun fetchInvoicesForCustomerPeriod(

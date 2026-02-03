@@ -169,7 +169,8 @@ fun AppNavigation() {
             autoSync = true,
             syncOnStartup = true,
             wifiOnly = false,
-            lastSyncAt = null
+            lastSyncAt = null,
+            useTtl = false
         )
     )
     val isOnline by networkMonitor.isConnected.collectAsState(false)
@@ -409,7 +410,7 @@ fun AppNavigation() {
                                                         com.erpnext.pos.utils.view.SnackbarPosition.Bottom
                                                     )
                                                 } else {
-                                                    scope.launch { syncManager.fullSync() }
+                                                    scope.launch { syncManager.fullSync(force = true) }
                                                 }
                                             },
                                             tint = dbTint,
