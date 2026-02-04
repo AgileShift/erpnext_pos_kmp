@@ -176,21 +176,9 @@ class PaymentHandler(
         val isOnline = networkMonitor.isConnected.first()
         val remoteEntryByReference = mutableMapOf<String, String?>()
 
-        if (createdInvoice != null && isOnline) {
-            val resolvedInvoice = if (!createdInvoice.name.isNullOrBlank()) {
-                if (isPosInvoice) {
-                    runCatching { api.getPOSInvoiceByName(createdInvoice.name) }
-                        .getOrElse { createdInvoice }
-                } else {
-                    runCatching { api.getSalesInvoiceByName(createdInvoice.name) }
-                        .getOrElse { createdInvoice }
-                }
-            } else {
-                createdInvoice
-            }
-            val resolvedOutstanding = resolvedInvoice.outstandingAmount
-                ?: (resolvedInvoice.grandTotal - (resolvedInvoice.paidAmount ?: 0.0))
-            val allowPosShortcut = isPosInvoice && resolvedOutstanding <= 0.0001
+        if (createdInvoice != null) {
+            val resolvedInvoice = createdInvoice
+            val allowPosShortcut = isPosInvoice && (receivableAmounts?.outstandingRc ?: 0.0) <= 0.0001
             resolvedInvoiceCurrency = normalizeCurrency(resolvedInvoice.currency)
             resolvedReceivableCurrency = normalizeCurrency(resolvedInvoice.partyAccountCurrency)
 
@@ -253,7 +241,7 @@ class PaymentHandler(
                 remotePaymentsSucceeded = true
             }
 
-            if (!allowPosShortcut) {
+            if (isOnline && !allowPosShortcut) {
                 val paidFrom = resolvedInvoice.debitTo
                 var remotePaymentFailed = false
                 val cacheForReceivable = if (resolvedInvoiceCurrency.equals(
@@ -268,6 +256,7 @@ class PaymentHandler(
 
                 paymentLines.forEach { line ->
                     if (remainingOutstandingRc != null && remainingOutstandingRc <= 0.0) return@forEach
+                    val outstandingForEntry = remainingOutstandingRc?.coerceAtLeast(0.0)
                     val paidToCurrency = normalizeCurrency(
                         paymentModeDetails[line.modeOfPayment]?.currency
                     )
@@ -285,7 +274,7 @@ class PaymentHandler(
 
                     val adjustedLine = capPaymentLineToOutstanding(
                         line = line,
-                        remainingOutstandingRc = remainingOutstandingRc,
+                        remainingOutstandingRc = outstandingForEntry,
                         receivableCurrency = resolvedReceivableCurrency,
                         paidToCurrency = paidToCurrency,
                         invoiceCurrency = resolvedInvoiceCurrency,
@@ -303,7 +292,7 @@ class PaymentHandler(
                         postingDate = postingDate,
                         invoiceId = resolvedInvoice.name ?: invoiceNameForLocal,
                         invoiceTotalRc = receivableAmounts.totalRc,
-                        outstandingRc = remainingOutstandingRc ?: resolvedInvoice.grandTotal,
+                        outstandingRc = outstandingForEntry ?: resolvedInvoice.grandTotal,
                         paidFromAccount = paidFrom,
                         partyAccountCurrency = resolvedReceivableCurrency,
                         invoiceCurrency = resolvedInvoiceCurrency,
@@ -336,9 +325,6 @@ class PaymentHandler(
                     remotePaymentsSucceeded = true
                 }
             }
-        } else if (createdInvoice != null && isPosInvoice) {
-            // Offline or no invoice name: do not mark as remote success.
-            remotePaymentsSucceeded = false
         }
 
         val localOutstandingRc = receivableAmounts?.outstandingRc

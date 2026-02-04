@@ -15,7 +15,7 @@ fun formatCurrency(code: String, amount: Double): String {
     val rounded0 = roundToCurrency(display, 0)
     val isWhole = abs(rounded2 - rounded0) < 0.005
     val decimals = when (normalized) {
-        "USD", "NIO" -> if (isWhole) 0 else 2
+        "USD", "NIO" -> 2
         else -> 2
     }
     return symbol + " " + "%.${decimals}f".format(display)

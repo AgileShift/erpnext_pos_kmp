@@ -3817,9 +3817,7 @@ private fun filterPendingInvoices(invoices: List<SalesInvoiceBO>): List<SalesInv
 private fun formatAmountRawForCurrency(amount: Double, currency: String): String {
     val normalized = normalizeCurrency(currency)
     val rounded = roundForCurrency(amount, normalized)
-    val decimals = if (normalized.equals("USD", ignoreCase = true) ||
-        normalized.equals("NIO", ignoreCase = true)
-    ) 0 else 2
+    val decimals = 2
     return formatDoubleToString(rounded, decimals)
 }
 

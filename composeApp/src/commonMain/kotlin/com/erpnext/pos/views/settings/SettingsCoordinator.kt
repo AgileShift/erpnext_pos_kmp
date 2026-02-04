@@ -21,6 +21,8 @@ class SettingsCoordinator(
     fun onInventoryAlertsEnabledChanged(enabled: Boolean) = viewModel.setInventoryAlertsEnabled(enabled)
     fun onInventoryAlertTimeChanged(hour: Int, minute: Int) =
         viewModel.setInventoryAlertTime(hour, minute)
+    fun onSalesTargetChanged(value: Double) = viewModel.setSalesTargetMonthly(value)
+    fun onSyncSalesTarget() = viewModel.syncSalesTargetFromERPNext()
 
     fun onSelect(s: String) {}
 

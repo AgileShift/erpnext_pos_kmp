@@ -65,11 +65,13 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.erpnext.pos.domain.models.POSProfileSimpleBO
 import com.erpnext.pos.domain.models.UserBO
+import com.erpnext.pos.localization.LocalAppStrings
 import com.erpnext.pos.localSource.preferences.SyncSettings
 import com.erpnext.pos.sync.SyncState
 import com.erpnext.pos.utils.datetimeNow
 import com.erpnext.pos.utils.toCurrencySymbol
 import com.erpnext.pos.utils.formatDoubleToString
+import com.erpnext.pos.utils.formatCurrency
 import com.erpnext.pos.utils.view.SnackbarController
 import com.erpnext.pos.utils.view.SnackbarPosition
 import com.erpnext.pos.utils.view.SnackbarType
@@ -310,6 +312,7 @@ fun HomeScreen(
 @Composable
 private fun BISection(metrics: HomeMetrics) {
     val currencyMetrics = metrics.currencyMetrics
+    val strings = LocalAppStrings.current
     Column(
         modifier = Modifier.fillMaxWidth()
             .verticalScroll(rememberScrollState(), true),
@@ -348,6 +351,18 @@ private fun BISection(metrics: HomeMetrics) {
         }
 
         HeroAndActionsRow(metric = selectedMetric, symbol = symbol)
+
+        metrics.salesTarget?.let { target ->
+            SalesTargetCard(
+                target = target,
+                title = strings.settings.salesTargetTitle,
+                monthlyLabel = strings.settings.salesTargetMonthlyLabel,
+                weeklyLabel = strings.settings.salesTargetWeeklyLabel,
+                dailyLabel = strings.settings.salesTargetDailyLabel,
+                staleHint = strings.settings.salesTargetConversionStaleHint,
+                missingHint = strings.settings.salesTargetConversionMissingHint
+            )
+        }
 
         KpiRow(metric = selectedMetric, symbol = symbol)
 
@@ -622,6 +637,93 @@ private fun KpiRow(metric: CurrencyHomeMetric, symbol: String) {
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun SalesTargetCard(
+    target: SalesTargetMetric,
+    title: String,
+    monthlyLabel: String,
+    weeklyLabel: String,
+    dailyLabel: String,
+    staleHint: String,
+    missingHint: String
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(18.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+
+            TargetLine(
+                label = monthlyLabel,
+                baseCurrency = target.baseCurrency,
+                baseAmount = target.monthlyBase,
+                secondaryCurrency = target.secondaryCurrency,
+                secondaryAmount = target.monthlySecondary
+            )
+            TargetLine(
+                label = weeklyLabel,
+                baseCurrency = target.baseCurrency,
+                baseAmount = target.weeklyBase,
+                secondaryCurrency = target.secondaryCurrency,
+                secondaryAmount = target.weeklySecondary
+            )
+            TargetLine(
+                label = dailyLabel,
+                baseCurrency = target.baseCurrency,
+                baseAmount = target.dailyBase,
+                secondaryCurrency = target.secondaryCurrency,
+                secondaryAmount = target.dailySecondary
+            )
+
+            if (target.secondaryCurrency != null && target.monthlySecondary == null) {
+                Text(
+                    text = missingHint,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            } else if (target.conversionStale) {
+                Text(
+                    text = staleHint,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.tertiary
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun TargetLine(
+    label: String,
+    baseCurrency: String,
+    baseAmount: Double,
+    secondaryCurrency: String?,
+    secondaryAmount: Double?
+) {
+    Column(modifier = Modifier.padding(bottom = 10.dp)) {
+        Text(text = label, style = MaterialTheme.typography.bodyMedium)
+        Text(
+            text = formatCurrency(baseCurrency, baseAmount),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.primary
+        )
+        if (secondaryCurrency != null && secondaryAmount != null) {
+            Text(
+                text = formatCurrency(secondaryCurrency, secondaryAmount),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
     }
 }

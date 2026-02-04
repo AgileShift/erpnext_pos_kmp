@@ -754,7 +754,15 @@ class BillingViewModel(
                 val discountPercent = discountInfo.percent?.takeIf { it > 0.0 }
 
                 val isCreditSale = current.isCreditSale
-                val paymentLines = current.paymentLines
+                val resolvedPaymentLines = current.paymentLines.map { line ->
+                    paymentHandler.resolvePaymentLine(
+                        line = line,
+                        invoiceCurrencyInput = invoiceCurrency,
+                        paymentModeDetails = paymentModeDetails,
+                        exchangeRateByCurrency = current.exchangeRateByCurrency,
+                        round = { value -> roundForCurrency(value, invoiceCurrency) }
+                    ).line
+                }
 
                 val postingDate = DateTimeProvider.todayDate()
                 val dueDate = resolveDueDate(isCreditSale, postingDate, current.selectedPaymentTerm)
@@ -764,8 +772,8 @@ class BillingViewModel(
                 val rounding = resolveRoundedTotal(totals.total, invoiceCurrency)
                 val paymentStatus = resolvePaymentStatus(
                     total = rounding.roundedTotal,
-                    paymentLines = paymentLines,
-                    round = ::roundToCurrency
+                    paymentLines = resolvedPaymentLines,
+                    round = { value -> roundForCurrency(value, invoiceCurrency) }
                 )
                 val currencyKey = normalizeCurrency(invoiceCurrency).uppercase()
                 val roundingTolerance = when (currencyKey) {
@@ -773,7 +781,7 @@ class BillingViewModel(
                     "USD" -> 0.01
                     else -> 0.01
                 }
-                val fullyPaid = paymentLines.isNotEmpty() &&
+                val fullyPaid = resolvedPaymentLines.isNotEmpty() &&
                     roundToCurrency(paymentStatus.paidAmount) + roundingTolerance >=
                     roundToCurrency(rounding.roundedTotal)
                 val usePosInvoice = !isCreditSale && paymentStatus.status == "Paid" && fullyPaid
@@ -807,7 +815,7 @@ class BillingViewModel(
                     discountPercent = discountPercent,
                     discountAmount = discountInfo.amount,
                     paymentSchedule = paymentSchedule,
-                    paymentLines = paymentLines,
+                    paymentLines = resolvedPaymentLines,
                     paymentStatus = paymentStatus,
                     invoiceCurrency = invoiceCurrency,
                     rounding = rounding,
@@ -851,7 +859,7 @@ class BillingViewModel(
                 }
 
                 val paymentResult = paymentHandler.registerPayments(
-                    paymentLines = paymentLines,
+                    paymentLines = resolvedPaymentLines,
                     createdInvoice = created,
                     invoiceNameForLocal = invoiceNameForLocal,
                     postingDate = postingDate,
@@ -946,7 +954,7 @@ class BillingViewModel(
                                 }
                             }
 
-                            paymentLines.isNotEmpty() -> {
+                            resolvedPaymentLines.isNotEmpty() -> {
                                 val label = created.name ?: localInvoiceName
                                 "Factura $label creada. Pagos guardados localmente."
                             }
@@ -958,7 +966,7 @@ class BillingViewModel(
                         },
                         successDialogMessage = when {
                             created == null -> "Venta guardada localmente."
-                            paymentLines.isNotEmpty() -> "Tu pago se ha realizado con exito"
+                            resolvedPaymentLines.isNotEmpty() -> "Tu pago se ha realizado con exito"
                             current.isCreditSale -> "Venta a credito registrada"
                             else -> "Venta registrada correctamente"
                         },

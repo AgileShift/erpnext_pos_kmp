@@ -13,6 +13,7 @@ import com.erpnext.pos.remoteSource.dto.CustomerCreateDto
 import com.erpnext.pos.remoteSource.dto.AddressCreateDto
 import com.erpnext.pos.remoteSource.dto.AddressListDto
 import com.erpnext.pos.remoteSource.dto.AddressUpdateDto
+import com.erpnext.pos.remoteSource.dto.CompanySalesTargetDto
 import com.erpnext.pos.remoteSource.dto.ContactCreateDto
 import com.erpnext.pos.remoteSource.dto.DocNameResponseDto
 import com.erpnext.pos.remoteSource.dto.DeliveryChargeDto
@@ -126,6 +127,19 @@ class APIService(
             name = "",
             baseUrl = url,
         )
+    }
+
+    suspend fun getCompanyMonthlySalesTarget(companyId: String): Double? {
+        val url = authStore.getCurrentSite()
+        val rows = client.getERPList<CompanySalesTargetDto>(
+            doctype = ERPDocType.Company.path,
+            fields = listOf("name", "monthly_sales_target"),
+            limit = 1,
+            baseUrl = url
+        ) {
+            "name" eq companyId
+        }
+        return rows.firstOrNull()?.monthlySalesTarget
     }
 
     suspend fun getStockSettings(): List<StockSettingsDto> {

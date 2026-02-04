@@ -58,6 +58,7 @@ import com.erpnext.pos.localSource.preferences.SyncSettings
 import com.erpnext.pos.localization.AppLanguage
 import com.erpnext.pos.localization.LocalAppStrings
 import com.erpnext.pos.sync.SyncState
+import com.erpnext.pos.utils.formatCurrency
 import com.erpnext.pos.utils.toErpDateTime
 import com.erpnext.pos.utils.view.SnackbarController
 import com.erpnext.pos.utils.view.SnackbarPosition
@@ -94,7 +95,16 @@ fun SettingsScreenPreview() {
             themeMode = AppThemeMode.System,
             inventoryAlertsEnabled = true,
             inventoryAlertHour = 9,
-            inventoryAlertMinute = 0
+            inventoryAlertMinute = 0,
+            salesTargetMonthly = 12000.0,
+            salesTargetWeekly = 2775.0,
+            salesTargetDaily = 400.0,
+            salesTargetBaseCurrency = "USD",
+            salesTargetSecondaryCurrency = "NIO",
+            salesTargetConvertedMonthly = 450000.0,
+            salesTargetConvertedWeekly = 104000.0,
+            salesTargetConvertedDaily = 15000.0,
+            salesTargetConversionStale = false
         ),
         POSSettingAction()
     )
@@ -123,6 +133,7 @@ fun PosSettingsScreen(
             when (state) {
                 is POSSettingState.Success -> {
                     var showAlertTimeDialog by remember { mutableStateOf(false) }
+                    var showSalesTargetDialog by remember { mutableStateOf(false) }
 
                     if (showAlertTimeDialog) {
                         InventoryAlertTimeDialog(
@@ -132,6 +143,17 @@ fun PosSettingsScreen(
                             onConfirm = { hour, minute ->
                                 showAlertTimeDialog = false
                                 action.onInventoryAlertTimeChanged(hour, minute)
+                            }
+                        )
+                    }
+                    if (showSalesTargetDialog) {
+                        SalesTargetDialog(
+                            initialValue = state.salesTargetMonthly,
+                            baseCurrency = state.salesTargetBaseCurrency,
+                            onDismiss = { showSalesTargetDialog = false },
+                            onConfirm = { value ->
+                                showSalesTargetDialog = false
+                                action.onSalesTargetChanged(value)
                             }
                         )
                     }
@@ -223,6 +245,64 @@ fun PosSettingsScreen(
                             onClick = { showAlertTimeDialog = true },
                             enabled = state.inventoryAlertsEnabled
                         )
+                    }
+
+                    SettingSection(
+                        title = strings.settings.salesTargetTitle,
+                        description = strings.settings.salesTargetHint
+                    ) {
+                        SettingItem(
+                            label = strings.settings.salesTargetEditLabel,
+                            value = formatCurrency(
+                                state.salesTargetBaseCurrency,
+                                state.salesTargetMonthly
+                            ),
+                            onClick = { showSalesTargetDialog = true }
+                        )
+                        TargetRow(
+                            label = strings.settings.salesTargetMonthlyLabel,
+                            baseCurrency = state.salesTargetBaseCurrency,
+                            baseAmount = state.salesTargetMonthly,
+                            secondaryCurrency = state.salesTargetSecondaryCurrency,
+                            secondaryAmount = state.salesTargetConvertedMonthly
+                        )
+                        TargetRow(
+                            label = strings.settings.salesTargetWeeklyLabel,
+                            baseCurrency = state.salesTargetBaseCurrency,
+                            baseAmount = state.salesTargetWeekly,
+                            secondaryCurrency = state.salesTargetSecondaryCurrency,
+                            secondaryAmount = state.salesTargetConvertedWeekly
+                        )
+                        TargetRow(
+                            label = strings.settings.salesTargetDailyLabel,
+                            baseCurrency = state.salesTargetBaseCurrency,
+                            baseAmount = state.salesTargetDaily,
+                            secondaryCurrency = state.salesTargetSecondaryCurrency,
+                            secondaryAmount = state.salesTargetConvertedDaily
+                        )
+                        if (state.salesTargetSecondaryCurrency != null &&
+                            state.salesTargetConvertedMonthly == null
+                        ) {
+                            Text(
+                                text = strings.settings.salesTargetConversionMissingHint,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        } else if (state.salesTargetConversionStale) {
+                            Text(
+                                text = strings.settings.salesTargetConversionStaleHint,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.tertiary
+                            )
+                        }
+                        Button(
+                            onClick = action.onSyncSalesTarget,
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.primary
+                            )
+                        ) {
+                            Text(strings.settings.salesTargetSyncLabel)
+                        }
                     }
 
                     SettingSection(title = strings.settings.hardwareTitle) {
@@ -617,6 +697,67 @@ private fun InventoryAlertTimeDialog(
 
 private fun formatTime(hour: Int, minute: Int): String =
     "${hour.coerceIn(0, 23).toString().padStart(2, '0')}:${minute.coerceIn(0, 59).toString().padStart(2, '0')}"
+
+@Composable
+private fun TargetRow(
+    label: String,
+    baseCurrency: String,
+    baseAmount: Double,
+    secondaryCurrency: String?,
+    secondaryAmount: Double?
+) {
+    Column(modifier = Modifier.padding(vertical = 6.dp)) {
+        Text(label, style = MaterialTheme.typography.bodyMedium)
+        Text(
+            text = formatCurrency(baseCurrency, baseAmount),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.primary
+        )
+        if (secondaryCurrency != null && secondaryAmount != null) {
+            Text(
+                text = formatCurrency(secondaryCurrency, secondaryAmount),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+@Composable
+private fun SalesTargetDialog(
+    initialValue: Double,
+    baseCurrency: String,
+    onDismiss: () -> Unit,
+    onConfirm: (Double) -> Unit
+) {
+    val strings = LocalAppStrings.current
+    var input by remember { mutableStateOf(initialValue.toString()) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(strings.settings.salesTargetEditLabel) },
+        text = {
+            OutlinedTextField(
+                value = input,
+                onValueChange = { input = it },
+                label = { Text(baseCurrency) },
+                singleLine = true
+            )
+        },
+        confirmButton = {
+            Button(onClick = {
+                val value = input.toDoubleOrNull() ?: 0.0
+                onConfirm(value)
+            }) {
+                Text(strings.settings.inventoryAlertsTimeSaveLabel)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(strings.settings.inventoryAlertsTimeCancelLabel)
+            }
+        }
+    )
+}
 
 @Composable
 private fun SyncSection(

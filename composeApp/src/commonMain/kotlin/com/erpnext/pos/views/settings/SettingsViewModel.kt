@@ -1,3 +1,5 @@
+@file:OptIn(ExperimentalTime::class)
+
 package com.erpnext.pos.views.settings
 
 import AppColorTheme
@@ -10,15 +12,24 @@ import com.erpnext.pos.localSource.preferences.SyncPreferences
 import com.erpnext.pos.localSource.preferences.SyncSettings
 import com.erpnext.pos.localSource.preferences.ThemePreferences
 import com.erpnext.pos.localization.AppLanguage
+import com.erpnext.pos.data.repositories.SalesTargetRepository
+import com.erpnext.pos.localSource.datasources.ExchangeRateLocalSource
 import com.erpnext.pos.sync.SyncManager
 import com.erpnext.pos.sync.SyncState
 import com.erpnext.pos.views.CashBoxManager
 import com.erpnext.pos.views.POSContext
 import com.erpnext.pos.utils.notifications.configureInventoryAlertWorker
+import com.erpnext.pos.utils.normalizeCurrency
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.number
+import kotlinx.datetime.plus
+import kotlinx.datetime.toLocalDateTime
+import kotlin.time.Clock
+import kotlin.time.ExperimentalTime
 
 class SettingsViewModel(
     private val cashBoxManager: CashBoxManager,
@@ -26,7 +37,9 @@ class SettingsViewModel(
     private val syncManager: SyncManager,
     private val generalPreferences: GeneralPreferences,
     private val languagePreferences: LanguagePreferences,
-    private val themePreferences: ThemePreferences
+    private val themePreferences: ThemePreferences,
+    private val salesTargetRepository: SalesTargetRepository,
+    private val exchangeRateLocalSource: ExchangeRateLocalSource
 ) : BaseViewModel() {
 
     private val _uiState: MutableStateFlow<POSSettingState> =
@@ -49,7 +62,8 @@ class SettingsViewModel(
                 generalPreferences.allowNegativeStock,
                 generalPreferences.inventoryAlertsEnabled,
                 generalPreferences.inventoryAlertHour,
-                generalPreferences.inventoryAlertMinute
+                generalPreferences.inventoryAlertMinute,
+                generalPreferences.salesTargetMonthly
             ) { args: Array<Any?> ->
                 val ctx = args[0] as POSContext
                 val syncSettings = args[1] as SyncSettings
@@ -65,6 +79,34 @@ class SettingsViewModel(
                 val inventoryAlertsEnabled = args[11] as Boolean
                 val inventoryAlertHour = args[12] as Int
                 val inventoryAlertMinute = args[13] as Int
+                val salesTargetMonthly = args[14] as Double
+
+                val baseCurrency = normalizeCurrency(ctx.companyCurrency)
+                val secondaryCurrency = normalizeCurrency(ctx.currency)
+                    .takeIf { it != baseCurrency }
+                val now = Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault())
+                val daysInMonth = daysInMonth(now.year, now.month.number)
+                val weeksInMonth = weeksInMonth(now.year, now.month.number, daysInMonth)
+                val targetWeekly = if (weeksInMonth > 0) {
+                    salesTargetMonthly / weeksInMonth.toDouble()
+                } else {
+                    0.0
+                }
+                val targetDaily = if (daysInMonth > 0) {
+                    salesTargetMonthly / daysInMonth.toDouble()
+                } else {
+                    0.0
+                }
+                val rate = if (secondaryCurrency != null) {
+                    resolveLocalRate(baseCurrency, secondaryCurrency)
+                } else {
+                    null
+                }
+                val rateValue = rate?.rate
+                val stale = rate?.let { isRateStale(it.lastSyncedAt) } ?: false
+                val convertedMonthly = rateValue?.let { salesTargetMonthly * it }
+                val convertedWeekly = rateValue?.let { targetWeekly * it }
+                val convertedDaily = rateValue?.let { targetDaily * it }
                 POSSettingState.Success(
                     settings = POSSettingBO(
                         company = ctx.company,
@@ -84,7 +126,16 @@ class SettingsViewModel(
                     themeMode = themeMode,
                     inventoryAlertsEnabled = inventoryAlertsEnabled,
                     inventoryAlertHour = inventoryAlertHour,
-                    inventoryAlertMinute = inventoryAlertMinute
+                    inventoryAlertMinute = inventoryAlertMinute,
+                    salesTargetMonthly = salesTargetMonthly,
+                    salesTargetWeekly = targetWeekly,
+                    salesTargetDaily = targetDaily,
+                    salesTargetBaseCurrency = baseCurrency,
+                    salesTargetSecondaryCurrency = secondaryCurrency,
+                    salesTargetConvertedMonthly = convertedMonthly,
+                    salesTargetConvertedWeekly = convertedWeekly,
+                    salesTargetConvertedDaily = convertedDaily,
+                    salesTargetConversionStale = stale
                 )
             }.collect { state ->
                 _uiState.value = state
@@ -143,6 +194,19 @@ class SettingsViewModel(
         }
     }
 
+    fun setSalesTargetMonthly(value: Double) {
+        viewModelScope.launch { generalPreferences.setSalesTargetMonthly(value) }
+    }
+
+    fun syncSalesTargetFromERPNext() {
+        viewModelScope.launch {
+            val ctx = cashBoxManager.getContext() ?: return@launch
+            val target = salesTargetRepository.fetchMonthlyCompanyTarget(ctx.company)
+                ?: return@launch
+            generalPreferences.setSalesTargetMonthly(target)
+        }
+    }
+
     fun setLanguage(language: AppLanguage) {
         viewModelScope.launch { languagePreferences.setLanguage(language) }
     }
@@ -160,5 +224,52 @@ class SettingsViewModel(
         val hour = generalPreferences.getInventoryAlertHour()
         val minute = generalPreferences.getInventoryAlertMinute()
         configureInventoryAlertWorker(enabled, hour, minute)
+    }
+
+    private fun daysInMonth(year: Int, month: Int): Int {
+        return when (month) {
+            1, 3, 5, 7, 8, 10, 12 -> 31
+            4, 6, 9, 11 -> 30
+            2 -> if (isLeapYear(year)) 29 else 28
+            else -> 30
+        }
+    }
+
+    private fun weeksInMonth(year: Int, month: Int, daysInMonth: Int): Int {
+        if (daysInMonth <= 0) return 0
+        val firstDay = kotlinx.datetime.LocalDate(year, month, 1)
+        var mondays = 0
+        for (i in 0 until daysInMonth) {
+            val day = firstDay.plus(kotlinx.datetime.DatePeriod(days = i))
+            if (day.dayOfWeek == kotlinx.datetime.DayOfWeek.MONDAY) {
+                mondays++
+            }
+        }
+        return if (firstDay.dayOfWeek == kotlinx.datetime.DayOfWeek.MONDAY) mondays else mondays + 1
+    }
+
+    private suspend fun resolveLocalRate(from: String, to: String): RateInfo? {
+        val direct = exchangeRateLocalSource.getRate(from, to)
+        if (direct != null) {
+            return RateInfo(direct.rate, direct.lastSyncedAt)
+        }
+        val reverse = exchangeRateLocalSource.getRate(to, from) ?: return null
+        if (reverse.rate == 0.0) return null
+        return RateInfo(1 / reverse.rate, reverse.lastSyncedAt)
+    }
+
+    private fun isRateStale(lastSyncedAt: Long): Boolean {
+        val now = Clock.System.now().toEpochMilliseconds()
+        val sevenDaysMs = 7 * 24 * 60 * 60 * 1000L
+        return now - lastSyncedAt > sevenDaysMs
+    }
+
+    private data class RateInfo(
+        val rate: Double,
+        val lastSyncedAt: Long
+    )
+
+    private fun isLeapYear(year: Int): Boolean {
+        return (year % 4 == 0 && year % 100 != 0) || (year % 400 == 0)
     }
 }

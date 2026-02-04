@@ -20,7 +20,8 @@ data class HomeMetrics(
     val topProductsByMargin: List<TopProductMarginMetric> = emptyList(),
     val weekSeries: List<DailyMetric> = emptyList(),
     val currencyMetrics: List<CurrencyHomeMetric> = emptyList(),
-    val inventoryAlerts: List<InventoryAlert> = emptyList()
+    val inventoryAlerts: List<InventoryAlert> = emptyList(),
+    val salesTarget: SalesTargetMetric? = null
 )
 
 data class DailyMetric(
@@ -77,3 +78,15 @@ enum class InventoryAlertStatus {
     CRITICAL,
     LOW
 }
+
+data class SalesTargetMetric(
+    val baseCurrency: String,
+    val secondaryCurrency: String?,
+    val monthlyBase: Double,
+    val weeklyBase: Double,
+    val dailyBase: Double,
+    val monthlySecondary: Double?,
+    val weeklySecondary: Double?,
+    val dailySecondary: Double?,
+    val conversionStale: Boolean
+)

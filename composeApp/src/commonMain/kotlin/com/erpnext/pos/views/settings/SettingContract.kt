@@ -29,7 +29,16 @@ sealed class POSSettingState {
         val themeMode: AppThemeMode,
         val inventoryAlertsEnabled: Boolean,
         val inventoryAlertHour: Int,
-        val inventoryAlertMinute: Int
+        val inventoryAlertMinute: Int,
+        val salesTargetMonthly: Double,
+        val salesTargetWeekly: Double,
+        val salesTargetDaily: Double,
+        val salesTargetBaseCurrency: String,
+        val salesTargetSecondaryCurrency: String?,
+        val salesTargetConvertedMonthly: Double?,
+        val salesTargetConvertedWeekly: Double?,
+        val salesTargetConvertedDaily: Double?,
+        val salesTargetConversionStale: Boolean
     ) : POSSettingState()
     data class Error(val message: String) : POSSettingState()
 }
@@ -42,6 +51,8 @@ data class POSSettingAction(
     val onCashDrawerEnabledChanged: (Boolean) -> Unit = {},
     val onInventoryAlertsEnabledChanged: (Boolean) -> Unit = {},
     val onInventoryAlertTimeChanged: (Int, Int) -> Unit = { _, _ -> },
+    val onSalesTargetChanged: (Double) -> Unit = {},
+    val onSyncSalesTarget: () -> Unit = {},
     val onSelect: (String) -> Unit = {},
     val onSyncNow: () -> Unit = {},
     val onAutoSyncChanged: (Boolean) -> Unit = {},

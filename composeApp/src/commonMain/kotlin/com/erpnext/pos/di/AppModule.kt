@@ -23,6 +23,7 @@ import com.erpnext.pos.data.repositories.PaymentTermsRepository
 import com.erpnext.pos.data.repositories.POSProfileRepository
 import com.erpnext.pos.data.repositories.PaymentEntryRepository
 import com.erpnext.pos.data.repositories.SalesInvoiceRepository
+import com.erpnext.pos.data.repositories.SalesTargetRepository
 import com.erpnext.pos.data.repositories.TerritoryRepository
 import com.erpnext.pos.data.repositories.PosOpeningRepository
 import com.erpnext.pos.data.repositories.UserRepository
@@ -534,7 +535,8 @@ val appModule = module {
             homeRefreshController = get(),
             sessionRefresher = get(),
             syncContextProvider = get(),
-            generalPreferences = get()
+            generalPreferences = get(),
+            exchangeRateLocalSource = get()
         )
     }
     single<IUserRepository> { UserRepository(get(), get()) }
@@ -606,6 +608,8 @@ val appModule = module {
             get(),
             get(),
             get(),
+            get(),
+            get(),
             get()
         )
     }
@@ -647,6 +651,7 @@ val appModule = module {
     single { LoadHomeMetricsUseCase(get()) }
     single { InventoryAlertRepository(get(), get(named("apiService")), get(), get()) }
     single { LoadInventoryAlertsUseCase(get()) }
+    single { SalesTargetRepository(get(named("apiService")), get(), get()) }
     single { GetCompanyInfoUseCase(get()) }
     //endregion
 }

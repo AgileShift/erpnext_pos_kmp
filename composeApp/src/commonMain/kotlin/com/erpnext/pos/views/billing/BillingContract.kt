@@ -7,7 +7,7 @@ import com.erpnext.pos.domain.models.POSCurrencyOption
 import com.erpnext.pos.domain.models.POSPaymentModeOption
 import com.erpnext.pos.domain.models.PaymentTermBO
 import com.erpnext.pos.domain.models.SourceDocumentOption
-import com.erpnext.pos.utils.roundToCurrency
+import com.erpnext.pos.utils.roundForCurrency
 import com.erpnext.pos.views.salesflow.SalesFlowContext
 import com.erpnext.pos.views.salesflow.SalesFlowSource
 
@@ -78,9 +78,12 @@ sealed interface BillingState {
         val isFinalizingSale: Boolean = false
     ) : BillingState {
         fun recalculatePaymentTotals(): Success {
-            val newPaidAmountBase = roundToCurrency(paymentLines.sumOf { it.baseAmount })
-            val newBalanceDueBase = roundToCurrency((total - newPaidAmountBase).coerceAtLeast(0.0))
-            val newChangeDueBase = roundToCurrency((newPaidAmountBase - total).coerceAtLeast(0.0))
+            val code = currency
+            val newPaidAmountBase = roundForCurrency(paymentLines.sumOf { it.baseAmount }, code)
+            val newBalanceDueBase =
+                roundForCurrency((total - newPaidAmountBase).coerceAtLeast(0.0), code)
+            val newChangeDueBase =
+                roundForCurrency((newPaidAmountBase - total).coerceAtLeast(0.0), code)
             return copy(
                 paidAmountBase = newPaidAmountBase,
                 balanceDueBase = newBalanceDueBase,

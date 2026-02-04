@@ -2061,8 +2061,8 @@ data class MoneyUiSpec(
 
 private fun moneyUiSpec(currencyCode: String, fallbackDecimals: Int = 2): MoneyUiSpec {
     return when (val code = currencyCode.trim().uppercase()) {
-        "NIO" -> MoneyUiSpec(code = code, decimals = 0, groupSep = ',', decimalSep = '.')
-        "USD" -> MoneyUiSpec(code = code, decimals = 0, groupSep = ',', decimalSep = '.')
+        "NIO" -> MoneyUiSpec(code = code, decimals = 2, groupSep = ',', decimalSep = '.')
+        "USD" -> MoneyUiSpec(code = code, decimals = 2, groupSep = ',', decimalSep = '.')
         "EUR" -> MoneyUiSpec(code = code, decimals = 2, groupSep = '.', decimalSep = ',')
         else -> MoneyUiSpec(
             code = code, decimals = fallbackDecimals, groupSep = ',', decimalSep = '.'
