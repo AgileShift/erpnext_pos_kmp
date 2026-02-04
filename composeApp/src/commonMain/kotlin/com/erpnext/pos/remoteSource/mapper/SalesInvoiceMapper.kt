@@ -118,9 +118,9 @@ fun SalesInvoiceDto.toEntity(): SalesInvoiceWithItemsAndPayments {
     }
 
     val paidResolved = when {
-        paidAmount > 0.0001 -> paidAmount
+        (paidAmount ?: 0.0) > 0.0001 -> paidAmount ?: 0.0
         payments.isNotEmpty() -> payments.sumOf { it.amount }
-        else -> paidAmount
+        else -> paidAmount ?: 0.0
     }
     val rawOutstanding = outstandingAmount ?: (grandTotal - paidResolved)
     val shouldDefaultOutstanding =

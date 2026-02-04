@@ -71,6 +71,7 @@ import com.erpnext.pos.utils.QuickActions.customerQuickActions
 import com.erpnext.pos.utils.formatDoubleToString
 import com.erpnext.pos.utils.formatCurrency
 import com.erpnext.pos.utils.normalizeCurrency
+import com.erpnext.pos.utils.roundForCurrency
 import com.erpnext.pos.utils.resolveInvoiceDisplayAmounts
 import com.erpnext.pos.utils.resolveCompanyToTargetAmount
 import com.erpnext.pos.utils.resolvePaymentCurrencyForMode
@@ -1965,6 +1966,7 @@ private fun CustomerOutstandingInvoicesContent(
     var selectedInvoice by remember { mutableStateOf<SalesInvoiceBO?>(null) }
     var amountRaw by remember { mutableStateOf("") }
     var amountValue by remember { mutableStateOf(0.0) }
+    var lastAutoAmount by remember { mutableStateOf<String?>(null) }
     val companyCurrency = normalizeCurrency(paymentState.baseCurrency)
     val invoiceCurrency = normalizeCurrency(selectedInvoice?.currency)
     val paymentModes = paymentState.paymentModes
@@ -2005,44 +2007,53 @@ private fun CustomerOutstandingInvoicesContent(
         cachedRates,
         selectedInvoice?.conversionRate
     ) {
-        rateBaseToPos = if (selectedCurrency.isBlank()) {
-            1.0
-        } else if (!selectedCurrency.equals(companyCurrency, ignoreCase = true)) {
-            cachedRates[selectedCurrency]
-                ?: selectedInvoice?.conversionRate?.takeIf { it > 0.0 }
-                    ?.let { rate ->
-                        if (selectedCurrency.equals(invoiceCurrency, ignoreCase = true)) {
-                            1.0 / rate
-                        } else {
-                            null
-                        }
-                    }
-                ?: cashboxManager.resolveExchangeRateBetween(
-                    fromCurrency = companyCurrency,
-                    toCurrency = selectedCurrency,
-                    allowNetwork = false
-                )
-        } else {
-            1.0
-        }
+        rateBaseToPos = resolveBaseToSelectedRate(
+            cashboxManager = cashboxManager,
+            companyCurrency = companyCurrency,
+            selectedCurrency = selectedCurrency,
+            invoiceCurrency = invoiceCurrency,
+            invoiceConversionRate = selectedInvoice?.conversionRate,
+            cachedRates = cachedRates
+        )
     }
 
-    val conversionError = rateBaseToPos == null
-
-    // Base amount = monto pagado convertido a moneda base de la factura
-    val baseAmount = rateBaseToPos?.let { rate ->
-        if (rate <= 0.0) 0.0 else amountValue / rate
-    } ?: 0.0
-
-    val outstandingBase = bd(
-        selectedInvoice?.baseOutstandingAmount ?: selectedInvoice?.outstandingAmount ?: 0.0
-    ).toDouble(0)
-    val outstandingInSelectedCurrency = rateBaseToPos?.let { rate ->
-        bd(outstandingBase * rate).toDouble(0)
+    val invoiceConversionRate = selectedInvoice?.conversionRate?.takeIf { it > 0.0 }
+    val receivableCurrency =
+        normalizeCurrency(selectedInvoice?.partyAccountCurrency ?: companyCurrency)
+    val outstandingRc = selectedInvoice?.outstandingAmount ?: 0.0
+    val rateInvToRc = invoiceConversionRate
+    val baseToPosRate = rateBaseToPos
+    val outstandingInSelectedCurrency = when {
+        selectedCurrency.equals(receivableCurrency, ignoreCase = true) -> outstandingRc
+        selectedCurrency.equals(invoiceCurrency, ignoreCase = true) -> {
+            com.erpnext.pos.utils.CurrencyService.amountReceivableToInvoice(
+                outstandingRc,
+                rateInvToRc
+            )
+        }
+        receivableCurrency.equals(companyCurrency, ignoreCase = true) && baseToPosRate != null ->
+            outstandingRc * baseToPosRate
+        else -> {
+            cachedRates[selectedCurrency]?.let { outstandingRc * it }
+        }
+    }
+    val conversionError = outstandingInSelectedCurrency == null
+    LaunchedEffect(selectedInvoice?.invoiceId, selectedCurrency, outstandingInSelectedCurrency) {
+        val resolvedOutstanding = outstandingInSelectedCurrency ?: return@LaunchedEffect
+        if (amountRaw.isBlank() || amountRaw == lastAutoAmount) {
+            val formatted = formatAmountRawForCurrency(resolvedOutstanding, selectedCurrency)
+            amountRaw = formatted
+            lastAutoAmount = formatted
+        }
     }
     val changeDue =
         outstandingInSelectedCurrency?.let { (amountValue - it).coerceAtLeast(0.0) } ?: 0.0
     val amountToApply = outstandingInSelectedCurrency?.let { minOf(amountValue, it) } ?: amountValue
+    val amountInCompanyCurrency = when {
+        selectedCurrency.equals(companyCurrency, ignoreCase = true) -> amountValue
+        baseToPosRate != null && baseToPosRate > 0.0 -> amountValue / baseToPosRate
+        else -> null
+    }
     val isSubmitEnabled =
         !paymentState.isSubmitting && selectedInvoice?.invoiceId?.isNotBlank() == true && selectedMode.isNotBlank() && amountValue > 0.0 && !conversionError
 
@@ -2124,17 +2135,22 @@ private fun CustomerOutstandingInvoicesContent(
                                 Column(
                                     modifier = Modifier.fillMaxWidth().clickable {
                                         selectedInvoice = invoice
-                                        val amountToUse = if (selectedCurrency.equals(
-                                                display.companyCurrency,
-                                                ignoreCase = true
+                                            val amountToUse = if (selectedCurrency.equals(
+                                                    display.companyCurrency,
+                                                    ignoreCase = true
+                                                )
+                                            ) {
+                                                display.outstandingCompany
+                                            } else {
+                                                display.outstandingInvoice
+                                            }
+                                            val formatted = formatAmountRawForCurrency(
+                                                amountToUse,
+                                                selectedCurrency
                                             )
-                                        ) {
-                                            display.outstandingCompany
-                                        } else {
-                                            display.outstandingInvoice
-                                        }
-                                        amountRaw = amountToUse.toString()
-                                    }.padding(12.dp),
+                                            amountRaw = formatted
+                                            lastAutoAmount = formatted
+                                        }.padding(12.dp),
                                     verticalArrangement = Arrangement.spacedBy(6.dp)
                                 ) {
                                     Row(
@@ -2189,7 +2205,12 @@ private fun CustomerOutstandingInvoicesContent(
                                                     } else {
                                                         display.outstandingInvoice
                                                     }
-                                                    amountRaw = amountToUse.toString()
+                                                    val formatted = formatAmountRawForCurrency(
+                                                        amountToUse,
+                                                        selectedCurrency
+                                                    )
+                                                    amountRaw = formatted
+                                                    lastAutoAmount = formatted
                                                 })
                                         }
                                     }
@@ -2283,7 +2304,10 @@ private fun CustomerOutstandingInvoicesContent(
                 MoneyTextField(
                     currencyCode = selectedCurrency,
                     rawValue = amountRaw,
-                    onRawValueChange = { amountRaw = it },
+                    onRawValueChange = {
+                        amountRaw = it
+                        lastAutoAmount = null
+                    },
                     label = strings.customer.amountLabel,
                     onAmountChanged = { amountValue = it },
                     supportingText = {
@@ -2294,10 +2318,10 @@ private fun CustomerOutstandingInvoicesContent(
                             )
                         } else if (!selectedCurrency.equals(companyCurrency, ignoreCase = true)) {
                             Text(
-                                "Valor en ${selectedCurrency.toCurrencySymbol()}: ${
-                                    formatCurrency(
-                                        companyCurrency, baseAmount
-                                    )
+                                "Valor en ${companyCurrency.toCurrencySymbol()}: ${
+                                    amountInCompanyCurrency?.let {
+                                        formatCurrency(companyCurrency, it)
+                                    } ?: "—"
                                 }"
                             )
                         }
@@ -3788,6 +3812,61 @@ private fun isPaidStatus(status: String?): Boolean {
 
 private fun filterPendingInvoices(invoices: List<SalesInvoiceBO>): List<SalesInvoiceBO> {
     return invoices.filter { it.outstandingAmount > 0.0 && !isPaidStatus(it.status) }
+}
+
+private fun formatAmountRawForCurrency(amount: Double, currency: String): String {
+    val normalized = normalizeCurrency(currency)
+    val rounded = roundForCurrency(amount, normalized)
+    val decimals = if (normalized.equals("USD", ignoreCase = true) ||
+        normalized.equals("NIO", ignoreCase = true)
+    ) 0 else 2
+    return formatDoubleToString(rounded, decimals)
+}
+
+private suspend fun resolveBaseToSelectedRate(
+    cashboxManager: CashBoxManager,
+    companyCurrency: String,
+    selectedCurrency: String,
+    invoiceCurrency: String,
+    invoiceConversionRate: Double?,
+    cachedRates: Map<String, Double>
+): Double? {
+    if (selectedCurrency.isBlank() || selectedCurrency.equals(companyCurrency, ignoreCase = true)) {
+        return 1.0
+    }
+    cachedRates[selectedCurrency]?.takeIf { it > 0.0 }?.let { return it }
+    invoiceConversionRate?.takeIf { it > 0.0 }?.let { rate ->
+        if (selectedCurrency.equals(invoiceCurrency, ignoreCase = true)) {
+            return 1.0 / rate
+        }
+    }
+
+    val direct = cashboxManager.resolveExchangeRateBetween(
+        fromCurrency = companyCurrency,
+        toCurrency = selectedCurrency,
+        allowNetwork = false
+    )
+    if (direct != null && direct > 0.0) return direct
+
+    val reverse = cashboxManager.resolveExchangeRateBetween(
+        fromCurrency = selectedCurrency,
+        toCurrency = companyCurrency,
+        allowNetwork = false
+    )?.takeIf { it > 0.0 }?.let { 1.0 / it }
+    if (reverse != null && reverse > 0.0) return reverse
+
+    val ctx = cashboxManager.getContext()
+    val ctxCurrency = normalizeCurrency(ctx?.currency)
+    val ctxRate = ctx?.exchangeRate ?: 0.0
+    if (ctxRate > 0.0) {
+        if (companyCurrency.equals(ctxCurrency, true) && selectedCurrency.equals("USD", true)) {
+            return 1.0 / ctxRate
+        }
+        if (selectedCurrency.equals(ctxCurrency, true) && companyCurrency.equals("USD", true)) {
+            return ctxRate
+        }
+    }
+    return null
 }
 
 private enum class ReturnDestination(val label: String) {

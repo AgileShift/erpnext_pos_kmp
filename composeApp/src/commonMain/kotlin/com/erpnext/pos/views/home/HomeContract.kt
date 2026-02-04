@@ -32,6 +32,7 @@ data class HomeAction(
         )
     ),
     val homeMetrics: StateFlow<HomeMetrics> = MutableStateFlow(HomeMetrics()),
+    val inventoryAlertMessage: StateFlow<String?> = MutableStateFlow(null),
     val openingState: StateFlow<CashboxOpeningProfileState> =
         MutableStateFlow(CashboxOpeningProfileState()),
     val loadInitialData: () -> Unit = {},
@@ -47,4 +48,5 @@ data class HomeAction(
     val onCloseCashbox: () -> Unit = {},
     val onLogout: () -> Unit = {},
     val onError: (error: String) -> Unit = {},
+    val onInventoryAlertConsumed: () -> Unit = {},
 )

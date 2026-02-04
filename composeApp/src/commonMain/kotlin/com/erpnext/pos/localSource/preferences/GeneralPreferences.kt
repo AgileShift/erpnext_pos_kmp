@@ -13,6 +13,10 @@ class GeneralPreferences(
         private const val printerKey = "settings_printer_enabled"
         private const val cashDrawerKey = "settings_cash_drawer_enabled"
         private const val allowNegativeStockKey = "settings_allow_negative_stock"
+        private const val inventoryAlertDateKey = "inventory_alert_last_date"
+        private const val inventoryAlertsEnabledKey = "inventory_alerts_enabled"
+        private const val inventoryAlertHourKey = "inventory_alert_hour"
+        private const val inventoryAlertMinuteKey = "inventory_alert_minute"
     }
 
     val taxesIncluded: Flow<Boolean> = store.observeRaw(taxesKey).map { it?.toBooleanStrictOrNull() ?: false }
@@ -21,6 +25,13 @@ class GeneralPreferences(
     val cashDrawerEnabled: Flow<Boolean> = store.observeRaw(cashDrawerKey).map { it?.toBooleanStrictOrNull() ?: true }
     val allowNegativeStock: Flow<Boolean> =
         store.observeRaw(allowNegativeStockKey).map { it?.toBooleanStrictOrNull() ?: false }
+
+    val inventoryAlertsEnabled: Flow<Boolean> =
+        store.observeRaw(inventoryAlertsEnabledKey).map { it?.toBooleanStrictOrNull() ?: true }
+    val inventoryAlertHour: Flow<Int> =
+        store.observeRaw(inventoryAlertHourKey).map { it?.toIntOrNull() ?: 9 }
+    val inventoryAlertMinute: Flow<Int> =
+        store.observeRaw(inventoryAlertMinuteKey).map { it?.toIntOrNull() ?: 0 }
 
     suspend fun setTaxesIncluded(enabled: Boolean) {
         store.saveRaw(taxesKey, enabled.toString())
@@ -41,4 +52,31 @@ class GeneralPreferences(
     suspend fun setAllowNegativeStock(enabled: Boolean) {
         store.saveRaw(allowNegativeStockKey, enabled.toString())
     }
+
+    suspend fun getInventoryAlertDate(): String? = store.loadRaw(inventoryAlertDateKey)
+
+    suspend fun setInventoryAlertDate(value: String) {
+        store.saveRaw(inventoryAlertDateKey, value)
+    }
+
+    suspend fun setInventoryAlertsEnabled(enabled: Boolean) {
+        store.saveRaw(inventoryAlertsEnabledKey, enabled.toString())
+    }
+
+    suspend fun setInventoryAlertHour(value: Int) {
+        store.saveRaw(inventoryAlertHourKey, value.coerceIn(0, 23).toString())
+    }
+
+    suspend fun setInventoryAlertMinute(value: Int) {
+        store.saveRaw(inventoryAlertMinuteKey, value.coerceIn(0, 59).toString())
+    }
+
+    suspend fun getInventoryAlertsEnabled(): Boolean =
+        store.loadRaw(inventoryAlertsEnabledKey)?.toBooleanStrictOrNull() ?: true
+
+    suspend fun getInventoryAlertHour(): Int =
+        store.loadRaw(inventoryAlertHourKey)?.toIntOrNull() ?: 9
+
+    suspend fun getInventoryAlertMinute(): Int =
+        store.loadRaw(inventoryAlertMinuteKey)?.toIntOrNull() ?: 0
 }

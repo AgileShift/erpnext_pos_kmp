@@ -58,6 +58,7 @@ dependencies {
     implementation(libs.ui.tooling.preview)
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.core.ktx)
+    implementation(libs.androidx.work.runtime.ktx)
     implementation(libs.koin.android)
     implementation("androidx.lifecycle:lifecycle-process:2.6.1")
 

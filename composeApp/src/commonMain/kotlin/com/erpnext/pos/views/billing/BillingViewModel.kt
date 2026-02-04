@@ -459,6 +459,7 @@ class BillingViewModel(
         val current = requireSuccessState() ?: return
         val existing = current.cartItems.firstOrNull { it.itemCode == item.itemCode }
         val exchangeRate = current.exchangeRate
+        val posCurrency = contextProvider.getContext()?.currency
         val maxQty = item.actualQty
         val desiredQty = (existing?.quantity ?: 0.0) + 1.0
 
@@ -481,8 +482,12 @@ class BillingViewModel(
                 currency = item.currency?.toCurrencySymbol()
                     ?: current.currency?.toCurrencySymbol(),
                 quantity = 1.0,
-                price = if (item.currency.equals(current.currency)) item.price else item.price * (exchangeRate
-                    ?: 0.0)
+                price = resolveItemPriceForInvoiceCurrency(
+                    item = item,
+                    invoiceCurrency = current.currency ?: posCurrency,
+                    posCurrency = posCurrency,
+                    exchangeRate = exchangeRate
+                )
             )
         } else {
             current.cartItems.map {
@@ -771,7 +776,7 @@ class BillingViewModel(
                 val fullyPaid = paymentLines.isNotEmpty() &&
                     roundToCurrency(paymentStatus.paidAmount) + roundingTolerance >=
                     roundToCurrency(rounding.roundedTotal)
-                val usePosInvoice = !isCreditSale && fullyPaid
+                val usePosInvoice = !isCreditSale && paymentStatus.status == "Paid" && fullyPaid
 
                 val invoiceCurrencyNormalized = normalizeCurrency(invoiceCurrency)
                 val companyCurrencyNormalized = normalizeCurrency(companyCurrency)
@@ -1244,10 +1249,15 @@ class BillingViewModel(
         } else {
             emptyList()
         }
+        val resolvedPaid = if (usePosInvoice) {
+            roundForCurrency(paymentStatus.paidAmount, invoiceCurrency)
+        } else {
+            roundToCurrency(paymentStatus.paidAmount)
+        }
         val payments = if (usePosInvoice) {
             adjustPosPaymentsToMatchTotal(
                 payments = rawPayments,
-                invoiceTotal = rounding.roundedTotal,
+                targetAmount = resolvedPaid,
                 invoiceCurrency = invoiceCurrency
             )
         } else {
@@ -1255,11 +1265,6 @@ class BillingViewModel(
         }
         val resolvedStatus = if (usePosInvoice) "Paid" else paymentStatus.status
         // En ERPNext: paid/outstanding están en moneda de factura (invoice currency).
-        val resolvedPaid = if (usePosInvoice) {
-            roundForCurrency(rounding.roundedTotal, invoiceCurrency)
-        } else {
-            roundToCurrency(paymentStatus.paidAmount)
-        }
         val resolvedOutstanding = if (usePosInvoice) {
             0.0
         } else {
@@ -1293,11 +1298,11 @@ class BillingViewModel(
             grandTotal = totals.total,
             roundedTotal = roundedTotalField,
             roundingAdjustment = roundingAdjustmentField,
-            outstandingAmount = resolvedOutstanding,
+            outstandingAmount = if (usePosInvoice) resolvedOutstanding else null,
             totalTaxesAndCharges = totals.taxes,
             netTotal = totals.total,
-            paidAmount = resolvedPaid,
-            changeAmount = resolvedChange.takeIf { it > 0.0 },
+            paidAmount = if (usePosInvoice) resolvedPaid else null,
+            changeAmount = if (usePosInvoice) resolvedChange.takeIf { it > 0.0 } else null,
             items = items,
             payments = payments,
             paymentSchedule = paymentSchedule,
@@ -1315,19 +1320,27 @@ class BillingViewModel(
 
     private fun adjustPosPaymentsToMatchTotal(
         payments: List<SalesInvoicePaymentDto>,
-        invoiceTotal: Double,
+        targetAmount: Double,
         invoiceCurrency: String
     ): List<SalesInvoicePaymentDto> {
         if (payments.isEmpty()) return payments
         val totalPaid = payments.sumOf { it.amount }
-        val diff = roundForCurrency(invoiceTotal - totalPaid, invoiceCurrency)
+        val diff = roundForCurrency(targetAmount - totalPaid, invoiceCurrency)
         if (diff == 0.0) return payments
 
         val specs = buildCurrencySpecs()
         val currency = normalizeCurrency(invoiceCurrency)
         val minorUnits = specs[currency]?.minorUnits ?: 2
         val tolerance = 1.0 / 10.0.pow(minorUnits.toDouble())
-        if (kotlin.math.abs(diff) > tolerance) return payments
+        if (kotlin.math.abs(diff) > tolerance) {
+            val lastIndex = payments.lastIndex
+            val adjustedLast = (targetAmount - payments.dropLast(1).sumOf { it.amount })
+                .coerceAtLeast(0.0)
+            val updatedLast = payments[lastIndex].copy(
+                amount = roundForCurrency(adjustedLast, invoiceCurrency)
+            )
+            return payments.toMutableList().apply { this[lastIndex] = updatedLast }
+        }
 
         val lastIndex = payments.lastIndex
         val updatedLast = payments[lastIndex].copy(
@@ -1445,6 +1458,30 @@ class BillingViewModel(
         val reverse = contextProvider.resolveExchangeRateBetween(inv, pay, allowNetwork = false)
             ?.takeIf { it > 0.0 }?.let { 1 / it }
         return reverse ?: error("No se pudo resolver tasa $pay -> $inv")
+    }
+
+    private fun resolveItemPriceForInvoiceCurrency(
+        item: ItemBO,
+        invoiceCurrency: String?,
+        posCurrency: String?,
+        exchangeRate: Double?
+    ): Double {
+        val itemCurrency = normalizeCurrency(item.currency)
+        val invoice = normalizeCurrency(invoiceCurrency)
+        if (itemCurrency.isBlank() || invoice.isBlank()) return item.price
+        if (itemCurrency.equals(invoice, ignoreCase = true)) return item.price
+
+        val rate = exchangeRate?.takeIf { it > 0.0 } ?: return item.price
+        val pos = normalizeCurrency(posCurrency)
+        if (pos != null) {
+            if (itemCurrency.equals("USD", true) && invoice.equals(pos, true)) {
+                return item.price * rate
+            }
+            if (itemCurrency.equals(pos, true) && invoice.equals("USD", true)) {
+                return item.price / rate
+            }
+        }
+        return item.price
     }
 
     private fun resolveDueDate(

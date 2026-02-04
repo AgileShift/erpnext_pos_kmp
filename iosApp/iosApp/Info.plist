@@ -4,5 +4,7 @@
 <dict>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
+	<key>NSUserNotificationUsageDescription</key>
+	<string>Necesitamos notificaciones para alertas de inventario.</string>
 </dict>
 </plist>

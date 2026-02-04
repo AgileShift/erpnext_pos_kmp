@@ -306,9 +306,9 @@ class SalesInvoiceRepository(
         val now = Clock.System.now().toEpochMilliseconds()
         // Se valida si el servidor trae montos pagados reales o si aún están en cero.
         val remotePaid = when {
-            remote.paidAmount > 0.0001 -> remote.paidAmount
+            (remote.paidAmount ?: 0.0) > 0.0001 -> remote.paidAmount ?: 0.0
             remote.payments.isNotEmpty() -> remote.payments.sumOf { it.amount }
-            else -> remote.paidAmount
+            else -> remote.paidAmount ?: 0.0
         }
         val remoteOutstandingRaw = remote.outstandingAmount
         val remoteOutstanding = remoteOutstandingRaw ?: (remote.grandTotal - remotePaid)

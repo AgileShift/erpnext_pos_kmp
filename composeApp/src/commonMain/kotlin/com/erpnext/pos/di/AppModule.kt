@@ -13,6 +13,7 @@ import com.erpnext.pos.data.repositories.CustomerRepository
 import com.erpnext.pos.data.repositories.CustomerSyncRepository
 import com.erpnext.pos.data.repositories.DeliveryChargesRepository
 import com.erpnext.pos.data.repositories.InventoryRepository
+import com.erpnext.pos.data.repositories.InventoryAlertRepository
 import com.erpnext.pos.data.repositories.ModeOfPaymentRepository
 import com.erpnext.pos.data.repositories.PosProfilePaymentMethodLocalRepository
 import com.erpnext.pos.data.repositories.ClosingEntrySyncRepository
@@ -59,6 +60,7 @@ import com.erpnext.pos.domain.usecases.PushPendingCustomersUseCase
 import com.erpnext.pos.domain.usecases.FetchPosProfileUseCase
 import com.erpnext.pos.domain.usecases.FetchUserInfoUseCase
 import com.erpnext.pos.domain.usecases.LoadHomeMetricsUseCase
+import com.erpnext.pos.domain.usecases.LoadInventoryAlertsUseCase
 import com.erpnext.pos.domain.usecases.MarkSalesInvoiceSyncedUseCase
 import com.erpnext.pos.domain.usecases.LogoutUseCase
 import com.erpnext.pos.domain.usecases.RegisterInvoicePaymentUseCase
@@ -526,10 +528,13 @@ val appModule = module {
             syncPreferences = get(),
             navManager = get(),
             loadHomeMetricsUseCase = get(),
+            loadInventoryAlertsUseCase = get(),
             posProfileGate = get(),
             openingGate = get(),
             homeRefreshController = get(),
-            sessionRefresher = get()
+            sessionRefresher = get(),
+            syncContextProvider = get(),
+            generalPreferences = get()
         )
     }
     single<IUserRepository> { UserRepository(get(), get()) }
@@ -640,6 +645,8 @@ val appModule = module {
     single { CreatePaymentEntryUseCase(get()) }
     single { PartialReturnUseCase(get(), get(), get(), get()) }
     single { LoadHomeMetricsUseCase(get()) }
+    single { InventoryAlertRepository(get(), get(named("apiService")), get(), get()) }
+    single { LoadInventoryAlertsUseCase(get()) }
     single { GetCompanyInfoUseCase(get()) }
     //endregion
 }

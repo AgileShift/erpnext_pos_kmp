@@ -58,6 +58,7 @@ data class ItemPriceDto(
     val currency: String
 )
 
+
 @Serializable
 data class BinDto(
     @SerialName("item_code")

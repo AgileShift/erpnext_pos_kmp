@@ -24,6 +24,8 @@ fun rememberSettingsActions(coordinator: SettingsCoordinator): POSSettingAction 
             onOfflineModeChanged = coordinator::onOfflineModeChanged,
             onPrinterEnabledChanged = coordinator::onPrinterEnabledChanged,
             onCashDrawerEnabledChanged = coordinator::onCashDrawerEnabledChanged,
+            onInventoryAlertsEnabledChanged = coordinator::onInventoryAlertsEnabledChanged,
+            onInventoryAlertTimeChanged = coordinator::onInventoryAlertTimeChanged,
             onSelect = coordinator::onSelect,
             onSyncNow = coordinator::onSyncNow,
             onAutoSyncChanged = coordinator::onAutoSyncChanged,

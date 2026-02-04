@@ -150,7 +150,7 @@ fun BillingScreen(
         }
     }
 
-    LaunchedEffect(successDialogId, successDialogMessage, successMessage) {
+    LaunchedEffect(popupMessage != null) { //successDialogId, successDialogMessage, successMessage) {
         if (successDialogId == 0L) return@LaunchedEffect
         val message = (successDialogMessage ?: successMessage)
             ?.takeIf { it.isNotBlank() } ?: return@LaunchedEffect
@@ -391,7 +391,10 @@ fun BillingScreen(
                     popupInvoice = null
                     action.onClearSuccessMessage()
                 },
-                properties = DialogProperties(dismissOnClickOutside = false)
+                properties = DialogProperties(
+                    dismissOnClickOutside = true,
+                    dismissOnBackPress = true
+                )
             ) {
                 Surface(
                     shape = RoundedCornerShape(20.dp),
@@ -424,6 +427,16 @@ fun BillingScreen(
                                 color = colors.onSurface.copy(alpha = 0.75f),
                                 fontSize = 14.sp
                             )
+                        }
+                        Spacer(Modifier.height(6.dp))
+                        Button(
+                            onClick = {
+                                popupMessage = null
+                                popupInvoice = null
+                                action.onClearSuccessMessage()
+                            }
+                        ) {
+                            Text("Cerrar")
                         }
                     }
                 }
@@ -1639,8 +1652,7 @@ private fun PaymentSection(
         val rateValue = rateInput.toDoubleOrNull() ?: 0.0
         val canAdd =
             amountValue > 0.0 && rateValue > 0.0 && selectedMode.isNotBlank() &&
-                    (!requiresReference || referenceInput.isNotBlank()) &&
-                    (paidAmountBase < totalAmount)
+                    (!requiresReference || referenceInput.isNotBlank())
 
         MoneyTextField(
             currencyCode = selectedCurrency,
@@ -2049,7 +2061,8 @@ data class MoneyUiSpec(
 
 private fun moneyUiSpec(currencyCode: String, fallbackDecimals: Int = 2): MoneyUiSpec {
     return when (val code = currencyCode.trim().uppercase()) {
-        "NIO", "USD" -> MoneyUiSpec(code = code, decimals = 2, groupSep = ',', decimalSep = '.')
+        "NIO" -> MoneyUiSpec(code = code, decimals = 0, groupSep = ',', decimalSep = '.')
+        "USD" -> MoneyUiSpec(code = code, decimals = 0, groupSep = ',', decimalSep = '.')
         "EUR" -> MoneyUiSpec(code = code, decimals = 2, groupSep = '.', decimalSep = ',')
         else -> MoneyUiSpec(
             code = code, decimals = fallbackDecimals, groupSep = ',', decimalSep = '.'

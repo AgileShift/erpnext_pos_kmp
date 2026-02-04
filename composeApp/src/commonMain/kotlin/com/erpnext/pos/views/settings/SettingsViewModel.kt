@@ -14,6 +14,7 @@ import com.erpnext.pos.sync.SyncManager
 import com.erpnext.pos.sync.SyncState
 import com.erpnext.pos.views.CashBoxManager
 import com.erpnext.pos.views.POSContext
+import com.erpnext.pos.utils.notifications.configureInventoryAlertWorker
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
@@ -45,7 +46,10 @@ class SettingsViewModel(
                 generalPreferences.offlineMode,
                 generalPreferences.printerEnabled,
                 generalPreferences.cashDrawerEnabled,
-                generalPreferences.allowNegativeStock
+                generalPreferences.allowNegativeStock,
+                generalPreferences.inventoryAlertsEnabled,
+                generalPreferences.inventoryAlertHour,
+                generalPreferences.inventoryAlertMinute
             ) { args: Array<Any?> ->
                 val ctx = args[0] as POSContext
                 val syncSettings = args[1] as SyncSettings
@@ -58,6 +62,9 @@ class SettingsViewModel(
                 val printer = args[8] as Boolean
                 val drawer = args[9] as Boolean
                 val allowNegativeStock = args[10] as Boolean
+                val inventoryAlertsEnabled = args[11] as Boolean
+                val inventoryAlertHour = args[12] as Int
+                val inventoryAlertMinute = args[13] as Int
                 POSSettingState.Success(
                     settings = POSSettingBO(
                         company = ctx.company,
@@ -74,7 +81,10 @@ class SettingsViewModel(
                     syncState = syncState,
                     language = language,
                     theme = theme,
-                    themeMode = themeMode
+                    themeMode = themeMode,
+                    inventoryAlertsEnabled = inventoryAlertsEnabled,
+                    inventoryAlertHour = inventoryAlertHour,
+                    inventoryAlertMinute = inventoryAlertMinute
                 )
             }.collect { state ->
                 _uiState.value = state
@@ -118,6 +128,21 @@ class SettingsViewModel(
         viewModelScope.launch { generalPreferences.setCashDrawerEnabled(enabled) }
     }
 
+    fun setInventoryAlertsEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            generalPreferences.setInventoryAlertsEnabled(enabled)
+            updateInventoryAlertSchedule()
+        }
+    }
+
+    fun setInventoryAlertTime(hour: Int, minute: Int) {
+        viewModelScope.launch {
+            generalPreferences.setInventoryAlertHour(hour)
+            generalPreferences.setInventoryAlertMinute(minute)
+            updateInventoryAlertSchedule()
+        }
+    }
+
     fun setLanguage(language: AppLanguage) {
         viewModelScope.launch { languagePreferences.setLanguage(language) }
     }
@@ -128,5 +153,12 @@ class SettingsViewModel(
 
     fun setThemeMode(mode: AppThemeMode) {
         viewModelScope.launch { themePreferences.setThemeMode(mode) }
+    }
+
+    private suspend fun updateInventoryAlertSchedule() {
+        val enabled = generalPreferences.getInventoryAlertsEnabled()
+        val hour = generalPreferences.getInventoryAlertHour()
+        val minute = generalPreferences.getInventoryAlertMinute()
+        configureInventoryAlertWorker(enabled, hour, minute)
     }
 }

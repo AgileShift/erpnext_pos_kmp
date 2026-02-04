@@ -50,6 +50,7 @@ import com.erpnext.pos.localSource.entities.CustomerOutboxEntity
 import com.erpnext.pos.localSource.entities.DeliveryChargeEntity
 import com.erpnext.pos.localSource.entities.ExchangeRateEntity
 import com.erpnext.pos.localSource.entities.ItemEntity
+import com.erpnext.pos.localSource.entities.ItemReorderEntity
 import com.erpnext.pos.localSource.entities.ModeOfPaymentEntity
 import com.erpnext.pos.localSource.entities.POSClosingEntryEntity
 import com.erpnext.pos.localSource.entities.POSInvoicePaymentEntity
@@ -105,6 +106,7 @@ import com.erpnext.pos.localSource.entities.v2.UserEntity as UserEntityV2
     entities = [
         UserEntity::class,
         ItemEntity::class,
+        ItemReorderEntity::class,
         POSProfileEntity::class,
         PosProfileLocalEntity::class,
         PosProfilePaymentMethodEntity::class,
@@ -165,7 +167,7 @@ import com.erpnext.pos.localSource.entities.v2.UserEntity as UserEntityV2
         SyncStateEntity::class,
         CustomerOutboxEntity::class
     ],
-    version = 37,
+    version = 40,
     exportSchema = true
 )
 @ConstructedBy(AppDatabaseConstructor::class)

@@ -27,8 +27,9 @@ data class SalesInvoiceDto(
     val status: String? = null,
     @SerialName("grand_total")
     val grandTotal: Double = 0.0,
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
     @SerialName("outstanding_amount")
-    val outstandingAmount: Double? = 0.0,
+    val outstandingAmount: Double? = null,
     @SerialName("total_taxes_and_charges")
     val totalTaxesAndCharges: Double? = 0.0,
     @SerialName("total")
@@ -41,8 +42,9 @@ data class SalesInvoiceDto(
     val roundingAdjustment: Double? = null,
     @SerialName("discount_amount")
     val discountAmount: Double? = null,
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
     @SerialName("paid_amount")
-    val paidAmount: Double = 0.0,
+    val paidAmount: Double? = null,
     @SerialName("change_amount")
     val changeAmount: Double? = null,
     @SerialName("write_off_amount")

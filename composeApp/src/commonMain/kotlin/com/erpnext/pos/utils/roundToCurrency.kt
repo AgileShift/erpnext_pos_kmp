@@ -4,7 +4,7 @@ import com.erpnext.pos.utils.oauth.bd
 import com.erpnext.pos.utils.oauth.moneyScale
 import com.erpnext.pos.utils.oauth.toDouble
 import kotlin.math.ceil
-import kotlin.math.floor
+import kotlin.math.pow
 
 fun roundToCurrency(value: Double, scale: Int = 2): Double {
     if (!value.isFinite()) return value
@@ -19,15 +19,12 @@ data class RoundedTotal(
 fun roundForCurrency(value: Double, currency: String?): Double {
     if (!value.isFinite()) return value
     val normalized = normalizeCurrency(currency).uppercase()
-    return when (normalized) {
-        "NIO" -> ceil(value)
-        "USD" -> {
-            val rounded2 = roundToCurrency(value, 2)
-            val frac = rounded2 - floor(rounded2)
-            if (frac >= 0.99 - 0.000001) ceil(rounded2) else rounded2
-        }
-        else -> roundToCurrency(value, 2)
+    val scale = when (normalized) {
+        "USD" -> 0
+        "NIO" -> 0
+        else -> 2
     }
+    return roundUpToScale(value, scale)
 }
 
 fun resolveRoundedTotal(grandTotal: Double, currency: String?): RoundedTotal {
@@ -35,4 +32,10 @@ fun resolveRoundedTotal(grandTotal: Double, currency: String?): RoundedTotal {
     val roundedTotal = roundForCurrency(grandTotal, currency)
     val adjustment = roundToCurrency(roundedTotal - grandTotal)
     return RoundedTotal(roundedTotal = roundedTotal, roundingAdjustment = adjustment)
+}
+
+private fun roundUpToScale(value: Double, scale: Int): Double {
+    if (scale <= 0) return ceil(value)
+    val factor = 10.0.pow(scale.toDouble())
+    return ceil(value * factor) / factor
 }

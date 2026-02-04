@@ -143,8 +143,8 @@ fun buildCurrencySpecs(): Map<String, CurrencySpec> {
     // Ajusta aquí si agregas más monedas/escala por país.
     return mapOf(
         // USA
-        "NIO" to CurrencySpec(code = "NIO", minorUnits = 2, cashScale = 2),
-        "USD" to CurrencySpec(code = "USD", minorUnits = 2, cashScale = 2),
+        "NIO" to CurrencySpec(code = "NIO", minorUnits = 2, cashScale = 0),
+        "USD" to CurrencySpec(code = "USD", minorUnits = 0, cashScale = 0),
         // LATAM (continental)
         "MXN" to CurrencySpec(code = "MXN", minorUnits = 2, cashScale = 2),
         "GTQ" to CurrencySpec(code = "GTQ", minorUnits = 2, cashScale = 2),

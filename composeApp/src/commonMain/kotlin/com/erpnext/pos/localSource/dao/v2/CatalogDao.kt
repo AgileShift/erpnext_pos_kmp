@@ -51,6 +51,7 @@ interface CatalogDao {
         warehouseId: String
     ): List<InventoryBinEntity>
 
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertItemGroups(itemGroups: List<ItemGroupEntity>)
 

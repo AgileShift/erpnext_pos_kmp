@@ -11,6 +11,8 @@ data class BinDto(
     val warehouse: String,
     @SerialName("actual_qty")
     val actualQty: Double,
+    @SerialName("projected_qty")
+    val projectedQty: Double? = null,
     @SerialName("stock_uom")
     val stockUom: String,
     @SerialName("valuation_rate")

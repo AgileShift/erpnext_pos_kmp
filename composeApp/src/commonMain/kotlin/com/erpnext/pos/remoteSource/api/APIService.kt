@@ -19,6 +19,7 @@ import com.erpnext.pos.remoteSource.dto.DeliveryChargeDto
 import com.erpnext.pos.remoteSource.dto.ExchangeRateResponse
 import com.erpnext.pos.remoteSource.dto.ItemDto
 import com.erpnext.pos.remoteSource.dto.ItemPriceDto
+import com.erpnext.pos.remoteSource.dto.ItemReorderDto
 import com.erpnext.pos.remoteSource.dto.LoginInfo
 import com.erpnext.pos.remoteSource.dto.AccountDetailDto
 import com.erpnext.pos.remoteSource.dto.ModeOfPaymentDetailDto
@@ -896,6 +897,57 @@ class APIService(
         return bins.associate { it.itemCode to it.actualQty }
     }
 
+    suspend fun fetchBinsForItems(
+        warehouse: String,
+        itemCodes: List<String>
+    ): List<BinDto> {
+        if (itemCodes.isEmpty()) return emptyList()
+        val url = authStore.getCurrentSite() ?: throw Exception("URL Invalida")
+        val chunkSize = 50
+        return itemCodes.chunked(chunkSize).flatMap { codes ->
+            client.getERPList<BinDto>(
+                doctype = ERPDocType.Bin.path,
+                fields = listOf(
+                    "item_code",
+                    "warehouse",
+                    "stock_uom",
+                    "actual_qty",
+                    "projected_qty"
+                ),
+                limit = codes.size,
+                baseUrl = url
+            ) {
+                "warehouse" eq warehouse
+                "item_code" `in` codes
+            }
+        }
+    }
+
+    suspend fun fetchItemReordersForItems(
+        warehouse: String,
+        itemCodes: List<String>
+    ): List<ItemReorderDto> {
+        if (itemCodes.isEmpty()) return emptyList()
+        val url = authStore.getCurrentSite() ?: throw Exception("URL Invalida")
+        val chunkSize = 50
+        return itemCodes.chunked(chunkSize).flatMap { codes ->
+            client.getERPList<ItemReorderDto>(
+                doctype = "Item Reorder",
+                fields = listOf(
+                    "parent",
+                    "warehouse",
+                    "warehouse_reorder_level",
+                    "warehouse_reorder_qty"
+                ),
+                limit = codes.size,
+                baseUrl = url
+            ) {
+                "warehouse" eq warehouse
+                "parent" `in` codes
+            }
+        }
+    }
+
     suspend fun findInvoiceBySignature(
         doctype: String,
         posOpeningEntry: String?,
@@ -984,7 +1036,7 @@ class APIService(
                 )
             })
         val totalOutstanding = invoices.sumOf { invoice ->
-            invoice.outstandingAmount ?: (invoice.grandTotal - invoice.paidAmount)
+            invoice.outstandingAmount ?: (invoice.grandTotal - (invoice.paidAmount ?: 0.0))
         }
         return OutstandingInfo(totalOutstanding, invoices)
     }

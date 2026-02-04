@@ -23,6 +23,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CardDefaults
@@ -40,6 +41,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -89,7 +91,10 @@ fun SettingsScreenPreview() {
             syncState = SyncState.IDLE,
             language = AppLanguage.Spanish,
             theme = AppColorTheme.Noir,
-            themeMode = AppThemeMode.System
+            themeMode = AppThemeMode.System,
+            inventoryAlertsEnabled = true,
+            inventoryAlertHour = 9,
+            inventoryAlertMinute = 0
         ),
         POSSettingAction()
     )
@@ -117,6 +122,20 @@ fun PosSettingsScreen(
         ) {
             when (state) {
                 is POSSettingState.Success -> {
+                    var showAlertTimeDialog by remember { mutableStateOf(false) }
+
+                    if (showAlertTimeDialog) {
+                        InventoryAlertTimeDialog(
+                            initialHour = state.inventoryAlertHour,
+                            initialMinute = state.inventoryAlertMinute,
+                            onDismiss = { showAlertTimeDialog = false },
+                            onConfirm = { hour, minute ->
+                                showAlertTimeDialog = false
+                                action.onInventoryAlertTimeChanged(hour, minute)
+                            }
+                        )
+                    }
+
                     Text(
                         text = strings.settings.title,
                         style = MaterialTheme.typography.headlineMedium,
@@ -187,6 +206,23 @@ fun PosSettingsScreen(
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
+                    }
+
+                    SettingSection(
+                        title = strings.settings.inventoryAlertsTitle,
+                        description = strings.settings.inventoryAlertsTimeHint
+                    ) {
+                        SettingToggle(
+                            label = strings.settings.inventoryAlertsEnabledLabel,
+                            checked = state.inventoryAlertsEnabled,
+                            onCheckedChange = action.onInventoryAlertsEnabledChanged
+                        )
+                        SettingItem(
+                            label = strings.settings.inventoryAlertsTimeLabel,
+                            value = formatTime(state.inventoryAlertHour, state.inventoryAlertMinute),
+                            onClick = { showAlertTimeDialog = true },
+                            enabled = state.inventoryAlertsEnabled
+                        )
                     }
 
                     SettingSection(title = strings.settings.hardwareTitle) {
@@ -425,12 +461,13 @@ private fun SettingSection(
 private fun SettingItem(
     label: String,
     value: String,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    enabled: Boolean = true
 ) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { onClick() }
+            .clickable(enabled = enabled) { onClick() }
             .padding(vertical = 8.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
@@ -440,13 +477,21 @@ private fun SettingItem(
             Text(
                 text = value,
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.primary
+                color = if (enabled) {
+                    MaterialTheme.colorScheme.primary
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                }
             )
         }
         Icon(
             imageVector = Icons.AutoMirrored.Filled.ArrowForward,
             contentDescription = null,
-            tint = MaterialTheme.colorScheme.primary
+            tint = if (enabled) {
+                MaterialTheme.colorScheme.primary
+            } else {
+                MaterialTheme.colorScheme.onSurfaceVariant
+            }
         )
     }
 }
@@ -477,6 +522,101 @@ private fun SettingToggle(
         )
     }
 }
+
+@Composable
+private fun InventoryAlertTimeDialog(
+    initialHour: Int,
+    initialMinute: Int,
+    onDismiss: () -> Unit,
+    onConfirm: (Int, Int) -> Unit
+) {
+    val strings = LocalAppStrings.current
+    var hour by remember { mutableStateOf(initialHour.coerceIn(0, 23)) }
+    var minute by remember { mutableStateOf(initialMinute.coerceIn(0, 59)) }
+    var hourExpanded by remember { mutableStateOf(false) }
+    var minuteExpanded by remember { mutableStateOf(false) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(strings.settings.inventoryAlertsTimeLabel) },
+        text = {
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                ExposedDropdownMenuBox(
+                    expanded = hourExpanded,
+                    onExpandedChange = { hourExpanded = !hourExpanded },
+                    modifier = Modifier.weight(1f)
+                ) {
+                    OutlinedTextField(
+                        value = hour.toString().padStart(2, '0'),
+                        onValueChange = {},
+                        label = { Text("HH") },
+                        readOnly = true,
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = hourExpanded) },
+                        colors = ExposedDropdownMenuDefaults.textFieldColors(),
+                        modifier = Modifier.menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable)
+                    )
+                    ExposedDropdownMenu(
+                        expanded = hourExpanded,
+                        onDismissRequest = { hourExpanded = false }
+                    ) {
+                        (0..23).forEach { option ->
+                            DropdownMenuItem(
+                                text = { Text(option.toString().padStart(2, '0')) },
+                                onClick = {
+                                    hour = option
+                                    hourExpanded = false
+                                }
+                            )
+                        }
+                    }
+                }
+
+                ExposedDropdownMenuBox(
+                    expanded = minuteExpanded,
+                    onExpandedChange = { minuteExpanded = !minuteExpanded },
+                    modifier = Modifier.weight(1f)
+                ) {
+                    OutlinedTextField(
+                        value = minute.toString().padStart(2, '0'),
+                        onValueChange = {},
+                        label = { Text("MM") },
+                        readOnly = true,
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = minuteExpanded) },
+                        colors = ExposedDropdownMenuDefaults.textFieldColors(),
+                        modifier = Modifier.menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable)
+                    )
+                    ExposedDropdownMenu(
+                        expanded = minuteExpanded,
+                        onDismissRequest = { minuteExpanded = false }
+                    ) {
+                        (0..59).forEach { option ->
+                            DropdownMenuItem(
+                                text = { Text(option.toString().padStart(2, '0')) },
+                                onClick = {
+                                    minute = option
+                                    minuteExpanded = false
+                                }
+                            )
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Button(onClick = { onConfirm(hour, minute) }) {
+                Text(strings.settings.inventoryAlertsTimeSaveLabel)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(strings.settings.inventoryAlertsTimeCancelLabel)
+            }
+        }
+    )
+}
+
+private fun formatTime(hour: Int, minute: Int): String =
+    "${hour.coerceIn(0, 23).toString().padStart(2, '0')}:${minute.coerceIn(0, 59).toString().padStart(2, '0')}"
 
 @Composable
 private fun SyncSection(
@@ -574,7 +714,7 @@ private fun LanguageSelector(
     var expanded by remember { mutableStateOf(false) }
     ExposedDropdownMenuBox(
         expanded = expanded,
-        onExpandedChange = { expanded = !expanded }
+        onExpandedChange = { }
     ) {
         OutlinedTextField(
             value = when (currentLanguage) {
