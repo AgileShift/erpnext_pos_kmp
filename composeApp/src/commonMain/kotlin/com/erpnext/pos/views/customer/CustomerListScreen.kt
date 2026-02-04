@@ -80,6 +80,7 @@ import com.erpnext.pos.utils.view.SnackbarType
 import com.erpnext.pos.utils.oauth.bd
 import com.erpnext.pos.utils.oauth.moneyScale
 import com.erpnext.pos.utils.oauth.toDouble
+import com.erpnext.pos.utils.roundToCurrency
 import com.erpnext.pos.utils.toCurrencySymbol
 import com.erpnext.pos.utils.view.SnackbarPosition
 import com.erpnext.pos.views.CashBoxManager
@@ -3816,7 +3817,7 @@ private fun filterPendingInvoices(invoices: List<SalesInvoiceBO>): List<SalesInv
 
 private fun formatAmountRawForCurrency(amount: Double, currency: String): String {
     val normalized = normalizeCurrency(currency)
-    val rounded = roundForCurrency(amount, normalized)
+    val rounded = roundToCurrency(amount)
     val decimals = 2
     return formatDoubleToString(rounded, decimals)
 }

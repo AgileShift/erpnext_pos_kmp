@@ -288,15 +288,18 @@ suspend fun buildPaymentEntryDto(
 
     // Caso 1: paid_to == receivable
     if (paidToCurrency.equals(receivableCurrency, ignoreCase = true)) {
-        val roundingTolerance = maxOf(
-            1.0 / rcSpec.minorUnits.toDouble().pow(10.0),
-            0.05
-        )
-        val allocated = if (entered.toDouble(2) + roundingTolerance >= outstanding.toDouble(2)) {
-            outstanding
-        } else {
-            minOfBd(entered, outstanding).moneyScale(rcSpec.minorUnits)
-        }
+    val roundingTolerance = maxOf(
+        1.0 / rcSpec.minorUnits.toDouble().pow(10.0),
+        0.05
+    )
+    val outstandingAdjusted = bd(outstandingRc - roundingTolerance)
+        .moneyScale(rcSpec.minorUnits)
+        .coerceAtLeastZero()
+    val allocated = if (entered.toDouble(2) + roundingTolerance >= outstanding.toDouble(2)) {
+        outstandingAdjusted
+    } else {
+        minOfBd(entered, outstandingAdjusted).moneyScale(rcSpec.minorUnits)
+    }
         return PaymentEntryCreateDto(
             company = context.company,
             postingDate = postingDate,
@@ -352,10 +355,13 @@ suspend fun buildPaymentEntryDto(
         0.05
     )
     val deliveredRc = entered.safeMul(rate).moneyScale(rcSpec.minorUnits)
+    val outstandingAdjusted2 = bd(outstandingRc - roundingTolerance)
+        .moneyScale(rcSpec.minorUnits)
+        .coerceAtLeastZero()
     val allocatedRc = if (deliveredRc.toDouble(2) + roundingTolerance >= outstanding.toDouble(2)) {
-        outstanding
+        outstandingAdjusted2
     } else {
-        minOfBd(deliveredRc, outstanding).moneyScale(rcSpec.minorUnits)
+        minOfBd(deliveredRc, outstandingAdjusted2).moneyScale(rcSpec.minorUnits)
     }
     val receivedEffective = allocatedRc
         .safeDiv(rate, scale = 8)
@@ -461,15 +467,18 @@ suspend fun buildPaymentEntryDtoWithRateResolver(
 
     // Caso 1: paid_to == receivable
     if (paidToCurrency.equals(receivableCurrency, ignoreCase = true)) {
-        val roundingTolerance = maxOf(
-            1.0 / rcSpec.minorUnits.toDouble().pow(10.0),
-            0.05
-        )
-        val allocated = if (entered.toDouble(2) + roundingTolerance >= outstanding.toDouble(2)) {
-            outstanding
-        } else {
-            minOfBd(entered, outstanding).moneyScale(rcSpec.minorUnits)
-        }
+    val roundingTolerance = maxOf(
+        1.0 / rcSpec.minorUnits.toDouble().pow(10.0),
+        0.05
+    )
+    val outstandingAdjusted = bd(outstandingRc - roundingTolerance)
+        .moneyScale(rcSpec.minorUnits)
+        .coerceAtLeastZero()
+    val allocated = if (entered.toDouble(2) + roundingTolerance >= outstanding.toDouble(2)) {
+        outstandingAdjusted
+    } else {
+        minOfBd(entered, outstandingAdjusted).moneyScale(rcSpec.minorUnits)
+    }
 
         return PaymentEntryCreateDto(
             company = context.company,
@@ -531,10 +540,13 @@ suspend fun buildPaymentEntryDtoWithRateResolver(
         0.05
     )
     val deliveredRc = entered.safeMul(rate).moneyScale(rcSpec.minorUnits)
+    val outstandingAdjusted2 = bd(outstandingRc - roundingTolerance)
+        .moneyScale(rcSpec.minorUnits)
+        .coerceAtLeastZero()
     val allocatedRc = if (deliveredRc.toDouble(2) + roundingTolerance >= outstanding.toDouble(2)) {
-        outstanding
+        outstandingAdjusted2
     } else {
-        minOfBd(deliveredRc, outstanding).moneyScale(rcSpec.minorUnits)
+        minOfBd(deliveredRc, outstandingAdjusted2).moneyScale(rcSpec.minorUnits)
     }
 
     val receivedEffective = allocatedRc

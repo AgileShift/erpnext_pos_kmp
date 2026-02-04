@@ -355,7 +355,7 @@ private fun BISection(metrics: HomeMetrics) {
         metrics.salesTarget?.let { target ->
             SalesTargetCard(
                 target = target,
-                title = strings.settings.salesTargetTitle,
+                title = strings.settings.salesTargetSuggestedLabel,
                 monthlyLabel = strings.settings.salesTargetMonthlyLabel,
                 weeklyLabel = strings.settings.salesTargetWeeklyLabel,
                 dailyLabel = strings.settings.salesTargetDailyLabel,
@@ -664,26 +664,18 @@ private fun SalesTargetCard(
             )
             Spacer(modifier = Modifier.height(12.dp))
 
-            TargetLine(
-                label = monthlyLabel,
+            TargetCompactRow(
+                monthlyLabel = monthlyLabel,
+                weeklyLabel = weeklyLabel,
+                dailyLabel = dailyLabel,
                 baseCurrency = target.baseCurrency,
-                baseAmount = target.monthlyBase,
                 secondaryCurrency = target.secondaryCurrency,
-                secondaryAmount = target.monthlySecondary
-            )
-            TargetLine(
-                label = weeklyLabel,
-                baseCurrency = target.baseCurrency,
-                baseAmount = target.weeklyBase,
-                secondaryCurrency = target.secondaryCurrency,
-                secondaryAmount = target.weeklySecondary
-            )
-            TargetLine(
-                label = dailyLabel,
-                baseCurrency = target.baseCurrency,
-                baseAmount = target.dailyBase,
-                secondaryCurrency = target.secondaryCurrency,
-                secondaryAmount = target.dailySecondary
+                monthlyBase = target.monthlyBase,
+                weeklyBase = target.weeklyBase,
+                dailyBase = target.dailyBase,
+                monthlySecondary = target.monthlySecondary,
+                weeklySecondary = target.weeklySecondary,
+                dailySecondary = target.dailySecondary
             )
 
             if (target.secondaryCurrency != null && target.monthlySecondary == null) {
@@ -704,15 +696,57 @@ private fun SalesTargetCard(
 }
 
 @Composable
-private fun TargetLine(
+private fun TargetCompactRow(
+    monthlyLabel: String,
+    weeklyLabel: String,
+    dailyLabel: String,
+    baseCurrency: String,
+    secondaryCurrency: String?,
+    monthlyBase: Double,
+    weeklyBase: Double,
+    dailyBase: Double,
+    monthlySecondary: Double?,
+    weeklySecondary: Double?,
+    dailySecondary: Double?
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        TargetCompactCell(
+            label = monthlyLabel,
+            baseCurrency = baseCurrency,
+            baseAmount = monthlyBase,
+            secondaryCurrency = secondaryCurrency,
+            secondaryAmount = monthlySecondary
+        )
+        TargetCompactCell(
+            label = weeklyLabel,
+            baseCurrency = baseCurrency,
+            baseAmount = weeklyBase,
+            secondaryCurrency = secondaryCurrency,
+            secondaryAmount = weeklySecondary
+        )
+        TargetCompactCell(
+            label = dailyLabel,
+            baseCurrency = baseCurrency,
+            baseAmount = dailyBase,
+            secondaryCurrency = secondaryCurrency,
+            secondaryAmount = dailySecondary
+        )
+    }
+}
+
+@Composable
+private fun TargetCompactCell(
     label: String,
     baseCurrency: String,
     baseAmount: Double,
     secondaryCurrency: String?,
     secondaryAmount: Double?
 ) {
-    Column(modifier = Modifier.padding(bottom = 10.dp)) {
-        Text(text = label, style = MaterialTheme.typography.bodyMedium)
+    Column(modifier = Modifier.padding(end = 8.dp)) {
+        Text(text = label, style = MaterialTheme.typography.bodySmall)
         Text(
             text = formatCurrency(baseCurrency, baseAmount),
             style = MaterialTheme.typography.bodySmall,
