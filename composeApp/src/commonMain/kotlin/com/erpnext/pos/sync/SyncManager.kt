@@ -24,15 +24,13 @@ import com.erpnext.pos.localSource.preferences.SyncSettings
 import com.erpnext.pos.utils.NetworkMonitor
 import com.erpnext.pos.utils.AppLogger
 import com.erpnext.pos.utils.AppSentry
+import com.erpnext.pos.utils.loading.LoadingIndicator
 import com.erpnext.pos.auth.SessionRefresher
 import com.erpnext.pos.domain.policy.DefaultPolicy
 import com.erpnext.pos.domain.policy.PolicyInput
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -140,185 +138,23 @@ class SyncManager(
                 return@launch
             }
 
+            val steps = buildFullSyncSteps(ttlHours)
+            LoadingIndicator.start(
+                message = "Sincronizando datos...",
+                progress = 0f,
+                currentStep = 0,
+                totalSteps = steps.size
+            )
             try {
-                coroutineScope {
-                    val jobs = listOf(async {
-                        _state.value = SyncState.SYNCING("Metodos de pago...")
-                        AppSentry.breadcrumb("Sync: mode of payment")
-                        val result =
-                            modeOfPaymentRepo.sync(ttlHours).filter { it !is Resource.Loading }
-                                .first()
-                        if (result is Resource.Error) {
-                            val error = Exception(
-                                result.message ?: "Error al sincronizar métodos de pago"
-                            )
-                            AppSentry.capture(error, "Sync: mode of payment failed")
-                            AppLogger.warn("Sync: mode of payment failed", error)
-                            throw error
-                        }
-                    }, async {
-                        _state.value = SyncState.SYNCING("Clientes...")
-
-                        AppSentry.breadcrumb("Sync: customers")
-                        val result = customerRepo.sync().filter { it !is Resource.Loading }.first()
-                        if (result is Resource.Error) {
-                            val error = Exception(result.message ?: "Error al sincronizar clientes")
-                            AppSentry.capture(error, "Sync: customers failed")
-                            AppLogger.warn("Sync: customers failed", error)
-                            throw error
-                        }
-                    }, async {
-                        _state.value = SyncState.SYNCING("Categorias de Productos...")
-
-                        AppSentry.breadcrumb("Sync: categories")
-                        val result =
-                            inventoryRepo.getCategories().filter { it !is Resource.Loading }.first()
-                        if (result is Resource.Error) {
-                            val error =
-                                Exception(result.message ?: "Error al sincronizar categorías")
-                            AppSentry.capture(error, "Sync: categories failed")
-                            AppLogger.warn("Sync: categories failed", error)
-                            throw error
-                        }
-                    }, async {
-                        _state.value = SyncState.SYNCING("Inventario...")
-                        AppSentry.breadcrumb("Sync: inventory")
-                        val result = inventoryRepo.sync().filter { it !is Resource.Loading }.first()
-                        if (result is Resource.Error) {
-                            val error =
-                                Exception(result.message ?: "Error al sincronizar inventario")
-                            AppSentry.capture(error, "Sync: inventory failed")
-                            AppLogger.warn("Sync: inventory failed", error)
-                            throw error
-                        }
-                    }, async {
-                        _state.value = SyncState.SYNCING("Facturas...")
-                        AppSentry.breadcrumb("Sync: invoices")
-                        val result = invoiceRepo.sync().filter { it !is Resource.Loading }.first()
-                        if (result is Resource.Error) {
-                            val error = Exception(result.message ?: "Error al sincronizar facturas")
-                            AppSentry.capture(error, "Sync: invoices failed")
-                            AppLogger.warn("Sync: invoices failed", error)
-                            throw error
-                        }
-                    }, async {
-                        _state.value = SyncState.SYNCING("Términos de pago...")
-                        AppSentry.breadcrumb("Sync: payment terms")
-                        runCatching { paymentTermsRepo.fetchPaymentTerms() }.getOrElse { error ->
-                            val exception = Exception(
-                                error.message ?: "Error al sincronizar términos de pago"
-                            )
-                            AppSentry.capture(exception, "Sync: payment terms failed")
-                            AppLogger.warn("Sync: payment terms failed", exception)
-                            throw exception
-                        }
-                    }, async {
-                        _state.value = SyncState.SYNCING("Grupos de cliente...")
-                        AppSentry.breadcrumb("Sync: customer groups")
-                        runCatching { customerGroupRepo.fetchCustomerGroups() }.getOrElse { error ->
-                            val exception = Exception(
-                                error.message ?: "Error al sincronizar grupos de cliente"
-                            )
-                            AppSentry.capture(exception, "Sync: customer groups failed")
-                            AppLogger.warn("Sync: customer groups failed", exception)
-                            throw exception
-                        }
-                    }, async {
-                        _state.value = SyncState.SYNCING("Territorios...")
-                        AppSentry.breadcrumb("Sync: territories")
-                        runCatching { territoryRepo.fetchTerritories() }.getOrElse { error ->
-                            val exception = Exception(
-                                error.message ?: "Error al sincronizar territorios"
-                            )
-                            AppSentry.capture(exception, "Sync: territories failed")
-                            AppLogger.warn("Sync: territories failed", exception)
-                            throw exception
-                        }
-                    }, async {
-                        _state.value = SyncState.SYNCING("Cargos de envío...")
-                        AppSentry.breadcrumb("Sync: delivery charges")
-                        runCatching { deliveryChargesRepo.fetchDeliveryCharges() }.getOrElse { error ->
-                            val exception = Exception(
-                                error.message ?: "Error al sincronizar cargos de envío"
-                            )
-                            AppSentry.capture(exception, "Sync: delivery charges failed")
-                            AppLogger.warn(
-                                "Sync: delivery charges failed", exception
-                            )
-                            throw exception
-                        }
-                    }, async {
-                        _state.value = SyncState.SYNCING("Contactos...")
-                        AppSentry.breadcrumb("Sync: contacts")
-                        runCatching { contactRepo.fetchCustomerContacts() }.getOrElse { error ->
-                            val exception = Exception(
-                                error.message ?: "Error al sincronizar contactos"
-                            )
-                            AppSentry.capture(exception, "Sync: contacts failed")
-                            AppLogger.warn("Sync: contacts failed", exception)
-                            throw exception
-                        }
-                    }, async {
-                        _state.value = SyncState.SYNCING("Direcciones...")
-                        AppSentry.breadcrumb("Sync: addresses")
-                        runCatching { addressRepo.fetchCustomerAddresses() }.getOrElse { error ->
-                            val exception = Exception(
-                                error.message ?: "Error al sincronizar direcciones"
-                            )
-                            AppSentry.capture(exception, "Sync: addresses failed")
-                            AppLogger.warn("Sync: addresses failed", exception)
-                            throw exception
-                        }
-                    }, async {
-                        _state.value = SyncState.SYNCING("Informacion de la empresa...")
-                        AppSentry.breadcrumb("Sync: company info")
-                        runCatching {
-                            companyInfoRepo.getCompanyInfo()
-                        }.getOrElse { error ->
-                            AppSentry.capture(
-                                error, "Sync: company info failed"
-                            )
-                            AppLogger.warn(
-                                "Sync: company info failed", error
-                            )
-                        }
-                    }, async {
-                        _state.value = SyncState.SYNCING("Stock settings...")
-                        runCatching {
-                            stockSettingsRepository.sync()
-                        }.onFailure { error ->
-                            AppSentry.capture(error, "Sync: stock settings failed")
-                            AppLogger.warn("Sync: stock settings failed", error)
-                        }
-                    }, async {
-                        _state.value = SyncState.SYNCING("Tasas de cambio...")
-                        AppSentry.breadcrumb("Sync: exchange rates")
-                        val enabledCurrencies =
-                            runCatching { exchangeRateRepo.getEnabledCurrencyCodes() }
-                                .getOrElse { emptyList() }
-                        val normalized =
-                            enabledCurrencies.filter { it.isNotBlank() }.map { it.uppercase() }.distinct()
-                        runCatching {
-                            exchangeRateRepo.syncRatesForCurrencies(normalized)
-                        }.getOrElse { error ->
-                            AppSentry.capture(error, "Sync: exchange rates failed")
-                            AppLogger.warn("Sync: exchange rates failed", error)
-                        }
-                    }, async {
-                        _state.value = SyncState.SYNCING("POS Profile payments...")
-                        val profile = posProfileDao.getActiveProfile()
-                        if (profile != null) {
-                            runCatching {
-                                posProfilePaymentMethodSyncRepository.syncProfilePayments(profile.profileName)
-                            }.onFailure { error ->
-                                AppSentry.capture(error, "Sync: pos profile payments failed")
-                                AppLogger.warn("Sync: pos profile payments failed", error)
-                                throw error
-                            }
-                        }
-                    })
-                    jobs.awaitAll()
-                    runPushQueue()
+                steps.forEachIndexed { index, step ->
+                    val currentStep = index + 1
+                    updateSyncProgress(
+                        message = step.message,
+                        currentStep = currentStep,
+                        totalSteps = steps.size
+                    )
+                    step.action()
+                    LoadingIndicator.update(progress = currentStep.toFloat() / steps.size.toFloat())
                 }
                 _state.value = SyncState.SUCCESS
                 AppSentry.breadcrumb("SyncManager.fullSync success")
@@ -330,6 +166,7 @@ class SyncManager(
                 AppLogger.warn("SyncManager.fullSync failed", e)
                 _state.value = SyncState.ERROR("Error durante la sincronización: ${e.message}")
             } finally {
+                LoadingIndicator.stop()
                 delay(5000)
                 _state.value = SyncState.IDLE
             }
@@ -364,8 +201,18 @@ class SyncManager(
                 AppLogger.warn("SyncManager.syncInventory aborted: invalid session")
                 return@launch
             }
+            LoadingIndicator.start(
+                message = "Sincronizando inventario...",
+                progress = 0f,
+                currentStep = 1,
+                totalSteps = 1
+            )
             try {
-                _state.value = SyncState.SYNCING("Inventario...")
+                updateSyncProgress(
+                    message = "Sincronizando inventario...",
+                    currentStep = 1,
+                    totalSteps = 1
+                )
                 val result = inventoryRepo.sync().filter { it !is Resource.Loading }.first()
                 if (result is Resource.Error) {
                     val error = Exception(
@@ -374,12 +221,14 @@ class SyncManager(
                     AppSentry.capture(error, "Sync: inventory only failed")
                     AppLogger.warn("Sync: inventory only failed", error)
                 }
+                LoadingIndicator.update(progress = 1f)
                 _state.value = SyncState.SUCCESS
             } catch (e: Exception) {
                 AppSentry.capture(e, "SyncManager.syncInventory failed")
                 AppLogger.warn("SyncManager.syncInventory failed", e)
                 _state.value = SyncState.ERROR("Error al sincronizar inventario: ${e.message}")
             } finally {
+                LoadingIndicator.stop()
                 delay(2000)
                 _state.value = SyncState.IDLE
             }
@@ -413,10 +262,13 @@ class SyncManager(
                     ?: DefaultPolicy(PolicyInput(3)).invoicesFromDate()
             )
         }
-        _state.value = SyncState.SYNCING("Sincronizando push...")
+        val syncing = _state.value as? SyncState.SYNCING
+        val currentStep = syncing?.currentStep ?: 1
+        val totalSteps = syncing?.totalSteps ?: 1
+        updateSyncProgress("Sincronizando pendientes...", currentStep, totalSteps)
         try {
             pushSyncManager.runPushQueue(ctx) { docType ->
-                _state.value = SyncState.SYNCING("Push: $docType")
+                updateSyncProgressAsync("Sincronizando $docType...", currentStep, totalSteps)
             }
         } catch (e: Throwable) {
             AppSentry.capture(e, "SyncManager.pushQueue failed")
@@ -424,6 +276,189 @@ class SyncManager(
             throw e
         }
     }
+
+    private suspend fun updateSyncProgress(message: String, currentStep: Int, totalSteps: Int) {
+        _state.value = SyncState.SYNCING(
+            message = message,
+            currentStep = currentStep,
+            totalSteps = totalSteps
+        )
+        LoadingIndicator.update(
+            message = "$message ($currentStep/$totalSteps)",
+            progress = currentStep.toFloat() / totalSteps.toFloat(),
+            currentStep = currentStep,
+            totalSteps = totalSteps
+        )
+    }
+
+    private fun updateSyncProgressAsync(message: String, currentStep: Int, totalSteps: Int) {
+        _state.value = SyncState.SYNCING(
+            message = message,
+            currentStep = currentStep,
+            totalSteps = totalSteps
+        )
+        scope.launch {
+            LoadingIndicator.update(
+                message = "$message ($currentStep/$totalSteps)",
+                progress = currentStep.toFloat() / totalSteps.toFloat(),
+                currentStep = currentStep,
+                totalSteps = totalSteps
+            )
+        }
+    }
+
+    private fun buildFullSyncSteps(ttlHours: Int): List<SyncStep> {
+        return listOf(
+            SyncStep("Sincronizando métodos de pago...") {
+                AppSentry.breadcrumb("Sync: mode of payment")
+                val result = modeOfPaymentRepo.sync(ttlHours).filter { it !is Resource.Loading }.first()
+                if (result is Resource.Error) {
+                    val error = Exception(result.message ?: "Error al sincronizar métodos de pago")
+                    AppSentry.capture(error, "Sync: mode of payment failed")
+                    AppLogger.warn("Sync: mode of payment failed", error)
+                    throw error
+                }
+            },
+            SyncStep("Sincronizando clientes...") {
+                AppSentry.breadcrumb("Sync: customers")
+                val result = customerRepo.sync().filter { it !is Resource.Loading }.first()
+                if (result is Resource.Error) {
+                    val error = Exception(result.message ?: "Error al sincronizar clientes")
+                    AppSentry.capture(error, "Sync: customers failed")
+                    AppLogger.warn("Sync: customers failed", error)
+                    throw error
+                }
+            },
+            SyncStep("Sincronizando categorías de productos...") {
+                AppSentry.breadcrumb("Sync: categories")
+                val result = inventoryRepo.getCategories().filter { it !is Resource.Loading }.first()
+                if (result is Resource.Error) {
+                    val error = Exception(result.message ?: "Error al sincronizar categorías")
+                    AppSentry.capture(error, "Sync: categories failed")
+                    AppLogger.warn("Sync: categories failed", error)
+                    throw error
+                }
+            },
+            SyncStep("Sincronizando inventario...") {
+                AppSentry.breadcrumb("Sync: inventory")
+                val result = inventoryRepo.sync().filter { it !is Resource.Loading }.first()
+                if (result is Resource.Error) {
+                    val error = Exception(result.message ?: "Error al sincronizar inventario")
+                    AppSentry.capture(error, "Sync: inventory failed")
+                    AppLogger.warn("Sync: inventory failed", error)
+                    throw error
+                }
+            },
+            SyncStep("Sincronizando facturas...") {
+                AppSentry.breadcrumb("Sync: invoices")
+                val result = invoiceRepo.sync().filter { it !is Resource.Loading }.first()
+                if (result is Resource.Error) {
+                    val error = Exception(result.message ?: "Error al sincronizar facturas")
+                    AppSentry.capture(error, "Sync: invoices failed")
+                    AppLogger.warn("Sync: invoices failed", error)
+                    throw error
+                }
+            },
+            SyncStep("Sincronizando términos de pago...") {
+                AppSentry.breadcrumb("Sync: payment terms")
+                runCatching { paymentTermsRepo.fetchPaymentTerms() }.getOrElse { error ->
+                    val exception = Exception(error.message ?: "Error al sincronizar términos de pago")
+                    AppSentry.capture(exception, "Sync: payment terms failed")
+                    AppLogger.warn("Sync: payment terms failed", exception)
+                    throw exception
+                }
+            },
+            SyncStep("Sincronizando grupos de cliente...") {
+                AppSentry.breadcrumb("Sync: customer groups")
+                runCatching { customerGroupRepo.fetchCustomerGroups() }.getOrElse { error ->
+                    val exception = Exception(error.message ?: "Error al sincronizar grupos de cliente")
+                    AppSentry.capture(exception, "Sync: customer groups failed")
+                    AppLogger.warn("Sync: customer groups failed", exception)
+                    throw exception
+                }
+            },
+            SyncStep("Sincronizando territorios...") {
+                AppSentry.breadcrumb("Sync: territories")
+                runCatching { territoryRepo.fetchTerritories() }.getOrElse { error ->
+                    val exception = Exception(error.message ?: "Error al sincronizar territorios")
+                    AppSentry.capture(exception, "Sync: territories failed")
+                    AppLogger.warn("Sync: territories failed", exception)
+                    throw exception
+                }
+            },
+            SyncStep("Sincronizando cargos de envío...") {
+                AppSentry.breadcrumb("Sync: delivery charges")
+                runCatching { deliveryChargesRepo.fetchDeliveryCharges() }.getOrElse { error ->
+                    val exception = Exception(error.message ?: "Error al sincronizar cargos de envío")
+                    AppSentry.capture(exception, "Sync: delivery charges failed")
+                    AppLogger.warn("Sync: delivery charges failed", exception)
+                    throw exception
+                }
+            },
+            SyncStep("Sincronizando contactos...") {
+                AppSentry.breadcrumb("Sync: contacts")
+                runCatching { contactRepo.fetchCustomerContacts() }.getOrElse { error ->
+                    val exception = Exception(error.message ?: "Error al sincronizar contactos")
+                    AppSentry.capture(exception, "Sync: contacts failed")
+                    AppLogger.warn("Sync: contacts failed", exception)
+                    throw exception
+                }
+            },
+            SyncStep("Sincronizando direcciones...") {
+                AppSentry.breadcrumb("Sync: addresses")
+                runCatching { addressRepo.fetchCustomerAddresses() }.getOrElse { error ->
+                    val exception = Exception(error.message ?: "Error al sincronizar direcciones")
+                    AppSentry.capture(exception, "Sync: addresses failed")
+                    AppLogger.warn("Sync: addresses failed", exception)
+                    throw exception
+                }
+            },
+            SyncStep("Sincronizando información de la empresa...") {
+                AppSentry.breadcrumb("Sync: company info")
+                runCatching { companyInfoRepo.getCompanyInfo() }.onFailure { error ->
+                    AppSentry.capture(error, "Sync: company info failed")
+                    AppLogger.warn("Sync: company info failed", error)
+                }
+            },
+            SyncStep("Sincronizando stock settings...") {
+                runCatching { stockSettingsRepository.sync() }.onFailure { error ->
+                    AppSentry.capture(error, "Sync: stock settings failed")
+                    AppLogger.warn("Sync: stock settings failed", error)
+                }
+            },
+            SyncStep("Sincronizando tasas de cambio...") {
+                AppSentry.breadcrumb("Sync: exchange rates")
+                val enabledCurrencies =
+                    runCatching { exchangeRateRepo.getEnabledCurrencyCodes() }.getOrElse { emptyList() }
+                val normalized =
+                    enabledCurrencies.filter { it.isNotBlank() }.map { it.uppercase() }.distinct()
+                runCatching { exchangeRateRepo.syncRatesForCurrencies(normalized) }.onFailure { error ->
+                    AppSentry.capture(error, "Sync: exchange rates failed")
+                    AppLogger.warn("Sync: exchange rates failed", error)
+                }
+            },
+            SyncStep("Sincronizando métodos del perfil POS...") {
+                val profile = posProfileDao.getActiveProfile()
+                if (profile != null) {
+                    runCatching {
+                        posProfilePaymentMethodSyncRepository.syncProfilePayments(profile.profileName)
+                    }.onFailure { error ->
+                        AppSentry.capture(error, "Sync: pos profile payments failed")
+                        AppLogger.warn("Sync: pos profile payments failed", error)
+                        throw error
+                    }
+                }
+            },
+            SyncStep("Sincronizando documentos pendientes...") {
+                runPushQueue()
+            }
+        )
+    }
+
+    private data class SyncStep(
+        val message: String,
+        val action: suspend () -> Unit
+    )
 
     private fun observeSyncSettings() {
         scope.launch {

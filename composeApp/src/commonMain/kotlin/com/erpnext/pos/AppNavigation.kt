@@ -72,6 +72,7 @@ import com.erpnext.pos.navigation.formatShiftDuration
 import com.erpnext.pos.navigation.v2.BottomBarWithCenterFab
 import com.erpnext.pos.utils.view.SnackbarHost
 import com.erpnext.pos.utils.loading.LoadingIndicator
+import com.erpnext.pos.utils.loading.LoadingUiState
 import com.erpnext.pos.views.CashBoxManager
 import com.erpnext.pos.views.home.HomeRefreshController
 import com.erpnext.pos.utils.NetworkMonitor
@@ -155,7 +156,7 @@ fun AppNavigation() {
     val appThemeMode by themePreferences.themeMode.collectAsState(initial = AppThemeMode.System)
 
     val snackbar by snackbarController.snackbar.collectAsState()
-    val isLoading by LoadingIndicator.isLoading.collectAsState(initial = false)
+    val loadingState by LoadingIndicator.state.collectAsState(initial = LoadingUiState())
     val cashBoxManager = koinInject<CashBoxManager>()
     val homeRefreshController = koinInject<HomeRefreshController>()
     val billingResetController = koinInject<BillingResetController>()
@@ -360,7 +361,7 @@ fun AppNavigation() {
                                             else -> MaterialTheme.colorScheme.onSurfaceVariant
                                         }
                                         val dbLabel = when (syncState) {
-                                            is SyncState.SYNCING -> "Base de datos: Sincronizando"
+                                            is SyncState.SYNCING -> "Base de datos: ${(syncState as SyncState.SYNCING).message}"
                                             is SyncState.ERROR -> "Base de datos: Error de sincronización"
                                             is SyncState.SUCCESS -> "Base de datos: Sincronizada"
                                             else -> if (dbHealthy) {
@@ -643,11 +644,7 @@ fun AppNavigation() {
                                     },
                                     showBack = resolvedShowBack,
                                     onBack = resolvedOnBack,
-                                    bottomContent = {
-                                        if (syncState is SyncState.SYNCING) {
-                                            LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
-                                        }
-                                    }
+                                    bottomContent = {}
                                 )
                             }
                             Box(
@@ -660,14 +657,36 @@ fun AppNavigation() {
                                     onDismiss = snackbarController::dismiss
                                 )
 
-                                if (isLoading) {
-                                    LinearProgressIndicator(
+                                if (loadingState.isLoading) {
+                                    Column(
                                         modifier = Modifier
                                             .fillMaxWidth()
-                                            .align(Alignment.TopCenter),
-                                        color = MaterialTheme.colorScheme.primary,
-                                        trackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.25f)
-                                    )
+                                            .align(Alignment.TopCenter)
+                                    ) {
+                                        val message = loadingState.message.ifBlank {
+                                            (syncState as? SyncState.SYNCING)?.message ?: "Procesando..."
+                                        }
+                                        Text(
+                                            text = message,
+                                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
+                                            style = MaterialTheme.typography.labelMedium,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                        if (loadingState.progress != null) {
+                                            LinearProgressIndicator(
+                                                progress = { loadingState.progress ?: 0f },
+                                                modifier = Modifier.fillMaxWidth(),
+                                                color = MaterialTheme.colorScheme.primary,
+                                                trackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.25f)
+                                            )
+                                        } else {
+                                            LinearProgressIndicator(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                color = MaterialTheme.colorScheme.primary,
+                                                trackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.25f)
+                                            )
+                                        }
+                                    }
                                 }
 
                                 val navManager: NavigationManager = koinInject()

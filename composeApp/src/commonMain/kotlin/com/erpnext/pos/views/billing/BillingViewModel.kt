@@ -25,6 +25,7 @@ import com.erpnext.pos.navigation.NavigationManager
 import com.erpnext.pos.remoteSource.dto.SalesInvoiceDto
 import com.erpnext.pos.remoteSource.dto.SalesInvoiceItemDto
 import com.erpnext.pos.remoteSource.dto.SalesInvoicePaymentScheduleDto
+import com.erpnext.pos.remoteSource.sdk.extractReservedStockItemCode
 import com.erpnext.pos.remoteSource.sdk.toUserMessage
 import com.erpnext.pos.utils.toCurrencySymbol
 import com.erpnext.pos.utils.view.DateTimeProvider
@@ -206,7 +207,7 @@ class BillingViewModel(
             _state.value = BillingState.Error(
                 it.toUserMessage("No se pudo cargar la información de facturación.")
             )
-        }, showLoading = false)
+        }, showLoading = false, loadingMessage = "Cargando datos de facturación...")
     }
 
     private fun requireSuccessState(): BillingState.Success? {
@@ -391,7 +392,7 @@ class BillingViewModel(
                     cartErrorMessage = e.toUserMessage("No se pudo aplicar el documento de origen.")
                 )
             }
-        })
+        }, loadingMessage = "Aplicando documento de origen...")
     }
 
     fun clearSourceDocument() {
@@ -438,7 +439,8 @@ class BillingViewModel(
                             ?: "No se pudieron cargar los documentos."
                     )
                 }
-            }
+            },
+            loadingMessage = "Cargando documentos de origen..."
         )
     }
 
@@ -590,7 +592,8 @@ class BillingViewModel(
                         paymentErrorMessage = e.toUserMessage("No se pudo calcular moneda/tasa del pago.")
                     )
                 }
-            }
+            },
+            loadingMessage = "Calculando datos del pago..."
         )
     }
 
@@ -631,7 +634,8 @@ class BillingViewModel(
             },
             exceptionHandler = {
                 // No bloqueamos UI si falla la tasa; el pago resolverá tasa al guardar.
-            }
+            },
+            loadingMessage = "Actualizando tasa de cambio..."
         )
     }
 
@@ -738,17 +742,13 @@ class BillingViewModel(
             executeUseCase(action = {
                 val invoiceCurrency = context.currency.ifBlank { current.currency ?: "USD" }
                 val companyCurrency = context.companyCurrency.ifBlank { invoiceCurrency }
-                val rounderCash: (Double) -> Double = { value ->
-                    roundForCurrency(value, invoiceCurrency)
-                }
-
                 val rawTotals = calculateTotals(current)
                 val totals = rawTotals.copy(
-                    subtotal = rounderCash(rawTotals.subtotal),
-                    taxes = rounderCash(rawTotals.taxes),
-                    discount = rounderCash(rawTotals.discount),
-                    shipping = rounderCash(rawTotals.shipping),
-                    total = rounderCash(rawTotals.total)
+                    subtotal = roundToCurrency(rawTotals.subtotal),
+                    taxes = roundToCurrency(rawTotals.taxes),
+                    discount = roundToCurrency(rawTotals.discount),
+                    shipping = roundToCurrency(rawTotals.shipping),
+                    total = roundToCurrency(rawTotals.total)
                 )
                 val discountInfo = resolveDiscountInfo(current, totals.subtotal)
                 val discountPercent = discountInfo.percent?.takeIf { it > 0.0 }
@@ -777,7 +777,7 @@ class BillingViewModel(
                 )
                 val currencyKey = normalizeCurrency(invoiceCurrency).uppercase()
                 val roundingTolerance = when (currencyKey) {
-                    "NIO" -> 1.0
+                    "NIO" -> 0.01
                     "USD" -> 0.01
                     else -> 0.01
                 }
@@ -979,7 +979,8 @@ class BillingViewModel(
             }, exceptionHandler = { e ->
                 // En modo prueba necesitamos mensajes útiles: agregamos contexto del flujo.
                 _state.update { currentState ->
-                    val previous = currentState as? BillingState.Success
+                    val previous = (currentState as? BillingState.Success)
+                        ?.let { applyReservedItemFilter(it, e) }
                     val errorMessage = buildFinalizeErrorMessage(previous, e)
                     BillingState.Error(
                         errorMessage,
@@ -989,7 +990,7 @@ class BillingViewModel(
                 }
             }, finallyHandler = {
                 setFinalizingSale(false)
-            })
+            }, loadingMessage = "Procesando factura y pago...")
         }
     }
 
@@ -1023,7 +1024,8 @@ class BillingViewModel(
             exceptionHandler = { e ->
                 val message = e.toUserMessage("No se pudo sincronizar tasas de cambio.")
                 _state.value = BillingState.Error(message, base, showSyncRates = true)
-            }
+            },
+            loadingMessage = "Sincronizando tasas de cambio..."
         )
     }
 
@@ -1084,6 +1086,45 @@ class BillingViewModel(
         val message = error.message ?: return false
         return message.contains("tasa de cambio", ignoreCase = true) ||
                 message.contains("exchange rate", ignoreCase = true)
+    }
+
+    private fun applyReservedItemFilter(
+        current: BillingState.Success,
+        error: Throwable
+    ): BillingState.Success {
+        val reservedItemCode = error.extractReservedStockItemCode()?.trim().orEmpty()
+        if (reservedItemCode.isBlank()) return current
+
+        val normalizedCode = reservedItemCode.uppercase()
+        val updatedProducts = products.filterNot { it.itemCode.uppercase() == normalizedCode }
+        val productsChanged = updatedProducts.size != products.size
+        if (productsChanged) {
+            products = updatedProducts
+        }
+
+        val updatedCart = current.cartItems.filterNot { it.itemCode.uppercase() == normalizedCode }
+        val cartChanged = updatedCart.size != current.cartItems.size
+        val filteredResults = if (current.productSearchQuery.isBlank()) {
+            updatedProducts
+        } else {
+            updatedProducts.filter {
+                it.name.contains(current.productSearchQuery, ignoreCase = true) ||
+                    it.itemCode.contains(current.productSearchQuery, ignoreCase = true)
+            }
+        }
+
+        if (!productsChanged && !cartChanged) return current
+
+        val reservedMessage =
+            "El artículo $reservedItemCode está reservado para otras órdenes y fue ocultado del catálogo."
+
+        return recalculateTotals(
+            current.copy(
+                productSearchResults = filteredResults,
+                cartItems = updatedCart,
+                cartErrorMessage = reservedMessage
+            )
+        )
     }
 
     private suspend fun buildExchangeRateMap(
@@ -1241,6 +1282,9 @@ class BillingViewModel(
         val items = buildInvoiceItems(current, context, discountPercent, discountAmount)
         val paymentMetadata =
             buildInvoiceRemarks(current, paymentLines, totals.shipping, invoiceCurrency)
+        val taxes = roundToCurrency(totals.taxes)
+        val total = roundToCurrency(totals.total)
+        val netTotal = roundToCurrency((total - taxes).coerceAtLeast(0.0))
 
         val rawPayments = if (usePosInvoice) {
             val paymentMode = paymentLines.firstOrNull()?.modeOfPayment
@@ -1288,9 +1332,8 @@ class BillingViewModel(
         }
 
         val hasRounding = kotlin.math.abs(rounding.roundingAdjustment) > 0.0001
-        val roundedTotalField = if (hasRounding) rounding.roundedTotal else null
-        val roundingAdjustmentField =
-            if (hasRounding) rounding.roundingAdjustment else null
+        val roundedTotalField = if (hasRounding) roundToCurrency(rounding.roundedTotal) else null
+        val roundingAdjustmentField = if (hasRounding) roundToCurrency(rounding.roundingAdjustment) else null
 
         return SalesInvoiceDto(
             customer = customer.name,
@@ -1303,12 +1346,12 @@ class BillingViewModel(
             partyAccountCurrency = context.partyAccountCurrency,
             dueDate = dueDate,
             status = resolvedStatus,
-            grandTotal = totals.total,
+            grandTotal = total,
             roundedTotal = roundedTotalField,
             roundingAdjustment = roundingAdjustmentField,
             outstandingAmount = if (usePosInvoice) resolvedOutstanding else null,
-            totalTaxesAndCharges = totals.taxes,
-            netTotal = totals.total,
+            totalTaxesAndCharges = taxes,
+            netTotal = netTotal,
             paidAmount = if (usePosInvoice) resolvedPaid else null,
             changeAmount = if (usePosInvoice) resolvedChange.takeIf { it > 0.0 } else null,
             items = items,
@@ -1370,12 +1413,14 @@ class BillingViewModel(
             if (source?.sourceType == SalesFlowSource.DeliveryNote) sourceId else null
 
         val items = current.cartItems.map { cart ->
+            val rate = roundToCurrency(cart.price)
+            val amount = roundToCurrency(cart.quantity * rate)
             SalesInvoiceItemDto(
                 itemCode = cart.itemCode,
                 itemName = cart.name,
                 qty = cart.quantity,
-                rate = cart.price,
-                amount = cart.quantity * cart.price,
+                rate = rate,
+                amount = amount,
                 discountPercentage = discountPercent,
                 warehouse = context.warehouse,
                 incomeAccount = context.incomeAccount,
@@ -1385,13 +1430,14 @@ class BillingViewModel(
         }.toMutableList()
 
         if (discountPercent == null && discountAmount > 0.0) {
+            val discountValue = roundToCurrency(discountAmount)
             items.add(
                 SalesInvoiceItemDto(
                     itemCode = DISCOUNT_ITEM_CODE,
                     itemName = "Discount",
                     qty = 1.0,
-                    rate = -discountAmount,
-                    amount = -discountAmount,
+                    rate = -discountValue,
+                    amount = -discountValue,
                     warehouse = context.warehouse,
                     incomeAccount = context.incomeAccount
                 )

@@ -23,6 +23,7 @@ val iosModule = module {
 
     // DAO after builder
     single { get<AppDatabase>().itemDao() }
+    single { get<AppDatabase>().itemReorderDao() }
     single { get<AppDatabase>().userDao() }
     single { get<AppDatabase>().posProfileDao() }
     single { get<AppDatabase>().posProfileLocalDao() }

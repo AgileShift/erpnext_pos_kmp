@@ -1,8 +1,0 @@
-{
-  "data": {
-    "name": "Clothing Center",
-    "default_currency": "USD",
-    "default_receivable_account": "Cuentas por Cobrar a Clientes USD - CL",
-    "doctype": "Company"
-  }
-}

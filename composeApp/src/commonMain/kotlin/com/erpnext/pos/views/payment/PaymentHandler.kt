@@ -23,7 +23,7 @@ import com.erpnext.pos.utils.resolvePaymentCurrencyForMode
 import com.erpnext.pos.utils.resolvePaymentToReceivableRate
 import com.erpnext.pos.utils.resolveRateToInvoiceCurrency
 import com.erpnext.pos.utils.roundToCurrency
-import kotlin.math.floor
+import kotlin.math.ceil
 import kotlin.math.pow
 import com.erpnext.pos.utils.toBaseAmount
 import kotlinx.coroutines.flow.first
@@ -310,8 +310,28 @@ class PaymentHandler(
                     if (paymentResult.isFailure) {
                         remotePaymentFailed = true
                     } else {
+                        val createdPaymentName = paymentResult.getOrNull()
                         adjustedLine.referenceNumber?.takeIf { it.isNotBlank() }?.let { ref ->
-                            remoteEntryByReference[ref] = paymentResult.getOrNull()
+                            remoteEntryByReference[ref] = createdPaymentName
+                        }
+                        val outstandingFromServer = createdPaymentName?.let { paymentName ->
+                            runCatching {
+                                api.getPaymentEntryByName(paymentName)
+                                    .references
+                                    .firstOrNull { reference ->
+                                        reference.referenceName.equals(
+                                            resolvedInvoice.name ?: invoiceNameForLocal,
+                                            ignoreCase = true
+                                        )
+                                    }
+                                    ?.outstandingAmount
+                            }.getOrNull()
+                        }
+                        if (outstandingFromServer != null) {
+                            remainingOutstandingRc = roundToCurrency(
+                                outstandingFromServer.coerceAtLeast(0.0)
+                            )
+                            return@forEach
                         }
                     }
 
@@ -399,7 +419,7 @@ class PaymentHandler(
         }
 
         val scale = paySpec.cashScale.coerceAtMost(paySpec.minorUnits)
-        val capped = floorToScale(maxEntered, scale)
+        val capped = ceilToScale(maxEntered, scale)
         if (line.enteredAmount <= capped + 0.000001) return line
 
         return line.copy(
@@ -408,11 +428,11 @@ class PaymentHandler(
         )
     }
 
-    private fun floorToScale(value: Double, scale: Int): Double {
+    private fun ceilToScale(value: Double, scale: Int): Double {
         if (!value.isFinite()) return value
-        if (scale <= 0) return floor(value)
+        if (scale <= 0) return ceil(value)
         val factor = 10.0.pow(scale.toDouble())
-        return floor(value * factor) / factor
+        return ceil(value * factor) / factor
     }
 
     private suspend fun resolveRateBetweenCurrencies(

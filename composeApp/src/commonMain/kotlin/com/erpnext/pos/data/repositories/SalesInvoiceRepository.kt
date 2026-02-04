@@ -666,8 +666,11 @@ class SalesInvoiceRepository(
         invoices.forEach { wrapper ->
             val invoice = wrapper.invoice
             val receivableCurrency = invoice.partyAccountCurrency ?: invoice.currency
-            val outstanding = (invoice.baseOutstandingAmount ?: invoice.outstandingAmount)
-                .coerceAtLeast(0.0)
+            val outstanding = when {
+                receivableCurrency.equals(baseCurrency, ignoreCase = true) ->
+                    (invoice.baseOutstandingAmount ?: invoice.outstandingAmount)
+                else -> invoice.outstandingAmount ?: invoice.baseOutstandingAmount
+            }?.coerceAtLeast(0.0) ?: 0.0
             val rate = when {
                 receivableCurrency.equals(baseCurrency, ignoreCase = true) -> 1.0
                 else -> context.resolveExchangeRateBetween(

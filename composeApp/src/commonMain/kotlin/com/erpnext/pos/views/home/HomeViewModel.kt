@@ -160,7 +160,9 @@ class HomeViewModel(
                     syncManager.fullSync(force = false)
                 }
             },
-            exceptionHandler = { it.printStackTrace() })
+            exceptionHandler = { it.printStackTrace() },
+            loadingMessage = "Preparando sincronización..."
+        )
     }
 
     fun syncNow() {
@@ -170,7 +172,9 @@ class HomeViewModel(
                     syncManager.fullSync(force = true)
                 }
             },
-            exceptionHandler = { it.printStackTrace() })
+            exceptionHandler = { it.printStackTrace() },
+            loadingMessage = "Iniciando sincronización..."
+        )
     }
 
     fun loadInitialData() {
@@ -191,7 +195,7 @@ class HomeViewModel(
             _stateFlow.update { HomeState.POSProfiles(posProfiles, userInfo) }
         }, exceptionHandler = { e ->
             _stateFlow.update { HomeState.Error(e.message ?: "Error") }
-        })
+        }, loadingMessage = "Cargando inicio...")
     }
 
     fun refreshMetrics() {
@@ -206,7 +210,8 @@ class HomeViewModel(
                 refreshInventoryAlerts()
                 refreshSalesTarget()
             },
-            exceptionHandler = { it.printStackTrace() }
+            exceptionHandler = { it.printStackTrace() },
+            loadingMessage = "Actualizando métricas..."
         )
     }
 
@@ -389,7 +394,7 @@ class HomeViewModel(
             logoutUseCase.invoke(null)
             _stateFlow.update { HomeState.Logout }
             navManager.navigateTo(NavRoute.Login)
-        }, exceptionHandler = { it.printStackTrace() })
+        }, exceptionHandler = { it.printStackTrace() }, loadingMessage = "Cerrando sesión...")
     }
 
     fun openSettings() {
@@ -413,7 +418,7 @@ class HomeViewModel(
         executeUseCase(action = {
             val posProfileInfo = fetchPosProfileInfoLocalUseCase(pos.name)
             _stateFlow.update { HomeState.POSInfoLoaded(posProfileInfo, posProfileInfo.currency) }
-        }, exceptionHandler = { it.printStackTrace() })
+        }, exceptionHandler = { it.printStackTrace() }, loadingMessage = "Cargando perfil POS...")
     }
 
     fun closeCashbox() {

@@ -83,7 +83,8 @@ class ReconciliationViewModel(
                         errorMessage = error.message ?: "Failed to close the cashbox."
                     )
                 }
-            }
+            },
+            loadingMessage = "Cerrando caja..."
         )
     }
 

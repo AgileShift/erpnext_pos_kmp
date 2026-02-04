@@ -16,6 +16,7 @@ import com.erpnext.pos.localSource.dao.CustomerGroupDao
 import com.erpnext.pos.localSource.dao.DeliveryChargeDao
 import com.erpnext.pos.localSource.dao.ExchangeRateDao
 import com.erpnext.pos.localSource.dao.ItemDao
+import com.erpnext.pos.localSource.dao.ItemReorderDao
 import com.erpnext.pos.localSource.dao.ModeOfPaymentDao
 import com.erpnext.pos.localSource.dao.PaymentTermDao
 import com.erpnext.pos.localSource.dao.POSClosingEntryDao
@@ -167,13 +168,14 @@ import com.erpnext.pos.localSource.entities.v2.UserEntity as UserEntityV2
         SyncStateEntity::class,
         CustomerOutboxEntity::class
     ],
-    version = 40,
+    version = 1,
     exportSchema = true
 )
 @ConstructedBy(AppDatabaseConstructor::class)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun userDao(): UserDao
     abstract fun itemDao(): ItemDao
+    abstract fun itemReorderDao(): ItemReorderDao
     abstract fun posProfileDao(): POSProfileDao
     abstract fun posProfileLocalDao(): PosProfileLocalDao
     abstract fun posProfilePaymentMethodDao(): PosProfilePaymentMethodDao

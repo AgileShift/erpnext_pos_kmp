@@ -4,6 +4,7 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.os.Build
 import androidx.core.app.NotificationCompat
+import androidx.work.PeriodicWorkRequestBuilder
 import com.erpnext.pos.AppContext
 
 private const val CHANNEL_ID = "inventory_alerts"
@@ -60,7 +61,7 @@ actual fun configureInventoryAlertWorker(enabled: Boolean, hour: Int, minute: In
     val initialDelay = calendar.timeInMillis - now
 
     val request =
-        androidx.work.PeriodicWorkRequestBuilder<com.erpnext.pos.alerts.InventoryAlertsWorker>(
+        PeriodicWorkRequestBuilder<InventoryAlertsWorker>(
             24,
             java.util.concurrent.TimeUnit.HOURS
         ).setInitialDelay(initialDelay, java.util.concurrent.TimeUnit.MILLISECONDS)

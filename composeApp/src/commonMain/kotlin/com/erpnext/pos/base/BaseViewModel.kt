@@ -14,10 +14,11 @@ abstract class BaseViewModel : ViewModel() {
         action: suspend CoroutineScope.() -> Unit,
         exceptionHandler: suspend (Throwable) -> Unit,
         finallyHandler: (suspend () -> Unit)? = null,
-        showLoading: Boolean = true
+        showLoading: Boolean = true,
+        loadingMessage: String = "Procesando..."
     ): Job {
         return viewModelScope.launch {
-            if (showLoading) LoadingIndicator.start()
+            if (showLoading) LoadingIndicator.start(message = loadingMessage)
             try {
                 action.invoke(this)
             } catch (e: kotlinx.coroutines.CancellationException) {

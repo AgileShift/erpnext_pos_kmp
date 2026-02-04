@@ -649,7 +649,7 @@ val appModule = module {
     single { CreatePaymentEntryUseCase(get()) }
     single { PartialReturnUseCase(get(), get(), get(), get()) }
     single { LoadHomeMetricsUseCase(get()) }
-    single { InventoryAlertRepository(get(), get(named("apiService")), get(), get()) }
+    single { InventoryAlertRepository(get(), get(), get(named("apiService")), get(), get()) }
     single { LoadInventoryAlertsUseCase(get()) }
     single { SalesTargetRepository(get(named("apiService")), get(), get()) }
     single { GetCompanyInfoUseCase(get()) }

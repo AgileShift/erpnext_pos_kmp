@@ -80,10 +80,17 @@ import io.ktor.http.encodeURLParameter
 import io.ktor.http.formUrlEncode
 import io.ktor.http.isSuccess
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.decodeFromJsonElement
+import kotlinx.serialization.json.doubleOrNull
+import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import com.erpnext.pos.utils.AppLogger
 import com.erpnext.pos.utils.AppSentry
 import io.ktor.client.statement.HttpResponse
@@ -778,7 +785,14 @@ class APIService(
         suspend fun fetchBins(batchOffset: Int, batchLimit: Int): List<BinDto> {
             return client.getERPList<BinDto>(
                 doctype = ERPDocType.Bin.path,
-                fields = listOf("item_code", "warehouse", "stock_uom", "actual_qty", "valuation_rate"),
+                fields = listOf(
+                    "item_code",
+                    "warehouse",
+                    "stock_uom",
+                    "actual_qty",
+                    "reserved_qty",
+                    "valuation_rate"
+                ),
                 limit = batchLimit,
                 offset = batchOffset,
                 orderBy = "item_code",
@@ -854,10 +868,11 @@ class APIService(
                 val isStocked = item.isStockItem
                 val isService =
                     !isStocked || (item.itemGroup == "COMPLEMENTARIOS")  // Infer de group en JSON
+                val sellableQty = (bin.actualQty - (bin.reservedQty ?: 0.0)).coerceAtLeast(0.0)
 
                 WarehouseItemDto(
                     itemCode = bin.itemCode,
-                    actualQty = bin.actualQty,
+                    actualQty = sellableQty,
                     price = price,
                     valuationRate = bin.valuationRate,
                     name = item.itemName,
@@ -901,14 +916,17 @@ class APIService(
         val url = authStore.getCurrentSite() ?: throw Exception("URL Invalida")
         val bins = client.getERPList<BinDto>(
             doctype = ERPDocType.Bin.path,
-            fields = listOf("item_code", "warehouse", "stock_uom", "actual_qty"),
+            fields = listOf("item_code", "warehouse", "stock_uom", "actual_qty", "reserved_qty"),
             limit = itemCodes.size,
             baseUrl = url
         ) {
             "warehouse" eq warehouse
             "item_code" `in` itemCodes
         }
-        return bins.associate { it.itemCode to it.actualQty }
+        return bins.associate { bin ->
+            val sellableQty = (bin.actualQty - (bin.reservedQty ?: 0.0)).coerceAtLeast(0.0)
+            bin.itemCode to sellableQty
+        }
     }
 
     suspend fun fetchBinsForItems(
@@ -926,7 +944,8 @@ class APIService(
                     "warehouse",
                     "stock_uom",
                     "actual_qty",
-                    "projected_qty"
+                    "projected_qty",
+                    "reserved_qty"
                 ),
                 limit = codes.size,
                 baseUrl = url
@@ -945,21 +964,52 @@ class APIService(
         val url = authStore.getCurrentSite() ?: throw Exception("URL Invalida")
         val chunkSize = 50
         return itemCodes.chunked(chunkSize).flatMap { codes ->
-            client.getERPList<ItemReorderDto>(
-                doctype = "Item Reorder",
-                fields = listOf(
-                    "parent",
-                    "warehouse",
-                    "warehouse_reorder_level",
-                    "warehouse_reorder_qty"
-                ),
+            val rows = client.getERPList<JsonObject>(
+                doctype = ERPDocType.Item.path,
+                fields = listOf("name", "reorder_levels"),
                 limit = codes.size,
                 baseUrl = url
             ) {
-                "warehouse" eq warehouse
-                "parent" `in` codes
+                "name" `in` codes
+            }
+
+            rows.mapNotNull { row ->
+                val itemCode = row["name"]?.jsonPrimitive?.contentOrNull ?: return@mapNotNull null
+                val reorderLevels = decodeReorderLevels(row["reorder_levels"])
+                val warehouseMatch = reorderLevels.firstOrNull {
+                    val wh = it["warehouse"]?.jsonPrimitive?.contentOrNull
+                    wh.equals(warehouse, ignoreCase = true)
+                } ?: return@mapNotNull null
+
+                ItemReorderDto(
+                    itemCode = itemCode,
+                    warehouse = warehouse,
+                    reorderLevel = warehouseMatch["warehouse_reorder_level"]?.asDoubleOrNull(),
+                    reorderQty = warehouseMatch["warehouse_reorder_qty"]?.asDoubleOrNull()
+                )
             }
         }
+    }
+
+    private fun decodeReorderLevels(raw: JsonElement?): List<JsonObject> {
+        if (raw == null) return emptyList()
+        val parsed: JsonElement = when (raw) {
+            is JsonArray -> raw
+            is JsonPrimitive -> {
+                val content = raw.contentOrNull ?: return emptyList()
+                runCatching { json.parseToJsonElement(content) }.getOrNull() ?: return emptyList()
+            }
+
+            else -> return emptyList()
+        }
+        return (parsed as? JsonArray)
+            ?.mapNotNull { it as? JsonObject }
+            .orEmpty()
+    }
+
+    private fun JsonElement.asDoubleOrNull(): Double? {
+        val primitive = this as? JsonPrimitive ?: return null
+        return primitive.doubleOrNull ?: primitive.contentOrNull?.toDoubleOrNull()
     }
 
     suspend fun findInvoiceBySignature(

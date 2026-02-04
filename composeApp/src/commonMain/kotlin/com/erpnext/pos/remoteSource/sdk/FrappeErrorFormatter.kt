@@ -8,6 +8,8 @@ import kotlinx.serialization.json.jsonPrimitive
 
 private val htmlTagRegex = Regex("<[^>]*>")
 private val whitespaceRegex = Regex("\\s+")
+private val itemFromLinkRegex = Regex("/app/Form/Item/([^\"\\s?/]+)")
+private val itemFromProductLabelRegex = Regex("Producto\\s+([A-Za-z0-9._-]+)")
 
 fun Throwable.toUserMessage(
     defaultMessage: String = "Ocurrió un error. Inténtalo nuevamente."
@@ -22,8 +24,55 @@ fun Throwable.toUserMessage(
         ?: frappeException?.message
         ?: message
 
+    if (isReservedStockError()) {
+        val itemCode = extractReservedStockItemCode()
+        return if (itemCode.isNullOrBlank()) {
+            "No se puede completar la venta porque el stock está reservado para otras órdenes."
+        } else {
+            "No se puede completar la venta: el artículo $itemCode está reservado para otras órdenes."
+        }
+    }
+
     val sanitized = fallbackMessage?.let { sanitizeHtml(it) }
     return sanitized?.takeIf { it.isNotBlank() } ?: defaultMessage
+}
+
+fun Throwable.isReservedStockError(): Boolean {
+    return collectErrorTexts().any { raw ->
+        val normalized = raw.lowercase()
+        normalized.contains("negativestockerror") &&
+            (
+                normalized.contains("reserved for other sales orders") ||
+                    normalized.contains("stock is reserved for other sales orders") ||
+                    normalized.contains("reserved_qty")
+                )
+    }
+}
+
+fun Throwable.extractReservedStockItemCode(): String? {
+    val candidates = collectErrorTexts()
+    val byLink = candidates.firstNotNullOfOrNull { text ->
+        itemFromLinkRegex.find(text)?.groupValues?.getOrNull(1)
+    }
+    if (!byLink.isNullOrBlank()) return byLink
+
+    return candidates.firstNotNullOfOrNull { text ->
+        val sanitized = sanitizeHtml(text)
+        itemFromProductLabelRegex.find(sanitized)?.groupValues?.getOrNull(1)
+    }
+}
+
+private fun Throwable.collectErrorTexts(): List<String> {
+    val messages = mutableListOf<String>()
+    var current: Throwable? = this
+    while (current != null) {
+        val frappe = current as? FrappeException
+        frappe?.errorResponse?._server_messages?.let { messages += it }
+        frappe?.errorResponse?.exception?.let { messages += it }
+        current.message?.let { messages += it }
+        current = current.cause
+    }
+    return messages
 }
 
 private fun parseServerMessages(raw: String): String? {

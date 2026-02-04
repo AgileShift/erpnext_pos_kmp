@@ -35,6 +35,8 @@ data class PaymentEntryReferenceDto(
     val referenceDoctype: String? = null,
     @SerialName("reference_name")
     val referenceName: String? = null,
+    @SerialName("outstanding_amount")
+    val outstandingAmount: Double? = null,
     @SerialName("allocated_amount")
     val allocatedAmount: Double = 0.0
 )

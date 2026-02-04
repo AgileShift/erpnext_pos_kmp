@@ -259,7 +259,8 @@ class CustomerViewModel(
                 }
                 onResult(isValid, message)
             },
-            exceptionHandler = { onResult(false, it.message ?: "Error al validar credito") }
+            exceptionHandler = { onResult(false, it.message ?: "Error al validar credito") },
+            loadingMessage = "Validando crédito..."
         )
     }
 
@@ -337,7 +338,8 @@ class CustomerViewModel(
                 _invoicesState.value = CustomerInvoicesState.Error(
                     it.message ?: "No se pudieron cargar las facturas pendientes."
                 )
-            }
+            },
+            loadingMessage = "Cargando facturas pendientes..."
         )
     }
 
@@ -497,7 +499,8 @@ class CustomerViewModel(
                 _paymentState.value = buildPaymentState(
                     errorMessage = it.message ?: "No se pudo registrar el pago."
                 )
-            }
+            },
+            loadingMessage = "Registrando pago..."
         )
     }
 

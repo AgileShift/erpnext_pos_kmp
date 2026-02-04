@@ -66,7 +66,8 @@ class PaymentEntryViewModel(
                         errorMessage = throwable.message ?: "No se pudo registrar el pago."
                     )
                 }
-            }
+            },
+            loadingMessage = "Registrando pago..."
         )
     }
 

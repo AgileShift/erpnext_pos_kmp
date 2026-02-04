@@ -143,8 +143,8 @@ fun buildCurrencySpecs(): Map<String, CurrencySpec> {
     // Ajusta aquí si agregas más monedas/escala por país.
     return mapOf(
         // USA
-        "NIO" to CurrencySpec(code = "NIO", minorUnits = 2, cashScale = 0),
-        "USD" to CurrencySpec(code = "USD", minorUnits = 0, cashScale = 0),
+        "NIO" to CurrencySpec(code = "NIO", minorUnits = 2, cashScale = 2),
+        "USD" to CurrencySpec(code = "USD", minorUnits = 2, cashScale = 2),
         // LATAM (continental)
         "MXN" to CurrencySpec(code = "MXN", minorUnits = 2, cashScale = 2),
         "GTQ" to CurrencySpec(code = "GTQ", minorUnits = 2, cashScale = 2),
@@ -164,6 +164,11 @@ fun buildCurrencySpecs(): Map<String, CurrencySpec> {
         "GYD" to CurrencySpec(code = "GYD", minorUnits = 2, cashScale = 2),
         "SRD" to CurrencySpec(code = "SRD", minorUnits = 2, cashScale = 2),
     )
+}
+
+private fun minorUnitEpsilon(minorUnits: Int): Double {
+    val units = minorUnits.coerceAtLeast(0)
+    return if (units == 0) 0.5 else 1.0 / (2.0 * 10.0.pow(units.toDouble()))
 }
 
 fun resolveMinorUnits(
@@ -285,21 +290,16 @@ suspend fun buildPaymentEntryDto(
     }
 
     val entered = roundCashIfNeeded(bd(line.enteredAmount), toSpec)
+    val roundingTolerance = minorUnitEpsilon(rcSpec.minorUnits)
 
     // Caso 1: paid_to == receivable
     if (paidToCurrency.equals(receivableCurrency, ignoreCase = true)) {
-    val roundingTolerance = maxOf(
-        1.0 / rcSpec.minorUnits.toDouble().pow(10.0),
-        0.05
-    )
-    val outstandingAdjusted = bd(outstandingRc - roundingTolerance)
-        .moneyScale(rcSpec.minorUnits)
-        .coerceAtLeastZero()
-    val allocated = if (entered.toDouble(2) + roundingTolerance >= outstanding.toDouble(2)) {
-        outstandingAdjusted
-    } else {
-        minOfBd(entered, outstandingAdjusted).moneyScale(rcSpec.minorUnits)
-    }
+        val outstandingValue = outstanding.toDouble(rcSpec.minorUnits)
+        val allocated = if (entered.toDouble(toSpec.minorUnits) + roundingTolerance >= outstandingValue) {
+            outstanding
+        } else {
+            minOfBd(entered, outstanding).moneyScale(rcSpec.minorUnits)
+        }
         return PaymentEntryCreateDto(
             company = context.company,
             postingDate = postingDate,
@@ -350,18 +350,12 @@ suspend fun buildPaymentEntryDto(
 
     val rate = bd(rateDouble)
 
-    val roundingTolerance = maxOf(
-        1.0 / rcSpec.minorUnits.toDouble().pow(10.0),
-        0.05
-    )
     val deliveredRc = entered.safeMul(rate).moneyScale(rcSpec.minorUnits)
-    val outstandingAdjusted2 = bd(outstandingRc - roundingTolerance)
-        .moneyScale(rcSpec.minorUnits)
-        .coerceAtLeastZero()
-    val allocatedRc = if (deliveredRc.toDouble(2) + roundingTolerance >= outstanding.toDouble(2)) {
-        outstandingAdjusted2
+    val outstandingValue = outstanding.toDouble(rcSpec.minorUnits)
+    val allocatedRc = if (deliveredRc.toDouble(rcSpec.minorUnits) + roundingTolerance >= outstandingValue) {
+        outstanding
     } else {
-        minOfBd(deliveredRc, outstandingAdjusted2).moneyScale(rcSpec.minorUnits)
+        minOfBd(deliveredRc, outstanding).moneyScale(rcSpec.minorUnits)
     }
     val receivedEffective = allocatedRc
         .safeDiv(rate, scale = 8)
@@ -380,8 +374,8 @@ suspend fun buildPaymentEntryDto(
         paidFrom = paidFromResolved,
         paidTo = paidToResolved,
         paidToAccountCurrency = paidToCurrency,
-        sourceExchangeRate = 1.0,
-        targetExchangeRate = rate.toDouble(6),
+        sourceExchangeRate = null,
+        targetExchangeRate = null,
         referenceNo = line.referenceNumber?.takeIf { it.isNotBlank() },
         referenceDate = if (!line.referenceNumber.isNullOrEmpty())
             Clock.System.now().toEpochMilliseconds().toErpDateTime()
@@ -464,20 +458,15 @@ suspend fun buildPaymentEntryDtoWithRateResolver(
     }
 
     val entered = roundCashIfNeeded(bd(line.enteredAmount), toSpec)
+    val roundingTolerance = minorUnitEpsilon(rcSpec.minorUnits)
 
     // Caso 1: paid_to == receivable
     if (paidToCurrency.equals(receivableCurrency, ignoreCase = true)) {
-    val roundingTolerance = maxOf(
-        1.0 / rcSpec.minorUnits.toDouble().pow(10.0),
-        0.05
-    )
-    val outstandingAdjusted = bd(outstandingRc - roundingTolerance)
-        .moneyScale(rcSpec.minorUnits)
-        .coerceAtLeastZero()
-    val allocated = if (entered.toDouble(2) + roundingTolerance >= outstanding.toDouble(2)) {
-        outstandingAdjusted
+        val outstandingValue = outstanding.toDouble(rcSpec.minorUnits)
+        val allocated = if (entered.toDouble(toSpec.minorUnits) + roundingTolerance >= outstandingValue) {
+            outstanding
     } else {
-        minOfBd(entered, outstandingAdjusted).moneyScale(rcSpec.minorUnits)
+        minOfBd(entered, outstanding).moneyScale(rcSpec.minorUnits)
     }
 
         return PaymentEntryCreateDto(
@@ -535,18 +524,12 @@ suspend fun buildPaymentEntryDtoWithRateResolver(
 
     val rate = bd(rateDouble)
 
-    val roundingTolerance = maxOf(
-        1.0 / rcSpec.minorUnits.toDouble().pow(10.0),
-        0.05
-    )
     val deliveredRc = entered.safeMul(rate).moneyScale(rcSpec.minorUnits)
-    val outstandingAdjusted2 = bd(outstandingRc - roundingTolerance)
-        .moneyScale(rcSpec.minorUnits)
-        .coerceAtLeastZero()
-    val allocatedRc = if (deliveredRc.toDouble(2) + roundingTolerance >= outstanding.toDouble(2)) {
-        outstandingAdjusted2
+    val outstandingValue = outstanding.toDouble(rcSpec.minorUnits)
+    val allocatedRc = if (deliveredRc.toDouble(rcSpec.minorUnits) + roundingTolerance >= outstandingValue) {
+        outstanding
     } else {
-        minOfBd(deliveredRc, outstandingAdjusted2).moneyScale(rcSpec.minorUnits)
+        minOfBd(deliveredRc, outstanding).moneyScale(rcSpec.minorUnits)
     }
 
     val receivedEffective = allocatedRc
@@ -566,8 +549,8 @@ suspend fun buildPaymentEntryDtoWithRateResolver(
         paidFrom = paidFromResolved,
         paidTo = paidToResolved,
         paidToAccountCurrency = paidToCurrency,
-        sourceExchangeRate = 1.0,
-        targetExchangeRate = rate.toDouble(6),
+        sourceExchangeRate = null,
+        targetExchangeRate = null,
         referenceNo = line.referenceNumber?.takeIf { it.isNotBlank() },
         referenceDate = if (!line.referenceNumber.isNullOrEmpty())
             Clock.System.now().toEpochMilliseconds().toErpDateTime()
