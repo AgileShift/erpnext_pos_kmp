@@ -92,6 +92,7 @@ import com.erpnext.pos.localSource.preferences.OpeningSessionPreferences
 import com.erpnext.pos.localSource.preferences.SyncLogPreferences
 import com.erpnext.pos.localSource.preferences.SyncPreferences
 import com.erpnext.pos.localSource.preferences.ThemePreferences
+import com.erpnext.pos.localSource.preferences.CurrencySettingsPreferences
 import com.erpnext.pos.remoteSource.api.APIService
 import com.erpnext.pos.remoteSource.api.defaultEngine
 import com.erpnext.pos.remoteSource.api.v2.APIServiceV2
@@ -141,6 +142,7 @@ import com.erpnext.pos.views.reconciliation.ReconciliationViewModel
 import com.erpnext.pos.auth.AppLifecycleObserver
 import com.erpnext.pos.auth.TokenHeartbeat
 import com.erpnext.pos.data.repositories.v2.SourceDocumentRepository
+import com.erpnext.pos.data.repositories.CurrencySettingsRepository
 import com.erpnext.pos.domain.usecases.CancelSalesInvoiceUseCase
 import com.erpnext.pos.domain.usecases.FetchSalesInvoiceWithItemsUseCase
 import com.erpnext.pos.domain.usecases.PartialReturnUseCase
@@ -331,6 +333,8 @@ val appModule = module {
     single { SyncPreferences(get()) }
     single { ThemePreferences(get()) }
     single { StockSettingsRepository(get(named("apiService")), get()) }
+    single { CurrencySettingsPreferences(get()) }
+    single { CurrencySettingsRepository(get(named("apiService")), get()) }
     single<DatePolicy> { DefaultPolicy(PolicyInput()) }
     single<CashBoxManager> {
         CashBoxManager(
@@ -348,6 +352,7 @@ val appModule = module {
             paymentMethodLocalRepository = get(),
             salesInvoiceDao = get(),
             generalPreferences = get(),
+            currencySettingsRepository = get(),
             sessionRefresher = get(),
             networkMonitor = get()
         )
@@ -381,6 +386,7 @@ val appModule = module {
             modeOfPaymentRepo = get(),
             posProfilePaymentMethodSyncRepository = get(),
             stockSettingsRepository = get(),
+            currencySettingsRepository = get(),
             paymentTermsRepo = get(),
             deliveryChargesRepo = get(),
             contactRepo = get(),

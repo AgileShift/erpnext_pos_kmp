@@ -658,45 +658,59 @@ fun AppNavigation() {
                                     onDismiss = snackbarController::dismiss
                                 )
 
-                                if (loadingState.isLoading) {
-                                    Column(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .align(Alignment.TopCenter)
+                                AnimatedVisibility(
+                                    visible = loadingState.isLoading,
+                                    enter = fadeIn(tween(160)) + slideInVertically(
+                                        animationSpec = tween(180, easing = FastOutSlowInEasing),
+                                        initialOffsetY = { -it / 2 }
+                                    ),
+                                    exit = fadeOut(tween(120)) + slideOutVertically(
+                                        animationSpec = tween(140, easing = FastOutSlowInEasing),
+                                        targetOffsetY = { -it / 2 }
+                                    )
+                                ) {
+                                    Surface(
+                                        color = MaterialTheme.colorScheme.surface,
+                                        tonalElevation = 2.dp,
+                                        shadowElevation = 4.dp
                                     ) {
-                                        val strings = LocalAppStrings.current
-                                        val message = loadingState.message.ifBlank {
-                                            (syncState as? SyncState.SYNCING)?.message ?: "Procesando..."
-                                        }
-                                        Text(
-                                            text = message,
-                                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
-                                            style = MaterialTheme.typography.labelMedium,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                        val step = loadingState.currentStep
-                                        val total = loadingState.totalSteps
-                                        if (step != null && total != null && total > 0) {
+                                        Column(
+                                            modifier = Modifier.fillMaxWidth()
+                                        ) {
+                                            val strings = LocalAppStrings.current
+                                            val message = loadingState.message.ifBlank {
+                                                (syncState as? SyncState.SYNCING)?.message ?: "Procesando..."
+                                            }
                                             Text(
-                                                text = "${strings.settings.syncStepLabel} $step ${strings.settings.syncStepOfLabel} $total",
-                                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp),
-                                                style = MaterialTheme.typography.labelSmall,
+                                                text = message,
+                                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                                                style = MaterialTheme.typography.labelMedium,
                                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                                             )
-                                        }
-                                        if (loadingState.progress != null) {
-                                            LinearProgressIndicator(
-                                                progress = { loadingState.progress ?: 0f },
-                                                modifier = Modifier.fillMaxWidth(),
-                                                color = MaterialTheme.colorScheme.primary,
-                                                trackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.25f)
-                                            )
-                                        } else {
-                                            LinearProgressIndicator(
-                                                modifier = Modifier.fillMaxWidth(),
-                                                color = MaterialTheme.colorScheme.primary,
-                                                trackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.25f)
-                                            )
+                                            val step = loadingState.currentStep
+                                            val total = loadingState.totalSteps
+                                            if (step != null && total != null && total > 0) {
+                                                Text(
+                                                    text = "${strings.settings.syncStepLabel} $step ${strings.settings.syncStepOfLabel} $total",
+                                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp),
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                )
+                                            }
+                                            if (loadingState.progress != null) {
+                                                LinearProgressIndicator(
+                                                    progress = { loadingState.progress ?: 0f },
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                    color = MaterialTheme.colorScheme.primary,
+                                                    trackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.25f)
+                                                )
+                                            } else {
+                                                LinearProgressIndicator(
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                    color = MaterialTheme.colorScheme.primary,
+                                                    trackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.25f)
+                                                )
+                                            }
                                         }
                                     }
                                 }

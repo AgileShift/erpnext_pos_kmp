@@ -15,8 +15,8 @@ import com.erpnext.pos.utils.oauth.coerceAtLeastZero
 import com.erpnext.pos.utils.oauth.isZero
 import com.erpnext.pos.utils.oauth.minOfBd
 import com.erpnext.pos.utils.oauth.moneyScale
+import com.erpnext.pos.utils.oauth.moneyScaleDown
 import com.erpnext.pos.utils.oauth.roundCashIfNeeded
-import com.erpnext.pos.utils.oauth.safeDiv
 import com.erpnext.pos.utils.oauth.safeMul
 import com.erpnext.pos.utils.oauth.toDouble
 import com.erpnext.pos.views.POSContext
@@ -141,7 +141,7 @@ fun requiresReference(mode: POSPaymentModeOption?): Boolean {
 
 fun buildCurrencySpecs(): Map<String, CurrencySpec> {
     // Ajusta aquí si agregas más monedas/escala por país.
-    return mapOf(
+    val base = mapOf(
         // USA
         "NIO" to CurrencySpec(code = "NIO", minorUnits = 2, cashScale = 2),
         "USD" to CurrencySpec(code = "USD", minorUnits = 2, cashScale = 2),
@@ -164,6 +164,22 @@ fun buildCurrencySpecs(): Map<String, CurrencySpec> {
         "GYD" to CurrencySpec(code = "GYD", minorUnits = 2, cashScale = 2),
         "SRD" to CurrencySpec(code = "SRD", minorUnits = 2, cashScale = 2),
     )
+    return base.mapValues { (code, spec) ->
+        val precision = CurrencyPrecisionResolver.precisionFor(code)
+        val cashScale = CurrencyPrecisionResolver.cashScaleFor(code)
+        spec.copy(minorUnits = precision, cashScale = cashScale)
+    }
+}
+
+fun resolveCurrencySpec(
+    currency: String?,
+    specs: Map<String, CurrencySpec> = buildCurrencySpecs()
+): CurrencySpec {
+    val code = normalizeCurrency(currency)
+    val precision = CurrencyPrecisionResolver.precisionFor(code)
+    val cashScale = CurrencyPrecisionResolver.cashScaleFor(code)
+    return specs[code]?.copy(minorUnits = precision, cashScale = cashScale)
+        ?: CurrencySpec(code = code, minorUnits = precision, cashScale = cashScale)
 }
 
 private fun minorUnitEpsilon(minorUnits: Int): Double {
@@ -176,7 +192,7 @@ fun resolveMinorUnits(
     specs: Map<String, CurrencySpec> = buildCurrencySpecs()
 ): Int {
     val code = normalizeCurrency(currency)
-    return specs[code]?.minorUnits ?: 2
+    return specs[code]?.minorUnits ?: CurrencyPrecisionResolver.precisionFor(code)
 }
 
 fun resolveMinorUnitTolerance(
@@ -274,15 +290,13 @@ suspend fun buildPaymentEntryDto(
         ?: line.currency.takeIf { it.isNotBlank() }
         ?: error("No se pudo resolver moneda de paid_to"))
         .trim().uppercase()
-    val rcSpec = currencySpecs[receivableCurrency]
-        ?: CurrencySpec(code = receivableCurrency, minorUnits = 2, cashScale = 2)
-    val toSpec = currencySpecs[paidToCurrency]
-        ?: CurrencySpec(code = paidToCurrency, minorUnits = 2, cashScale = 2)
+    val rcSpec = resolveCurrencySpec(receivableCurrency, currencySpecs)
+    val toSpec = resolveCurrencySpec(paidToCurrency, currencySpecs)
     val invoiceCurrencyResolved = normalizeCurrency(invoiceCurrency)
     val rateInvToRc = invoiceToReceivableRate?.takeIf { it > 0.0 }
 
     val outstanding = bd(outstandingRc)
-        .moneyScale(rcSpec.minorUnits)
+        .moneyScaleDown(rcSpec.minorUnits)
         .coerceAtLeastZero()
 
     if (outstanding.isZero()) {
@@ -298,7 +312,7 @@ suspend fun buildPaymentEntryDto(
         val allocated = if (entered.toDouble(toSpec.minorUnits) + roundingTolerance >= outstandingValue) {
             outstanding
         } else {
-            minOfBd(entered, outstanding).moneyScale(rcSpec.minorUnits)
+            minOfBd(entered, outstanding).moneyScaleDown(rcSpec.minorUnits)
         }
         return PaymentEntryCreateDto(
             company = context.company,
@@ -323,7 +337,7 @@ suspend fun buildPaymentEntryDto(
                 PaymentEntryReferenceCreateDto(
                     referenceDoctype = referenceDoctype,
                     referenceName = invoiceId,
-                    totalAmount = bd(invoiceTotalRc).moneyScale(rcSpec.minorUnits)
+                    totalAmount = bd(invoiceTotalRc).moneyScaleDown(rcSpec.minorUnits)
                         .toDouble(rcSpec.minorUnits),
                     outstandingAmount = outstanding.toDouble(rcSpec.minorUnits),
                     allocatedAmount = allocated.toDouble(rcSpec.minorUnits)
@@ -350,16 +364,14 @@ suspend fun buildPaymentEntryDto(
 
     val rate = bd(rateDouble)
 
-    val deliveredRc = entered.safeMul(rate).moneyScale(rcSpec.minorUnits)
+    val deliveredRc = entered.safeMul(rate).moneyScaleDown(rcSpec.minorUnits)
     val outstandingValue = outstanding.toDouble(rcSpec.minorUnits)
     val allocatedRc = if (deliveredRc.toDouble(rcSpec.minorUnits) + roundingTolerance >= outstandingValue) {
         outstanding
     } else {
-        minOfBd(deliveredRc, outstanding).moneyScale(rcSpec.minorUnits)
+        minOfBd(deliveredRc, outstanding).moneyScaleDown(rcSpec.minorUnits)
     }
-    val receivedEffective = allocatedRc
-        .safeDiv(rate, scale = 8)
-        .let { roundCashIfNeeded(it, toSpec) }
+    val receivedEffective = entered
 
     return PaymentEntryCreateDto(
         company = context.company,
@@ -384,7 +396,7 @@ suspend fun buildPaymentEntryDto(
             PaymentEntryReferenceCreateDto(
                 referenceDoctype = referenceDoctype,
                 referenceName = invoiceId,
-                totalAmount = bd(invoiceTotalRc).moneyScale(rcSpec.minorUnits)
+                totalAmount = bd(invoiceTotalRc).moneyScaleDown(rcSpec.minorUnits)
                     .toDouble(rcSpec.minorUnits),
                 outstandingAmount = outstanding.toDouble(rcSpec.minorUnits),
                 allocatedAmount = allocatedRc.toDouble(rcSpec.minorUnits)
@@ -444,13 +456,11 @@ suspend fun buildPaymentEntryDtoWithRateResolver(
         ?: error("No se pudo resolver moneda de paid_to"))
         .trim().uppercase()
 
-    val rcSpec = currencySpecs[receivableCurrency]
-        ?: CurrencySpec(code = receivableCurrency, minorUnits = 2, cashScale = 2)
-    val toSpec = currencySpecs[paidToCurrency]
-        ?: CurrencySpec(code = paidToCurrency, minorUnits = 2, cashScale = 2)
+    val rcSpec = resolveCurrencySpec(receivableCurrency, currencySpecs)
+    val toSpec = resolveCurrencySpec(paidToCurrency, currencySpecs)
 
     val outstanding = bd(outstandingRc)
-        .moneyScale(rcSpec.minorUnits)
+        .moneyScaleDown(rcSpec.minorUnits)
         .coerceAtLeastZero()
 
     if (outstanding.isZero()) {
@@ -466,7 +476,7 @@ suspend fun buildPaymentEntryDtoWithRateResolver(
         val allocated = if (entered.toDouble(toSpec.minorUnits) + roundingTolerance >= outstandingValue) {
             outstanding
     } else {
-        minOfBd(entered, outstanding).moneyScale(rcSpec.minorUnits)
+        minOfBd(entered, outstanding).moneyScaleDown(rcSpec.minorUnits)
     }
 
         return PaymentEntryCreateDto(
@@ -492,7 +502,7 @@ suspend fun buildPaymentEntryDtoWithRateResolver(
                 PaymentEntryReferenceCreateDto(
                     referenceDoctype = referenceDoctype,
                     referenceName = invoiceId,
-                    totalAmount = bd(invoiceTotalRc).moneyScale(rcSpec.minorUnits)
+                    totalAmount = bd(invoiceTotalRc).moneyScaleDown(rcSpec.minorUnits)
                         .toDouble(rcSpec.minorUnits),
                     outstandingAmount = outstanding.toDouble(rcSpec.minorUnits),
                     allocatedAmount = allocated.toDouble(rcSpec.minorUnits)
@@ -524,17 +534,15 @@ suspend fun buildPaymentEntryDtoWithRateResolver(
 
     val rate = bd(rateDouble)
 
-    val deliveredRc = entered.safeMul(rate).moneyScale(rcSpec.minorUnits)
+    val deliveredRc = entered.safeMul(rate).moneyScaleDown(rcSpec.minorUnits)
     val outstandingValue = outstanding.toDouble(rcSpec.minorUnits)
     val allocatedRc = if (deliveredRc.toDouble(rcSpec.minorUnits) + roundingTolerance >= outstandingValue) {
         outstanding
     } else {
-        minOfBd(deliveredRc, outstanding).moneyScale(rcSpec.minorUnits)
+        minOfBd(deliveredRc, outstanding).moneyScaleDown(rcSpec.minorUnits)
     }
 
-    val receivedEffective = allocatedRc
-        .safeDiv(rate, scale = 8)
-        .let { roundCashIfNeeded(it, toSpec) }
+    val receivedEffective = entered
 
     return PaymentEntryCreateDto(
         company = context.company,
@@ -559,7 +567,7 @@ suspend fun buildPaymentEntryDtoWithRateResolver(
             PaymentEntryReferenceCreateDto(
                 referenceDoctype = referenceDoctype,
                 referenceName = invoiceId,
-                totalAmount = bd(invoiceTotalRc).moneyScale(rcSpec.minorUnits)
+                totalAmount = bd(invoiceTotalRc).moneyScaleDown(rcSpec.minorUnits)
                     .toDouble(rcSpec.minorUnits),
                 outstandingAmount = outstanding.toDouble(rcSpec.minorUnits),
                 allocatedAmount = allocatedRc.toDouble(rcSpec.minorUnits)

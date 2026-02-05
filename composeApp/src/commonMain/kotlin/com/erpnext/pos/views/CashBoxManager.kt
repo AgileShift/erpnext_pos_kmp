@@ -44,6 +44,7 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.withContext
+import com.erpnext.pos.data.repositories.CurrencySettingsRepository
 
 data class PaymentModeWithAmount(
     val mode: PaymentModesBO, val amount: Double
@@ -87,6 +88,7 @@ class CashBoxManager(
     private val paymentMethodLocalRepository: PosProfilePaymentMethodLocalRepository,
     private val salesInvoiceDao: SalesInvoiceDao,
     private val generalPreferences: com.erpnext.pos.localSource.preferences.GeneralPreferences,
+    private val currencySettingsRepository: CurrencySettingsRepository,
     private val sessionRefresher: SessionRefresher,
     private val networkMonitor: NetworkMonitor
 ) {
@@ -100,6 +102,7 @@ class CashBoxManager(
     val cashboxState = _cashboxState.asStateFlow()
 
     suspend fun initializeContext(): POSContext? = withContext(Dispatchers.IO) {
+        currencySettingsRepository.loadCached()
         val user = userDao.getUserInfo() ?: return@withContext null
         openingEntrySyncRepository.repairActiveOpenings()
         val company = companyDao.getCompanyInfo()

@@ -14,6 +14,7 @@ import com.erpnext.pos.data.repositories.SalesInvoiceRepository
 import com.erpnext.pos.data.repositories.ContactRepository
 import com.erpnext.pos.data.repositories.AddressRepository
 import com.erpnext.pos.data.repositories.TerritoryRepository
+import com.erpnext.pos.data.repositories.CurrencySettingsRepository
 import com.erpnext.pos.sync.PushSyncRunner
 import com.erpnext.pos.sync.SyncContextProvider
 import com.erpnext.pos.domain.sync.SyncContext
@@ -62,6 +63,7 @@ class SyncManager(
     private val modeOfPaymentRepo: ModeOfPaymentRepository,
     private val posProfilePaymentMethodSyncRepository: PosProfilePaymentMethodSyncRepository,
     private val stockSettingsRepository: com.erpnext.pos.data.repositories.StockSettingsRepository,
+    private val currencySettingsRepository: CurrencySettingsRepository,
     private val paymentTermsRepo: PaymentTermsRepository,
     private val deliveryChargesRepo: DeliveryChargesRepository,
     private val contactRepo: ContactRepository,
@@ -564,6 +566,12 @@ class SyncManager(
                 runCatching { stockSettingsRepository.sync() }.onFailure { error ->
                     AppSentry.capture(error, "Sync: stock settings failed")
                     AppLogger.warn("Sync: stock settings failed", error)
+                }
+            },
+            SyncStep(label = "Moneda", message = "Sincronizando configuración de moneda...", attempts = 1) {
+                runCatching { currencySettingsRepository.sync() }.onFailure { error ->
+                    AppSentry.capture(error, "Sync: currency settings failed")
+                    AppLogger.warn("Sync: currency settings failed", error)
                 }
             },
             SyncStep(label = "Tasas de cambio", message = "Sincronizando tasas de cambio...") {

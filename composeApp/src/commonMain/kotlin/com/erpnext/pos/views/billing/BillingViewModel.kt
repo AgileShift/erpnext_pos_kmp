@@ -54,9 +54,10 @@ import com.erpnext.pos.utils.calculateTotals
 import com.erpnext.pos.utils.resolveDiscountInfo
 import com.erpnext.pos.utils.RoundedTotal
 import com.erpnext.pos.utils.resolveRoundedTotal
+import com.erpnext.pos.utils.resolveMinorUnitTolerance
 import com.erpnext.pos.utils.roundForCurrency
-import com.erpnext.pos.utils.roundToCurrency
 import com.erpnext.pos.utils.buildCurrencySpecs
+import com.erpnext.pos.utils.roundToCurrency
 import com.erpnext.pos.views.payment.PaymentHandler
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -747,11 +748,11 @@ class BillingViewModel(
                 val companyCurrency = context.companyCurrency.ifBlank { invoiceCurrency }
                 val rawTotals = calculateTotals(current)
                 val totals = rawTotals.copy(
-                    subtotal = roundToCurrency(rawTotals.subtotal),
-                    taxes = roundToCurrency(rawTotals.taxes),
-                    discount = roundToCurrency(rawTotals.discount),
-                    shipping = roundToCurrency(rawTotals.shipping),
-                    total = roundToCurrency(rawTotals.total)
+                    subtotal = roundForCurrency(rawTotals.subtotal, invoiceCurrency),
+                    taxes = roundForCurrency(rawTotals.taxes, invoiceCurrency),
+                    discount = roundForCurrency(rawTotals.discount, invoiceCurrency),
+                    shipping = roundForCurrency(rawTotals.shipping, invoiceCurrency),
+                    total = roundForCurrency(rawTotals.total, invoiceCurrency)
                 )
                 val discountInfo = resolveDiscountInfo(current, totals.subtotal)
                 val discountPercent = discountInfo.percent?.takeIf { it > 0.0 }
@@ -778,16 +779,7 @@ class BillingViewModel(
                     paymentLines = resolvedPaymentLines,
                     round = { value -> roundForCurrency(value, invoiceCurrency) }
                 )
-                val currencyKey = normalizeCurrency(invoiceCurrency).uppercase()
-                val roundingTolerance = when (currencyKey) {
-                    "NIO" -> 0.01
-                    "USD" -> 0.01
-                    else -> 0.01
-                }
-                val fullyPaid = resolvedPaymentLines.isNotEmpty() &&
-                    roundToCurrency(paymentStatus.paidAmount) + roundingTolerance >=
-                    roundToCurrency(rounding.roundedTotal)
-                val usePosInvoice = !isCreditSale && paymentStatus.status == "Paid" && fullyPaid
+                val usePosInvoice = false
 
                 val invoiceCurrencyNormalized = normalizeCurrency(invoiceCurrency)
                 val companyCurrencyNormalized = normalizeCurrency(companyCurrency)
@@ -1065,8 +1057,8 @@ class BillingViewModel(
             current.salesFlowContext.sourceId?.let { id -> "$label ($id)" } ?: label
         } ?: "N/A"
         val customerInfo = current?.selectedCustomer?.name ?: "N/A"
-        val totalInfo = current?.total?.let { roundToCurrency(it) } ?: 0.0
-        val paidInfo = current?.paidAmountBase?.let { roundToCurrency(it) } ?: 0.0
+        val totalInfo = current?.total?.let { roundForCurrency(it, current.currency) } ?: 0.0
+        val paidInfo = current?.paidAmountBase?.let { roundForCurrency(it, current.currency) } ?: 0.0
         val linesInfo = current?.paymentLines?.size ?: 0
         val creditInfo = current?.isCreditSale ?: false
         val errorType = error::class.simpleName ?: "Error"
@@ -1282,12 +1274,12 @@ class BillingViewModel(
         posOpeningEntry: String?,
         usePosInvoice: Boolean
     ): SalesInvoiceDto {
-        val items = buildInvoiceItems(current, context, discountPercent, discountAmount)
+        val items = buildInvoiceItems(current, context, invoiceCurrency, discountPercent, discountAmount)
         val paymentMetadata =
             buildInvoiceRemarks(current, paymentLines, totals.shipping, invoiceCurrency)
-        val taxes = roundToCurrency(totals.taxes)
-        val total = roundToCurrency(totals.total)
-        val netTotal = roundToCurrency((total - taxes).coerceAtLeast(0.0))
+        val taxes = roundForCurrency(totals.taxes, invoiceCurrency)
+        val total = roundForCurrency(totals.total, invoiceCurrency)
+        val netTotal = roundForCurrency((total - taxes).coerceAtLeast(0.0), invoiceCurrency)
 
         val rawPayments = if (usePosInvoice) {
             val paymentMode = paymentLines.firstOrNull()?.modeOfPayment
@@ -1307,7 +1299,7 @@ class BillingViewModel(
         val resolvedPaid = if (usePosInvoice) {
             roundForCurrency(paymentStatus.paidAmount, invoiceCurrency)
         } else {
-            roundToCurrency(paymentStatus.paidAmount)
+            roundForCurrency(paymentStatus.paidAmount, invoiceCurrency)
         }
         val payments = if (usePosInvoice) {
             adjustPosPaymentsToMatchTotal(
@@ -1323,7 +1315,7 @@ class BillingViewModel(
         val resolvedOutstanding = if (usePosInvoice) {
             0.0
         } else {
-            roundToCurrency(paymentStatus.outstandingAmount)
+            roundForCurrency(paymentStatus.outstandingAmount, invoiceCurrency)
         }
         val resolvedChange = if (usePosInvoice) {
             roundForCurrency(
@@ -1331,12 +1323,12 @@ class BillingViewModel(
                 invoiceCurrency
             )
         } else {
-            roundToCurrency((resolvedPaid - rounding.roundedTotal).coerceAtLeast(0.0))
+            roundForCurrency((resolvedPaid - rounding.roundedTotal).coerceAtLeast(0.0), invoiceCurrency)
         }
 
         val hasRounding = kotlin.math.abs(rounding.roundingAdjustment) > 0.0001
-        val roundedTotalField = if (hasRounding) roundToCurrency(rounding.roundedTotal) else null
-        val roundingAdjustmentField = if (hasRounding) roundToCurrency(rounding.roundingAdjustment) else null
+        val roundedTotalField = if (hasRounding) roundForCurrency(rounding.roundedTotal, invoiceCurrency) else null
+        val roundingAdjustmentField = if (hasRounding) roundForCurrency(rounding.roundingAdjustment, invoiceCurrency) else null
 
         return SalesInvoiceDto(
             customer = customer.name,
@@ -1368,8 +1360,8 @@ class BillingViewModel(
             customExchangeRate = null,
             updateStock = true,
             docStatus = 0,
-            isPos = usePosInvoice,
-            doctype = if (usePosInvoice) "POS Invoice" else "Sales Invoice"
+            isPos = true,
+            doctype = "Sales Invoice"
         )
     }
 
@@ -1407,6 +1399,7 @@ class BillingViewModel(
     private fun buildInvoiceItems(
         current: BillingState.Success,
         context: POSContext,
+        invoiceCurrency: String,
         discountPercent: Double?,
         discountAmount: Double
     ): MutableList<SalesInvoiceItemDto> {
@@ -1417,8 +1410,8 @@ class BillingViewModel(
             if (source?.sourceType == SalesFlowSource.DeliveryNote) sourceId else null
 
         val items = current.cartItems.map { cart ->
-            val rate = roundToCurrency(cart.price)
-            val amount = roundToCurrency(cart.quantity * rate)
+            val rate = roundForCurrency(cart.price, invoiceCurrency)
+            val amount = roundForCurrency(cart.quantity * rate, invoiceCurrency)
             SalesInvoiceItemDto(
                 itemCode = cart.itemCode,
                 itemName = cart.name,
@@ -1434,7 +1427,7 @@ class BillingViewModel(
         }.toMutableList()
 
         if (discountPercent == null && discountAmount > 0.0) {
-            val discountValue = roundToCurrency(discountAmount)
+            val discountValue = roundForCurrency(discountAmount, invoiceCurrency)
             items.add(
                 SalesInvoiceItemDto(
                     itemCode = DISCOUNT_ITEM_CODE,
@@ -1529,28 +1522,26 @@ class BillingViewModel(
             ?.takeIf { it.isNotBlank() }
             ?: normalizeCurrency(posCurrency)
         val invoice = normalizeCurrency(invoiceCurrency)
-        if (itemCurrency.isBlank() || invoice.isBlank()) return roundToCurrency(item.price)
+        if (itemCurrency.isBlank() || invoice.isBlank()) return roundForCurrency(item.price, invoiceCurrency)
         if (itemCurrency.equals(invoice, ignoreCase = true)) return item.price
 
         // Prioridad: tasa directa moneda_item -> moneda_factura (mismo criterio que ERP/local cache).
         rateToInvoice?.takeIf { it > 0.0 }?.let { directRate ->
-            return roundToCurrency(item.price * directRate)
+            return roundForCurrency(item.price * directRate, invoiceCurrency)
         }
 
         // Fallback legado usando tasa del contexto POS; inferimos dirección para evitar inflar montos.
-        val rate = exchangeRate?.takeIf { it > 0.0 } ?: return roundToCurrency(item.price)
+        val rate = exchangeRate?.takeIf { it > 0.0 } ?: return roundForCurrency(item.price, invoiceCurrency)
         val pos = normalizeCurrency(posCurrency)
-        if (pos != null) {
-            if (itemCurrency.equals("USD", true) && invoice.equals(pos, true)) {
-                val converted = if (rate > 1.0) item.price * rate else item.price / rate
-                return roundToCurrency(converted)
-            }
-            if (itemCurrency.equals(pos, true) && invoice.equals("USD", true)) {
-                val converted = if (rate > 1.0) item.price / rate else item.price * rate
-                return roundToCurrency(converted)
-            }
+        if (itemCurrency.equals("USD", true) && invoice.equals(pos, true)) {
+            val converted = if (rate > 1.0) item.price * rate else item.price / rate
+            return roundForCurrency(converted, invoiceCurrency)
         }
-        return roundToCurrency(item.price)
+        if (itemCurrency.equals(pos, true) && invoice.equals("USD", true)) {
+            val converted = if (rate > 1.0) item.price / rate else item.price * rate
+            return roundForCurrency(converted, invoiceCurrency)
+        }
+        return roundForCurrency(item.price, invoiceCurrency)
     }
 
     private fun resolveDueDate(
@@ -1612,9 +1603,9 @@ class BillingViewModel(
             return "Selecciona un término de pago para finalizar una venta a crédito."
 
         // No crédito: debe pagar todo
-        val total = roundToCurrency(current.total)
-        val paid = roundToCurrency(current.paidAmountBase)
-        val tolerance = 0.01
+        val total = roundForCurrency(current.total, current.currency)
+        val paid = roundForCurrency(current.paidAmountBase, current.currency)
+        val tolerance = resolveMinorUnitTolerance(current.currency)
 
         if (!current.isCreditSale && paid + tolerance < total)
             return "El monto pagado debe cubrir el total antes de finalizar la venta."

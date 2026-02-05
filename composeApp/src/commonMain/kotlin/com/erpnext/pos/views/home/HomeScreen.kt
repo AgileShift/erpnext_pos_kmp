@@ -9,9 +9,6 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.slideInVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -27,6 +24,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -174,7 +173,11 @@ fun HomeScreen(
 
                             Spacer(Modifier.height(24.dp))
 
-                            BISection(metrics = homeMetrics, actions)
+                            BISection(
+                                metrics = homeMetrics,
+                                actions = actions,
+                                modifier = Modifier.weight(1f).fillMaxWidth()
+                            )
 
                             Spacer(Modifier.height(24.dp))
 
@@ -239,8 +242,10 @@ fun HomeScreen(
                                                             alpha = 0.8f
                                                         )
                                                     )
-                                                    val step = (syncState as SyncState.SYNCING).currentStep
-                                                    val total = (syncState as SyncState.SYNCING).totalSteps
+                                                    val step =
+                                                        (syncState as SyncState.SYNCING).currentStep
+                                                    val total =
+                                                        (syncState as SyncState.SYNCING).totalSteps
                                                     if (step != null && total != null && total > 0) {
                                                         Spacer(Modifier.height(6.dp))
                                                         Text(
@@ -295,7 +300,7 @@ fun HomeScreen(
                             }
                         }
 
-                        Spacer(Modifier.weight(1f))
+                        Spacer(Modifier.height(12.dp))
 
                         // Botón abrir caja
                         if (!isCashboxOpen) {
@@ -335,65 +340,85 @@ fun HomeScreen(
 }
 
 @Composable
-private fun BISection(metrics: HomeMetrics, actions: HomeAction) {
+private fun BISection(
+    metrics: HomeMetrics,
+    actions: HomeAction,
+    modifier: Modifier = Modifier
+) {
     val currencyMetrics = metrics.currencyMetrics
     val strings = LocalAppStrings.current
-    Column(
-        modifier = Modifier.fillMaxWidth().verticalScroll(rememberScrollState(), true),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        if (currencyMetrics.isEmpty()) {
+    if (currencyMetrics.isEmpty()) {
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
             Text(
                 text = "Aún no hay métricas disponibles.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
-            return@Column
         }
+        return
+    }
 
-        val preferredCurrency = metrics.salesTarget?.secondaryCurrency
-            ?.takeIf { preferred -> currencyMetrics.any { it.currency.equals(preferred, true) } }
-            ?: currencyMetrics.first().currency
-        var selectedCurrency by remember(currencyMetrics, preferredCurrency) {
-            mutableStateOf(preferredCurrency)
-        }
-        val selectedMetric = currencyMetrics.firstOrNull { it.currency == selectedCurrency }
-            ?: currencyMetrics.first()
-        val symbol = selectedMetric.currency.toCurrencySymbol().ifBlank { selectedMetric.currency }
+    val preferredCurrency = metrics.salesTarget?.secondaryCurrency
+        ?.takeIf { preferred -> currencyMetrics.any { it.currency.equals(preferred, true) } }
+        ?: currencyMetrics.first().currency
+    var selectedCurrency by remember(currencyMetrics, preferredCurrency) {
+        mutableStateOf(preferredCurrency)
+    }
+    val selectedMetric = currencyMetrics.firstOrNull { it.currency == selectedCurrency }
+        ?: currencyMetrics.first()
+    val symbol = selectedMetric.currency.toCurrencySymbol().ifBlank { selectedMetric.currency }
 
-        Row(
-            modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            currencyMetrics.forEach { metric ->
-                FilterChip(
-                    selected = metric.currency == selectedCurrency,
-                    onClick = { selectedCurrency = metric.currency },
-                    label = { Text(metric.currency) })
+    LazyColumn(
+        modifier = modifier,
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+        contentPadding = PaddingValues(bottom = 16.dp)
+    ) {
+        item {
+            Row(
+                modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                currencyMetrics.forEach { metric ->
+                    FilterChip(
+                        selected = metric.currency == selectedCurrency,
+                        onClick = { selectedCurrency = metric.currency },
+                        label = { Text(metric.currency) })
+                }
             }
         }
 
-        HeroAndActionsRow(metric = selectedMetric, symbol = symbol, actions)
-
-        metrics.salesTarget?.let { target ->
-            SalesTargetCard(
-                target = target,
-                metric = selectedMetric,
-                title = strings.settings.salesTargetSuggestedLabel,
-                monthlyLabel = strings.settings.salesTargetMonthlyLabel,
-                weeklyLabel = strings.settings.salesTargetWeeklyLabel,
-                dailyLabel = strings.settings.salesTargetDailyLabel,
-                staleHint = strings.settings.salesTargetConversionStaleHint,
-                missingHint = strings.settings.salesTargetConversionMissingHint
-            )
+        item {
+            HeroAndActionsRow(metric = selectedMetric, symbol = symbol, actions)
         }
 
-        KpiRow(metric = selectedMetric, symbol = symbol)
+        metrics.salesTarget?.let { target ->
+            item {
+                SalesTargetCard(
+                    target = target,
+                    metric = selectedMetric,
+                    title = strings.settings.salesTargetSuggestedLabel,
+                    monthlyLabel = strings.settings.salesTargetMonthlyLabel,
+                    weeklyLabel = strings.settings.salesTargetWeeklyLabel,
+                    dailyLabel = strings.settings.salesTargetDailyLabel,
+                    staleHint = strings.settings.salesTargetConversionStaleHint,
+                    missingHint = strings.settings.salesTargetConversionMissingHint
+                )
+            }
+        }
 
-        InventoryAlertsCard(
-            items = metrics.inventoryAlerts,
-            onViewInventory = actions.onOpenSettings
-        )
+        item {
+            KpiRow(metric = selectedMetric, symbol = symbol)
+        }
+
+        item {
+            InventoryAlertsCard(
+                items = metrics.inventoryAlerts,
+                onViewInventory = actions.onOpenSettings
+            )
+        }
     }
 }
 
@@ -725,7 +750,11 @@ private fun SalesTargetCard(
                 }
             }
 
-            if (targetInMetricCurrency == null && !metric.currency.equals(target.baseCurrency, true)) {
+            if (targetInMetricCurrency == null && !metric.currency.equals(
+                    target.baseCurrency,
+                    true
+                )
+            ) {
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
                     text = "No hay conversión local ${target.baseCurrency} -> ${metric.currency}. Se muestran metas base.",
@@ -794,7 +823,8 @@ private fun resolveTargetForCurrency(
 
 @Composable
 private fun TargetProgressTile(row: TargetProgressRow, modifier: Modifier = Modifier) {
-    val progressRaw = if (row.goal <= 0.0) 0f else (row.actual / row.goal).toFloat().coerceIn(0f, 1f)
+    val progressRaw =
+        if (row.goal <= 0.0) 0f else (row.actual / row.goal).toFloat().coerceIn(0f, 1f)
     val progress by animateFloatAsState(
         targetValue = progressRaw,
         animationSpec = tween(durationMillis = 700),
@@ -884,6 +914,32 @@ private fun KpiTile(title: String, value: String, modifier: Modifier = Modifier)
     }
 }
 
+@Preview
+@Composable
+fun InventoryAlertsCardPreview() {
+    InventoryAlertsCard(
+        listOf(
+            InventoryAlert(
+                "123123",
+                "Test",
+                10.0,
+                InventoryAlertStatus.LOW,
+                6.0,
+                20.0
+            ),
+            InventoryAlert(
+                "123123123",
+                "Test",
+                10.0,
+                InventoryAlertStatus.LOW,
+                6.0,
+                20.0
+            )
+        ),
+        {}
+    )
+}
+
 @Composable
 private fun InventoryAlertsCard(
     items: List<InventoryAlert>, onViewInventory: () -> Unit
@@ -940,9 +996,22 @@ private fun InventoryAlertsCard(
 
             Spacer(Modifier.height(12.dp))
 
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                SeverityBadge("Crítico", criticalCount, MaterialTheme.colorScheme.error, Modifier.weight(1f))
-                SeverityBadge("Bajo", lowCount, MaterialTheme.colorScheme.tertiary, Modifier.weight(1f))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                SeverityBadge(
+                    "Crítico",
+                    criticalCount,
+                    MaterialTheme.colorScheme.error,
+                    Modifier.weight(1f)
+                )
+                SeverityBadge(
+                    "Bajo",
+                    lowCount,
+                    MaterialTheme.colorScheme.tertiary,
+                    Modifier.weight(1f)
+                )
             }
 
             Spacer(Modifier.height(8.dp))
@@ -992,36 +1061,20 @@ private fun InventoryAlertsCard(
                 BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
                     val isWide = maxWidth >= 900.dp
                     if (isWide) {
-                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             items.chunked(2).forEach { row ->
-                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                     row.forEach { item ->
-                                        AnimatedVisibility(
-                                            visible = true,
-                                            enter = fadeIn(tween(280)) + slideInVertically(
-                                                animationSpec = tween(280),
-                                                initialOffsetY = { it / 8 }
-                                            )
-                                        ) {
-                                            InventoryAlertRow(item, Modifier.weight(1f))
-                                        }
+                                        InventoryAlertRow(item, Modifier.weight(1f))
                                     }
                                     if (row.size == 1) Spacer(Modifier.weight(1f))
                                 }
                             }
                         }
                     } else {
-                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                             items.forEach { item ->
-                                AnimatedVisibility(
-                                    visible = true,
-                                    enter = fadeIn(tween(280)) + slideInVertically(
-                                        animationSpec = tween(280),
-                                        initialOffsetY = { it / 8 }
-                                    )
-                                ) {
-                                    InventoryAlertRow(item, Modifier.fillMaxWidth())
-                                }
+                                InventoryAlertRow(item, Modifier.fillMaxWidth())
                             }
                         }
                     }
@@ -1067,6 +1120,12 @@ private fun SeverityBadge(
             )
         }
     }
+}
+
+@Preview
+@Composable
+fun InventoryAlertRowPreview() {
+    InventoryAlertRow(InventoryAlert("123123", "Test", 10.0, InventoryAlertStatus.LOW, 6.0, 20.0))
 }
 
 @Composable

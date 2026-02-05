@@ -23,7 +23,7 @@ import com.erpnext.pos.utils.resolvePaymentCurrencyForMode
 import com.erpnext.pos.utils.resolvePaymentToReceivableRate
 import com.erpnext.pos.utils.resolveRateToInvoiceCurrency
 import com.erpnext.pos.utils.roundToCurrency
-import kotlin.math.ceil
+import kotlin.math.floor
 import kotlin.math.pow
 import com.erpnext.pos.utils.toBaseAmount
 import kotlinx.coroutines.flow.first
@@ -439,7 +439,7 @@ class PaymentHandler(
         }
 
         val scale = paySpec.cashScale.coerceAtMost(paySpec.minorUnits)
-        val capped = ceilToScale(maxEntered, scale)
+        val capped = floorToScale(maxEntered, scale)
         if (line.enteredAmount <= capped + 0.000001) return line
 
         return line.copy(
@@ -448,11 +448,11 @@ class PaymentHandler(
         )
     }
 
-    private fun ceilToScale(value: Double, scale: Int): Double {
+    private fun floorToScale(value: Double, scale: Int): Double {
         if (!value.isFinite()) return value
-        if (scale <= 0) return ceil(value)
+        if (scale <= 0) return floor(value)
         val factor = 10.0.pow(scale.toDouble())
-        return ceil(value * factor) / factor
+        return floor(value * factor) / factor
     }
 
     private suspend fun resolveRateBetweenCurrencies(

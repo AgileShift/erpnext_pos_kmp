@@ -1,14 +1,11 @@
 package com.erpnext.pos.utils
 
-import com.erpnext.pos.utils.oauth.bd
-import com.erpnext.pos.utils.oauth.moneyScale
-import com.erpnext.pos.utils.oauth.toDouble
 import kotlin.math.ceil
 import kotlin.math.pow
 
-fun roundToCurrency(value: Double, scale: Int = 2): Double {
+fun roundToCurrency(value: Double, scale: Int = CurrencyPrecisionResolver.defaultPrecision()): Double {
     if (!value.isFinite()) return value
-    return bd(value).moneyScale(scale).toDouble(scale)
+    return CurrencyPrecisionResolver.roundWithScale(value, scale)
 }
 
 data class RoundedTotal(
@@ -18,13 +15,7 @@ data class RoundedTotal(
 
 fun roundForCurrency(value: Double, currency: String?): Double {
     if (!value.isFinite()) return value
-    val normalized = normalizeCurrency(currency).uppercase()
-    val scale = when (normalized) {
-        "USD" -> 2
-        "NIO" -> 2
-        else -> 2
-    }
-    return roundToCurrency(value, scale)
+    return CurrencyPrecisionResolver.round(value, currency)
 }
 
 fun resolveRoundedTotal(grandTotal: Double, currency: String?): RoundedTotal {

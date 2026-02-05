@@ -3,6 +3,8 @@ package com.erpnext.pos.utils.oauth
 import platform.Foundation.NSDecimalNumber
 import platform.Foundation.NSDecimalNumberHandler
 import platform.Foundation.NSNumber
+import platform.Foundation.NSRoundingMode.NSRoundBankers
+import platform.Foundation.NSRoundingMode.NSRoundDown
 import platform.Foundation.NSRoundingMode.NSRoundPlain
 
 actual typealias Decimal = NSDecimalNumber
@@ -23,10 +25,36 @@ private fun handler(scale: Int): NSDecimalNumberHandler =
         raiseOnDivideByZero = false
     )
 
+private fun handlerBankers(scale: Int): NSDecimalNumberHandler =
+    NSDecimalNumberHandler(
+        roundingMode = NSRoundBankers,
+        scale = scale.toShort(),
+        raiseOnExactness = false,
+        raiseOnOverflow = false,
+        raiseOnUnderflow = false,
+        raiseOnDivideByZero = false
+    )
+
+private fun handlerDown(scale: Int): NSDecimalNumberHandler =
+    NSDecimalNumberHandler(
+        roundingMode = NSRoundDown,
+        scale = scale.toShort(),
+        raiseOnExactness = false,
+        raiseOnOverflow = false,
+        raiseOnUnderflow = false,
+        raiseOnDivideByZero = false
+    )
+
 private val ZERO: Decimal = NSDecimalNumber.zero()
 
 actual fun Decimal.moneyScale(scale: Int): Decimal =
     this.decimalNumberByRoundingAccordingToBehavior(handler(scale))
+
+actual fun Decimal.moneyScaleBankers(scale: Int): Decimal =
+    this.decimalNumberByRoundingAccordingToBehavior(handlerBankers(scale))
+
+actual fun Decimal.moneyScaleDown(scale: Int): Decimal =
+    this.decimalNumberByRoundingAccordingToBehavior(handlerDown(scale))
 
 actual fun Decimal.safeDiv(divisor: Decimal, scale: Int): Decimal {
     // divisor == 0 ?

@@ -414,6 +414,29 @@ class APIService(
             })
     }
 
+    suspend fun getSystemSettingsRaw(): JsonObject? {
+        val url = authStore.getCurrentSite() ?: return null
+        return runCatching {
+            client.getERPSingle<JsonObject>(
+                doctype = "System Settings",
+                name = "System Settings",
+                baseUrl = url
+            )
+        }.getOrNull()
+    }
+
+    suspend fun getCurrencyDetail(code: String): JsonObject? {
+        val url = authStore.getCurrentSite() ?: return null
+        val name = code.trim().uppercase().encodeURLParameter()
+        return runCatching {
+            client.getERPSingle<JsonObject>(
+                doctype = "Currency",
+                name = name,
+                baseUrl = url
+            )
+        }.getOrNull()
+    }
+
     suspend fun getActiveModeOfPayment(): List<ModeOfPaymentDto> {
         val url = authStore.getCurrentSite() ?: return emptyList()
         return client.getERPList(

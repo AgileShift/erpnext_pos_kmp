@@ -15,6 +15,12 @@ actual fun Decimal.coerceAtLeastZero(): Decimal =
 actual fun Decimal.moneyScale(scale: Int): Decimal =
     this.setScale(scale, RoundingMode.HALF_UP)
 
+actual fun Decimal.moneyScaleBankers(scale: Int): Decimal =
+    this.setScale(scale, RoundingMode.HALF_EVEN)
+
+actual fun Decimal.moneyScaleDown(scale: Int): Decimal =
+    this.setScale(scale, RoundingMode.DOWN)
+
 actual fun Decimal.safeDiv(divisor: Decimal, scale: Int): Decimal =
     if (divisor.compareTo(BigDecimal.ZERO) == 0) BigDecimal.ZERO
     else this.divide(divisor, scale, RoundingMode.HALF_UP)

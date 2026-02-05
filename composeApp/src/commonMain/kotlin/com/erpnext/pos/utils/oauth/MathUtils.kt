@@ -8,6 +8,8 @@ expect fun db(value: Float): Decimal
 expect fun Decimal.coerceAtLeastZero(): Decimal
 expect fun Decimal.isZero(): Boolean
 expect fun Decimal.moneyScale(scale: Int = 2): Decimal
+expect fun Decimal.moneyScaleBankers(scale: Int = 2): Decimal
+expect fun Decimal.moneyScaleDown(scale: Int = 2): Decimal
 expect fun Decimal.safeDiv(divisor: Decimal, scale: Int = 8): Decimal
 expect fun Decimal.safeMul(other: Decimal): Decimal
 expect fun min(a: Decimal, b: Decimal): Decimal

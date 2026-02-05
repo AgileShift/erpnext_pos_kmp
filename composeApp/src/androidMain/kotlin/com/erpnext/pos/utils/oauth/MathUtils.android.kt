@@ -12,6 +12,12 @@ actual fun db(value: Float): Decimal = value.toBigDecimal()
 actual fun Decimal.moneyScale(scale: Int): Decimal =
     this.setScale(scale, RoundingMode.HALF_UP)
 
+actual fun Decimal.moneyScaleBankers(scale: Int): Decimal =
+    this.setScale(scale, RoundingMode.HALF_EVEN)
+
+actual fun Decimal.moneyScaleDown(scale: Int): Decimal =
+    this.setScale(scale, RoundingMode.DOWN)
+
 actual fun Decimal.coerceAtLeastZero(): Decimal =
     if (this < BigDecimal.ZERO) BigDecimal.ZERO else this
 
