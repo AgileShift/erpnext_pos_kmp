@@ -13,8 +13,12 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.erpnext.pos.utils.loading.LoadingIndicator
+import com.erpnext.pos.utils.loading.LoadingUiState
 import com.erpnext.pos.utils.view.SnackbarController
 import com.erpnext.pos.utils.view.SnackbarPosition
 import com.erpnext.pos.utils.view.SnackbarType
@@ -28,6 +32,8 @@ fun PaymentEntryScreen(
     action: PaymentEntryAction
 ) {
     val snackbar = koinInject<SnackbarController>()
+    val loadingState by LoadingIndicator.state.collectAsState(initial = LoadingUiState())
+    val globalBusy = loadingState.isLoading
 
     state.errorMessage?.let {
         snackbar.show(it, SnackbarType.Error, SnackbarPosition.Top)
@@ -72,7 +78,7 @@ fun PaymentEntryScreen(
             Button(
                 onClick = action.onSubmit,
                 modifier = Modifier.fillMaxWidth(),
-                enabled = !state.isSubmitting
+                enabled = !state.isSubmitting && !globalBusy
             ) {
                 if (state.isSubmitting) {
                     CircularProgressIndicator(

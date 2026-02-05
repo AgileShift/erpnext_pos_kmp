@@ -1,6 +1,5 @@
 package com.erpnext.pos
 
-import androidx.compose.material.Icon
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.PointOfSale
 import androidx.compose.ui.graphics.vector.rememberVectorPainter
@@ -10,22 +9,23 @@ import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
 import com.erpnext.pos.di.appModule
 import com.erpnext.pos.di.v2.appModulev2
+import com.erpnext.pos.utils.AppSentry
 import org.koin.compose.KoinApplication
 import org.koin.core.logger.Level
 
 fun main() = application {
     DesktopLogger.init()
     DesktopLogger.info("Desktop app started")
-    com.erpnext.pos.utils.AppSentry.init()
+    AppSentry.init()
 
     // Default Desktop Size
     val state = rememberWindowState(
-        width = 1200.dp,
-        height = 780.dp,
+        width = 1215.dp,
+        height = 810.dp,
     )
 
     Window(
-        undecorated = false,
+        undecorated = true,
         transparent = false,
         icon = rememberVectorPainter(Icons.Default.PointOfSale),
         onCloseRequest = ::exitApplication,

@@ -28,6 +28,7 @@ import com.erpnext.pos.domain.usecases.InvoiceCancellationAction
 import com.erpnext.pos.domain.usecases.PartialReturnInput
 import com.erpnext.pos.domain.usecases.PartialReturnUseCase
 import com.erpnext.pos.domain.usecases.PushPendingCustomersUseCase
+import com.erpnext.pos.domain.usecases.RebuildCustomerSummariesUseCase
 import com.erpnext.pos.localSource.dao.ModeOfPaymentDao
 import com.erpnext.pos.localSource.dao.CompanyDao
 import com.erpnext.pos.localSource.entities.ModeOfPaymentEntity
@@ -77,6 +78,7 @@ class CustomerViewModel(
     private val cashboxManager: CashBoxManager,
     private val fetchCustomersUseCase: FetchCustomersLocalWithStateUseCase,
     private val checkCustomerCreditUseCase: CheckCustomerCreditUseCase,
+    private val rebuildCustomerSummariesUseCase: RebuildCustomerSummariesUseCase,
     private val fetchCustomerDetailUseCase: FetchCustomerDetailUseCase,
     private val fetchOutstandingInvoicesUseCase: FetchOutstandingInvoicesLocalForCustomerUseCase,
     private val fetchCustomerInvoicesForPeriodUseCase: FetchCustomerInvoicesLocalForPeriodUseCase,
@@ -117,6 +119,8 @@ class CustomerViewModel(
 
     private val _customerMessage = MutableStateFlow<String?>(null)
     val customerMessage = _customerMessage
+
+    private var didRebuildSummaries = false
 
     private val _historyActionBusy = MutableStateFlow(false)
     val historyActionBusy = _historyActionBusy.asStateFlow()
@@ -160,6 +164,12 @@ class CustomerViewModel(
     init {
         preloadPaymentState()
         loadDialogData()
+        viewModelScope.launch {
+            if (!didRebuildSummaries) {
+                didRebuildSummaries = true
+                runCatching { rebuildCustomerSummariesUseCase(Unit) }
+            }
+        }
         combine(searchFlow, stateFlowFilter) { q, s -> q to s }
             .debounce(250)
             .onEach { (q, s) -> fetchAllCustomers(q, s) }

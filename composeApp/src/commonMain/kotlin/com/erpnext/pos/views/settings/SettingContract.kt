@@ -3,6 +3,7 @@ package com.erpnext.pos.views.settings
 import com.erpnext.pos.localSource.preferences.SyncSettings
 import com.erpnext.pos.localization.AppLanguage
 import com.erpnext.pos.sync.SyncState
+import com.erpnext.pos.domain.models.SyncLogEntry
 import AppColorTheme
 import AppThemeMode
 
@@ -38,7 +39,8 @@ sealed class POSSettingState {
         val salesTargetConvertedMonthly: Double?,
         val salesTargetConvertedWeekly: Double?,
         val salesTargetConvertedDaily: Double?,
-        val salesTargetConversionStale: Boolean
+        val salesTargetConversionStale: Boolean,
+        val syncLog: List<SyncLogEntry>
     ) : POSSettingState()
     data class Error(val message: String) : POSSettingState()
 }
@@ -55,6 +57,7 @@ data class POSSettingAction(
     val onSyncSalesTarget: () -> Unit = {},
     val onSelect: (String) -> Unit = {},
     val onSyncNow: () -> Unit = {},
+    val onCancelSync: () -> Unit = {},
     val onAutoSyncChanged: (Boolean) -> Unit = {},
     val onSyncOnStartupChanged: (Boolean) -> Unit = {},
     val onWifiOnlyChanged: (Boolean) -> Unit = {},

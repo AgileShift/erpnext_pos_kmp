@@ -30,6 +30,7 @@ fun rememberSettingsActions(coordinator: SettingsCoordinator): POSSettingAction 
             onSyncSalesTarget = coordinator::onSyncSalesTarget,
             onSelect = coordinator::onSelect,
             onSyncNow = coordinator::onSyncNow,
+            onCancelSync = coordinator::onCancelSync,
             onAutoSyncChanged = coordinator::onAutoSyncChanged,
             onSyncOnStartupChanged = coordinator::onSyncOnStartupChanged,
             onWifiOnlyChanged = coordinator::onWifiOnlyChanged,

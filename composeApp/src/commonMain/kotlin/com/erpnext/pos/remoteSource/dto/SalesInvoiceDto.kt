@@ -40,6 +40,10 @@ data class SalesInvoiceDto(
     val roundedTotal: Double? = null,
     @SerialName("rounding_adjustment")
     val roundingAdjustment: Double? = null,
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    @SerialName("disable_rounded_total")
+    @Serializable(IntAsBooleanSerializer::class)
+    val disableRoundedTotal: Boolean? = null,
     @SerialName("discount_amount")
     val discountAmount: Double? = null,
     @EncodeDefault(EncodeDefault.Mode.NEVER)

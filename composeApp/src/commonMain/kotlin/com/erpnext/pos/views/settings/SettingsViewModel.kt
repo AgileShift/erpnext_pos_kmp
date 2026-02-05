@@ -8,6 +8,7 @@ import androidx.lifecycle.viewModelScope
 import com.erpnext.pos.base.BaseViewModel
 import com.erpnext.pos.localSource.preferences.GeneralPreferences
 import com.erpnext.pos.localSource.preferences.LanguagePreferences
+import com.erpnext.pos.localSource.preferences.SyncLogPreferences
 import com.erpnext.pos.localSource.preferences.SyncPreferences
 import com.erpnext.pos.localSource.preferences.SyncSettings
 import com.erpnext.pos.localSource.preferences.ThemePreferences
@@ -34,6 +35,7 @@ import kotlin.time.ExperimentalTime
 class SettingsViewModel(
     private val cashBoxManager: CashBoxManager,
     private val syncPreferences: SyncPreferences,
+    private val syncLogPreferences: SyncLogPreferences,
     private val syncManager: SyncManager,
     private val generalPreferences: GeneralPreferences,
     private val languagePreferences: LanguagePreferences,
@@ -52,6 +54,7 @@ class SettingsViewModel(
                 cashBoxManager.contextFlow,
                 syncPreferences.settings,
                 syncManager.state,
+                syncLogPreferences.log,
                 languagePreferences.language,
                 themePreferences.theme,
                 themePreferences.themeMode,
@@ -68,18 +71,19 @@ class SettingsViewModel(
                 val ctx = args[0] as POSContext
                 val syncSettings = args[1] as SyncSettings
                 val syncState = args[2] as SyncState
-                val language = args[3] as AppLanguage
-                val theme = args[4] as AppColorTheme
-                val themeMode = args[5] as AppThemeMode
-                val taxes = args[6] as Boolean
-                val offline = args[7] as Boolean
-                val printer = args[8] as Boolean
-                val drawer = args[9] as Boolean
-                val allowNegativeStock = args[10] as Boolean
-                val inventoryAlertsEnabled = args[11] as Boolean
-                val inventoryAlertHour = args[12] as Int
-                val inventoryAlertMinute = args[13] as Int
-                val salesTargetMonthly = args[14] as Double
+                val syncLog = args[3] as List<*>
+                val language = args[4] as AppLanguage
+                val theme = args[5] as AppColorTheme
+                val themeMode = args[6] as AppThemeMode
+                val taxes = args[7] as Boolean
+                val offline = args[8] as Boolean
+                val printer = args[9] as Boolean
+                val drawer = args[10] as Boolean
+                val allowNegativeStock = args[11] as Boolean
+                val inventoryAlertsEnabled = args[12] as Boolean
+                val inventoryAlertHour = args[13] as Int
+                val inventoryAlertMinute = args[14] as Int
+                val salesTargetMonthly = args[15] as Double
 
                 val baseCurrency = normalizeCurrency(ctx.companyCurrency)
                 val secondaryCurrency = normalizeCurrency(ctx.currency)
@@ -135,7 +139,8 @@ class SettingsViewModel(
                     salesTargetConvertedMonthly = convertedMonthly,
                     salesTargetConvertedWeekly = convertedWeekly,
                     salesTargetConvertedDaily = convertedDaily,
-                    salesTargetConversionStale = stale
+                    salesTargetConversionStale = stale,
+                    syncLog = syncLog.filterIsInstance<com.erpnext.pos.domain.models.SyncLogEntry>()
                 )
             }.collect { state ->
                 _uiState.value = state
@@ -145,6 +150,10 @@ class SettingsViewModel(
 
     fun onSyncNow() {
         viewModelScope.launch { syncManager.fullSync(force = true) }
+    }
+
+    fun onCancelSync() {
+        syncManager.cancelSync()
     }
 
     fun setAutoSync(enabled: Boolean) {

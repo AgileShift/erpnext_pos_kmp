@@ -60,6 +60,7 @@ import androidx.navigation.compose.rememberNavController
 import com.erpnext.pos.NavGraph.Setup
 import com.erpnext.pos.base.getPlatformName
 import com.erpnext.pos.localization.ProvideAppStrings
+import com.erpnext.pos.localization.LocalAppStrings
 import com.erpnext.pos.navigation.DesktopNavigationRail
 import com.erpnext.pos.navigation.NavRoute
 import com.erpnext.pos.navigation.NavigationManager
@@ -362,7 +363,7 @@ fun AppNavigation() {
                                         }
                                         val dbLabel = when (syncState) {
                                             is SyncState.SYNCING -> "Base de datos: ${(syncState as SyncState.SYNCING).message}"
-                                            is SyncState.ERROR -> "Base de datos: Error de sincronización"
+                                            is SyncState.ERROR -> "Base de datos: ${(syncState as SyncState.ERROR).message}"
                                             is SyncState.SUCCESS -> "Base de datos: Sincronizada"
                                             else -> if (dbHealthy) {
                                                 "Base de datos: Saludable"
@@ -663,6 +664,7 @@ fun AppNavigation() {
                                             .fillMaxWidth()
                                             .align(Alignment.TopCenter)
                                     ) {
+                                        val strings = LocalAppStrings.current
                                         val message = loadingState.message.ifBlank {
                                             (syncState as? SyncState.SYNCING)?.message ?: "Procesando..."
                                         }
@@ -672,6 +674,16 @@ fun AppNavigation() {
                                             style = MaterialTheme.typography.labelMedium,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
+                                        val step = loadingState.currentStep
+                                        val total = loadingState.totalSteps
+                                        if (step != null && total != null && total > 0) {
+                                            Text(
+                                                text = "${strings.settings.syncStepLabel} $step ${strings.settings.syncStepOfLabel} $total",
+                                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp),
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
                                         if (loadingState.progress != null) {
                                             LinearProgressIndicator(
                                                 progress = { loadingState.progress ?: 0f },

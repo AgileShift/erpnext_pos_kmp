@@ -22,6 +22,7 @@ import com.erpnext.pos.utils.RepoTrace
 import com.erpnext.pos.utils.AppLogger
 import com.erpnext.pos.utils.buildPaymentModeDetailMap
 import com.erpnext.pos.utils.buildCurrencySpecs
+import com.erpnext.pos.utils.normalizeCurrency
 import com.erpnext.pos.utils.roundToCurrency
 import com.erpnext.pos.utils.resolveMinorUnitTolerance
 import com.erpnext.pos.utils.view.DateTimeProvider
@@ -194,18 +195,34 @@ class SalesInvoiceRepository(
         }
         if (uniquePayments.isEmpty()) return
 
-        val paidDeltaInvoice = uniquePayments.sumOf { payment ->
-            val rate = payment.exchangeRate
-            if (rate > 0.0 && payment.enteredAmount > 0.0) {
-                payment.enteredAmount * rate
-            } else {
-                payment.amount
+        val invoiceCurrency = normalizeCurrency(invoice.currency)
+        val receivableCurrency = normalizeCurrency(invoice.partyAccountCurrency ?: invoice.currency)
+        val invoiceToReceivableRate = when {
+            invoiceCurrency.equals(receivableCurrency, ignoreCase = true) -> 1.0
+            invoice.conversionRate != null && (invoice.conversionRate ?: 0.0) > 0.0 ->
+                invoice.conversionRate ?: 0.0
+            invoice.baseGrandTotal != null && invoice.grandTotal > 0.0 ->
+                (invoice.baseGrandTotal ?: 0.0) / invoice.grandTotal
+            else -> 1.0
+        }
+
+        val paidDeltaReceivable = uniquePayments.sumOf { payment ->
+            val paymentCurrency = normalizeCurrency(payment.paymentCurrency)
+            when {
+                paymentCurrency.equals(receivableCurrency, ignoreCase = true) &&
+                    payment.enteredAmount > 0.0 -> payment.enteredAmount
+
+                payment.amount > 0.0 -> payment.amount * invoiceToReceivableRate
+                payment.exchangeRate > 0.0 && payment.enteredAmount > 0.0 ->
+                    (payment.enteredAmount * payment.exchangeRate) * invoiceToReceivableRate
+
+                else -> 0.0
             }
         }
         val totalBefore = invoice.paidAmount + invoice.outstandingAmount
-        val totalPaid = roundToCurrency((invoice.paidAmount + paidDeltaInvoice).coerceAtLeast(0.0))
+        val totalPaid = roundToCurrency((invoice.paidAmount + paidDeltaReceivable).coerceAtLeast(0.0))
         var newOutstanding =
-            roundToCurrency((invoice.outstandingAmount - paidDeltaInvoice).coerceAtLeast(0.0))
+            roundToCurrency((invoice.outstandingAmount - paidDeltaReceivable).coerceAtLeast(0.0))
         val roundingTolerance = 0.05
         val epsilon = 0.0001
         if (newOutstanding <= roundingTolerance) {
@@ -666,11 +683,9 @@ class SalesInvoiceRepository(
         invoices.forEach { wrapper ->
             val invoice = wrapper.invoice
             val receivableCurrency = invoice.partyAccountCurrency ?: invoice.currency
-            val outstanding = when {
-                receivableCurrency.equals(baseCurrency, ignoreCase = true) ->
-                    (invoice.baseOutstandingAmount ?: invoice.outstandingAmount)
-                else -> invoice.outstandingAmount ?: invoice.baseOutstandingAmount
-            }?.coerceAtLeast(0.0) ?: 0.0
+            val outstanding =
+                (invoice.outstandingAmount ?: invoice.baseOutstandingAmount)
+                    ?.coerceAtLeast(0.0) ?: 0.0
             val rate = when {
                 receivableCurrency.equals(baseCurrency, ignoreCase = true) -> 1.0
                 else -> context.resolveExchangeRateBetween(

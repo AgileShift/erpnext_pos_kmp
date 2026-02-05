@@ -29,12 +29,7 @@ fun roundForCurrency(value: Double, currency: String?): Double {
 
 fun resolveRoundedTotal(grandTotal: Double, currency: String?): RoundedTotal {
     if (!grandTotal.isFinite()) return RoundedTotal(grandTotal, 0.0)
-    val normalized = normalizeCurrency(currency).uppercase()
-    val roundedTotal = when (normalized) {
-        // Política de caja: total final hacia arriba a entero.
-        "USD", "NIO" -> roundUpToScale(grandTotal, 0)
-        else -> roundForCurrency(grandTotal, currency)
-    }
+    val roundedTotal = roundForCurrency(grandTotal, currency)
     val adjustment = roundToCurrency(roundedTotal - grandTotal)
     return RoundedTotal(roundedTotal = roundedTotal, roundingAdjustment = adjustment)
 }

@@ -17,7 +17,6 @@ object LoadingIndicator {
     private val mutex = Mutex()
     private var counter: Int = 0
     private val _isLoading = MutableStateFlow(false)
-    val isLoading = _isLoading.asStateFlow()
     private val _state = MutableStateFlow(LoadingUiState())
     val state = _state.asStateFlow()
 

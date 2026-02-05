@@ -89,6 +89,7 @@ import com.erpnext.pos.localSource.preferences.ExchangeRatePreferences
 import com.erpnext.pos.localSource.preferences.GeneralPreferences
 import com.erpnext.pos.localSource.preferences.LanguagePreferences
 import com.erpnext.pos.localSource.preferences.OpeningSessionPreferences
+import com.erpnext.pos.localSource.preferences.SyncLogPreferences
 import com.erpnext.pos.localSource.preferences.SyncPreferences
 import com.erpnext.pos.localSource.preferences.ThemePreferences
 import com.erpnext.pos.remoteSource.api.APIService
@@ -145,6 +146,7 @@ import com.erpnext.pos.domain.usecases.FetchSalesInvoiceWithItemsUseCase
 import com.erpnext.pos.domain.usecases.PartialReturnUseCase
 import com.erpnext.pos.domain.usecases.FetchPosProfileInfoLocalUseCase
 import com.erpnext.pos.domain.usecases.FetchPosProfileInfoUseCase
+import com.erpnext.pos.domain.usecases.RebuildCustomerSummariesUseCase
 import com.erpnext.pos.domain.usecases.v2.LoadSourceDocumentsUseCase
 import io.ktor.client.HttpClient
 import io.ktor.client.plugins.HttpTimeout
@@ -325,6 +327,7 @@ val appModule = module {
     single { ExchangeRatePreferences(get()) }
     single { LanguagePreferences(get()) }
     single { OpeningSessionPreferences(get()) }
+    single { SyncLogPreferences(get()) }
     single { SyncPreferences(get()) }
     single { ThemePreferences(get()) }
     single { StockSettingsRepository(get(named("apiService")), get()) }
@@ -386,6 +389,7 @@ val appModule = module {
             territoryRepo = get(),
             exchangeRateRepo = get(),
             syncPreferences = get(),
+            syncLogPreferences = get(),
             companyInfoRepo = get(),
             cashBoxManager = get(),
             posProfileDao = get(),
@@ -492,6 +496,7 @@ val appModule = module {
             cashboxManager = get(),
             fetchCustomersUseCase = get(),
             checkCustomerCreditUseCase = get(),
+            rebuildCustomerSummariesUseCase = get(),
             fetchCustomerDetailUseCase = get(),
             fetchOutstandingInvoicesUseCase = get(),
             fetchCustomerInvoicesForPeriodUseCase = get(),
@@ -610,6 +615,7 @@ val appModule = module {
             get(),
             get(),
             get(),
+            get(),
             get()
         )
     }
@@ -635,6 +641,7 @@ val appModule = module {
     single { FetchCustomersUseCase(get()) }
     single { FetchCustomersLocalUseCase(get()) }
     single { FetchCustomersLocalWithStateUseCase(get()) }
+    single { RebuildCustomerSummariesUseCase(get()) }
     single { FetchPaymentTermsLocalUseCase(get()) }
     single { FetchDeliveryChargesLocalUseCase(get()) }
     single { FetchCustomerGroupsLocalUseCase(get()) }

@@ -22,6 +22,7 @@ fun rememberHomeActions(coordinator: HomeCoordinator): HomeAction {
     return remember(coordinator) {
         HomeAction(
             sync = coordinator::sync,
+            cancelSync = coordinator::cancelSync,
             syncState = coordinator.syncState,
             syncSettings = coordinator.syncSettings,
             homeMetrics = coordinator.homeMetrics,

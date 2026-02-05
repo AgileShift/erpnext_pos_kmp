@@ -21,6 +21,7 @@ sealed class HomeState {
 
 data class HomeAction(
     val sync: () -> Unit = {},
+    val cancelSync: () -> Unit = {},
     val syncState: StateFlow<SyncState> = MutableStateFlow(SyncState.IDLE),
     val syncSettings: StateFlow<SyncSettings> = MutableStateFlow(
         SyncSettings(

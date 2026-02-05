@@ -38,6 +38,7 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -104,7 +105,8 @@ fun SettingsScreenPreview() {
             salesTargetConvertedMonthly = 450000.0,
             salesTargetConvertedWeekly = 104000.0,
             salesTargetConvertedDaily = 15000.0,
-            salesTargetConversionStale = false
+            salesTargetConversionStale = false,
+            syncLog = emptyList()
         ),
         POSSettingAction()
     )
@@ -202,6 +204,11 @@ fun PosSettingsScreen(
                         onWifiOnlyChanged = action.onWifiOnlyChanged,
                         onUseTtlChanged = action.onUseTtlChanged,
                         onSyncNow = action.onSyncNow,
+                        onCancelSync = action.onCancelSync,
+                    )
+
+                    SyncLogSection(
+                        entries = state.syncLog
                     )
 
                     SettingSection(title = strings.settings.operationTitle) {
@@ -768,6 +775,7 @@ private fun SyncSection(
     onWifiOnlyChanged: (Boolean) -> Unit,
     onUseTtlChanged: (Boolean) -> Unit,
     onSyncNow: () -> Unit,
+    onCancelSync: () -> Unit,
 ) {
     val strings = LocalAppStrings.current
     SettingSection(title = strings.settings.syncTitle) {
@@ -802,9 +810,76 @@ private fun SyncSection(
         Button(
             onClick = onSyncNow,
             modifier = Modifier.fillMaxWidth(),
+            enabled = syncState !is SyncState.SYNCING,
             colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
         ) {
             Text(strings.settings.syncNowButton)
+        }
+        if (syncState is SyncState.SYNCING) {
+            Spacer(modifier = Modifier.height(8.dp))
+            OutlinedButton(
+                onClick = onCancelSync,
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.outlinedButtonColors(
+                    contentColor = MaterialTheme.colorScheme.error
+                )
+            ) {
+                Text(strings.settings.syncCancelButton)
+            }
+        }
+    }
+}
+
+@Composable
+private fun SyncLogSection(
+    entries: List<com.erpnext.pos.domain.models.SyncLogEntry>
+) {
+    val strings = LocalAppStrings.current
+    SettingSection(title = strings.settings.syncLogTitle) {
+        if (entries.isEmpty()) {
+            Text(
+                text = strings.settings.syncLogEmpty,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            return@SettingSection
+        }
+        entries.take(6).forEach { entry ->
+            val statusLabel = when (entry.status) {
+                com.erpnext.pos.domain.models.SyncLogStatus.SUCCESS -> strings.settings.syncStatusSuccess
+                com.erpnext.pos.domain.models.SyncLogStatus.PARTIAL -> strings.settings.syncLogStatusPartial
+                com.erpnext.pos.domain.models.SyncLogStatus.ERROR -> strings.settings.syncStatusError
+                com.erpnext.pos.domain.models.SyncLogStatus.CANCELED -> strings.settings.syncLogStatusCanceled
+            }
+            Column(modifier = Modifier.padding(bottom = 10.dp)) {
+                Text(
+                    text = statusLabel,
+                    style = MaterialTheme.typography.labelLarge,
+                    color = when (entry.status) {
+                        com.erpnext.pos.domain.models.SyncLogStatus.SUCCESS -> MaterialTheme.colorScheme.primary
+                        com.erpnext.pos.domain.models.SyncLogStatus.PARTIAL -> MaterialTheme.colorScheme.tertiary
+                        com.erpnext.pos.domain.models.SyncLogStatus.ERROR -> MaterialTheme.colorScheme.error
+                        com.erpnext.pos.domain.models.SyncLogStatus.CANCELED -> MaterialTheme.colorScheme.onSurfaceVariant
+                    }
+                )
+                Text(
+                    text = entry.message,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                    text = entry.startedAt.toErpDateTime(),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                if (entry.failedSteps.isNotEmpty()) {
+                    Text(
+                        text = entry.failedSteps.joinToString(" · "),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
         }
     }
 }

@@ -59,8 +59,8 @@ fun ProductCard(
     }
     val context = LocalPlatformContext.current
     val strings = LocalAppStrings.current
-    val imageWidth = if (isDesktop) 170.dp else 120.dp
-    val cardHeight = if (isDesktop) 200.dp else 180.dp
+    val imageWidth = if (isDesktop) 170.dp else 110.dp
+    val cardHeight = if (isDesktop) 200.dp else 160.dp
     val posBase = baseCurrency.trim().uppercase()
     val itemCurrency = product.currency?.trim()?.uppercase().orEmpty()
     val displayPrice = if (itemCurrency.isBlank() || itemCurrency == posBase) {
@@ -84,7 +84,7 @@ fun ProductCard(
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Box(
@@ -122,8 +122,8 @@ fun ProductCard(
             Column(
                 modifier = Modifier
                     .weight(1f)
-                    .padding(end = if (isDesktop) 16.dp else 12.dp, top = 14.dp, bottom = 14.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp),
+                    .padding(end = if (isDesktop) 16.dp else 10.dp, top = 10.dp, bottom = 10.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
                 horizontalAlignment = Alignment.End
             ) {
                 Text(
@@ -143,7 +143,7 @@ fun ProductCard(
                 )
 
                 Column(
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
                     horizontalAlignment = Alignment.End
                 ) {
                     Row(
@@ -159,7 +159,7 @@ fun ProductCard(
                         )
                     }
                     Row(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         /*InfoBadge(
@@ -238,7 +238,7 @@ private fun InfoBadge(
             text = label,
             style = MaterialTheme.typography.labelMedium,
             color = textColor,
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
         )
     }
 }

@@ -4,10 +4,14 @@ package com.erpnext.pos.views.home
 
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.slideInVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -28,12 +32,12 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Logout
-import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.LocalCafe
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.LocalOffer
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material3.Button
@@ -94,6 +98,7 @@ fun HomeScreen(
     var currentUser by remember { mutableStateOf<UserBO?>(null) }
     val snackbar: SnackbarController = koinInject()
     val syncState by actions.syncState.collectAsState()
+    val strings = LocalAppStrings.current
     val homeMetrics by actions.homeMetrics.collectAsState()
     val openingState by actions.openingState.collectAsState()
     val isCashboxOpen by actions.isCashboxOpen().collectAsState()
@@ -103,6 +108,12 @@ fun HomeScreen(
         if (uiState is HomeState.POSProfiles) {
             currentProfiles = uiState.posProfiles
             currentUser = uiState.user
+        }
+    }
+
+    LaunchedEffect(isCashboxOpen) {
+        if (isCashboxOpen && showOpeningView) {
+            showOpeningView = false
         }
     }
 
@@ -116,6 +127,7 @@ fun HomeScreen(
             onOpenCashbox = actions.onOpenCashbox,
             onSelectProfile = { actions.onPosSelected(it) },
             onDismiss = {
+                showOpeningView = false
                 actions.initialState()
             },
             snackbar
@@ -227,6 +239,25 @@ fun HomeScreen(
                                                             alpha = 0.8f
                                                         )
                                                     )
+                                                    val step = (syncState as SyncState.SYNCING).currentStep
+                                                    val total = (syncState as SyncState.SYNCING).totalSteps
+                                                    if (step != null && total != null && total > 0) {
+                                                        Spacer(Modifier.height(6.dp))
+                                                        Text(
+                                                            text = "${strings.settings.syncStepLabel} $step ${strings.settings.syncStepOfLabel} $total",
+                                                            style = MaterialTheme.typography.labelSmall,
+                                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                        )
+                                                    }
+                                                }
+                                                Button(
+                                                    onClick = { actions.cancelSync() },
+                                                    colors = ButtonDefaults.buttonColors(
+                                                        containerColor = MaterialTheme.colorScheme.error,
+                                                        contentColor = MaterialTheme.colorScheme.onError
+                                                    )
+                                                ) {
+                                                    Text(strings.settings.syncCancelButton)
                                                 }
                                             }
                                         }
@@ -272,9 +303,14 @@ fun HomeScreen(
                                 onClick = {
                                     if (isCashboxOpen) {
                                         actions.onCloseCashbox()
+                                    } else {
+                                        if (currentProfiles.isNotEmpty()) {
+                                            showOpeningView = true
+                                        }
                                     }
                                 },
                                 modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
+                                enabled = syncState !is SyncState.SYNCING,
                                 colors = ButtonDefaults.buttonColors(
                                     containerColor = if (!isCashboxOpen) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
                                 )
@@ -315,8 +351,11 @@ private fun BISection(metrics: HomeMetrics, actions: HomeAction) {
             return@Column
         }
 
-        var selectedCurrency by remember(currencyMetrics) {
-            mutableStateOf(currencyMetrics.first().currency)
+        val preferredCurrency = metrics.salesTarget?.secondaryCurrency
+            ?.takeIf { preferred -> currencyMetrics.any { it.currency.equals(preferred, true) } }
+            ?: currencyMetrics.first().currency
+        var selectedCurrency by remember(currencyMetrics, preferredCurrency) {
+            mutableStateOf(preferredCurrency)
         }
         val selectedMetric = currencyMetrics.firstOrNull { it.currency == selectedCurrency }
             ?: currencyMetrics.first()
@@ -339,6 +378,7 @@ private fun BISection(metrics: HomeMetrics, actions: HomeAction) {
         metrics.salesTarget?.let { target ->
             SalesTargetCard(
                 target = target,
+                metric = selectedMetric,
                 title = strings.settings.salesTargetSuggestedLabel,
                 monthlyLabel = strings.settings.salesTargetMonthlyLabel,
                 weeklyLabel = strings.settings.salesTargetWeeklyLabel,
@@ -351,7 +391,9 @@ private fun BISection(metrics: HomeMetrics, actions: HomeAction) {
         KpiRow(metric = selectedMetric, symbol = symbol)
 
         InventoryAlertsCard(
-            items = metrics.inventoryAlerts, onViewInventory = {})
+            items = metrics.inventoryAlerts,
+            onViewInventory = actions.onOpenSettings
+        )
     }
 }
 
@@ -470,41 +512,41 @@ private fun LivePill() {
 private fun QuickActionsGrid(modifier: Modifier = Modifier, actions: HomeAction) {
     val actions = listOf(
         ActionItem(
-            "Nueva venta",
-            Icons.Filled.Add,
+            "Sincronizar ahora",
+            Icons.Filled.Sync,
             MaterialTheme.colorScheme.primary,
             MaterialTheme.colorScheme.onPrimary,
-            action = { }
+            action = { actions.sync() }
         ), ActionItem(
-            "Anular",
-            Icons.Filled.Close,
-            MaterialTheme.colorScheme.error,
-            MaterialTheme.colorScheme.onError,
-            action = { }
-        ), ActionItem(
-            "Override",
+            "Reconciliación",
             Icons.Filled.Shield,
-            MaterialTheme.colorScheme.secondary,
-            MaterialTheme.colorScheme.onSecondary,
-            action = { }
-        ), ActionItem(
-            "Precio",
-            Icons.Filled.LocalOffer,
             MaterialTheme.colorScheme.tertiary,
             MaterialTheme.colorScheme.onTertiary,
-            action = { }
+            action = { actions.onOpenReconciliation() }
         ), ActionItem(
-            "Break",
-            Icons.Filled.LocalCafe,
+            "Ajustes POS",
+            Icons.Filled.Settings,
             MaterialTheme.colorScheme.secondary,
             MaterialTheme.colorScheme.onSecondary,
-            action = { }
+            action = { actions.onOpenSettings() }
         ), ActionItem(
-            "Cerrar turno",
+            "Cerrar caja",
             Icons.AutoMirrored.Filled.Logout,
+            MaterialTheme.colorScheme.error,
+            MaterialTheme.colorScheme.onError,
+            action = { actions.onCloseCashbox() }
+        ), ActionItem(
+            "Cerrar sesión",
+            Icons.Filled.Close,
+            MaterialTheme.colorScheme.surfaceVariant,
+            MaterialTheme.colorScheme.onSurfaceVariant,
+            action = { actions.onLogout() }
+        ), ActionItem(
+            "Resumen diario",
+            Icons.Filled.LocalOffer,
             MaterialTheme.colorScheme.surface,
             MaterialTheme.colorScheme.onSurface,
-            action = { actions.onCloseCashbox() }
+            action = { actions.onOpenReconciliation() }
         )
     )
     Card(
@@ -547,7 +589,9 @@ private data class ActionItem(
 @Composable
 private fun QuickActionButton(action: ActionItem, modifier: Modifier = Modifier) {
     Button(
-        onClick = {}, modifier = modifier.height(56.dp), colors = ButtonDefaults.buttonColors(
+        onClick = action.action,
+        modifier = modifier.height(56.dp),
+        colors = ButtonDefaults.buttonColors(
             containerColor = action.color, contentColor = action.contentColor
         )
     ) {
@@ -612,6 +656,7 @@ private fun KpiRow(metric: CurrencyHomeMetric, symbol: String) {
 @Composable
 private fun SalesTargetCard(
     target: SalesTargetMetric,
+    metric: CurrencyHomeMetric,
     title: String,
     monthlyLabel: String,
     weeklyLabel: String,
@@ -625,6 +670,12 @@ private fun SalesTargetCard(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
+            val targetInMetricCurrency = resolveTargetForCurrency(target, metric.currency)
+            val targetCurrency = targetInMetricCurrency?.currency ?: target.baseCurrency
+            val dailyGoal = targetInMetricCurrency?.daily ?: target.dailyBase
+            val weeklyGoal = targetInMetricCurrency?.weekly ?: target.weeklyBase
+            val monthlyGoal = targetInMetricCurrency?.monthly ?: target.monthlyBase
+
             Text(
                 text = title,
                 style = MaterialTheme.typography.titleMedium,
@@ -632,27 +683,64 @@ private fun SalesTargetCard(
             )
             Spacer(modifier = Modifier.height(12.dp))
 
-            TargetCompactRow(
-                monthlyLabel = monthlyLabel,
-                weeklyLabel = weeklyLabel,
-                dailyLabel = dailyLabel,
-                baseCurrency = target.baseCurrency,
-                secondaryCurrency = target.secondaryCurrency,
-                monthlyBase = target.monthlyBase,
-                weeklyBase = target.weeklyBase,
-                dailyBase = target.dailyBase,
-                monthlySecondary = target.monthlySecondary,
-                weeklySecondary = target.weeklySecondary,
-                dailySecondary = target.dailySecondary
+            val monthlyProjection = metric.salesLast7 * (30.0 / 7.0)
+            val rows = listOf(
+                TargetProgressRow(
+                    label = dailyLabel,
+                    actual = metric.totalSalesToday,
+                    goal = dailyGoal,
+                    currency = targetCurrency,
+                    context = "Objetivo del día"
+                ),
+                TargetProgressRow(
+                    label = weeklyLabel,
+                    actual = metric.salesLast7,
+                    goal = weeklyGoal,
+                    currency = targetCurrency,
+                    context = "Últimos 7 días"
+                ),
+                TargetProgressRow(
+                    label = monthlyLabel,
+                    actual = monthlyProjection,
+                    goal = monthlyGoal,
+                    currency = targetCurrency,
+                    context = "Proyección mensual por ritmo semanal"
+                )
             )
 
-            if (target.secondaryCurrency != null && target.monthlySecondary == null) {
+            BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+                val isWide = maxWidth >= 900.dp
+                if (isWide) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        rows.forEach { row ->
+                            TargetProgressTile(row = row, modifier = Modifier.weight(1f))
+                        }
+                    }
+                } else {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        rows.forEach { row ->
+                            TargetProgressTile(row = row, modifier = Modifier.fillMaxWidth())
+                        }
+                    }
+                }
+            }
+
+            if (targetInMetricCurrency == null && !metric.currency.equals(target.baseCurrency, true)) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "No hay conversión local ${target.baseCurrency} -> ${metric.currency}. Se muestran metas base.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            } else if (target.secondaryCurrency != null && target.monthlySecondary == null) {
+                Spacer(modifier = Modifier.height(8.dp))
                 Text(
                     text = missingHint,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             } else if (target.conversionStale) {
+                Spacer(modifier = Modifier.height(8.dp))
                 Text(
                     text = staleHint,
                     style = MaterialTheme.typography.bodySmall,
@@ -663,66 +751,107 @@ private fun SalesTargetCard(
     }
 }
 
-@Composable
-private fun TargetCompactRow(
-    monthlyLabel: String,
-    weeklyLabel: String,
-    dailyLabel: String,
-    baseCurrency: String,
-    secondaryCurrency: String?,
-    monthlyBase: Double,
-    weeklyBase: Double,
-    dailyBase: Double,
-    monthlySecondary: Double?,
-    weeklySecondary: Double?,
-    dailySecondary: Double?
-) {
-    Row(
-        modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween
-    ) {
-        TargetCompactCell(
-            label = monthlyLabel,
-            baseCurrency = baseCurrency,
-            baseAmount = monthlyBase,
-            secondaryCurrency = secondaryCurrency,
-            secondaryAmount = monthlySecondary
-        )
-        TargetCompactCell(
-            label = weeklyLabel,
-            baseCurrency = baseCurrency,
-            baseAmount = weeklyBase,
-            secondaryCurrency = secondaryCurrency,
-            secondaryAmount = weeklySecondary
-        )
-        TargetCompactCell(
-            label = dailyLabel,
-            baseCurrency = baseCurrency,
-            baseAmount = dailyBase,
-            secondaryCurrency = secondaryCurrency,
-            secondaryAmount = dailySecondary
+private data class TargetProgressRow(
+    val label: String,
+    val actual: Double,
+    val goal: Double,
+    val currency: String,
+    val context: String
+)
+
+private data class TargetCurrencyValues(
+    val currency: String,
+    val monthly: Double,
+    val weekly: Double,
+    val daily: Double
+)
+
+private fun resolveTargetForCurrency(
+    target: SalesTargetMetric,
+    currency: String
+): TargetCurrencyValues? {
+    if (currency.equals(target.baseCurrency, ignoreCase = true)) {
+        return TargetCurrencyValues(
+            currency = target.baseCurrency,
+            monthly = target.monthlyBase,
+            weekly = target.weeklyBase,
+            daily = target.dailyBase
         )
     }
+    if (currency.equals(target.secondaryCurrency, ignoreCase = true)) {
+        val monthly = target.monthlySecondary ?: return null
+        val weekly = target.weeklySecondary ?: return null
+        val daily = target.dailySecondary ?: return null
+        return TargetCurrencyValues(
+            currency = currency,
+            monthly = monthly,
+            weekly = weekly,
+            daily = daily
+        )
+    }
+    return null
 }
 
 @Composable
-private fun TargetCompactCell(
-    label: String,
-    baseCurrency: String,
-    baseAmount: Double,
-    secondaryCurrency: String?,
-    secondaryAmount: Double?
-) {
-    Column(modifier = Modifier.padding(end = 8.dp)) {
-        Text(text = label, style = MaterialTheme.typography.bodySmall)
-        Text(
-            text = formatCurrency(baseCurrency, baseAmount),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.primary
-        )
-        if (secondaryCurrency != null && secondaryAmount != null) {
+private fun TargetProgressTile(row: TargetProgressRow, modifier: Modifier = Modifier) {
+    val progressRaw = if (row.goal <= 0.0) 0f else (row.actual / row.goal).toFloat().coerceIn(0f, 1f)
+    val progress by animateFloatAsState(
+        targetValue = progressRaw,
+        animationSpec = tween(durationMillis = 700),
+        label = "target_progress"
+    )
+    val reached = row.actual >= row.goal
+    val pending = (row.goal - row.actual).coerceAtLeast(0.0)
+    val progressColor = Color(0xFF2E7D32)
+    val trackColor = Color(0xFFD32F2F).copy(alpha = 0.30f)
+
+    Card(
+        modifier = modifier,
+        shape = RoundedCornerShape(14.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(
+                alpha = 0.35f
+            )
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+    ) {
+        Column(
+            modifier = Modifier.padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
             Text(
-                text = formatCurrency(secondaryCurrency, secondaryAmount),
-                style = MaterialTheme.typography.bodySmall,
+                text = row.label,
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.SemiBold
+            )
+            Text(
+                text = "${formatCurrency(row.currency, row.actual)} / ${
+                    formatCurrency(
+                        row.currency,
+                        row.goal
+                    )
+                }",
+                style = MaterialTheme.typography.bodyMedium
+            )
+            LinearProgressIndicator(
+                progress = { progress },
+                modifier = Modifier.fillMaxWidth().height(8.dp),
+                color = progressColor,
+                trackColor = trackColor
+            )
+            Text(
+                text = if (reached) "Meta alcanzada" else "Faltan ${
+                    formatCurrency(
+                        row.currency,
+                        pending
+                    )
+                }",
+                style = MaterialTheme.typography.labelSmall,
+                color = if (reached) progressColor else MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Text(
+                text = row.context,
+                style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
@@ -811,19 +940,30 @@ private fun InventoryAlertsCard(
 
             Spacer(Modifier.height(12.dp))
 
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                SeverityBadge("Crítico", criticalCount, MaterialTheme.colorScheme.error, Modifier.weight(1f))
+                SeverityBadge("Bajo", lowCount, MaterialTheme.colorScheme.tertiary, Modifier.weight(1f))
+            }
+
+            Spacer(Modifier.height(8.dp))
             Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                modifier = Modifier.fillMaxWidth().background(
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.25f),
+                    shape = RoundedCornerShape(10.dp)
+                ).padding(horizontal = 10.dp, vertical = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                KpiTile(
-                    title = "Crítico",
-                    value = criticalCount.toString(),
-                    modifier = Modifier.fillMaxWidth().weight(1f)
+                Icon(
+                    imageVector = Icons.Filled.Info,
+                    contentDescription = null,
+                    modifier = Modifier.size(14.dp),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                KpiTile(
-                    title = "Bajo",
-                    value = lowCount.toString(),
-                    modifier = Modifier.fillMaxWidth().weight(1f)
+                Text(
+                    text = "Tooltip: cobertura = stock disponible frente al nivel de reorden (100% o más está saludable).",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
 
@@ -843,9 +983,47 @@ private fun InventoryAlertsCard(
                     )
                 }
             } else {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    items.forEach { item ->
-                        InventoryAlertRow(item)
+                Text(
+                    text = "Mostrando ${items.size} productos con mayor riesgo de quiebre.",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(Modifier.height(8.dp))
+                BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+                    val isWide = maxWidth >= 900.dp
+                    if (isWide) {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            items.chunked(2).forEach { row ->
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    row.forEach { item ->
+                                        AnimatedVisibility(
+                                            visible = true,
+                                            enter = fadeIn(tween(280)) + slideInVertically(
+                                                animationSpec = tween(280),
+                                                initialOffsetY = { it / 8 }
+                                            )
+                                        ) {
+                                            InventoryAlertRow(item, Modifier.weight(1f))
+                                        }
+                                    }
+                                    if (row.size == 1) Spacer(Modifier.weight(1f))
+                                }
+                            }
+                        }
+                    } else {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            items.forEach { item ->
+                                AnimatedVisibility(
+                                    visible = true,
+                                    enter = fadeIn(tween(280)) + slideInVertically(
+                                        animationSpec = tween(280),
+                                        initialOffsetY = { it / 8 }
+                                    )
+                                ) {
+                                    InventoryAlertRow(item, Modifier.fillMaxWidth())
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -856,14 +1034,43 @@ private fun InventoryAlertsCard(
                 modifier = Modifier.fillMaxWidth(),
                 colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
             ) {
-                Text("Ver inventario")
+                Text("Configurar alertas")
             }
         }
     }
 }
 
 @Composable
-private fun InventoryAlertRow(item: InventoryAlert) {
+private fun SeverityBadge(
+    label: String,
+    value: Int,
+    tint: Color,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier,
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(containerColor = tint.copy(alpha = 0.12f)),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(text = label, style = MaterialTheme.typography.labelMedium, color = tint)
+            Text(
+                text = value.toString(),
+                style = MaterialTheme.typography.titleSmall,
+                color = tint,
+                fontWeight = FontWeight.Bold
+            )
+        }
+    }
+}
+
+@Composable
+private fun InventoryAlertRow(item: InventoryAlert, modifier: Modifier = Modifier) {
     val statusColor = when (item.status) {
         InventoryAlertStatus.CRITICAL -> MaterialTheme.colorScheme.error
         InventoryAlertStatus.LOW -> MaterialTheme.colorScheme.tertiary
@@ -873,13 +1080,23 @@ private fun InventoryAlertRow(item: InventoryAlert) {
         InventoryAlertStatus.LOW -> "Bajo"
     }
     val reorderLevel = item.reorderLevel
-    val progress = when {
-        reorderLevel == null || reorderLevel <= 0.0 -> if (item.qty > 0) 1f else 0f
-        else -> (item.qty / reorderLevel).coerceIn(0.0, 1.0).toFloat()
+    val coverageRatio = reorderLevel?.takeIf { it > 0.0 }?.let { item.qty / it }
+    val progressRaw = coverageRatio?.coerceIn(0.0, 1.0)?.toFloat()
+    val progress by animateFloatAsState(
+        targetValue = progressRaw ?: 0f,
+        animationSpec = tween(durationMillis = 650),
+        label = "inventory_coverage"
+    )
+    val progressColor = when {
+        coverageRatio == null -> MaterialTheme.colorScheme.outline
+        coverageRatio >= 1.0 -> Color(0xFF2E7D32)
+        coverageRatio >= 0.6 -> MaterialTheme.colorScheme.tertiary
+        else -> MaterialTheme.colorScheme.error
     }
+    val missingToReorder = reorderLevel?.let { (it - item.qty).coerceAtLeast(0.0) }
 
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = modifier,
         shape = RoundedCornerShape(14.dp),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
@@ -927,12 +1144,35 @@ private fun InventoryAlertRow(item: InventoryAlert) {
                 }
             }
 
-            LinearProgressIndicator(
-                progress = { progress },
-                modifier = Modifier.fillMaxWidth(),
-                color = statusColor,
-                trackColor = MaterialTheme.colorScheme.surfaceContainerHighest
-            )
+            if (progressRaw != null) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        text = "Cobertura vs reorden",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        text = "${formatAmount((coverageRatio * 100.0).coerceAtLeast(0.0))}%",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = progressColor
+                    )
+                }
+                LinearProgressIndicator(
+                    progress = { progress },
+                    modifier = Modifier.fillMaxWidth(),
+                    color = progressColor,
+                    trackColor = MaterialTheme.colorScheme.surfaceContainerHighest
+                )
+            } else {
+                Text(
+                    text = "Sin nivel de reorden configurado para este artículo.",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -945,6 +1185,13 @@ private fun InventoryAlertRow(item: InventoryAlert) {
                 Text("Reorden: ${item.reorderLevel?.let { formatAmount(it) } ?: "N/D"}",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            missingToReorder?.let {
+                Text(
+                    text = if (it <= 0.0) "Sobre nivel de reorden" else "Faltan ${formatAmount(it)} para llegar al nivel de reorden",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
         }
     }

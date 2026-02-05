@@ -24,6 +24,10 @@ class HomeCoordinator(
         viewModel.syncNow()
     }
 
+    fun cancelSync() {
+        viewModel.cancelSync()
+    }
+
     fun initialState() {
         viewModel.resetToInitialState()
     }

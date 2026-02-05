@@ -487,6 +487,9 @@ class BillingViewModel(
                 price = resolveItemPriceForInvoiceCurrency(
                     item = item,
                     invoiceCurrency = current.currency ?: posCurrency,
+                    rateToInvoice = current.exchangeRateByCurrency[
+                        normalizeCurrency(item.currency)
+                    ],
                     posCurrency = posCurrency,
                     exchangeRate = exchangeRate
                 )
@@ -1349,6 +1352,7 @@ class BillingViewModel(
             grandTotal = total,
             roundedTotal = roundedTotalField,
             roundingAdjustment = roundingAdjustmentField,
+            disableRoundedTotal = true,
             outstandingAmount = if (usePosInvoice) resolvedOutstanding else null,
             totalTaxesAndCharges = taxes,
             netTotal = netTotal,
@@ -1517,25 +1521,36 @@ class BillingViewModel(
     private fun resolveItemPriceForInvoiceCurrency(
         item: ItemBO,
         invoiceCurrency: String?,
+        rateToInvoice: Double?,
         posCurrency: String?,
         exchangeRate: Double?
     ): Double {
-        val itemCurrency = normalizeCurrency(item.currency)
+        val itemCurrency = item.currency?.trim()?.uppercase()
+            ?.takeIf { it.isNotBlank() }
+            ?: normalizeCurrency(posCurrency)
         val invoice = normalizeCurrency(invoiceCurrency)
-        if (itemCurrency.isBlank() || invoice.isBlank()) return item.price
+        if (itemCurrency.isBlank() || invoice.isBlank()) return roundToCurrency(item.price)
         if (itemCurrency.equals(invoice, ignoreCase = true)) return item.price
 
-        val rate = exchangeRate?.takeIf { it > 0.0 } ?: return item.price
+        // Prioridad: tasa directa moneda_item -> moneda_factura (mismo criterio que ERP/local cache).
+        rateToInvoice?.takeIf { it > 0.0 }?.let { directRate ->
+            return roundToCurrency(item.price * directRate)
+        }
+
+        // Fallback legado usando tasa del contexto POS; inferimos dirección para evitar inflar montos.
+        val rate = exchangeRate?.takeIf { it > 0.0 } ?: return roundToCurrency(item.price)
         val pos = normalizeCurrency(posCurrency)
         if (pos != null) {
             if (itemCurrency.equals("USD", true) && invoice.equals(pos, true)) {
-                return item.price * rate
+                val converted = if (rate > 1.0) item.price * rate else item.price / rate
+                return roundToCurrency(converted)
             }
             if (itemCurrency.equals(pos, true) && invoice.equals("USD", true)) {
-                return item.price / rate
+                val converted = if (rate > 1.0) item.price / rate else item.price * rate
+                return roundToCurrency(converted)
             }
         }
-        return item.price
+        return roundToCurrency(item.price)
     }
 
     private fun resolveDueDate(

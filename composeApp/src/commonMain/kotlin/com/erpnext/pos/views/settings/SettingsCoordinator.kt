@@ -27,6 +27,7 @@ class SettingsCoordinator(
     fun onSelect(s: String) {}
 
     fun onSyncNow() = viewModel.onSyncNow()
+    fun onCancelSync() = viewModel.onCancelSync()
     fun onAutoSyncChanged(enabled: Boolean) = viewModel.setAutoSync(enabled)
     fun onSyncOnStartupChanged(enabled: Boolean) = viewModel.setSyncOnStartup(enabled)
     fun onWifiOnlyChanged(enabled: Boolean) = viewModel.setWifiOnly(enabled)

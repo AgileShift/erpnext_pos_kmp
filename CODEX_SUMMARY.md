@@ -11,6 +11,8 @@
 
 - Features
   - Posibilidad de vender inventario negativo (Reserva)
+  - Apertura de caja puede hacer un backNavigation nuevamente a Home
+  - Al abrir 
 
 
 BI -> codex resume 019c25b8-9d1c-79f1-b49a-0da1dff44ba9

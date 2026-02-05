@@ -22,6 +22,7 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
 import kotlin.collections.map
@@ -32,6 +33,13 @@ class CustomerRepository(
     private val outboxLocalSource: com.erpnext.pos.localSource.datasources.CustomerOutboxLocalSource,
     private val context: CashBoxManager
 ) : ICustomerRepository {
+
+    suspend fun rebuildAllCustomerSummaries() {
+        val customers = localSource.getAll().first()
+        customers.forEach { customer ->
+            refreshCustomerSummaryWithRates(customer.name)
+        }
+    }
 
     override suspend fun getCustomers(
         search: String?, state: String?
@@ -200,11 +208,9 @@ class CustomerRepository(
         invoices.forEach { wrapper ->
             val invoice = wrapper.invoice
             val receivableCurrency = invoice.partyAccountCurrency ?: invoice.currency
-            val outstanding = when {
-                receivableCurrency.equals(baseCurrency, ignoreCase = true) ->
-                    (invoice.baseOutstandingAmount ?: invoice.outstandingAmount)
-                else -> invoice.outstandingAmount ?: invoice.baseOutstandingAmount
-            }?.coerceAtLeast(0.0) ?: 0.0
+            val outstanding =
+                (invoice.outstandingAmount ?: invoice.baseOutstandingAmount)
+                    ?.coerceAtLeast(0.0) ?: 0.0
             val rate = when {
                 receivableCurrency.equals(baseCurrency, ignoreCase = true) -> 1.0
                 else -> context.resolveExchangeRateBetween(

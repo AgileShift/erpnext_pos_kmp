@@ -144,8 +144,8 @@ fun InventoryList(
                         LazyColumn(
                             modifier = modifier.fillMaxSize(),
                             state = listState,
-                            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 12.dp),
-                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 8.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             itemsIndexed(filteredItems, key = { _, item ->
                                 val keyBase = item.itemCode.ifBlank { item.name }
@@ -203,8 +203,8 @@ fun InventoryList(
                     LazyColumn(
                         modifier = modifier.fillMaxSize(),
                         state = listState,
-                        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 12.dp),
-                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         items(
                             count = items.itemCount,

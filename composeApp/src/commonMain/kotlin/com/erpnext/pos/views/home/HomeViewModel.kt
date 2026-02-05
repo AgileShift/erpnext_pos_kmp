@@ -177,6 +177,10 @@ class HomeViewModel(
         )
     }
 
+    fun cancelSync() {
+        syncManager.cancelSync()
+    }
+
     fun loadInitialData() {
         _stateFlow.update { HomeState.Loading }
         executeUseCase(action = {

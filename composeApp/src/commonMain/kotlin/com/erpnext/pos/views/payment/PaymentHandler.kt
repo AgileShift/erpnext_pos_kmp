@@ -182,12 +182,25 @@ class PaymentHandler(
             resolvedInvoiceCurrency = normalizeCurrency(resolvedInvoice.currency)
             resolvedReceivableCurrency = normalizeCurrency(resolvedInvoice.partyAccountCurrency)
 
+            val remoteInvoice = if (isOnline) {
+                runCatching {
+                    if (isPosInvoice) {
+                        api.getPOSInvoiceByName(resolvedInvoice.name ?: invoiceNameForLocal)
+                    } else {
+                        api.getSalesInvoiceByName(resolvedInvoice.name ?: invoiceNameForLocal)
+                    }
+                }.getOrNull()
+            } else {
+                null
+            }
+
             val rateInvToRcResolved =
                 com.erpnext.pos.utils.CurrencyService.resolveInvoiceToReceivableRateUnified(
                     invoiceCurrency = resolvedInvoiceCurrency,
                     receivableCurrency = resolvedReceivableCurrency,
-                    conversionRate = resolvedInvoice.conversionRate,
-                    customExchangeRate = resolvedInvoice.customExchangeRate,
+                    conversionRate = remoteInvoice?.conversionRate ?: resolvedInvoice.conversionRate,
+                    customExchangeRate = remoteInvoice?.customExchangeRate
+                        ?: resolvedInvoice.customExchangeRate,
                     posCurrency = context.currency,
                     posExchangeRate = context.exchangeRate,
                     rateResolver = { from, to ->
@@ -199,40 +212,46 @@ class PaymentHandler(
                     }
                 )?.takeIf { it > 0.0 }
 
-            val totalRcResolved = when {
+            val remoteGrandTotal = remoteInvoice?.grandTotal ?: resolvedInvoice.grandTotal
+            val remoteOutstanding = remoteInvoice?.outstandingAmount
+                ?: resolvedInvoice.outstandingAmount
+                ?: remoteGrandTotal
+
+            val totalRc = when {
                 resolvedReceivableCurrency.equals(resolvedInvoiceCurrency, ignoreCase = true) ->
-                    resolvedInvoice.grandTotal
+                    remoteGrandTotal
 
                 resolvedReceivableCurrency.equals(companyCurrency, ignoreCase = true) &&
-                    resolvedInvoice.baseGrandTotal != null && resolvedInvoice.baseGrandTotal > 0.0 ->
-                    resolvedInvoice.baseGrandTotal
+                    (remoteInvoice?.baseGrandTotal ?: resolvedInvoice.baseGrandTotal) != null &&
+                    (remoteInvoice?.baseGrandTotal ?: resolvedInvoice.baseGrandTotal ?: 0.0) > 0.0 ->
+                    remoteInvoice?.baseGrandTotal ?: resolvedInvoice.baseGrandTotal
 
                 rateInvToRcResolved != null -> resolvedInvoice.grandTotal * rateInvToRcResolved
-                else -> resolvedInvoice.grandTotal
+                else -> remoteGrandTotal
             }
 
             val outstandingRcResolved = when {
                 resolvedReceivableCurrency.equals(resolvedInvoiceCurrency, ignoreCase = true) ->
-                    resolvedInvoice.outstandingAmount ?: resolvedInvoice.grandTotal
+                    remoteOutstanding
 
                 resolvedReceivableCurrency.equals(companyCurrency, ignoreCase = true) &&
-                    resolvedInvoice.baseGrandTotal != null -> {
-                    val basePaid = resolvedInvoice.basePaidAmount ?: 0.0
-                    (resolvedInvoice.baseGrandTotal - basePaid).coerceAtLeast(0.0)
+                    (remoteInvoice?.baseGrandTotal ?: resolvedInvoice.baseGrandTotal) != null -> {
+                    val baseTotal = remoteInvoice?.baseGrandTotal ?: resolvedInvoice.baseGrandTotal
+                    val basePaid = remoteInvoice?.basePaidAmount ?: resolvedInvoice.basePaidAmount ?: 0.0
+                    ((baseTotal ?: 0.0) - basePaid).coerceAtLeast(0.0)
                 }
 
                 rateInvToRcResolved != null -> {
-                    val invOutstanding =
-                        resolvedInvoice.outstandingAmount ?: resolvedInvoice.grandTotal
+                    val invOutstanding = remoteOutstanding
                     (invOutstanding * rateInvToRcResolved).coerceAtLeast(0.0)
                 }
 
-                else -> resolvedInvoice.outstandingAmount ?: resolvedInvoice.grandTotal
+                else -> remoteOutstanding
             }
 
             receivableAmounts = InvoiceReceivableAmounts(
                 receivableCurrency = resolvedReceivableCurrency,
-                totalRc = totalRcResolved,
+                totalRc = totalRc ?: 0.0,
                 outstandingRc = outstandingRcResolved
             )
             remainingOutstandingRc = receivableAmounts.outstandingRc
@@ -347,7 +366,8 @@ class PaymentHandler(
             }
         }
 
-        val localOutstandingRc = receivableAmounts?.outstandingRc
+        val localOutstandingRc = remainingOutstandingRc
+            ?: receivableAmounts?.outstandingRc
             ?: createdInvoice?.outstandingAmount?.takeIf { it > 0.0 }
             ?: createdInvoice?.grandTotal
         val localOutstandingInv = localOutstandingRc?.let {

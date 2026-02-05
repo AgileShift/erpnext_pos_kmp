@@ -97,6 +97,8 @@ import com.erpnext.pos.utils.view.SnackbarPosition
 import com.erpnext.pos.utils.view.SnackbarType
 import com.erpnext.pos.navigation.GlobalTopBarState
 import com.erpnext.pos.navigation.LocalTopBarController
+import com.erpnext.pos.utils.loading.LoadingIndicator
+import com.erpnext.pos.utils.loading.LoadingUiState
 import kotlinx.coroutines.delay
 import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
@@ -118,6 +120,8 @@ fun BillingScreen(
 ) {
     val uiSnackbar = snackbar.snackbar.collectAsState().value
     val colors = MaterialTheme.colorScheme
+    val loadingState by LoadingIndicator.state.collectAsState(initial = LoadingUiState())
+    val globalBusy = loadingState.isLoading
     var step by rememberSaveable { mutableStateOf(LabCheckoutStep.Cart) }
     val successState = when (state) {
         is BillingState.Success -> state
@@ -246,14 +250,15 @@ fun BillingScreen(
                                 )
                             )
                     ) {
+                        val canFinalize = state.selectedCustomer != null &&
+                                state.cartItems.isNotEmpty() &&
+                                (state.isCreditSale || state.paidAmountBase + 0.01 >= state.total) &&
+                                (!state.isCreditSale || state.selectedPaymentTerm != null)
                         Button(
                             onClick = action.onFinalizeSale,
+                            enabled = canFinalize && !globalBusy,
                             modifier = Modifier
                                 .padding(horizontal = 16.dp, vertical = 16.dp),
-                            enabled = state.selectedCustomer != null &&
-                                    state.cartItems.isNotEmpty() &&
-                                    (state.isCreditSale || state.paidAmountBase + 0.01 >= state.total) &&
-                                    (!state.isCreditSale || state.selectedPaymentTerm != null),
                             colors = ButtonDefaults.buttonColors(
                                 containerColor = colors.primary,
                                 contentColor = colors.onPrimary
@@ -932,6 +937,7 @@ private fun BillingLabCheckoutStep(
         }
         /*Button(
             onClick = action.onFinalizeSale,
+            enabled = !globalBusy,
             modifier = Modifier.fillMaxWidth(),
             enabled = state.selectedCustomer != null &&
                     state.cartItems.isNotEmpty() &&
