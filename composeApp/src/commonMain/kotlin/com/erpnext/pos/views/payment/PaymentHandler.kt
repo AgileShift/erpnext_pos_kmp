@@ -62,7 +62,7 @@ class PaymentHandler(
             invoiceCurrency = invoiceCurrency
         )
 
-        val rate = resolveRateToInvoiceCurrency(
+        val resolvedRate = resolveRateToInvoiceCurrency(
             paymentCurrency = paymentCurrency,
             invoiceCurrency = invoiceCurrency,
             cache = exchangeRateByCurrency,
@@ -70,6 +70,7 @@ class PaymentHandler(
                 exchangeRateRepository.getLocalRate(from, to)
             }
         )
+        val rate = if (paymentCurrency.equals(invoiceCurrency, ignoreCase = true)) 1.0 else resolvedRate
 
         val resolvedReference = line.referenceNumber?.takeIf { it.isNotBlank() }
             ?: "POSPAY-${UUIDGenerator().newId()}"
@@ -108,9 +109,6 @@ class PaymentHandler(
             )
         }
 
-        val isPosInvoice =
-            createdInvoice?.doctype?.equals("POS Invoice", ignoreCase = true) == true ||
-                createdInvoice?.isPos == true
         val currencySpecs = buildCurrencySpecs()
         val companyCurrency = normalizeCurrency(context.companyCurrency)
         var resolvedReceivableCurrency = normalizeCurrency(createdInvoice?.partyAccountCurrency)
@@ -178,17 +176,12 @@ class PaymentHandler(
 
         if (createdInvoice != null) {
             val resolvedInvoice = createdInvoice
-            val allowPosShortcut = isPosInvoice && (receivableAmounts?.outstandingRc ?: 0.0) <= 0.0001
             resolvedInvoiceCurrency = normalizeCurrency(resolvedInvoice.currency)
             resolvedReceivableCurrency = normalizeCurrency(resolvedInvoice.partyAccountCurrency)
 
             val remoteInvoice = if (isOnline) {
                 runCatching {
-                    if (isPosInvoice) {
-                        api.getPOSInvoiceByName(resolvedInvoice.name ?: invoiceNameForLocal)
-                    } else {
-                        api.getSalesInvoiceByName(resolvedInvoice.name ?: invoiceNameForLocal)
-                    }
+                    api.getSalesInvoiceByName(resolvedInvoice.name ?: invoiceNameForLocal)
                 }.getOrNull()
             } else {
                 null
@@ -256,11 +249,7 @@ class PaymentHandler(
             )
             remainingOutstandingRc = receivableAmounts.outstandingRc
 
-            if (allowPosShortcut) {
-                remotePaymentsSucceeded = true
-            }
-
-            if (isOnline && !allowPosShortcut) {
+            if (isOnline) {
                 val paidFrom = resolvedInvoice.debitTo
                 var remotePaymentFailed = false
                 val cacheForReceivable = if (resolvedInvoiceCurrency.equals(
@@ -318,9 +307,7 @@ class PaymentHandler(
                         invoiceToReceivableRate = rateInvToRcResolved,
                         currencySpecs = currencySpecs,
                         paymentModeDetails = paymentModeDetails,
-                        referenceDoctype = resolvedInvoice.doctype.ifBlank {
-                            if (isPosInvoice) "POS Invoice" else "Sales Invoice"
-                        }
+                        referenceDoctype = "Sales Invoice"
                     )
 
                     val paymentResult = runCatching {

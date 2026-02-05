@@ -229,7 +229,11 @@ class SalesInvoiceRepository(
             newOutstanding = 0.0
         }
 
+        val companyCurrency = context.getContext()?.companyCurrency
         val rateToBase = when {
+            !companyCurrency.isNullOrBlank() &&
+                receivableCurrency.equals(companyCurrency, ignoreCase = true) -> 1.0
+
             invoice.conversionRate != null && (invoice.conversionRate
                 ?: 0.0) > 0.0 -> invoice.conversionRate
 
@@ -291,16 +295,14 @@ class SalesInvoiceRepository(
     }
 
     suspend fun fetchRemoteInvoice(name: String): SalesInvoiceDto? {
-        val local = localSource.getInvoiceByName(name)?.invoice
-        return remoteSource.fetchInvoiceSmart(name, local?.isPos)
+        return remoteSource.fetchInvoiceSmart(name, isPosHint = false)
     }
 
     suspend fun fetchRemoteReturnInvoices(
         returnAgainst: String,
-        isPos: Boolean
     ): List<SalesInvoiceDto> {
         val posProfile = context.requireContext().profileName
-        return remoteSource.fetchReturnInvoices(returnAgainst, isPos, posProfile)
+        return remoteSource.fetchReturnInvoices(returnAgainst, posProfile)
     }
 
     suspend fun refreshInvoiceFromRemote(invoiceName: String): SalesInvoiceWithItemsAndPayments? {
@@ -432,7 +434,7 @@ class SalesInvoiceRepository(
             remarks = remote.remarks,
             posOpeningEntry = remote.posOpeningEntry ?: localInvoice?.posOpeningEntry,
             isReturn = remote.isReturn == 1,
-            isPos = remote.doctype.equals("POS Invoice", true) || remote.isPos,
+            isPos = remote.isPos,
             syncStatus = "Synced",
             modifiedAt = now
         )
@@ -472,16 +474,8 @@ class SalesInvoiceRepository(
                 )
             )
         )
-        val created = if (isPosInvoice(draft)) {
-            remoteSource.createPosInvoice(draft)
-        } else {
-            remoteSource.createInvoice(draft)
-        }
+        val created = remoteSource.createInvoice(draft)
         val createdName = created.name!!
-        if (isPosInvoice(draft)) {
-            remoteSource.submitPosInvoice(createdName)
-            return remoteSource.fetchPosInvoice(createdName)!!
-        }
         submitSalesInvoice(createdName)
         return remoteSource.fetchInvoice(createdName)!!
     }
@@ -490,11 +484,7 @@ class SalesInvoiceRepository(
         invoiceName: String, invoice: SalesInvoiceDto
     ): SalesInvoiceDto {
         val ensured = ensurePosOpeningEntry(ensurePosProfile(invoice))
-        return if (isPosInvoice(ensured)) {
-            remoteSource.updatePosInvoice(invoiceName, ensured)
-        } else {
-            remoteSource.updateInvoice(invoiceName, ensured)
-        }
+        return remoteSource.updateInvoice(invoiceName, ensured)
     }
 
     override suspend fun deleteRemoteInvoice(invoiceId: String) {
@@ -503,17 +493,8 @@ class SalesInvoiceRepository(
     }
 
     suspend fun cancelRemoteInvoice(invoiceName: String): SalesInvoiceDto? {
-        val isPos = localSource.getInvoiceByName(invoiceName)?.invoice?.isPos == true
-        if (isPos) {
-            remoteSource.cancelPosInvoice(invoiceName)
-        } else {
-            remoteSource.cancelInvoice(invoiceName)
-        }
-        val remote = if (isPos) {
-            remoteSource.fetchPosInvoice(invoiceName)
-        } else {
-            remoteSource.fetchInvoice(invoiceName)
-        }
+        remoteSource.cancelInvoice(invoiceName)
+        val remote = remoteSource.fetchInvoice(invoiceName)
         if (remote != null) {
             updateLocalInvoiceFromRemote(invoiceName, remote)
         }
@@ -543,16 +524,8 @@ class SalesInvoiceRepository(
 
     private suspend fun handleRemoteInvoice(invoice: SalesInvoiceWithItemsAndPayments) {
         val localName = invoice.invoice.invoiceName ?: return
-        if (invoice.invoice.isPos) {
-            remoteSource.submitPosInvoice(localName)
-        } else {
-            submitSalesInvoice(localName)
-        }
-        val remote = if (invoice.invoice.isPos) {
-            remoteSource.fetchPosInvoice(localName)
-        } else {
-            remoteSource.fetchInvoice(localName)
-        } ?: return
+        submitSalesInvoice(localName)
+        val remote = remoteSource.fetchInvoice(localName) ?: return
         updateLocalInvoiceFromRemote(localName, remote)
     }
 
@@ -585,18 +558,13 @@ class SalesInvoiceRepository(
         }
 
         val existingName = remoteSource.findExistingInvoiceName(
-            isPos = invoice.invoice.isPos,
             posOpeningEntry = invoice.invoice.posOpeningEntry,
             postingDate = invoice.invoice.postingDate,
             customer = invoice.invoice.customer,
             grandTotal = invoice.invoice.grandTotal
         )
         if (!existingName.isNullOrBlank()) {
-            val existing = if (invoice.invoice.isPos) {
-                remoteSource.fetchPosInvoice(existingName)
-            } else {
-                remoteSource.fetchInvoice(existingName)
-            }
+            val existing = remoteSource.fetchInvoice(existingName)
             if (existing != null) {
                 updateLocalInvoiceFromRemote(localName, existing)
                 return
@@ -604,23 +572,11 @@ class SalesInvoiceRepository(
         }
 
         val dto = ensureDraftDocStatus(enrichPaymentsWithAccount(invoice.toDto()))
-        val created = if (isPosInvoice(dto)) {
-            remoteSource.createPosInvoice(dto)
-        } else {
-            remoteSource.createInvoice(dto)
-        }
+        val created = remoteSource.createInvoice(dto)
         val createdName = created.name ?: return
         updateLocalInvoiceFromRemote(localName, created)
-        if (isPosInvoice(dto)) {
-            remoteSource.submitPosInvoice(createdName)
-        } else {
-            submitSalesInvoice(createdName)
-        }
-        val remote = if (isPosInvoice(dto)) {
-            remoteSource.fetchPosInvoice(createdName)
-        } else {
-            remoteSource.fetchInvoice(createdName)
-        } ?: return
+        submitSalesInvoice(createdName)
+        val remote = remoteSource.fetchInvoice(createdName) ?: return
         updateLocalInvoiceFromRemote(createdName, remote)
     }
 
@@ -630,16 +586,8 @@ class SalesInvoiceRepository(
             localSource.softDeleteByInvoiceId(localName)
             return
         }
-        if (invoice.invoice.isPos) {
-            remoteSource.cancelPosInvoice(localName)
-        } else {
-            remoteSource.cancelInvoice(localName)
-        }
-        val remote = if (invoice.invoice.isPos) {
-            remoteSource.fetchPosInvoice(localName)
-        } else {
-            remoteSource.fetchInvoice(localName)
-        }
+        remoteSource.cancelInvoice(localName)
+        val remote = remoteSource.fetchInvoice(localName)
         if (remote != null) {
             updateLocalInvoiceFromRemote(localName, remote)
         } else {
@@ -649,10 +597,6 @@ class SalesInvoiceRepository(
 
     private suspend fun submitSalesInvoice(name: String) {
         remoteSource.submitInvoice(name)
-    }
-
-    private fun isPosInvoice(invoice: SalesInvoiceDto): Boolean {
-        return invoice.doctype.equals("POS Invoice", ignoreCase = true) || invoice.isPos
     }
 
     private fun resolveDocStatus(status: String?, docStatus: Int?): Int {
@@ -896,7 +840,7 @@ class SalesInvoiceRepository(
                 val invoiceName = ref.referenceName?.trim().orEmpty()
                 if (invoiceName.isBlank()) return@forEach
                 val doctype = ref.referenceDoctype?.trim().orEmpty()
-                if (!doctype.equals("Sales Invoice", true) && !doctype.equals("POS Invoice", true)) {
+                if (!doctype.equals("Sales Invoice", true)) {
                     return@forEach
                 }
 

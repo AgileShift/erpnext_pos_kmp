@@ -80,4 +80,22 @@ interface CashboxDao {
 
     @Query("UPDATE tabCashbox SET pendingSync = :pendingSync WHERE localId = :localId")
     suspend fun updatePendingSync(localId: Long, pendingSync: Boolean)
+
+    @Query(
+        """
+        UPDATE balance_details
+           SET pos_opening_entry = :remoteName
+         WHERE pos_opening_entry = :localName
+        """
+    )
+    suspend fun updateBalanceDetailsOpeningEntry(localName: String, remoteName: String)
+
+    @Query(
+        """
+        UPDATE balance_details
+           SET pos_closing_entry = :closingName
+         WHERE cashbox_id = :cashboxId
+        """
+    )
+    suspend fun updateBalanceDetailsClosingEntry(cashboxId: Long, closingName: String)
 }

@@ -34,8 +34,8 @@ class OpeningEntrySyncRepository(
                     cashboxDao.updateOpeningEntryId(candidate.cashbox.localId, response.name)
                     response.name
                 }
-                updateOpeningEntryRefs(candidate.openingEntry.name, remoteName)
                 ensureRemoteOpeningEntry(remoteName, candidate.openingEntry)
+                updateOpeningEntryRefs(candidate.openingEntry.name, remoteName)
                 posOpeningRepository.submitOpeningEntry(remoteName)
                 openingEntryLinkDao.markSynced(candidate.link.id, remoteName)
                 openingEntryDao.update(candidate.openingEntry.copy(pendingSync = false))
@@ -85,8 +85,8 @@ class OpeningEntrySyncRepository(
             }
 
             if (!remoteName.isNullOrBlank()) {
-                updateOpeningEntryRefs(openingEntry.name, remoteName)
                 ensureRemoteOpeningEntry(remoteName, openingEntry)
+                updateOpeningEntryRefs(openingEntry.name, remoteName)
                 if (cashbox.openingEntryId != remoteName) {
                     cashboxDao.updateOpeningEntryId(cashbox.localId, remoteName)
                 }
@@ -116,6 +116,7 @@ class OpeningEntrySyncRepository(
 
     private suspend fun updateOpeningEntryRefs(localName: String, remoteName: String) {
         if (localName == remoteName) return
+        cashboxDao.updateBalanceDetailsOpeningEntry(localName, remoteName)
         val affected = salesInvoiceDao.getInvoicesForOpeningEntry(localName)
         salesInvoiceDao.updateInvoicesOpeningEntry(localName, remoteName)
         salesInvoiceDao.updatePaymentsOpeningEntry(localName, remoteName)
@@ -133,11 +134,7 @@ class OpeningEntrySyncRepository(
                 posProfile = wrapper.invoice.profileId ?: baseDto.posProfile
             )
             runCatching {
-                if (dto.isPos || dto.doctype.equals("POS Invoice", ignoreCase = true)) {
-                    salesInvoiceRemoteSource.updatePosInvoice(invoiceName, dto)
-                } else {
-                    salesInvoiceRemoteSource.updateInvoice(invoiceName, dto)
-                }
+                salesInvoiceRemoteSource.updateInvoice(invoiceName, dto)
             }.onFailure { error ->
                 AppLogger.warn(
                     "OpeningEntrySyncRepository: update remote invoice $invoiceName failed",

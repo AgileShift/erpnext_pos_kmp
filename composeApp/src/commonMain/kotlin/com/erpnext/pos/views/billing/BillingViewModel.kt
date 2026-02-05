@@ -1360,7 +1360,7 @@ class BillingViewModel(
             customExchangeRate = null,
             updateStock = true,
             docStatus = 0,
-            isPos = true,
+            isPos = false,
             doctype = "Sales Invoice"
         )
     }

@@ -658,8 +658,9 @@ fun AppNavigation() {
                                     onDismiss = snackbarController::dismiss
                                 )
 
-                                AnimatedVisibility(
+                                androidx.compose.animation.AnimatedVisibility(
                                     visible = loadingState.isLoading,
+                                    modifier = Modifier.align(Alignment.TopCenter),
                                     enter = fadeIn(tween(160)) + slideInVertically(
                                         animationSpec = tween(180, easing = FastOutSlowInEasing),
                                         initialOffsetY = { -it / 2 }

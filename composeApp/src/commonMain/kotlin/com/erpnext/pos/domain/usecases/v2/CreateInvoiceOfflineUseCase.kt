@@ -112,7 +112,7 @@ class CreateInvoiceOfflineUseCase(
             paidAmount <= 0.0001 -> "Unpaid"
             else -> "Partly Paid"
         }
-        val isPosInvoice = outstanding <= 0.0001
+        val isPosInvoice = false
 
         val invoice = SalesInvoiceEntity(
             invoiceId = localInvoiceId,

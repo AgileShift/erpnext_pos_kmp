@@ -1,8 +1,6 @@
 package com.erpnext.pos.domain.usecases
 
 import com.erpnext.pos.data.repositories.SalesInvoiceRepository
-import com.erpnext.pos.domain.usecases.CreatePaymentEntryInput
-import com.erpnext.pos.domain.usecases.CreatePaymentEntryUseCase
 import com.erpnext.pos.localSource.dao.ModeOfPaymentDao
 import com.erpnext.pos.localSource.entities.ModeOfPaymentEntity
 import com.erpnext.pos.localSource.entities.SalesInvoiceEntity
@@ -129,8 +127,7 @@ class PartialReturnUseCase(
     ): Map<String, Double> {
         val originalName = invoice.invoice.invoiceName ?: return emptyMap()
         val returnInvoices = repository.fetchRemoteReturnInvoices(
-            returnAgainst = originalName,
-            isPos = invoice.invoice.isPos
+            returnAgainst = originalName
         )
         if (returnInvoices.isEmpty()) {
             return invoice.items.associate { item ->
@@ -204,7 +201,7 @@ class PartialReturnUseCase(
             docStatus = 0,
             isReturn = 1,
             isPos = isPos,
-            doctype = if (isPos) "POS Invoice" else "Sales Invoice"
+            doctype = "Sales Invoice"
         )
     }
 

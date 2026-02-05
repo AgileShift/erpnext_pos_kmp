@@ -3,8 +3,6 @@ package com.erpnext.pos.remoteSource.datasources
 import com.erpnext.pos.remoteSource.api.APIService
 import com.erpnext.pos.remoteSource.dto.CustomerDto
 import com.erpnext.pos.remoteSource.dto.SalesInvoiceDto
-import com.erpnext.pos.utils.isLikelyPosInvoiceName
-import com.erpnext.pos.utils.isLikelySalesInvoiceName
 
 class CustomerRemoteSource(
     private val api: APIService,
@@ -30,9 +28,8 @@ class CustomerRemoteSource(
         endDate: String,
         posProfile: String
     ): List<SalesInvoiceDto> {
-        val sales = api.fetchCustomerInvoicesForPeriod(customerId, startDate, endDate, posProfile)
-        val pos = api.fetchCustomerPosInvoicesForPeriod(customerId, startDate, endDate, posProfile)
-        return (sales + pos).distinctBy { it.name }
+        return api.fetchCustomerInvoicesForPeriod(customerId, startDate, endDate, posProfile)
+            .distinctBy { it.name }
             .sortedByDescending { it.postingDate }
     }
 
@@ -42,37 +39,10 @@ class CustomerRemoteSource(
 
     suspend fun fetchInvoiceDetail(invoice: SalesInvoiceDto): SalesInvoiceDto? {
         val name = invoice.name ?: return null
-        return runCatching {
-            val isPosHint =
-                invoice.doctype.equals("POS Invoice", ignoreCase = true) || invoice.isPos
-            val likelyPosName = isLikelyPosInvoiceName(name)
-            val likelySalesName = isLikelySalesInvoiceName(name)
-            val resolvedPos = when {
-                likelyPosName -> true
-                likelySalesName -> false
-                else -> isPosHint
-            }
-            if (resolvedPos) api.getPOSInvoiceByName(name) else api.getSalesInvoiceByName(name)
-        }.getOrNull() ?: runCatching { api.getSalesInvoiceByName(name) }.getOrNull()
-            ?: runCatching { api.getPOSInvoiceByName(name) }.getOrNull()
+        return runCatching { api.getSalesInvoiceByName(name) }.getOrNull()
     }
 
     suspend fun fetchInvoiceByNameSmart(invoiceName: String, isPosHint: Boolean? = null): SalesInvoiceDto? {
-        val likelyPosName = isLikelyPosInvoiceName(invoiceName)
-        val likelySalesName = isLikelySalesInvoiceName(invoiceName)
-        val resolvedPos = when {
-            likelyPosName -> true
-            likelySalesName -> false
-            isPosHint != null -> isPosHint
-            else -> null
-        }
-        return when (resolvedPos) {
-            true -> runCatching { api.getPOSInvoiceByName(invoiceName) }.getOrNull()
-                ?: runCatching { api.getSalesInvoiceByName(invoiceName) }.getOrNull()
-            false -> runCatching { api.getSalesInvoiceByName(invoiceName) }.getOrNull()
-                ?: runCatching { api.getPOSInvoiceByName(invoiceName) }.getOrNull()
-            null -> runCatching { api.getSalesInvoiceByName(invoiceName) }.getOrNull()
-                ?: runCatching { api.getPOSInvoiceByName(invoiceName) }.getOrNull()
-        }
+        return runCatching { api.getSalesInvoiceByName(invoiceName) }.getOrNull()
     }
 }

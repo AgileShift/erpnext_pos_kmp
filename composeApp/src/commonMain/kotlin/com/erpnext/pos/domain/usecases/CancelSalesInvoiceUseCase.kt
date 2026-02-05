@@ -125,13 +125,12 @@ class CancelSalesInvoiceUseCase(
         val baseItems = remoteParent?.items?.takeIf { it.isNotEmpty() }
             ?: invoice.items.map { it.toDto(parent) }
         val returnInvoices = invoiceRepository.fetchRemoteReturnInvoices(
-            returnAgainst = originalName,
-            isPos = parent.isPos
+            returnAgainst = originalName
         )
         val returnedByItem = mutableMapOf<String, Double>()
         returnInvoices.forEach { credit ->
             credit.items.forEach { item ->
-                val qty = kotlin.math.abs(item.qty)
+                val qty = abs(item.qty)
                 if (qty > 0.0) {
                     returnedByItem[item.itemCode] =
                         (returnedByItem[item.itemCode] ?: 0.0) + qty
@@ -139,7 +138,7 @@ class CancelSalesInvoiceUseCase(
             }
         }
         return baseItems.mapNotNull { item ->
-            val originalQty = kotlin.math.abs(item.qty)
+            val originalQty = abs(item.qty)
             val returnedQty = returnedByItem[item.itemCode] ?: 0.0
             val remaining = (originalQty - returnedQty).coerceAtLeast(0.0)
             if (remaining <= 0.0) null else createReturnItemFromDto(item, remaining)
@@ -153,7 +152,7 @@ class CancelSalesInvoiceUseCase(
         val perUnit =
             if (item.qty != 0.0) item.amount / item.qty else item.rate.takeIf { it != 0.0 }
                 ?: 0.0
-        val absAmount = kotlin.math.abs(perUnit) * qtyToReturn
+        val absAmount = abs(perUnit) * qtyToReturn
         return item.copy(
             qty = -qtyToReturn,
             amount = -absAmount
@@ -197,7 +196,7 @@ class CancelSalesInvoiceUseCase(
             docStatus = 0,
             isReturn = 1,
             isPos = isPos,
-            doctype = if (isPos) "POS Invoice" else "Sales Invoice"
+            doctype = "Sales Invoice"
         )
     }
 

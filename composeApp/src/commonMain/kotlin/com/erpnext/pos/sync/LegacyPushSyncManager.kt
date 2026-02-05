@@ -144,7 +144,7 @@ class LegacyPushSyncManager(
                     exchangeRateByCurrency = exchangeRateCache,
                     currencySpecs = currencySpecs,
                     paymentModeDetails = paymentModeDetails,
-                    referenceDoctype = if (invoice.isPos) "POS Invoice" else "Sales Invoice"
+                    referenceDoctype = "Sales Invoice"
                 )
             }.getOrNull()
 

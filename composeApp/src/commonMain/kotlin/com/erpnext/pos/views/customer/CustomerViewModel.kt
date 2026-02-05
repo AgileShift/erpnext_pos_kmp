@@ -446,7 +446,7 @@ class CustomerViewModel(
 
                 val createdInvoiceDto = invoice.toDto().copy(
                     isPos = invoice.isPos,
-                    doctype = if (invoice.isPos) "POS Invoice" else "Sales Invoice"
+                    doctype = "Sales Invoice"
                 )
                 val paymentResult = paymentHandler.registerPayments(
                     paymentLines = listOf(fixedLine),

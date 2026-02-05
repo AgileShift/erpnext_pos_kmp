@@ -349,6 +349,7 @@ val appModule = module {
             exchangeRatePreferences = get(),
             exchangeRateRepository = get(),
             openingEntrySyncRepository = get(),
+            closingEntrySyncRepository = get(),
             paymentMethodLocalRepository = get(),
             salesInvoiceDao = get(),
             generalPreferences = get(),

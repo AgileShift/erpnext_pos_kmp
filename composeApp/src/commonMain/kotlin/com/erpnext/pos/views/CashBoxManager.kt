@@ -22,6 +22,7 @@ import com.erpnext.pos.localSource.preferences.ExchangeRatePreferences
 import com.erpnext.pos.remoteSource.api.APIService
 import com.erpnext.pos.remoteSource.mapper.toEntity
 import com.erpnext.pos.data.repositories.ExchangeRateRepository
+import com.erpnext.pos.data.repositories.ClosingEntrySyncRepository
 import com.erpnext.pos.data.repositories.OpeningEntrySyncRepository
 import com.erpnext.pos.data.repositories.PosProfilePaymentMethodLocalRepository
 import com.erpnext.pos.domain.models.UserBO
@@ -85,6 +86,7 @@ class CashBoxManager(
     private val exchangeRatePreferences: ExchangeRatePreferences,
     private val exchangeRateRepository: ExchangeRateRepository,
     private val openingEntrySyncRepository: OpeningEntrySyncRepository,
+    private val closingEntrySyncRepository: ClosingEntrySyncRepository,
     private val paymentMethodLocalRepository: PosProfilePaymentMethodLocalRepository,
     private val salesInvoiceDao: SalesInvoiceDao,
     private val generalPreferences: com.erpnext.pos.localSource.preferences.GeneralPreferences,
@@ -104,7 +106,14 @@ class CashBoxManager(
     suspend fun initializeContext(): POSContext? = withContext(Dispatchers.IO) {
         currencySettingsRepository.loadCached()
         val user = userDao.getUserInfo() ?: return@withContext null
-        openingEntrySyncRepository.repairActiveOpenings()
+        val isOnline = networkMonitor.isConnected.firstOrNull() == true
+        if (isOnline && sessionRefresher.ensureValidSession()) {
+            openingEntrySyncRepository.repairActiveOpenings()
+            runCatching { closingEntrySyncRepository.reconcileRemoteClosingsForActiveCashboxes() }
+                .onFailure { AppLogger.warn("initializeContext: reconcile remote closings failed", it) }
+        } else {
+            openingEntrySyncRepository.repairActiveOpenings()
+        }
         val company = companyDao.getCompanyInfo()
         val activeProfile = profileDao.getActiveProfile()
         val activeCashbox = activeProfile?.let {
@@ -365,6 +374,7 @@ class CashBoxManager(
         )
         profileDao.updateProfileState(ctx.username, ctx.profileName, false)
         closingDao.insert(dto.toEntity(closingEntryId, pendingSync = pendingSync))
+        cashboxDao.updateBalanceDetailsClosingEntry(entry.cashbox.localId, closingEntryId)
 
         _cashboxState.update { false }
         currentContext = null
@@ -384,8 +394,7 @@ class CashBoxManager(
             val name = invoice.invoiceName?.trim().orEmpty()
             if (name.isBlank() || name.startsWith("LOCAL-", ignoreCase = true)) return@forEach
             if (!invoice.isPos || invoice.docstatus != 1) return@forEach
-            val posInvoice = runCatching { api.getPOSInvoiceByName(name) }.getOrNull()
-            val remote = posInvoice ?: runCatching { api.getSalesInvoiceByName(name) }.getOrNull()
+            val remote = runCatching { api.getSalesInvoiceByName(name) }.getOrNull()
             if (remote == null) {
                 AppLogger.warn("closeCashBox: remote invoice missing for $name")
                 return@forEach
@@ -397,13 +406,18 @@ class CashBoxManager(
                 return@forEach
             }
             val updated = runCatching {
-                val doctype = if (remote.doctype.equals("POS Invoice", ignoreCase = true) || remote.isPos) {
-                    "POS Invoice"
-                } else {
-                    com.erpnext.pos.remoteSource.sdk.ERPDocType.SalesInvoice.path
-                }
-                api.setValue(doctype, name, "pos_opening_entry", openingEntryId)
-                api.setValue(doctype, name, "pos_profile", posProfile)
+                api.setValue(
+                    com.erpnext.pos.remoteSource.sdk.ERPDocType.SalesInvoice.path,
+                    name,
+                    "pos_opening_entry",
+                    openingEntryId
+                )
+                api.setValue(
+                    com.erpnext.pos.remoteSource.sdk.ERPDocType.SalesInvoice.path,
+                    name,
+                    "pos_profile",
+                    posProfile
+                )
                 true
             }.getOrElse {
                 AppLogger.warn("closeCashBox: set_value failed for $name", it)

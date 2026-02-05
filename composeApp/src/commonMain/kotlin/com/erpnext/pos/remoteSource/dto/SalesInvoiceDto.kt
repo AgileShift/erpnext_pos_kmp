@@ -69,7 +69,7 @@ data class SalesInvoiceDto(
     val posaDeliveryCharges: String? = null,
     @SerialName("is_pos")
     @Serializable(IntAsBooleanSerializer::class)
-    val isPos: Boolean = true,
+    val isPos: Boolean = false,
     @SerialName("update_stock")
     @Serializable(with = IntAsBooleanSerializer::class)
     val updateStock: Boolean = false,

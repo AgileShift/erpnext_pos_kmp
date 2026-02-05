@@ -21,15 +21,8 @@ import kotlin.time.ExperimentalTime
 
 fun SalesInvoiceWithItemsAndPayments.toDto(): SalesInvoiceDto {
     val invoiceName = invoice.invoiceName?.takeUnless { it.startsWith("LOCAL-") }
-    val hasOutstanding = invoice.outstandingAmount > 0.0001
-    val paymentsToSend = payments.filter { it.amount > 0.0 }
-    val shouldSendAsPos = invoice.isPos && paymentsToSend.isNotEmpty() && !hasOutstanding
-    val resolvedPayments = if (shouldSendAsPos) {
-        paymentsToSend.map { it.toDto() }
-    } else {
-        emptyList()
-    }
-    val resolvedDocType = if (shouldSendAsPos) "POS Invoice" else "Sales Invoice"
+    val resolvedPayments = emptyList<SalesInvoicePaymentDto>()
+    val resolvedDocType = "Sales Invoice"
 
     return SalesInvoiceDto(
         name = invoiceName,
@@ -49,7 +42,7 @@ fun SalesInvoiceWithItemsAndPayments.toDto(): SalesInvoiceDto {
         items = items.map { it.toDto(invoice) },
         payments = resolvedPayments,
         remarks = invoice.remarks,
-        isPos = shouldSendAsPos,
+        isPos = invoice.isPos,
         doctype = resolvedDocType,
         customerName = invoice.customerName ?: "CST",
         customerPhone = invoice.customerPhone,
@@ -105,7 +98,7 @@ fun List<SalesInvoiceDto>.toEntities(): List<SalesInvoiceWithItemsAndPayments> {
 
 fun SalesInvoiceDto.toEntity(): SalesInvoiceWithItemsAndPayments {
     val now = Clock.System.now().toEpochMilliseconds()
-    val resolvedIsPos = doctype.equals("POS Invoice", ignoreCase = true) || isPos
+    val resolvedIsPos = isPos
     fun resolveBaseAmount(amount: Double?, baseAmount: Double?): Double? {
         if (amount == null) return baseAmount
         val rate = conversionRate?.takeIf { it > 0.0 && it != 1.0 }
@@ -239,7 +232,7 @@ fun SalesInvoiceEntity.toDto(): SalesInvoiceDto {
         payments = emptyList(),
         remarks = remarks,
         isPos = isPos,
-        doctype = if (isPos) "POS Invoice" else "Sales Invoice",
+        doctype = "Sales Invoice",
         updateStock = true,
         posProfile = profileId,
         currency = currency,

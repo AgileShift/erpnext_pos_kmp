@@ -101,7 +101,7 @@ where `docId` is the primary identifier for the document type.
 - **Child tables:** `PaymentEntryReferenceEntity` (`payment_entry_references`)
 - **Join keys:** `(instanceId, companyId, paymentEntryId)`
 
-### POS Invoice Payment
+### Sales Invoice Payment
 - **Header:** `SalesInvoicePaymentEntity` (`sales_invoice_payments` table)
 - **Child tables:** none (child rows of `SalesInvoiceEntity`)
 - **Join keys:** `(instanceId, companyId, invoiceId, paymentId)`
@@ -155,7 +155,7 @@ flowchart LR
 
   SalesInvoice[Sales Invoice] --> SalesInvoiceItems[Sales Invoice Items]
   SalesInvoiceItems --> Item
-  SalesInvoice --> SalesInvoicePayments[POS Invoice Payment]
+  SalesInvoice --> SalesInvoicePayments[Sales Invoice Payment]
   SalesInvoice --> Customer
 
   DeliveryNote[Delivery Note] --> DeliveryNoteItems[Delivery Note Items]

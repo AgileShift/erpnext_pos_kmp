@@ -528,20 +528,12 @@ class APIService(
         return submitDoc(ERPDocType.SalesInvoice.path, name, "submitSalesInvoice")
     }
 
-    suspend fun submitPOSInvoice(name: String): SubmitResponseDto {
-        return submitDoc("POS Invoice", name, "submitPOSInvoice")
-    }
-
     suspend fun submitPaymentEntry(name: String): SubmitResponseDto {
         return submitDoc(ERPDocType.PaymentEntry.path, name, "submitPaymentEntry")
     }
 
     suspend fun cancelSalesInvoice(name: String): SubmitResponseDto {
         return cancelDoc(ERPDocType.SalesInvoice.path, name, "cancelSalesInvoice")
-    }
-
-    suspend fun cancelPOSInvoice(name: String): SubmitResponseDto {
-        return cancelDoc("POS Invoice", name, "cancelPOSInvoice")
     }
 
     suspend fun setValue(
@@ -1148,25 +1140,6 @@ class APIService(
             })
     }
 
-    suspend fun fetchCustomerPosInvoicesForPeriod(
-        customer: String,
-        startDate: String,
-        endDate: String,
-        posProfile: String
-    ): List<SalesInvoiceDto> {
-        val url = authStore.getCurrentSite()
-        return client.getERPList(
-            doctype = "POS Invoice",
-            fields = ERPDocType.SalesInvoice.getFields(),
-            baseUrl = url,
-            orderBy = "posting_date desc",
-            filters = filters {
-                "customer" eq customer
-                "pos_profile" eq posProfile
-                "posting_date" gte startDate
-                "posting_date" lte endDate
-            })
-    }
 
     suspend fun getCustomerContact(customerId: String): ContactChildDto? {
         val url = authStore.getCurrentSite()
@@ -1305,95 +1278,13 @@ class APIService(
         }
     }
 
-    suspend fun fetchAllPosInvoices(
-        posProfile: String, offset: Int = 0, limit: Int = Int.MAX_VALUE
-    ): List<SalesInvoiceDto> {
-        return try {
-            val url = authStore.getCurrentSite()
-            val today = DateTimeProvider.todayDate()
-            val startDate = DateTimeProvider.addDays(today, -DEFAULT_INVOICE_SYNC_DAYS)
-            client.getERPList(
-                doctype = "POS Invoice",
-                fields = ERPDocType.SalesInvoice.getFields(),
-                offset = offset,
-                limit = limit,
-                baseUrl = url,
-                filters = filters {
-                    "pos_profile" eq posProfile
-                    "posting_date" gte startDate
-                    "status" `in` listOf(
-                        "Draft",
-                        "Unpaid",
-                        "Overdue",
-                        "Paid",
-                        "Partly Paid",
-                        "Overdue and Discounted",
-                        "Unpaid and Discounted",
-                        "Partly Paid and Discounted",
-                        "Cancelled",
-                        "Credit Note Issued",
-                        "Return"
-                    )
-                })
-        } catch (e: Exception) {
-            e.printStackTrace()
-            AppSentry.capture(e, "fetchAllPosInvoices failed")
-            AppLogger.warn("fetchAllPosInvoices failed", e)
-            emptyList()
-        }
-    }
-
-    suspend fun fetchAllPosInvoicesSmart(
-        posProfile: String,
-        paidDays: Int = RECENT_PAID_INVOICE_DAYS
-    ): List<SalesInvoiceDto> {
-        return try {
-            val today = DateTimeProvider.todayDate()
-            val startDate = DateTimeProvider.addDays(today, -DEFAULT_INVOICE_SYNC_DAYS)
-            val paidStartDate = DateTimeProvider.addDays(today, -paidDays)
-            val openStatuses = listOf(
-                "Draft",
-                "Unpaid",
-                "Overdue",
-                "Partly Paid",
-                "Overdue and Discounted",
-                "Unpaid and Discounted",
-                "Partly Paid and Discounted",
-                "Cancelled",
-                "Credit Note Issued",
-                "Return"
-            )
-            val openInvoices = fetchInvoicesByStatus(
-                doctype = "POS Invoice",
-                posProfile = posProfile,
-                startDate = startDate,
-                statuses = openStatuses
-            )
-            val paidInvoices = fetchInvoicesByStatus(
-                doctype = "POS Invoice",
-                posProfile = posProfile,
-                startDate = paidStartDate,
-                statuses = listOf("Paid")
-            )
-            (openInvoices + paidInvoices).distinctBy { it.name }
-        } catch (e: Exception) {
-            e.printStackTrace()
-            AppSentry.capture(e, "fetchAllPosInvoicesSmart failed")
-            AppLogger.warn("fetchAllPosInvoicesSmart failed", e)
-            emptyList()
-        }
-    }
-
     suspend fun fetchAllInvoicesCombined(
         posProfile: String,
         recentPaidOnly: Boolean = false,
         paidDays: Int = RECENT_PAID_INVOICE_DAYS
     ): List<SalesInvoiceDto> {
-        val sales = if (recentPaidOnly) fetchAllInvoicesSmart(posProfile, paidDays)
+        return if (recentPaidOnly) fetchAllInvoicesSmart(posProfile, paidDays)
         else fetchAllInvoices(posProfile)
-        val pos = if (recentPaidOnly) fetchAllPosInvoicesSmart(posProfile, paidDays)
-        else fetchAllPosInvoices(posProfile)
-        return (sales + pos).distinctBy { it.name }
     }
 
     suspend fun fetchPaymentEntries(fromDate: String): List<PaymentEntryDto> {
@@ -1434,14 +1325,12 @@ class APIService(
 
     suspend fun fetchReturnInvoiceNames(
         returnAgainst: String,
-        posProfile: String,
-        isPos: Boolean
+        posProfile: String
     ): List<String> {
         return try {
             val url = authStore.getCurrentSite()
-            val doctype = if (isPos) "POS Invoice" else ERPDocType.SalesInvoice.path
             client.getERPList<SalesInvoiceDto>(
-                doctype = doctype,
+                doctype = ERPDocType.SalesInvoice.path,
                 fields = listOf("name"),
                 baseUrl = url,
                 filters = filters {
@@ -1470,16 +1359,6 @@ class APIService(
         return result
     }
 
-    suspend fun createPOSInvoice(data: SalesInvoiceDto): SalesInvoiceDto {
-        val url = authStore.getCurrentSite()
-        val result: SalesInvoiceDto = client.postERP(
-            doctype = "POS Invoice",
-            payload = data,
-            baseUrl = url,
-        )
-        return result
-    }
-
     suspend fun getSalesInvoiceByName(name: String): SalesInvoiceDto {
         val url = authStore.getCurrentSite()
         return client.getERPSingle(
@@ -1489,26 +1368,10 @@ class APIService(
         )
     }
 
-    suspend fun getPOSInvoiceByName(name: String): SalesInvoiceDto {
-        val url = authStore.getCurrentSite()
-        return client.getERPSingle(
-            doctype = "POS Invoice",
-            name = name,
-            baseUrl = url,
-        )
-    }
-
     suspend fun updateSalesInvoice(name: String, data: SalesInvoiceDto): SalesInvoiceDto {
         val url = authStore.getCurrentSite()
         return client.putERP(
             doctype = ERPDocType.SalesInvoice.path, name = name, payload = data, baseUrl = url
-        )
-    }
-
-    suspend fun updatePOSInvoice(name: String, data: SalesInvoiceDto): SalesInvoiceDto {
-        val url = authStore.getCurrentSite()
-        return client.putERP(
-            doctype = "POS Invoice", name = name, payload = data, baseUrl = url
         )
     }
     //endregion

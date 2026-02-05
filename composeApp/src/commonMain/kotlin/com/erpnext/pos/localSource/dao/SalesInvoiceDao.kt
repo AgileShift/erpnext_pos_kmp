@@ -89,7 +89,7 @@ interface SalesInvoiceDao {
     suspend fun getInvoiceNamesMissingItems(profileId: String, limit: Int = 50): List<String>
 
     @Transaction
-    @Query("SELECT * FROM tabSalesInvoice WHERE is_deleted = 0 AND sync_status = 'Pending'")
+    @Query("SELECT * FROM tabSalesInvoice WHERE is_deleted = 0 AND sync_status IN ('Pending','Failed')")
     suspend fun getPendingSyncInvoices(): List<SalesInvoiceWithItemsAndPayments>
 
     @Query("UPDATE tabSalesInvoice SET sync_status = :status WHERE invoice_name = :invoiceName AND is_deleted = 0")
@@ -538,7 +538,7 @@ interface SalesInvoiceDao {
     @Query("SELECT COUNT(*) FROM tabSalesInvoice WHERE is_deleted = 0")
     suspend fun countAll(): Int
 
-    @Query("SELECT COUNT(*) FROM tabSalesInvoice WHERE is_deleted = 0 AND sync_status = 'Pending'")
+    @Query("SELECT COUNT(*) FROM tabSalesInvoice WHERE is_deleted = 0 AND sync_status IN ('Pending','Failed')")
     suspend fun countAllSyncPending(): Int
 
     @Query(
