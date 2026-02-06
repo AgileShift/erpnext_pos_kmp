@@ -38,22 +38,19 @@ data class POSClosingEntryDto(
     val periodStartDate: String,
     @SerialName("period_end_date")
     val periodEndDate: String,
-    @SerialName("balance_details")
-    val balanceDetails: List<BalanceDetailsDto>,
-    @SerialName("pos_transactions")
-    val posTransactions: List<POSClosingInvoiceDto> = emptyList(),
+    @SerialName("payment_reconciliation")
+    val paymentReconciliation: List<PaymentReconciliationDto>,
+    @SerialName("sales_invoices")
+    val salesInvoices: List<POSClosingSalesInvoiceDto> = emptyList(),
     @EncodeDefault(EncodeDefault.Mode.NEVER)
     @SerialName("docstatus")
     val docStatus: Int? = null
 )
 
 @Serializable
-data class POSClosingInvoiceDto(
+data class POSClosingSalesInvoiceDto(
     @SerialName("sales_invoice")
     val salesInvoice: String,
-    @EncodeDefault(EncodeDefault.Mode.NEVER)
-    @SerialName("pos_invoice")
-    val posInvoice: String? = null,
     @SerialName("posting_date")
     val postingDate: String? = null,
     val customer: String? = null,
@@ -65,4 +62,17 @@ data class POSClosingInvoiceDto(
     val outstandingAmount: Double? = null,
     @SerialName("is_return")
     val isReturn: Boolean? = null
+)
+
+@Serializable
+data class PaymentReconciliationDto(
+    @SerialName("mode_of_payment")
+    val modeOfPayment: String,
+    @SerialName("opening_amount")
+    val openingAmount: Double,
+    @SerialName("expected_amount")
+    val expectedAmount: Double,
+    @SerialName("closing_amount")
+    val closingAmount: Double,
+    val difference: Double
 )

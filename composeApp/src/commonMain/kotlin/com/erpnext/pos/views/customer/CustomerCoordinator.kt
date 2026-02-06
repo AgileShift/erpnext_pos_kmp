@@ -17,6 +17,7 @@ class CustomerCoordinator(
     val historyActionBusy = viewModel.historyActionBusy
     val customerMessage = viewModel.customerMessage
     val dialogDataState = viewModel.dialogDataState
+    val returnPolicy = viewModel.returnPolicy
 
     fun fetchAll() = viewModel.fetchAllCustomers()
 

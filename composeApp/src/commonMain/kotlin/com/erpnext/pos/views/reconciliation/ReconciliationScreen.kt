@@ -133,17 +133,23 @@ fun ReconciliationScreen(
     val cashTotalsByCurrency = countState.mapValues { entry ->
         entry.value.sumOf { it.value * it.count }
     }
-    // Mapear conteos a modos de pago según moneda en el nombre del modo
+    // Mapear conteos a modos de pago según moneda, sin duplicar el total en múltiples modos.
     val countedByMode = run {
         val cashModes = summary?.cashModes?.ifEmpty { expectedCashByMode.keys } ?: emptySet()
         val fallbackCurrency = summary?.currency?.uppercase()
             ?: countCurrencies.firstOrNull()
             ?: "USD"
         val cashModeCurrency = summary?.cashModeCurrency.orEmpty()
-        cashModes.associateWith { mode ->
-            val mapped = cashModeCurrency[mode]?.uppercase() ?: fallbackCurrency
-            cashTotalsByCurrency[mapped] ?: 0.0
+        val modesByCurrency = cashModes.groupBy { mode ->
+            cashModeCurrency[mode]?.uppercase() ?: fallbackCurrency
         }
+        val primaryModes = modesByCurrency.mapValues { (_, modes) ->
+            modes.firstOrNull { isPrimaryCashModeName(it) } ?: modes.first()
+        }
+        primaryModes.mapNotNull { (currency, mode) ->
+            val counted = cashTotalsByCurrency[currency] ?: 0.0
+            mode to counted
+        }.toMap()
     }
     val fallbackCurrency = summary?.currency?.uppercase() ?: countCurrencies.firstOrNull() ?: "USD"
     val countedByCurrency = cashTotalsByCurrency.ifEmpty {
@@ -250,6 +256,11 @@ fun ReconciliationScreen(
             }
         }
     }
+}
+
+private fun isPrimaryCashModeName(mode: String): Boolean {
+    val normalized = mode.trim().lowercase()
+    return normalized.contains("efectivo") || normalized.contains("cash")
 }
 
 @OptIn(ExperimentalMaterial3Api::class)

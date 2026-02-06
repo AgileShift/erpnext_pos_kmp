@@ -21,8 +21,11 @@ import kotlin.time.ExperimentalTime
 
 fun SalesInvoiceWithItemsAndPayments.toDto(): SalesInvoiceDto {
     val invoiceName = invoice.invoiceName?.takeUnless { it.startsWith("LOCAL-") }
-    val resolvedPayments = emptyList<SalesInvoicePaymentDto>()
+    val resolvedPayments = payments.map { it.toDto() }
     val resolvedDocType = "Sales Invoice"
+    val resolvedIsPos = invoice.isPos ||
+        !invoice.profileId.isNullOrBlank() ||
+        !invoice.posOpeningEntry.isNullOrBlank()
 
     return SalesInvoiceDto(
         name = invoiceName,
@@ -42,7 +45,7 @@ fun SalesInvoiceWithItemsAndPayments.toDto(): SalesInvoiceDto {
         items = items.map { it.toDto(invoice) },
         payments = resolvedPayments,
         remarks = invoice.remarks,
-        isPos = invoice.isPos,
+        isPos = resolvedIsPos,
         doctype = resolvedDocType,
         customerName = invoice.customerName ?: "CST",
         customerPhone = invoice.customerPhone,

@@ -62,6 +62,8 @@ import com.erpnext.pos.domain.models.CustomerCounts
 import com.erpnext.pos.domain.models.CustomerQuickActionType
 import com.erpnext.pos.domain.models.POSPaymentModeOption
 import com.erpnext.pos.domain.models.SalesInvoiceBO
+import com.erpnext.pos.domain.models.ReturnPolicySettings
+import com.erpnext.pos.domain.models.ReturnDestinationPolicy
 import com.erpnext.pos.domain.usecases.CreateCustomerInput
 import com.erpnext.pos.domain.usecases.InvoiceCancellationAction
 import com.erpnext.pos.localSource.entities.SalesInvoiceWithItemsAndPayments
@@ -107,6 +109,7 @@ fun CustomerListScreen(
     historyBusy: Boolean,
     customerMessage: String?,
     dialogDataState: CustomerDialogDataState,
+    returnPolicy: ReturnPolicySettings,
     actions: CustomerAction
 ) {
     val strings = LocalAppStrings.current
@@ -354,6 +357,7 @@ fun CustomerListScreen(
                                                 supportedCurrencies = supportedCurrencies,
                                                 cashboxManager = cashboxManager,
                                                 posBaseCurrency = companyCurrency,
+                                                returnPolicy = returnPolicy,
                                                 onRegisterPayment = { invoiceId, mode, enteredAmount, enteredCurrency, referenceNumber ->
                                                     actions.registerPayment(
                                                         selectedCustomer?.name.orEmpty(),
@@ -364,11 +368,11 @@ fun CustomerListScreen(
                                                         referenceNumber
                                                     )
                                                 },
-                                                onInvoiceHistoryAction = { invoiceId, action, refundMode, refundReference, applyRefund ->
+                                                onInvoiceHistoryAction = { invoiceId, action, reason, refundMode, refundReference, applyRefund ->
                                                     actions.onInvoiceHistoryAction(
                                                         invoiceId,
                                                         action,
-                                                        null,
+                                                        reason,
                                                         refundMode,
                                                         refundReference,
                                                         applyRefund
@@ -466,9 +470,10 @@ fun CustomerListScreen(
                 paymentState = paymentState,
                 posBaseCurrency = companyCurrency,
                 cashboxManager = cashboxManager,
-                onAction = { invoiceId, action, refundMode, refundReference, applyRefund ->
+                returnPolicy = returnPolicy,
+                onAction = { invoiceId, action, reason, refundMode, refundReference, applyRefund ->
                     actions.onInvoiceHistoryAction(
-                        invoiceId, action, null, refundMode, refundReference, applyRefund
+                        invoiceId, action, reason, refundMode, refundReference, applyRefund
                     )
                 },
                 onDismiss = {
@@ -888,11 +893,17 @@ private fun CustomerRightPanel(
     supportedCurrencies: List<String>,
     cashboxManager: CashBoxManager,
     posBaseCurrency: String,
+    returnPolicy: ReturnPolicySettings,
     onRegisterPayment: (
         invoiceId: String, modeOfPayment: String, enteredAmount: Double, enteredCurrency: String, referenceNumber: String
     ) -> Unit,
     onInvoiceHistoryAction: (
-        invoiceId: String, action: InvoiceCancellationAction, refundModeOfPayment: String?, refundReferenceNo: String?, applyRefund: Boolean
+        invoiceId: String,
+        action: InvoiceCancellationAction,
+        reason: String?,
+        refundModeOfPayment: String?,
+        refundReferenceNo: String?,
+        applyRefund: Boolean
     ) -> Unit,
     loadLocalInvoice: suspend (String) -> SalesInvoiceWithItemsAndPayments?,
     onSubmitPartialReturn: (
@@ -974,6 +985,7 @@ private fun CustomerRightPanel(
                             paymentState = paymentState,
                             posBaseCurrency = posBaseCurrency,
                             cashboxManager = cashboxManager,
+                            returnPolicy = returnPolicy,
                             onAction = onInvoiceHistoryAction,
                             loadLocalInvoice = loadLocalInvoice,
                             onSubmitPartialReturn = onSubmitPartialReturn,
@@ -2032,8 +2044,10 @@ private fun CustomerOutstandingInvoicesContent(
                 rateInvToRc
             )
         }
+
         receivableCurrency.equals(companyCurrency, ignoreCase = true) && baseToPosRate != null ->
             outstandingRc * baseToPosRate
+
         else -> {
             cachedRates[selectedCurrency]?.let { outstandingRc * it }
         }
@@ -2136,22 +2150,22 @@ private fun CustomerOutstandingInvoicesContent(
                                 Column(
                                     modifier = Modifier.fillMaxWidth().clickable {
                                         selectedInvoice = invoice
-                                            val amountToUse = if (selectedCurrency.equals(
-                                                    display.companyCurrency,
-                                                    ignoreCase = true
-                                                )
-                                            ) {
-                                                display.outstandingCompany
-                                            } else {
-                                                display.outstandingInvoice
-                                            }
-                                            val formatted = formatAmountRawForCurrency(
-                                                amountToUse,
-                                                selectedCurrency
+                                        val amountToUse = if (selectedCurrency.equals(
+                                                display.companyCurrency,
+                                                ignoreCase = true
                                             )
-                                            amountRaw = formatted
-                                            lastAutoAmount = formatted
-                                        }.padding(12.dp),
+                                        ) {
+                                            display.outstandingCompany
+                                        } else {
+                                            display.outstandingInvoice
+                                        }
+                                        val formatted = formatAmountRawForCurrency(
+                                            amountToUse,
+                                            selectedCurrency
+                                        )
+                                        amountRaw = formatted
+                                        lastAutoAmount = formatted
+                                    }.padding(12.dp),
                                     verticalArrangement = Arrangement.spacedBy(6.dp)
                                 ) {
                                     Row(
@@ -2353,7 +2367,7 @@ private fun CustomerOutstandingInvoicesContent(
                     onRegisterPayment(
                         invoiceId, selectedMode, amountToApply, selectedCurrency, referenceInput
                     )
-                },enabled = isSubmitEnabled, modifier = Modifier.fillMaxWidth()
+                }, enabled = isSubmitEnabled, modifier = Modifier.fillMaxWidth()
             ) {
                 Text(
                     if (paymentState.isSubmitting) strings.customer.processing
@@ -2376,7 +2390,8 @@ private fun CustomerInvoiceHistorySheet(
     paymentState: CustomerPaymentState,
     posBaseCurrency: String,
     cashboxManager: CashBoxManager,
-    onAction: (String, InvoiceCancellationAction, String?, String?, Boolean) -> Unit,
+    returnPolicy: ReturnPolicySettings,
+    onAction: (String, InvoiceCancellationAction, String?, String?, String?, Boolean) -> Unit,
     onDismiss: () -> Unit,
     loadLocalInvoice: suspend (String) -> SalesInvoiceWithItemsAndPayments? = { null },
     onSubmitPartialReturn: (
@@ -2391,14 +2406,19 @@ private fun CustomerInvoiceHistorySheet(
 
     var refundMode by remember { mutableStateOf<String?>(null) }
     var refundReference by remember { mutableStateOf("") }
+    var returnReason by remember { mutableStateOf("") }
     var qtyByItemCode by remember { mutableStateOf<Map<String, Double>>(emptyMap()) }
-    var returnDestination by remember { mutableStateOf(ReturnDestination.RETURN) }
+    var returnDestination by remember { mutableStateOf(defaultReturnDestination(returnPolicy)) }
+    var destinationTouched by remember { mutableStateOf(false) }
 
     var showFullReturnDialog by remember { mutableStateOf(false) }
     var fullReturnInvoiceId by remember { mutableStateOf<String?>(null) }
+    var fullReturnInvoice by remember { mutableStateOf<SalesInvoiceBO?>(null) }
     var fullRefundMode by remember { mutableStateOf<String?>(null) }
     var fullRefundReference by remember { mutableStateOf("") }
-    var fullReturnDestination by remember { mutableStateOf(ReturnDestination.RETURN) }
+    var fullReturnReason by remember { mutableStateOf("") }
+    var fullReturnDestination by remember { mutableStateOf(defaultReturnDestination(returnPolicy)) }
+    var fullDestinationTouched by remember { mutableStateOf(false) }
 
     val refundOptions = remember(paymentState.paymentModes) {
         paymentState.paymentModes
@@ -2412,9 +2432,11 @@ private fun CustomerInvoiceHistorySheet(
     fun closeFullReturnDialog() {
         showFullReturnDialog = false
         fullReturnInvoiceId = null
+        fullReturnInvoice = null
         fullRefundMode = null
         fullRefundReference = ""
-        fullReturnDestination = ReturnDestination.RETURN
+        fullReturnReason = ""
+        fullReturnDestination = defaultReturnDestination(returnPolicy)
     }
 
     fun closeReturnDialog() {
@@ -2424,20 +2446,40 @@ private fun CustomerInvoiceHistorySheet(
         returnError = null
         refundMode = null
         refundReference = ""
+        returnReason = ""
         qtyByItemCode = emptyMap()
+        returnDestination = defaultReturnDestination(returnPolicy)
     }
 
     if (showReturnDialog && returnInvoiceId != null) {
-        val refundEnabled = returnDestination == ReturnDestination.RETURN
+        val invoiceCurrency = normalizeCurrency(returnInvoiceLocal?.invoice?.currency)
+        val returnTotal = remember(returnInvoiceLocal, qtyByItemCode) {
+            returnInvoiceLocal?.let { local ->
+                local.items.sumOf { item ->
+                    val perUnit = if (item.qty != 0.0) item.amount / item.qty else item.rate
+                    val qty = qtyByItemCode[item.itemCode] ?: 0.0
+                    kotlin.math.abs(perUnit) * qty.coerceAtLeast(0.0)
+                }
+            } ?: 0.0
+        }
+        val outstanding = returnInvoiceLocal?.invoice?.outstandingAmount
+        val projectedOutstanding =
+            outstanding?.let { (it - returnTotal).coerceAtLeast(0.0) }
+        val refundAllowed = returnPolicy.allowRefunds
+        val effectiveDestination =
+            if (refundAllowed) returnDestination else ReturnDestination.CREDIT
+        val refundEnabled = refundAllowed && effectiveDestination == ReturnDestination.RETURN
         val selectedMode = paymentState.paymentModes.firstOrNull {
             it.modeOfPayment.equals(refundMode, true)
         }
         val needsReference = refundEnabled && requiresReference(selectedMode)
         val missingRefundMode = refundEnabled && refundMode.isNullOrBlank()
         val missingReference = needsReference && refundReference.isBlank()
+        val missingReason = returnPolicy.requireReason && returnReason.isBlank()
         val hasRefundOptions = refundOptions.isNotEmpty()
         val canConfirmRefund =
             !refundEnabled || (hasRefundOptions && !missingRefundMode && !missingReference)
+        val canConfirm = canConfirmRefund && !missingReason
 
         AlertDialog(onDismissRequest = {
             if (!historyBusy) {
@@ -2445,7 +2487,101 @@ private fun CustomerInvoiceHistorySheet(
             }
         }, title = { Text("Retorno parcial") }, text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text("Factura: ${returnInvoiceId!!}")
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Text(
+                            "Factura ${returnInvoiceId!!}",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            val isPos = returnInvoiceLocal?.invoice?.isPos == true
+                            Surface(
+                                color = MaterialTheme.colorScheme.surfaceVariant,
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                Text(
+                                    text = if (isPos) "POS" else "Crédito",
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            val statusLabel = returnInvoiceLocal?.invoice?.status?.ifBlank { null }
+                                ?: "Sin estado"
+                            Surface(
+                                color = MaterialTheme.colorScheme.surfaceVariant,
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                Text(
+                                    text = statusLabel,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                        val postingDate = returnInvoiceLocal?.invoice?.postingDate
+                        if (!postingDate.isNullOrBlank()) {
+                            Text(
+                                postingDate,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        val baseCurrency = normalizeCurrency(posBaseCurrency)
+                        val invoiceCurrency =
+                            normalizeCurrency(returnInvoiceLocal?.invoice?.currency)
+                        val total = returnInvoiceLocal?.invoice?.grandTotal ?: 0.0
+                        val paid = returnInvoiceLocal?.invoice?.paidAmount ?: 0.0
+                        val outstanding = returnInvoiceLocal?.invoice?.outstandingAmount ?: 0.0
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text("Total")
+                            Text(formatCurrency(invoiceCurrency, total))
+                        }
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text("Pagado")
+                            Text(formatCurrency(invoiceCurrency, paid))
+                        }
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text("Pendiente")
+                            Text(formatCurrency(invoiceCurrency, outstanding))
+                        }
+                        val rate = returnInvoiceLocal?.invoice?.conversionRate ?: 0.0
+                        if (!invoiceCurrency.equals(baseCurrency, true) && rate > 0.0) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text("Tipo de cambio")
+                                Text(
+                                    "1 $invoiceCurrency = ${
+                                        formatDoubleToString(
+                                            rate,
+                                            4
+                                        )
+                                    } $baseCurrency"
+                                )
+                            }
+                        }
+                    }
+                }
 
                 if (returnLoading) {
                     LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
@@ -2464,56 +2600,93 @@ private fun CustomerInvoiceHistorySheet(
 
                 var refundModeExpanded by remember { mutableStateOf(false) }
 
-                Text(
-                    text = "Destino del monto devuelto",
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.SemiBold
-                )
-                Row(
+                Surface(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    shape = RoundedCornerShape(12.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
                 ) {
-                    ReturnDestination.entries.forEach { destination ->
-                        FilterChip(
-                            selected = returnDestination == destination,
-                            onClick = { returnDestination = destination },
-                            label = { Text(destination.label) })
+                    Column(
+                        modifier = Modifier.padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text(
+                            text = "Destino del monto devuelto",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        if (refundAllowed) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                ReturnDestination.entries.forEach { destination ->
+                                    FilterChip(
+                                        selected = returnDestination == destination,
+                                        onClick = {
+                                            returnDestination = destination
+                                            destinationTouched = true
+                                        },
+                                        label = { Text(destination.label) })
+                                }
+                            }
+                        } else {
+                            Text(
+                                "Reembolsos deshabilitados; se aplicará crédito a favor.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
                     }
                 }
-                Spacer(Modifier.height(6.dp))
 
                 if (refundEnabled && refundOptions.isNotEmpty()) {
-                    ExposedDropdownMenuBox(
-                        expanded = refundModeExpanded,
-                        onExpandedChange = { refundModeExpanded = it }) {
-                        OutlinedTextField(
-                            value = refundMode ?: "",
-                            onValueChange = { },
-                            modifier = Modifier.menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable)
-                                .fillMaxWidth(),
-                            label = { Text("Modo de reembolso (opcional)") },
-                            trailingIcon = {
-                                ExposedDropdownMenuDefaults.TrailingIcon(
-                                    expanded = refundModeExpanded
-                                )
-                            },
-                            leadingIcon = {
-                                Icon(Icons.Default.Sell, contentDescription = null)
-                            },
-                            readOnly = true,
-                            singleLine = true,
-                            enabled = !historyBusy,
-                            supportingText = {
-                                Text("Vacío = solo nota de crédito.")
-                            })
-                        ExposedDropdownMenu(
-                            expanded = refundModeExpanded,
-                            onDismissRequest = { refundModeExpanded = false }) {
-                            refundOptions.forEach { option ->
-                                DropdownMenuItem(text = { Text(option) }, onClick = {
-                                    refundMode = option
-                                    refundModeExpanded = false
-                                })
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(12.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Text(
+                                "Reembolso",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            ExposedDropdownMenuBox(
+                                expanded = refundModeExpanded,
+                                onExpandedChange = { refundModeExpanded = it }) {
+                                OutlinedTextField(
+                                    value = refundMode ?: "",
+                                    onValueChange = { },
+                                    modifier = Modifier.menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable)
+                                        .fillMaxWidth(),
+                                    label = { Text("Modo de reembolso (opcional)") },
+                                    trailingIcon = {
+                                        ExposedDropdownMenuDefaults.TrailingIcon(
+                                            expanded = refundModeExpanded
+                                        )
+                                    },
+                                    leadingIcon = {
+                                        Icon(Icons.Default.Sell, contentDescription = null)
+                                    },
+                                    readOnly = true,
+                                    singleLine = true,
+                                    enabled = !historyBusy,
+                                    supportingText = {
+                                        Text("Vacío = solo nota de crédito.")
+                                    })
+                                ExposedDropdownMenu(
+                                    expanded = refundModeExpanded,
+                                    onDismissRequest = { refundModeExpanded = false }) {
+                                    refundOptions.forEach { option ->
+                                        DropdownMenuItem(text = { Text(option) }, onClick = {
+                                            refundMode = option
+                                            refundModeExpanded = false
+                                        })
+                                    }
+                                }
                             }
                         }
                     }
@@ -2546,6 +2719,26 @@ private fun CustomerInvoiceHistorySheet(
                     )
                 }
 
+                ReturnAccountingSummary(
+                    returnTotal = returnTotal,
+                    currency = invoiceCurrency,
+                    refundEnabled = refundEnabled,
+                    creditEnabled = effectiveDestination == ReturnDestination.CREDIT,
+                    projectedOutstanding = projectedOutstanding
+                )
+
+                if (returnPolicy.requireReason) {
+                    OutlinedTextField(
+                        value = returnReason,
+                        onValueChange = { returnReason = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text("Motivo (requerido)") },
+                        singleLine = false,
+                        minLines = 2,
+                        enabled = !historyBusy
+                    )
+                }
+
                 Text(
                     "Selecciona cantidades a devolver:",
                     style = MaterialTheme.typography.titleSmall,
@@ -2570,58 +2763,66 @@ private fun CustomerInvoiceHistorySheet(
                                 ),
                                 shape = RoundedCornerShape(10.dp)
                             ) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth().padding(10.dp),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Column(
-                                        verticalArrangement = Arrangement.spacedBy(2.dp)
+                                Column(modifier = Modifier.fillMaxWidth().padding(10.dp)) {
+                                    Text(
+                                        text = item.itemName ?: item.itemCode,
+                                        fontWeight = FontWeight.SemiBold,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween
                                     ) {
                                         Text(
-                                            text = item.itemName ?: item.itemCode,
-                                            fontWeight = FontWeight.SemiBold,
-                                            maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis
+                                            text = "Vendidos: ${formatDoubleToString(soldQty, 2)}",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
                                         Text(
-                                            text = "Vendidos: ${
-                                                formatDoubleToString(
-                                                    soldQty, 2
-                                                )
-                                            }",
+                                            text = "Precio: ${formatDoubleToString(item.rate, 2)}",
                                             style = MaterialTheme.typography.bodySmall,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
                                     }
+                                    Spacer(Modifier.height(6.dp))
                                     Row(
+                                        modifier = Modifier.fillMaxWidth(),
                                         verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                        horizontalArrangement = Arrangement.SpaceBetween
                                     ) {
-                                        IconButton(
-                                            onClick = {
-                                                val next = (current - 1.0).coerceAtLeast(0.0)
-                                                qtyByItemCode = qtyByItemCode.toMutableMap().apply {
-                                                    put(item.itemCode, next)
-                                                }
-                                            }, enabled = !historyBusy && current > 0.0
+                                        Text("Devolver", style = MaterialTheme.typography.bodySmall)
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(6.dp)
                                         ) {
-                                            Icon(Icons.Default.Remove, null)
-                                        }
-                                        Text(
-                                            text = formatDoubleToString(current, 2),
-                                            fontWeight = FontWeight.Bold,
-                                            fontSize = 16.sp
-                                        )
-                                        IconButton(
-                                            onClick = {
-                                                val next = (current + 1.0).coerceAtMost(soldQty)
-                                                qtyByItemCode = qtyByItemCode.toMutableMap().apply {
-                                                    put(item.itemCode, next)
-                                                }
-                                            }, enabled = !historyBusy && current < soldQty
-                                        ) {
-                                            Icon(Icons.Default.Add, null)
+                                            IconButton(
+                                                onClick = {
+                                                    val next = (current - 1.0).coerceAtLeast(0.0)
+                                                    qtyByItemCode =
+                                                        qtyByItemCode.toMutableMap().apply {
+                                                            put(item.itemCode, next)
+                                                        }
+                                                }, enabled = !historyBusy && current > 0.0
+                                            ) {
+                                                Icon(Icons.Default.Remove, null)
+                                            }
+                                            Text(
+                                                text = formatDoubleToString(current, 2),
+                                                fontWeight = FontWeight.Bold,
+                                                fontSize = 16.sp
+                                            )
+                                            IconButton(
+                                                onClick = {
+                                                    val next = (current + 1.0).coerceAtMost(soldQty)
+                                                    qtyByItemCode =
+                                                        qtyByItemCode.toMutableMap().apply {
+                                                            put(item.itemCode, next)
+                                                        }
+                                                }, enabled = !historyBusy && current < soldQty
+                                            ) {
+                                                Icon(Icons.Default.Add, null)
+                                            }
                                         }
                                     }
                                 }
@@ -2649,20 +2850,29 @@ private fun CustomerInvoiceHistorySheet(
                             style = MaterialTheme.typography.bodySmall
                         )
                     }
+                    if (missingReason) {
+                        Text(
+                            "Debes indicar el motivo del retorno.",
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
                 }
 
             }
         }, confirmButton = {
             Button(
-                enabled = !historyBusy && !returnLoading && returnInvoiceLocal != null && canConfirmReturn() && canConfirmRefund,
+                enabled = !historyBusy && !returnLoading && returnInvoiceLocal != null && canConfirmReturn() && canConfirm,
                 onClick = {
                     val invoiceId = returnInvoiceId ?: return@Button
+                    val resolvedReason =
+                        if (returnPolicy.requireReason) returnReason.takeIf { it.isNotBlank() } else null
                     onSubmitPartialReturn(
                         invoiceId,
-                        null,
+                        resolvedReason,
                         refundMode?.takeIf { it.isNotBlank() },
                         refundReference.takeIf { it.isNotBlank() },
-                        returnDestination == ReturnDestination.RETURN,
+                        effectiveDestination == ReturnDestination.RETURN,
                         qtyByItemCode.filterValues { it > 0.0 })
                     closeReturnDialog()
                 }) { Text("Confirmar retorno") }
@@ -2673,16 +2883,25 @@ private fun CustomerInvoiceHistorySheet(
     }
 
     if (showFullReturnDialog && fullReturnInvoiceId != null) {
-        val refundEnabled = fullReturnDestination == ReturnDestination.RETURN
+        val invoiceCurrency = normalizeCurrency(fullReturnInvoice?.currency)
+        val returnTotal = fullReturnInvoice?.total ?: 0.0
+        val projectedOutstanding =
+            fullReturnInvoice?.outstandingAmount?.let { (it - returnTotal).coerceAtLeast(0.0) }
+        val refundAllowed = returnPolicy.allowRefunds
+        val effectiveDestination =
+            if (refundAllowed) fullReturnDestination else ReturnDestination.CREDIT
+        val refundEnabled = refundAllowed && effectiveDestination == ReturnDestination.RETURN
         val selectedMode = paymentState.paymentModes.firstOrNull {
             it.modeOfPayment.equals(fullRefundMode, true)
         }
         val needsReference = refundEnabled && requiresReference(selectedMode)
         val missingRefundMode = refundEnabled && fullRefundMode.isNullOrBlank()
         val missingReference = needsReference && fullRefundReference.isBlank()
+        val missingReason = returnPolicy.requireReason && fullReturnReason.isBlank()
         val hasRefundOptions = refundOptions.isNotEmpty()
         val canConfirmRefund =
             !refundEnabled || (hasRefundOptions && !missingRefundMode && !missingReference)
+        val canConfirm = canConfirmRefund && !missingReason
 
         AlertDialog(onDismissRequest = {
             if (!historyBusy) {
@@ -2690,24 +2909,138 @@ private fun CustomerInvoiceHistorySheet(
             }
         }, title = { Text("Retorno total") }, text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text("Factura: ${fullReturnInvoiceId!!}")
-                Text(
-                    text = "Destino del monto devuelto",
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.SemiBold
-                )
-                Row(
+                Surface(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    shape = RoundedCornerShape(12.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
                 ) {
-                    ReturnDestination.entries.forEach { destination ->
-                        FilterChip(
-                            selected = fullReturnDestination == destination,
-                            onClick = { fullReturnDestination = destination },
-                            label = { Text(destination.label) })
+                    Column(
+                        modifier = Modifier.padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Text(
+                            "Factura ${fullReturnInvoiceId!!}",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            val isPos = fullReturnInvoice?.isPos == true
+                            Surface(
+                                color = MaterialTheme.colorScheme.surfaceVariant,
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                Text(
+                                    text = if (isPos) "POS" else "Crédito",
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            val statusLabel =
+                                fullReturnInvoice?.status?.ifBlank { null } ?: "Sin estado"
+                            Surface(
+                                color = MaterialTheme.colorScheme.surfaceVariant,
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                Text(
+                                    text = statusLabel,
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                        val postingDate = fullReturnInvoice?.postingDate
+                        if (!postingDate.isNullOrBlank()) {
+                            Text(
+                                postingDate,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        val baseCurrency = normalizeCurrency(posBaseCurrency)
+                        val invoiceCurrency = normalizeCurrency(fullReturnInvoice?.currency)
+                        val total = fullReturnInvoice?.total ?: 0.0
+                        val paid = fullReturnInvoice?.paidAmount ?: 0.0
+                        val outstanding = fullReturnInvoice?.outstandingAmount ?: 0.0
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text("Total")
+                            Text(formatCurrency(invoiceCurrency, total))
+                        }
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text("Pagado")
+                            Text(formatCurrency(invoiceCurrency, paid))
+                        }
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text("Pendiente")
+                            Text(formatCurrency(invoiceCurrency, outstanding))
+                        }
+                        val rate = fullReturnInvoice?.conversionRate ?: 0.0
+                        if (!invoiceCurrency.equals(baseCurrency, true) && rate > 0.0) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text("Tipo de cambio")
+                                Text(
+                                    "1 $invoiceCurrency = ${
+                                        formatDoubleToString(
+                                            rate,
+                                            4
+                                        )
+                                    } $baseCurrency"
+                                )
+                            }
+                        }
                     }
                 }
-                Spacer(Modifier.height(6.dp))
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text(
+                            text = "Destino del monto devuelto",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        if (refundAllowed) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                ReturnDestination.entries.forEach { destination ->
+                                    FilterChip(
+                                        selected = fullReturnDestination == destination,
+                                        onClick = {
+                                            fullReturnDestination = destination
+                                            fullDestinationTouched = true
+                                        },
+                                        label = { Text(destination.label) })
+                                }
+                            }
+                        } else {
+                            Text(
+                                "Reembolsos deshabilitados; se aplicará crédito a favor.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
 
                 var refundModeExpanded by remember { mutableStateOf(false) }
                 if (refundEnabled && refundOptions.isNotEmpty()) {
@@ -2774,6 +3107,26 @@ private fun CustomerInvoiceHistorySheet(
                     )
                 }
 
+                ReturnAccountingSummary(
+                    returnTotal = returnTotal,
+                    currency = invoiceCurrency,
+                    refundEnabled = refundEnabled,
+                    creditEnabled = effectiveDestination == ReturnDestination.CREDIT,
+                    projectedOutstanding = projectedOutstanding
+                )
+
+                if (returnPolicy.requireReason) {
+                    OutlinedTextField(
+                        value = fullReturnReason,
+                        onValueChange = { fullReturnReason = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text("Motivo (requerido)") },
+                        singleLine = false,
+                        minLines = 2,
+                        enabled = !historyBusy
+                    )
+                }
+
                 if (refundEnabled && missingRefundMode) {
                     Text(
                         "Selecciona un modo de reembolso.",
@@ -2788,17 +3141,27 @@ private fun CustomerInvoiceHistorySheet(
                         style = MaterialTheme.typography.bodySmall
                     )
                 }
+                if (missingReason) {
+                    Text(
+                        "Debes indicar el motivo del retorno.",
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
             }
         }, confirmButton = {
             Button(
-                enabled = !historyBusy && canConfirmRefund, onClick = {
+                enabled = !historyBusy && canConfirm, onClick = {
                     val invoiceId = fullReturnInvoiceId ?: return@Button
+                    val resolvedReason =
+                        if (returnPolicy.requireReason) fullReturnReason.takeIf { it.isNotBlank() } else null
                     onAction(
                         invoiceId,
                         InvoiceCancellationAction.RETURN,
+                        resolvedReason,
                         fullRefundMode?.takeIf { it.isNotBlank() },
                         fullRefundReference.takeIf { it.isNotBlank() },
-                        fullReturnDestination == ReturnDestination.RETURN
+                        effectiveDestination == ReturnDestination.RETURN
                     )
                     closeFullReturnDialog()
                 }) { Text("Confirmar retorno") }
@@ -2818,6 +3181,7 @@ private fun CustomerInvoiceHistorySheet(
             paymentState = paymentState,
             posBaseCurrency = posBaseCurrency,
             cashboxManager = cashboxManager,
+            returnPolicy = returnPolicy,
             onAction = onAction,
             loadLocalInvoice = loadLocalInvoice,
             onSubmitPartialReturn = onSubmitPartialReturn,
@@ -2835,7 +3199,8 @@ private fun CustomerInvoiceHistoryContent(
     paymentState: CustomerPaymentState,
     posBaseCurrency: String,
     cashboxManager: CashBoxManager,
-    onAction: (String, InvoiceCancellationAction, String?, String?, Boolean) -> Unit,
+    returnPolicy: ReturnPolicySettings,
+    onAction: (String, InvoiceCancellationAction, String?, String?, String?, Boolean) -> Unit,
     loadLocalInvoice: suspend (String) -> SalesInvoiceWithItemsAndPayments? = { null },
     onSubmitPartialReturn: (
         invoiceId: String, reason: String?, refundModeOfPayment: String?, refundReferenceNo: String?, applyRefund: Boolean, itemsToReturnByCode: Map<String, Double>
@@ -2854,17 +3219,25 @@ private fun CustomerInvoiceHistoryContent(
 
     var refundMode by remember { mutableStateOf<String?>(null) }
     var refundReference by remember { mutableStateOf("") }
+    var returnReason by remember { mutableStateOf("") }
     var qtyByItemCode by remember { mutableStateOf<Map<String, Double>>(emptyMap()) }
-    var returnDestination by remember { mutableStateOf(ReturnDestination.RETURN) }
+    var returnDestination by remember { mutableStateOf(defaultReturnDestination(returnPolicy)) }
+    var destinationTouched by remember { mutableStateOf(false) }
 
     var showFullReturnDialog by remember { mutableStateOf(false) }
     var fullReturnInvoiceId by remember { mutableStateOf<String?>(null) }
+    var fullReturnInvoice by remember { mutableStateOf<SalesInvoiceBO?>(null) }
     var fullRefundMode by remember { mutableStateOf<String?>(null) }
     var fullRefundReference by remember { mutableStateOf("") }
-    var fullReturnDestination by remember { mutableStateOf(ReturnDestination.RETURN) }
+    var fullReturnReason by remember { mutableStateOf("") }
+    var fullReturnDestination by remember { mutableStateOf(defaultReturnDestination(returnPolicy)) }
+    var fullDestinationTouched by remember { mutableStateOf(false) }
 
     val refundOptions = remember(paymentState.paymentModes) {
-        paymentState.paymentModes.mapNotNull { it.modeOfPayment.ifBlank { null } }.distinct()
+        paymentState.paymentModes
+            .filter { it.allowInReturns }
+            .mapNotNull { it.modeOfPayment.ifBlank { null } }
+            .distinct()
     }
 
     fun canConfirmReturn(): Boolean = qtyByItemCode.values.any { it > 0.0 }
@@ -2877,7 +3250,9 @@ private fun CustomerInvoiceHistoryContent(
         refundMode = null
         refundReference = ""
         qtyByItemCode = emptyMap()
-        returnDestination = ReturnDestination.RETURN
+        returnReason = ""
+        returnDestination = defaultReturnDestination(returnPolicy)
+        destinationTouched = false
 
         scope.launch {
             returnLoading = true
@@ -2901,17 +3276,29 @@ private fun CustomerInvoiceHistoryContent(
     fun openFullReturn(invoiceId: String) {
         showFullReturnDialog = true
         fullReturnInvoiceId = invoiceId
+        fullReturnInvoice = historyState.let { state ->
+            if (state is CustomerInvoiceHistoryState.Success) {
+                state.invoices.firstOrNull { it.invoiceId == invoiceId }
+            } else {
+                null
+            }
+        }
         fullRefundMode = refundOptions.firstOrNull()
         fullRefundReference = ""
-        fullReturnDestination = ReturnDestination.RETURN
+        fullReturnReason = ""
+        fullReturnDestination = defaultReturnDestination(returnPolicy)
+        fullDestinationTouched = false
     }
 
     fun closeFullReturnDialog() {
         showFullReturnDialog = false
         fullReturnInvoiceId = null
+        fullReturnInvoice = null
         fullRefundMode = null
         fullRefundReference = ""
-        fullReturnDestination = ReturnDestination.RETURN
+        fullReturnReason = ""
+        fullReturnDestination = defaultReturnDestination(returnPolicy)
+        fullDestinationTouched = false
     }
 
     fun closeReturnDialog() {
@@ -2922,19 +3309,39 @@ private fun CustomerInvoiceHistoryContent(
         refundMode = null
         refundReference = ""
         qtyByItemCode = emptyMap()
+        returnReason = ""
+        returnDestination = defaultReturnDestination(returnPolicy)
+        destinationTouched = false
+    }
+
+    LaunchedEffect(showReturnDialog, returnPolicy, destinationTouched) {
+        if (showReturnDialog && !destinationTouched) {
+            returnDestination = defaultReturnDestination(returnPolicy)
+        }
+    }
+
+    LaunchedEffect(showFullReturnDialog, returnPolicy, fullDestinationTouched) {
+        if (showFullReturnDialog && !fullDestinationTouched) {
+            fullReturnDestination = defaultReturnDestination(returnPolicy)
+        }
     }
 
     if (showDialogs && showReturnDialog && returnInvoiceId != null) {
-        val refundEnabled = returnDestination == ReturnDestination.RETURN
+        val refundAllowed = returnPolicy.allowRefunds
+        val effectiveDestination =
+            if (refundAllowed) returnDestination else ReturnDestination.CREDIT
+        val refundEnabled = refundAllowed && effectiveDestination == ReturnDestination.RETURN
         val selectedMode = paymentState.paymentModes.firstOrNull {
             it.modeOfPayment.equals(refundMode, true)
         }
         val needsReference = refundEnabled && requiresReference(selectedMode)
         val missingRefundMode = refundEnabled && refundMode.isNullOrBlank()
         val missingReference = needsReference && refundReference.isBlank()
+        val missingReason = returnPolicy.requireReason && returnReason.isBlank()
         val hasRefundOptions = refundOptions.isNotEmpty()
         val canConfirmRefund =
             !refundEnabled || (hasRefundOptions && !missingRefundMode && !missingReference)
+        val canConfirm = canConfirmRefund && !missingReason
 
         AlertDialog(onDismissRequest = {
             if (!historyBusy) {
@@ -2966,16 +3373,27 @@ private fun CustomerInvoiceHistoryContent(
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.SemiBold
                 )
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    ReturnDestination.entries.forEach { destination ->
-                        FilterChip(
-                            selected = returnDestination == destination,
-                            onClick = { returnDestination = destination },
-                            label = { Text(destination.label) })
+                if (refundAllowed) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        ReturnDestination.entries.forEach { destination ->
+                            FilterChip(
+                                selected = returnDestination == destination,
+                                onClick = {
+                                    returnDestination = destination
+                                    destinationTouched = true
+                                },
+                                label = { Text(destination.label) })
+                        }
                     }
+                } else {
+                    Text(
+                        "Reembolsos deshabilitados; se aplicará crédito a favor.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
                 Spacer(Modifier.height(6.dp))
 
@@ -3040,6 +3458,18 @@ private fun CustomerInvoiceHistoryContent(
                         "El retorno genera una nota de crédito aplicable contra la factura original.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+
+                if (returnPolicy.requireReason) {
+                    OutlinedTextField(
+                        value = returnReason,
+                        onValueChange = { returnReason = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text("Motivo (requerido)") },
+                        singleLine = false,
+                        minLines = 2,
+                        enabled = !historyBusy
                     )
                 }
 
@@ -3122,6 +3552,24 @@ private fun CustomerInvoiceHistoryContent(
                                         }
                                     }
                                 }
+                                val perUnit =
+                                    if (item.qty != 0.0) item.amount / item.qty else item.rate
+                                val lineTotal = kotlin.math.abs(perUnit) * current
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Text(
+                                        text = "Subtotal devolución",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    Text(
+                                        text = formatCurrency(local.invoice.currency, lineTotal),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
                             }
                         }
                     }
@@ -3132,23 +3580,32 @@ private fun CustomerInvoiceHistoryContent(
                             style = MaterialTheme.typography.bodySmall
                         )
                     }
+                    if (missingReason) {
+                        Text(
+                            "Debes indicar el motivo del retorno.",
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
                 }
             }
         }, confirmButton = {
             TextButton(
                 onClick = {
                     if (!historyBusy && returnInvoiceId != null) {
+                        val resolvedReason =
+                            if (returnPolicy.requireReason) returnReason.takeIf { it.isNotBlank() } else null
                         onSubmitPartialReturn(
                             returnInvoiceId!!,
-                            null,
+                            resolvedReason,
                             if (refundEnabled) refundMode else null,
                             if (refundEnabled) refundReference else null,
-                            refundEnabled,
+                            effectiveDestination == ReturnDestination.RETURN,
                             qtyByItemCode
                         )
                         closeReturnDialog()
                     }
-                }, enabled = !historyBusy && canConfirmReturn() && canConfirmRefund
+                }, enabled = !historyBusy && canConfirmReturn() && canConfirm
             ) {
                 Text("Confirmar")
             }
@@ -3165,16 +3622,25 @@ private fun CustomerInvoiceHistoryContent(
     }
 
     if (showDialogs && showFullReturnDialog && fullReturnInvoiceId != null) {
-        val refundEnabled = fullReturnDestination == ReturnDestination.RETURN
+        val invoiceCurrency = normalizeCurrency(fullReturnInvoice?.currency)
+        val returnTotal = fullReturnInvoice?.total ?: 0.0
+        val projectedOutstanding =
+            fullReturnInvoice?.outstandingAmount?.let { (it - returnTotal).coerceAtLeast(0.0) }
+        val refundAllowed = returnPolicy.allowRefunds
+        val effectiveDestination =
+            if (refundAllowed) fullReturnDestination else ReturnDestination.CREDIT
+        val refundEnabled = refundAllowed && effectiveDestination == ReturnDestination.RETURN
         val selectedMode = paymentState.paymentModes.firstOrNull {
             it.modeOfPayment.equals(fullRefundMode, true)
         }
         val needsReference = refundEnabled && requiresReference(selectedMode)
         val missingRefundMode = refundEnabled && fullRefundMode.isNullOrBlank()
         val missingReference = needsReference && fullRefundReference.isBlank()
+        val missingReason = returnPolicy.requireReason && fullReturnReason.isBlank()
         val hasRefundOptions = refundOptions.isNotEmpty()
         val canConfirmRefund =
             !refundEnabled || (hasRefundOptions && !missingRefundMode && !missingReference)
+        val canConfirm = canConfirmRefund && !missingReason
 
         AlertDialog(onDismissRequest = {
             if (!historyBusy) {
@@ -3189,52 +3655,79 @@ private fun CustomerInvoiceHistoryContent(
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.SemiBold
                 )
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    ReturnDestination.entries.forEach { destination ->
-                        FilterChip(
-                            selected = fullReturnDestination == destination,
-                            onClick = { fullReturnDestination = destination },
-                            label = { Text(destination.label) })
+                if (refundAllowed) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        ReturnDestination.entries.forEach { destination ->
+                            FilterChip(
+                                selected = fullReturnDestination == destination,
+                                onClick = {
+                                    fullReturnDestination = destination
+                                    fullDestinationTouched = true
+                                },
+                                label = { Text(destination.label) })
+                        }
                     }
+                } else {
+                    Text(
+                        "Reembolsos deshabilitados; se aplicará crédito a favor.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
                 Spacer(Modifier.height(6.dp))
 
                 if (refundEnabled && refundOptions.isNotEmpty()) {
                     var fullRefundModeExpanded by remember { mutableStateOf(false) }
-                    ExposedDropdownMenuBox(
-                        expanded = fullRefundModeExpanded,
-                        onExpandedChange = { fullRefundModeExpanded = it }) {
-                        OutlinedTextField(
-                            value = fullRefundMode ?: "",
-                            onValueChange = { },
-                            modifier = Modifier.menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable)
-                                .fillMaxWidth(),
-                            label = { Text("Modo de reembolso (opcional)") },
-                            trailingIcon = {
-                                ExposedDropdownMenuDefaults.TrailingIcon(
-                                    expanded = fullRefundModeExpanded
-                                )
-                            },
-                            leadingIcon = {
-                                Icon(Icons.Default.Sell, contentDescription = null)
-                            },
-                            readOnly = true,
-                            singleLine = true,
-                            enabled = !historyBusy,
-                            supportingText = {
-                                Text("Vacío = solo nota de crédito.")
-                            })
-                        ExposedDropdownMenu(
-                            expanded = fullRefundModeExpanded,
-                            onDismissRequest = { fullRefundModeExpanded = false }) {
-                            refundOptions.forEach { option ->
-                                DropdownMenuItem(text = { Text(option) }, onClick = {
-                                    fullRefundMode = option
-                                    fullRefundModeExpanded = false
-                                })
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(12.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Text(
+                                "Reembolso",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            ExposedDropdownMenuBox(
+                                expanded = fullRefundModeExpanded,
+                                onExpandedChange = { fullRefundModeExpanded = it }) {
+                                OutlinedTextField(
+                                    value = fullRefundMode ?: "",
+                                    onValueChange = { },
+                                    modifier = Modifier.menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable)
+                                        .fillMaxWidth(),
+                                    label = { Text("Modo de reembolso (opcional)") },
+                                    trailingIcon = {
+                                        ExposedDropdownMenuDefaults.TrailingIcon(
+                                            expanded = fullRefundModeExpanded
+                                        )
+                                    },
+                                    leadingIcon = {
+                                        Icon(Icons.Default.Sell, contentDescription = null)
+                                    },
+                                    readOnly = true,
+                                    singleLine = true,
+                                    enabled = !historyBusy,
+                                    supportingText = {
+                                        Text("Vacío = solo nota de crédito.")
+                                    })
+                                ExposedDropdownMenu(
+                                    expanded = fullRefundModeExpanded,
+                                    onDismissRequest = { fullRefundModeExpanded = false }) {
+                                    refundOptions.forEach { option ->
+                                        DropdownMenuItem(text = { Text(option) }, onClick = {
+                                            fullRefundMode = option
+                                            fullRefundModeExpanded = false
+                                        })
+                                    }
+                                }
                             }
                         }
                     }
@@ -3266,17 +3759,62 @@ private fun CustomerInvoiceHistoryContent(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
+
+                ReturnAccountingSummary(
+                    returnTotal = returnTotal,
+                    currency = invoiceCurrency,
+                    refundEnabled = refundEnabled,
+                    creditEnabled = effectiveDestination == ReturnDestination.CREDIT,
+                    projectedOutstanding = projectedOutstanding
+                )
+
+                if (returnPolicy.requireReason) {
+                    OutlinedTextField(
+                        value = fullReturnReason,
+                        onValueChange = { fullReturnReason = it },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text("Motivo (requerido)") },
+                        singleLine = false,
+                        minLines = 2,
+                        enabled = !historyBusy
+                    )
+                }
+
+                if (refundEnabled && missingRefundMode) {
+                    Text(
+                        "Selecciona un modo de reembolso.",
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+                if (refundEnabled && missingReference) {
+                    Text(
+                        "La referencia es requerida para este modo de reembolso.",
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+                if (missingReason) {
+                    Text(
+                        "Debes indicar el motivo del retorno.",
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
             }
         }, confirmButton = {
             Button(
-                enabled = !historyBusy && canConfirmRefund, onClick = {
+                enabled = !historyBusy && canConfirm, onClick = {
                     val invoiceId = fullReturnInvoiceId ?: return@Button
+                    val resolvedReason =
+                        if (returnPolicy.requireReason) fullReturnReason.takeIf { it.isNotBlank() } else null
                     onAction(
                         invoiceId,
                         InvoiceCancellationAction.RETURN,
+                        resolvedReason,
                         fullRefundMode?.takeIf { it.isNotBlank() },
                         fullRefundReference.takeIf { it.isNotBlank() },
-                        fullReturnDestination == ReturnDestination.RETURN
+                        effectiveDestination == ReturnDestination.RETURN
                     )
                     closeFullReturnDialog()
                 }) { Text("Confirmar retorno") }
@@ -3435,10 +3973,12 @@ private fun CustomerInvoiceHistoryContent(
                                 isBusy = historyBusy,
                                 posBaseCurrency = posBaseCurrency,
                                 cashboxManager = cashboxManager,
+                                returnPolicy = returnPolicy,
                                 onCancel = { invoiceId ->
                                     onAction(
                                         invoiceId,
                                         InvoiceCancellationAction.CANCEL,
+                                        null,
                                         null,
                                         null,
                                         false
@@ -3628,6 +4168,7 @@ private fun InvoiceHistoryRow(
     isBusy: Boolean,
     posBaseCurrency: String,
     cashboxManager: CashBoxManager,
+    returnPolicy: ReturnPolicySettings,
     onCancel: (String) -> Unit,
     onReturnTotal: (String) -> Unit,
     onPartialReturn: (String) -> Unit = {}
@@ -3660,6 +4201,8 @@ private fun InvoiceHistoryRow(
     val isPaidOrPartly = statusKey in paidStatuses
     val allowCancel = isDraftOrUnpaid && !hasPayments
     val allowReturn = isPaidOrPartly || hasPayments
+    val allowFullReturn = allowReturn && returnPolicy.allowFullReturns
+    val allowPartialReturn = allowReturn && returnPolicy.allowPartialReturns
     val (statusBg, statusText) = when (statusLabel.lowercase()) {
         "paid" -> MaterialTheme.colorScheme.primaryContainer to MaterialTheme.colorScheme.primary
         "partly paid" -> MaterialTheme.colorScheme.tertiaryContainer to MaterialTheme.colorScheme.tertiary
@@ -3768,7 +4311,7 @@ private fun InvoiceHistoryRow(
                         }
                     }
                 }
-                if (allowReturn) {
+                if (allowFullReturn) {
                     OutlinedButton(
                         onClick = { onReturnTotal(invoice.invoiceId) },
                         enabled = !isBusy,
@@ -3777,7 +4320,7 @@ private fun InvoiceHistoryRow(
                         Text("Retorno total")
                     }
                 }
-                if (allowReturn) {
+                if (allowPartialReturn) {
                     OutlinedButton(
                         onClick = { onPartialReturn(invoice.invoiceId) },
                         enabled = !isBusy,
@@ -3866,6 +4409,76 @@ private suspend fun resolveBaseToSelectedRate(
         }
     }
     return null
+}
+
+private fun defaultReturnDestination(policy: ReturnPolicySettings): ReturnDestination {
+    return if (policy.allowRefunds && policy.defaultDestination == ReturnDestinationPolicy.REFUND) {
+        ReturnDestination.RETURN
+    } else {
+        ReturnDestination.CREDIT
+    }
+}
+
+@Composable
+private fun ReturnAccountingSummary(
+    returnTotal: Double,
+    currency: String?,
+    refundEnabled: Boolean,
+    creditEnabled: Boolean,
+    projectedOutstanding: Double?
+) {
+    val normalizedCurrency = normalizeCurrency(currency)
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(
+                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+                RoundedCornerShape(10.dp)
+            )
+            .padding(12.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        Text(
+            text = "Resumen contable",
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Text("Total devolución")
+            Text(formatCurrency(normalizedCurrency, returnTotal))
+        }
+        if (refundEnabled) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text("Reembolso")
+                Text(formatCurrency(normalizedCurrency, returnTotal))
+            }
+        } else if (creditEnabled) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text("Crédito a favor")
+                Text(formatCurrency(normalizedCurrency, returnTotal))
+            }
+        }
+        if (projectedOutstanding != null) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text("Saldo estimado")
+                Text(formatCurrency(normalizedCurrency, projectedOutstanding))
+            }
+        }
+        Text(
+            "Stock: se reintegra al almacén en el retorno.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
 }
 
 private enum class ReturnDestination(val label: String) {

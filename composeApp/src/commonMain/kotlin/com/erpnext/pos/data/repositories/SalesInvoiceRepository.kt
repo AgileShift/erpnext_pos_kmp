@@ -76,19 +76,35 @@ class SalesInvoiceRepository(
             return
         }
         val ctx = context.getContext()
+        val activeCashbox = context.getActiveCashboxWithDetails()?.cashbox
+        val openingEntryId = invoice.posOpeningEntry
+            ?: activeCashbox?.openingEntryId
         val ensuredProfile = invoice.profileId ?: ctx?.profileName
         val ensuredWarehouse = invoice.warehouse ?: ctx?.warehouse
 
         val normalizedInvoice = invoice.copy(
             profileId = ensuredProfile,
-            warehouse = ensuredWarehouse
+            warehouse = ensuredWarehouse,
+            posOpeningEntry = openingEntryId
         )
         val normalizedItems = items.map { item ->
             if (!item.warehouse.isNullOrBlank() || ensuredWarehouse.isNullOrBlank()) item
             else item.copy(warehouse = ensuredWarehouse)
         }
+        val normalizedPayments = payments.map { payment ->
+            if (!payment.posOpeningEntry.isNullOrBlank() || openingEntryId.isNullOrBlank()) {
+                payment
+            } else {
+                payment.copy(posOpeningEntry = openingEntryId)
+            }
+        }
+        if ((normalizedInvoice.isPos || ctx?.isCashBoxOpen == true) &&
+            (normalizedInvoice.profileId.isNullOrBlank() || normalizedInvoice.posOpeningEntry.isNullOrBlank())
+        ) {
+            throw IllegalStateException("Falta POS Profile o apertura de caja activa para guardar la factura.")
+        }
 
-        localSource.saveInvoiceLocally(normalizedInvoice, normalizedItems, payments)
+        localSource.saveInvoiceLocally(normalizedInvoice, normalizedItems, normalizedPayments)
         refreshCustomerSummaryWithRates(invoice.customer)
     }
 
@@ -194,6 +210,15 @@ class SalesInvoiceRepository(
             ref.isNullOrBlank() || !existingRefs.contains(ref)
         }
         if (uniquePayments.isEmpty()) return
+        val ctx = context.getContext()
+        val activeCashbox = context.getActiveCashboxWithDetails()?.cashbox
+        val ensuredProfile = invoice.profileId ?: ctx?.profileName
+        val ensuredOpening = invoice.posOpeningEntry ?: activeCashbox?.openingEntryId
+        if (ensuredProfile.isNullOrBlank() || ensuredOpening.isNullOrBlank()) {
+            throw IllegalStateException("Falta POS Profile o apertura de caja activa para registrar pagos.")
+        }
+        invoice.profileId = ensuredProfile
+        invoice.posOpeningEntry = ensuredOpening
 
         val invoiceCurrency = normalizeCurrency(invoice.currency)
         val receivableCurrency = normalizeCurrency(invoice.partyAccountCurrency ?: invoice.currency)
@@ -206,7 +231,12 @@ class SalesInvoiceRepository(
             else -> 1.0
         }
 
-        val paidDeltaReceivable = uniquePayments.sumOf { payment ->
+        val normalizedPayments = uniquePayments.map { payment ->
+            if (!payment.posOpeningEntry.isNullOrBlank()) payment
+            else payment.copy(posOpeningEntry = ensuredOpening)
+        }
+
+        val paidDeltaReceivable = normalizedPayments.sumOf { payment ->
             val paymentCurrency = normalizeCurrency(payment.paymentCurrency)
             when {
                 paymentCurrency.equals(receivableCurrency, ignoreCase = true) &&
@@ -260,7 +290,7 @@ class SalesInvoiceRepository(
         invoice.modifiedAt = Clock.System.now().toEpochMilliseconds()
         uniquePayments.lastOrNull()?.modeOfPayment?.let { invoice.modeOfPayment = it }
 
-        localSource.applyPayments(invoice, uniquePayments)
+        localSource.applyPayments(invoice, normalizedPayments)
         refreshCustomerSummaryWithRates(invoice.customer)
     }
 

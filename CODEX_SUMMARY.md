@@ -11,17 +11,9 @@
 
 - Features
   - Posibilidad de vender inventario negativo (Reserva)
-  - Apertura de caja puede hacer un backNavigation nuevamente a Home
-  - Al abrir 
+  - Resaltado de coincidencias en cada sección.
 
 
 BI -> codex resume 019c296c-474c-71f2-962c-658d5d2683e1 --profile cloud
 Invoices ->  codex resume 019c2b8a-bd44-7002-a5d3-65bb134b7c4f --profile cloud
 Sincronizacion - Carga -> codex resume 019c2a52-16a3-7c93-9431-5ef974a74bfd --profile cloud
-
-BI -> Error:
-
-Vertically scrollable component was measured with an infinity maximum height constraints, which
-is disallowed. One of the common reasons is nesting layout like LazyColumn and Column(Modifier.verticalScroll()).
-If you want to add a header before the list of items please add a header as a separate item() before the main items() inside
-the LazyColumn scope.

@@ -28,6 +28,7 @@ fun rememberHomeActions(coordinator: HomeCoordinator): HomeAction {
             homeMetrics = coordinator.homeMetrics,
             inventoryAlertMessage = coordinator.inventoryAlertMessage,
             openingState = coordinator.openingState,
+            openingEntryId = coordinator.openingEntryId,
             initialState = coordinator::initialState,
             loadInitialData = coordinator::loadInitialData,
             onOpenSettings = coordinator::openSettings,

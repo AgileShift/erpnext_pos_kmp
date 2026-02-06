@@ -14,6 +14,7 @@ class HomeCoordinator(
     val syncSettings = viewModel.syncSettings
     val homeMetrics = viewModel.homeMetrics
     val openingState = viewModel.openingState
+    val openingEntryId = viewModel.openingEntryId
     val inventoryAlertMessage = viewModel.inventoryAlertMessage
 
     fun loadInitialData() {

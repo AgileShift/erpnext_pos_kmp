@@ -2,6 +2,7 @@ package com.erpnext.pos.domain.usecases
 
 import com.erpnext.pos.data.repositories.SalesInvoiceRepository
 import com.erpnext.pos.localSource.dao.ModeOfPaymentDao
+import com.erpnext.pos.localSource.dao.PosProfilePaymentMethodDao
 import com.erpnext.pos.localSource.entities.ModeOfPaymentEntity
 import com.erpnext.pos.localSource.entities.SalesInvoiceWithItemsAndPayments
 import com.erpnext.pos.remoteSource.dto.SalesInvoiceDto
@@ -42,6 +43,7 @@ class CancelSalesInvoiceUseCase(
     private val invoiceRepository: SalesInvoiceRepository,
     private val paymentEntryUseCase: CreatePaymentEntryUseCase,
     private val modeOfPaymentDao: ModeOfPaymentDao,
+    private val posProfilePaymentMethodDao: PosProfilePaymentMethodDao,
     private val networkMonitor: NetworkMonitor
 ) : UseCase<CancelSalesInvoiceInput, CancelSalesInvoiceResult>() {
 
@@ -207,6 +209,7 @@ class CancelSalesInvoiceUseCase(
         refundReferenceNo: String?
     ) {
         val company = invoice.invoice.company
+        val profileId = invoice.invoice.profileId
         val creditName = creditNote.name ?: return
         val postingDate = Clock.System.now().toEpochMilliseconds().toErpDateTime()
         val modes = modeOfPaymentDao.getAllModes(company)
@@ -216,6 +219,9 @@ class CancelSalesInvoiceUseCase(
         val resolvedMode = refundModeOfPayment?.takeIf { it.isNotBlank() }
             ?: invoice.payments.firstOrNull()?.modeOfPayment
             ?: return
+        if (!isRefundModeAllowed(profileId, resolvedMode)) {
+            throw IllegalStateException("El modo de reembolso no está habilitado para retornos.")
+        }
         val paidToCurrency = creditNote.partyAccountCurrency
             ?: creditNote.currency
             ?: invoice.invoice.currency
@@ -258,5 +264,17 @@ class CancelSalesInvoiceUseCase(
         return cachedModes.firstOrNull {
             it.modeOfPayment.equals(mode, ignoreCase = true) || it.name.equals(mode, ignoreCase = true)
         }?.account ?: fallback
+    }
+
+    private suspend fun isRefundModeAllowed(
+        profileId: String?,
+        mode: String
+    ): Boolean {
+        if (profileId.isNullOrBlank()) return false
+        val resolved = posProfilePaymentMethodDao.getResolvedMethodsForProfile(profileId)
+        val matched = resolved.firstOrNull {
+            it.mopName.equals(mode, ignoreCase = true)
+        }
+        return matched?.allowInReturns == true && matched.enabledInProfile
     }
 }

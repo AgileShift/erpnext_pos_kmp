@@ -49,8 +49,10 @@ import androidx.compose.ui.unit.dp
 import androidx.paging.LoadState
 import androidx.paging.compose.collectAsLazyPagingItems
 import androidx.paging.compose.itemKey
+import com.erpnext.pos.domain.models.ReturnPolicySettings
 import com.erpnext.pos.domain.models.SalesInvoiceBO
 import com.erpnext.pos.domain.usecases.InvoiceCancellationAction
+import com.erpnext.pos.localSource.preferences.ReturnPolicyPreferences
 import com.erpnext.pos.utils.formatCurrency
 import com.erpnext.pos.utils.resolveInvoiceDisplayAmounts
 import com.erpnext.pos.utils.normalizeCurrency
@@ -67,6 +69,8 @@ fun InvoiceListScreen(action: InvoiceAction) {
     val feedback by action.feedbackMessage.collectAsState("")
     var pendingDialog by remember { mutableStateOf<InvoiceCancelDialogState?>(null) }
     var dialogReason by remember { mutableStateOf("") }
+    val returnPolicyPreferences: ReturnPolicyPreferences = koinInject()
+    val returnPolicy by returnPolicyPreferences.settings.collectAsState(ReturnPolicySettings())
 
     Scaffold(
         floatingActionButton = {
@@ -185,6 +189,7 @@ fun InvoiceListScreen(action: InvoiceAction) {
                         val item = filteredInvoices[index]
                         InvoiceItem(
                             invoice = item,
+                            returnPolicy = returnPolicy,
                             onClick = { action.onItemClick(it.invoiceId) },
                             onCancelClick = { invoiceId, actionType ->
                                 pendingDialog = InvoiceCancelDialogState(
@@ -230,12 +235,19 @@ fun InvoiceListScreen(action: InvoiceAction) {
                         )
                         if (dialogState.action == InvoiceCancellationAction.RETURN) {
                             Spacer(Modifier.height(8.dp))
-                            OutlinedTextField(
-                                value = dialogReason,
-                                onValueChange = { dialogReason = it },
-                                label = { Text("Motivo (opcional)") },
-                                modifier = Modifier.fillMaxWidth()
+                            Text(
+                                text = "Los reembolsos se gestionan desde el historial del cliente.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
+                            if (returnPolicy.requireReason) {
+                                OutlinedTextField(
+                                    value = dialogReason,
+                                    onValueChange = { dialogReason = it },
+                                    label = { Text("Motivo (requerido)") },
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            }
                         }
                     }
                 },
@@ -249,7 +261,10 @@ fun InvoiceListScreen(action: InvoiceAction) {
                             )
                             pendingDialog = null
                             dialogReason = ""
-                        }
+                        },
+                        enabled = dialogState.action != InvoiceCancellationAction.RETURN ||
+                                !returnPolicy.requireReason ||
+                                dialogReason.isNotBlank()
                     ) {
                         Text("Confirmar")
                     }
@@ -272,6 +287,7 @@ fun InvoiceListScreen(action: InvoiceAction) {
 @Composable
  fun InvoiceItem(
      invoice: SalesInvoiceBO,
+     returnPolicy: ReturnPolicySettings,
      onClick: (SalesInvoiceBO) -> Unit,
      onCancelClick: (String, InvoiceCancellationAction) -> Unit
  ) {
@@ -352,7 +368,7 @@ fun InvoiceListScreen(action: InvoiceAction) {
                 val isPaidOrPartly = normalizedStatus in paidStatuses
                 val canCancel = (isDraftOrUnpaid || (invoice.outstandingAmount > 0.0 && invoice.paidAmount <= 0.0001)) &&
                     !hasPayments
-                val canReturn = isPaidOrPartly || hasPayments
+                val canReturn = (isPaidOrPartly || hasPayments) && returnPolicy.allowFullReturns
                 if (canCancel || canReturn) {
                     val actionType =
                         if (canReturn) InvoiceCancellationAction.RETURN else InvoiceCancellationAction.CANCEL

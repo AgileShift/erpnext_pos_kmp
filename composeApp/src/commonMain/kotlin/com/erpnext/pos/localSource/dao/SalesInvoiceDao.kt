@@ -483,6 +483,33 @@ interface SalesInvoiceDao {
 
     @Query(
         """
+        UPDATE tabSalesInvoice
+        SET pos_opening_entry = :posOpeningEntry,
+            profile_id = :profileId
+        WHERE invoice_name = :invoiceName
+          AND is_deleted = 0
+        """
+    )
+    suspend fun updateInvoiceOpeningAndProfile(
+        invoiceName: String,
+        posOpeningEntry: String,
+        profileId: String
+    )
+
+    @Query(
+        """
+        UPDATE tabSalesInvoicePayment
+        SET pos_opening_entry = :posOpeningEntry
+        WHERE parent_invoice = :invoiceName
+        """
+    )
+    suspend fun updatePaymentsOpeningForInvoice(
+        invoiceName: String,
+        posOpeningEntry: String
+    )
+
+    @Query(
+        """
         UPDATE customers
         SET totalPendingAmount = COALESCE(
                 (SELECT SUM(outstanding_amount)
@@ -608,7 +635,7 @@ interface SalesInvoiceDao {
                i.party_account_currency AS partyAccountCurrency
         FROM tabSalesInvoicePayment p
         INNER JOIN tabSalesInvoice i ON i.invoice_name = p.parent_invoice
-        WHERE i.pos_opening_entry = :openingEntryId
+        WHERE COALESCE(p.pos_opening_entry, i.pos_opening_entry) = :openingEntryId
           AND i.docstatus != 2
           AND i.is_return = 0
           AND i.is_deleted = 0

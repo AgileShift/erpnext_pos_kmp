@@ -47,3 +47,19 @@ data class POSOpeningEntryResponseDto(
     @SerialName("name")
     val name: String
 )
+
+@Serializable
+data class POSOpeningEntryDetailDto(
+    @SerialName("name")
+    val name: String,
+    @SerialName("pos_profile")
+    val posProfile: String,
+    val company: String,
+    @SerialName("period_start_date")
+    val periodStartDate: String,
+    @SerialName("posting_date")
+    val postingDate: String,
+    val user: String? = null,
+    @SerialName("balance_details")
+    val balanceDetails: List<BalanceDetailsDto> = emptyList()
+)

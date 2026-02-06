@@ -4,12 +4,14 @@ import com.erpnext.pos.localSource.preferences.SyncSettings
 import com.erpnext.pos.localization.AppLanguage
 import com.erpnext.pos.sync.SyncState
 import com.erpnext.pos.domain.models.SyncLogEntry
+import com.erpnext.pos.domain.models.ReturnPolicySettings
 import AppColorTheme
 import AppThemeMode
 
 data class POSSettingBO(
     val company: String,
     val posProfile: String,
+    val openingEntryId: String,
     val warehouse: String,
     val priceList: String,
     val taxesIncluded: Boolean,
@@ -23,11 +25,13 @@ sealed class POSSettingState {
     object Loading : POSSettingState()
     data class Success(
         val settings: POSSettingBO,
+        val hasContext: Boolean,
         val syncSettings: SyncSettings,
         val syncState: SyncState,
         val language: AppLanguage,
         val theme: AppColorTheme,
         val themeMode: AppThemeMode,
+        val returnPolicy: ReturnPolicySettings,
         val inventoryAlertsEnabled: Boolean,
         val inventoryAlertHour: Int,
         val inventoryAlertMinute: Int,
@@ -54,6 +58,7 @@ data class POSSettingAction(
     val onInventoryAlertsEnabledChanged: (Boolean) -> Unit = {},
     val onInventoryAlertTimeChanged: (Int, Int) -> Unit = { _, _ -> },
     val onSalesTargetChanged: (Double) -> Unit = {},
+    val onReturnPolicyChanged: (ReturnPolicySettings) -> Unit = {},
     val onSyncSalesTarget: () -> Unit = {},
     val onSelect: (String) -> Unit = {},
     val onSyncNow: () -> Unit = {},

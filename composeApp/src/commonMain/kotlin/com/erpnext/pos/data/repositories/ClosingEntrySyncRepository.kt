@@ -5,11 +5,16 @@ import com.erpnext.pos.localSource.dao.POSClosingEntryDao
 import com.erpnext.pos.localSource.dao.POSOpeningEntryDao
 import com.erpnext.pos.localSource.dao.POSOpeningEntryLinkDao
 import com.erpnext.pos.data.mappers.buildClosingEntryDto
+import com.erpnext.pos.data.repositories.ExchangeRateRepository
+import com.erpnext.pos.data.repositories.PosProfilePaymentMethodLocalRepository
 import com.erpnext.pos.localSource.dao.SalesInvoiceDao
+import com.erpnext.pos.localSource.dao.POSProfileDao
 import com.erpnext.pos.remoteSource.api.APIService
 import com.erpnext.pos.remoteSource.mapper.toEntity
 import com.erpnext.pos.utils.AppLogger
 import com.erpnext.pos.utils.parseErpDateTimeToEpochMillis
+import com.erpnext.pos.utils.buildPaymentReconciliationSeeds
+import com.erpnext.pos.utils.normalizeCurrency
 
 class ClosingEntrySyncRepository(
     private val api: APIService,
@@ -17,7 +22,10 @@ class ClosingEntrySyncRepository(
     private val openingEntryLinkDao: POSOpeningEntryLinkDao,
     private val openingEntryDao: POSOpeningEntryDao,
     private val closingDao: POSClosingEntryDao,
-    private val salesInvoiceDao: SalesInvoiceDao
+    private val salesInvoiceDao: SalesInvoiceDao,
+    private val posProfileDao: POSProfileDao,
+    private val paymentMethodLocalRepository: PosProfilePaymentMethodLocalRepository,
+    private val exchangeRateRepository: ExchangeRateRepository
 ) {
     suspend fun reconcileRemoteClosingsForActiveCashboxes(): Boolean {
         val active = cashboxDao.getActiveCashboxes()
@@ -56,12 +64,78 @@ class ClosingEntrySyncRepository(
             val startMillis = parseErpDateTimeToEpochMillis(cashbox.periodStartDate)
                 ?: return@forEach
             val endMillis = parseErpDateTimeToEpochMillis(resolvedEndDate) ?: return@forEach
-            val shiftInvoices = cashbox.openingEntryId?.takeIf { it.isNotBlank() }?.let {
-                salesInvoiceDao.getInvoicesForOpeningEntry(it)
-            } ?: salesInvoiceDao.getInvoicesForShift(
-                profileId = cashbox.posProfile,
-                startMillis = startMillis,
-                endMillis = endMillis
+            val shiftInvoices = buildList {
+                val openingId = cashbox.openingEntryId?.takeIf { it.isNotBlank() }
+                if (!openingId.isNullOrBlank()) {
+                    addAll(salesInvoiceDao.getInvoicesForOpeningEntry(openingId))
+                }
+                if (isEmpty()) {
+                    val localOpening = openingEntryLinkDao.getByCashboxId(cashbox.localId)
+                        ?.localOpeningEntryName
+                    if (!localOpening.isNullOrBlank() && localOpening != openingId) {
+                        addAll(salesInvoiceDao.getInvoicesForOpeningEntry(localOpening))
+                    }
+                }
+                if (isEmpty()) {
+                    addAll(
+                        salesInvoiceDao.getInvoicesForShift(
+                            profileId = cashbox.posProfile,
+                            startMillis = startMillis,
+                            endMillis = endMillis
+                        )
+                    )
+                }
+            }
+            shiftInvoices.forEach { invoice ->
+                val name = invoice.invoiceName?.trim().orEmpty()
+                if (name.isBlank() || name.startsWith("LOCAL-", ignoreCase = true)) return@forEach
+                if (invoice.posOpeningEntry != remoteOpeningName ||
+                    invoice.profileId != cashbox.posProfile
+                ) {
+                    salesInvoiceDao.updateInvoiceOpeningAndProfile(
+                        invoiceName = name,
+                        posOpeningEntry = remoteOpeningName,
+                        profileId = cashbox.posProfile
+                    )
+                    salesInvoiceDao.updatePaymentsOpeningForInvoice(name, remoteOpeningName)
+                }
+            }
+            val paymentRows = buildList {
+                val openingId = cashbox.openingEntryId?.takeIf { it.isNotBlank() }
+                if (!openingId.isNullOrBlank()) {
+                    addAll(salesInvoiceDao.getPaymentsForOpeningEntry(openingId))
+                }
+                if (isEmpty()) {
+                    val localOpening = openingEntryLinkDao.getByCashboxId(cashbox.localId)
+                        ?.localOpeningEntryName
+                    if (!localOpening.isNullOrBlank() && localOpening != openingId) {
+                        addAll(salesInvoiceDao.getPaymentsForOpeningEntry(localOpening))
+                    }
+                }
+                if (isEmpty()) {
+                    addAll(
+                        salesInvoiceDao.getShiftPayments(
+                            profileId = cashbox.posProfile,
+                            startMillis = startMillis,
+                            endMillis = endMillis
+                        )
+                    )
+                }
+            }
+            val profileCurrency = posProfileDao.getPOSProfile(cashbox.posProfile).currency
+            val modeCurrency = runCatching {
+                paymentMethodLocalRepository.getMethodsForProfile(cashbox.posProfile)
+            }.getOrElse { emptyList() }
+                .associate { method ->
+                    method.mopName to normalizeCurrency(method.currency ?: profileCurrency)
+                }
+            val paymentReconciliation = buildPaymentReconciliationSeeds(
+                balanceDetails = wrapper.details,
+                paymentRows = paymentRows,
+                invoices = shiftInvoices,
+                modeCurrency = modeCurrency,
+                posCurrency = normalizeCurrency(profileCurrency),
+                rateResolver = { from, to -> exchangeRateRepository.getRate(from, to) }
             )
 
             val dto = buildClosingEntryDto(
@@ -69,7 +143,7 @@ class ClosingEntrySyncRepository(
                 openingEntryId = remoteOpeningName,
                 postingDate = resolvedEndDate,
                 periodEndDate = resolvedEndDate,
-                balanceDetails = wrapper.details,
+                paymentReconciliation = paymentReconciliation,
                 invoices = shiftInvoices
             )
 
@@ -127,12 +201,78 @@ class ClosingEntrySyncRepository(
                     it
                 )
             }.getOrNull()
-            val shiftInvoices = cashbox.openingEntryId?.takeIf { it.isNotBlank() }?.let {
-                salesInvoiceDao.getInvoicesForOpeningEntry(it)
-            } ?: salesInvoiceDao.getInvoicesForShift(
-                profileId = cashbox.posProfile,
-                startMillis = startMillis,
-                endMillis = endMillis
+            val shiftInvoices = buildList {
+                val openingId = cashbox.openingEntryId?.takeIf { it.isNotBlank() }
+                if (!openingId.isNullOrBlank()) {
+                    addAll(salesInvoiceDao.getInvoicesForOpeningEntry(openingId))
+                }
+                if (isEmpty()) {
+                    val localOpening = openingEntryLinkDao.getByCashboxId(cashbox.localId)
+                        ?.localOpeningEntryName
+                    if (!localOpening.isNullOrBlank() && localOpening != openingId) {
+                        addAll(salesInvoiceDao.getInvoicesForOpeningEntry(localOpening))
+                    }
+                }
+                if (isEmpty()) {
+                    addAll(
+                        salesInvoiceDao.getInvoicesForShift(
+                            profileId = cashbox.posProfile,
+                            startMillis = startMillis,
+                            endMillis = endMillis
+                        )
+                    )
+                }
+            }
+            shiftInvoices.forEach { invoice ->
+                val name = invoice.invoiceName?.trim().orEmpty()
+                if (name.isBlank() || name.startsWith("LOCAL-", ignoreCase = true)) return@forEach
+                if (invoice.posOpeningEntry != remoteOpeningName ||
+                    invoice.profileId != cashbox.posProfile
+                ) {
+                    salesInvoiceDao.updateInvoiceOpeningAndProfile(
+                        invoiceName = name,
+                        posOpeningEntry = remoteOpeningName,
+                        profileId = cashbox.posProfile
+                    )
+                    salesInvoiceDao.updatePaymentsOpeningForInvoice(name, remoteOpeningName)
+                }
+            }
+            val paymentRows = buildList {
+                val openingId = cashbox.openingEntryId?.takeIf { it.isNotBlank() }
+                if (!openingId.isNullOrBlank()) {
+                    addAll(salesInvoiceDao.getPaymentsForOpeningEntry(openingId))
+                }
+                if (isEmpty()) {
+                    val localOpening = openingEntryLinkDao.getByCashboxId(cashbox.localId)
+                        ?.localOpeningEntryName
+                    if (!localOpening.isNullOrBlank() && localOpening != openingId) {
+                        addAll(salesInvoiceDao.getPaymentsForOpeningEntry(localOpening))
+                    }
+                }
+                if (isEmpty()) {
+                    addAll(
+                        salesInvoiceDao.getShiftPayments(
+                            profileId = cashbox.posProfile,
+                            startMillis = startMillis,
+                            endMillis = endMillis
+                        )
+                    )
+                }
+            }
+            val profileCurrency = posProfileDao.getPOSProfile(cashbox.posProfile).currency
+            val modeCurrency = runCatching {
+                paymentMethodLocalRepository.getMethodsForProfile(cashbox.posProfile)
+            }.getOrElse { emptyList() }
+                .associate { method ->
+                    method.mopName to normalizeCurrency(method.currency ?: profileCurrency)
+                }
+            val paymentReconciliation = buildPaymentReconciliationSeeds(
+                balanceDetails = wrapper.details,
+                paymentRows = paymentRows,
+                invoices = shiftInvoices,
+                modeCurrency = modeCurrency,
+                posCurrency = normalizeCurrency(profileCurrency),
+                rateResolver = { from, to -> exchangeRateRepository.getRate(from, to) }
             )
             ensureRemoteOpeningEntry(remoteOpeningName, cashbox.localId)
             val dto = buildClosingEntryDto(
@@ -140,7 +280,7 @@ class ClosingEntrySyncRepository(
                 openingEntryId = remoteOpeningName,
                 postingDate = periodEnd,
                 periodEndDate = periodEnd,
-                balanceDetails = wrapper.details,
+                paymentReconciliation = paymentReconciliation,
                 invoices = shiftInvoices
             )
 

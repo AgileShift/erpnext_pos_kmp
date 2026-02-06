@@ -18,11 +18,33 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.automirrored.outlined.TrendingUp
+import androidx.compose.material.icons.automirrored.outlined.Undo
+import androidx.compose.material.icons.outlined.ExpandLess
+import androidx.compose.material.icons.outlined.ExpandMore
+import androidx.compose.material.icons.outlined.Search
+import androidx.compose.material.icons.outlined.Clear
+import androidx.compose.material.icons.outlined.History
+import androidx.compose.material.icons.outlined.Info
+import androidx.compose.material.icons.outlined.Language
+import androidx.compose.material.icons.outlined.Notifications
+import androidx.compose.material.icons.outlined.Print
+import androidx.compose.material.icons.outlined.Sync
+import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -43,7 +65,10 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -51,21 +76,27 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.unit.sp
 import com.erpnext.pos.localSource.preferences.SyncSettings
 import com.erpnext.pos.localization.AppLanguage
 import com.erpnext.pos.localization.LocalAppStrings
 import com.erpnext.pos.sync.SyncState
 import com.erpnext.pos.utils.formatCurrency
 import com.erpnext.pos.utils.toErpDateTime
+import com.erpnext.pos.domain.models.ReturnDestinationPolicy
+import com.erpnext.pos.utils.NetworkMonitor
 import com.erpnext.pos.utils.view.SnackbarController
 import com.erpnext.pos.utils.view.SnackbarPosition
 import com.erpnext.pos.utils.view.SnackbarType
 import org.jetbrains.compose.ui.tooling.preview.Preview
 import org.koin.compose.koinInject
+import kotlin.math.ceil
 
 @Preview(showBackground = true, name = "Settings Screen")
 @Composable
@@ -75,6 +106,7 @@ fun SettingsScreenPreview() {
             settings = POSSettingBO(
                 company = "Clothing Center",
                 posProfile = "Main",
+                openingEntryId = "POS-OPE-2026-00001",
                 warehouse = "Almacén Principal",
                 priceList = "Standard Price List",
                 taxesIncluded = false,
@@ -83,6 +115,7 @@ fun SettingsScreenPreview() {
                 cashDrawerEnabled = true,
                 allowNegativeStock = false
             ),
+            hasContext = true,
             syncSettings = SyncSettings(
                 autoSync = true,
                 syncOnStartup = true,
@@ -94,6 +127,7 @@ fun SettingsScreenPreview() {
             language = AppLanguage.Spanish,
             theme = AppColorTheme.Noir,
             themeMode = AppThemeMode.System,
+            returnPolicy = com.erpnext.pos.domain.models.ReturnPolicySettings(),
             inventoryAlertsEnabled = true,
             inventoryAlertHour = 9,
             inventoryAlertMinute = 0,
@@ -118,24 +152,31 @@ fun PosSettingsScreen(
     action: POSSettingAction
 ) {
     val snackbar = koinInject<SnackbarController>()
+    val networkMonitor = koinInject<NetworkMonitor>()
     val strings = LocalAppStrings.current
     val scrollState = rememberScrollState()
+    val isOnline by networkMonitor.isConnected.collectAsState(false)
 
-    Box(
+    BoxWithConstraints(
         modifier = Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
     ) {
+        val isCompact = maxWidth < 640.dp
+        val contentPadding = if (isCompact) 12.dp else 16.dp
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .verticalScroll(scrollState)
-                .padding(20.dp)
+                .padding(contentPadding)
         ) {
             when (state) {
                 is POSSettingState.Success -> {
                     var showAlertTimeDialog by remember { mutableStateOf(false) }
                     var showSalesTargetDialog by remember { mutableStateOf(false) }
+                    var showReturnDaysDialog by remember { mutableStateOf(false) }
+                    var showReturnDestinationDialog by remember { mutableStateOf(false) }
+                    var query by remember { mutableStateOf("") }
 
                     if (showAlertTimeDialog) {
                         InventoryAlertTimeDialog(
@@ -159,11 +200,45 @@ fun PosSettingsScreen(
                             }
                         )
                     }
+                    if (showReturnDaysDialog) {
+                        ReturnPolicyDaysDialog(
+                            initialValue = state.returnPolicy.maxDaysAfterInvoice,
+                            onDismiss = { showReturnDaysDialog = false },
+                            onConfirm = { value ->
+                                showReturnDaysDialog = false
+                                action.onReturnPolicyChanged(
+                                    state.returnPolicy.copy(maxDaysAfterInvoice = value)
+                                )
+                            }
+                        )
+                    }
+                    if (showReturnDestinationDialog) {
+                        ReturnPolicyDestinationDialog(
+                            current = state.returnPolicy.defaultDestination,
+                            allowRefunds = state.returnPolicy.allowRefunds,
+                            onDismiss = { showReturnDestinationDialog = false },
+                            onConfirm = { value ->
+                                showReturnDestinationDialog = false
+                                action.onReturnPolicyChanged(
+                                    state.returnPolicy.copy(defaultDestination = value)
+                                )
+                            }
+                        )
+                    }
 
                     Text(
                         text = strings.settings.title,
-                        style = MaterialTheme.typography.headlineMedium,
+                        style = MaterialTheme.typography.headlineSmall.copy(
+                            fontWeight = FontWeight.SemiBold,
+                            letterSpacing = (-0.2).sp
+                        ),
                         modifier = Modifier.padding(bottom = 12.dp)
+                    )
+
+                    SettingsSearchBar(
+                        query = query,
+                        onQueryChange = { query = it },
+                        compact = isCompact
                     )
 
                     SettingsOverviewRow(
@@ -171,100 +246,188 @@ fun PosSettingsScreen(
                         syncSettings = state.syncSettings,
                         syncState = state.syncState,
                         onSyncNow = action.onSyncNow,
+                        onCancelSync = action.onCancelSync,
+                        compact = isCompact,
+                        isOnline = isOnline
                     )
 
-                    SettingSection(title = strings.settings.generalTitle) {
-                        SettingItem(
-                            label = strings.settings.companyLabel,
-                            value = state.settings.company,
-                            onClick = { action.onSelect("company") }
-                        )
-                        SettingItem(
-                            label = strings.settings.posProfileLabel,
-                            value = state.settings.posProfile,
-                            onClick = { action.onSelect("profile") }
-                        )
-                        SettingItem(
-                            label = strings.settings.warehouseLabel,
-                            value = state.settings.warehouse,
-                            onClick = { action.onSelect("warehouse") }
-                        )
-                        SettingItem(
-                            label = strings.settings.priceListLabel,
-                            value = state.settings.priceList,
-                            onClick = { action.onSelect("price_list") }
+                    if (!state.hasContext) {
+                        MissingContextBanner()
+                    }
+
+                    if (sectionVisible(query, listOf("sync", "sincron", "wifi", "ttl"))) {
+                        SyncSection(
+                            syncSettings = state.syncSettings,
+                            onAutoSyncChanged = action.onAutoSyncChanged,
+                            onSyncOnStartupChanged = action.onSyncOnStartupChanged,
+                            onWifiOnlyChanged = action.onWifiOnlyChanged,
+                            onUseTtlChanged = action.onUseTtlChanged,
+                            compact = isCompact
                         )
                     }
 
-                    SyncSection(
-                        syncSettings = state.syncSettings,
-                        syncState = state.syncState,
-                        onAutoSyncChanged = action.onAutoSyncChanged,
-                        onSyncOnStartupChanged = action.onSyncOnStartupChanged,
-                        onWifiOnlyChanged = action.onWifiOnlyChanged,
-                        onUseTtlChanged = action.onUseTtlChanged,
-                        onSyncNow = action.onSyncNow,
-                        onCancelSync = action.onCancelSync,
-                    )
-
-                    SyncLogSection(
-                        entries = state.syncLog
-                    )
-
-                    SettingSection(title = strings.settings.operationTitle) {
-                        SettingToggle(
-                            label = strings.settings.taxesIncludedLabel,
-                            checked = state.settings.taxesIncluded,
-                            onCheckedChange = action.onTaxesIncludedChanged
+                    if (sectionVisible(query, listOf("oper", "impuesto", "offline", "stock"))) {
+                        SettingSection(
+                            title = strings.settings.operationTitle,
+                            icon = Icons.Outlined.Tune,
+                            compact = isCompact
+                        ) {
+                            SettingToggle(
+                                label = strings.settings.taxesIncludedLabel,
+                                checked = state.settings.taxesIncluded,
+                                onCheckedChange = action.onTaxesIncludedChanged,
+                                compact = isCompact
                         )
                         SettingToggle(
                             label = strings.settings.offlineModeLabel,
                             checked = state.settings.offlineMode,
-                            onCheckedChange = action.onOfflineModeChanged
+                            onCheckedChange = action.onOfflineModeChanged,
+                            compact = isCompact
                         )
-                        Column {
-                            SettingToggle(
-                                label = "Permitir venta con stock negativo",
-                                checked = state.settings.allowNegativeStock,
-                                onCheckedChange = {},
-                                enabled = false
-                            )
-                            Text(
-                                text = "Controlado por ERPNext (Desk).",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                        SettingToggle(
+                            label = "Permitir venta con stock negativo",
+                            checked = state.settings.allowNegativeStock,
+                            onCheckedChange = {},
+                            enabled = false,
+                                supportingText = "Controlado por ERPNext (Desk).",
+                                compact = isCompact,
+                                showDivider = false
                             )
                         }
                     }
 
-                    SettingSection(
-                        title = strings.settings.inventoryAlertsTitle,
-                        description = strings.settings.inventoryAlertsTimeHint
-                    ) {
+                    if (sectionVisible(query, listOf("devol", "retorno", "reembolso", "credito"))) {
+                        ExpandableSection(
+                            title = "Política de devoluciones",
+                            description = "Se aplica localmente y alinea los retornos con ERPNext v16.",
+                            icon = Icons.AutoMirrored.Outlined.Undo,
+                            compact = isCompact,
+                            initiallyExpanded = false
+                        ) {
+                            SettingItem(
+                                label = "Destino por defecto",
+                                value = if (state.returnPolicy.defaultDestination == ReturnDestinationPolicy.REFUND) {
+                                    "Reembolso"
+                                } else {
+                                "Crédito a favor"
+                            },
+                            onClick = { showReturnDestinationDialog = true },
+                            compact = isCompact
+                        )
+                        SettingItem(
+                            label = "Límite de días para retornar",
+                            value = if (state.returnPolicy.maxDaysAfterInvoice <= 0) {
+                                "Sin límite"
+                            } else {
+                                "${state.returnPolicy.maxDaysAfterInvoice} días"
+                            },
+                            onClick = { showReturnDaysDialog = true },
+                            compact = isCompact
+                        )
                         SettingToggle(
-                            label = strings.settings.inventoryAlertsEnabledLabel,
-                            checked = state.inventoryAlertsEnabled,
-                            onCheckedChange = action.onInventoryAlertsEnabledChanged
+                            label = "Permitir reembolsos",
+                            checked = state.returnPolicy.allowRefunds,
+                            onCheckedChange = { enabled ->
+                                val destination = if (enabled) {
+                                    state.returnPolicy.defaultDestination
+                                } else {
+                                    ReturnDestinationPolicy.CREDIT
+                                }
+                                action.onReturnPolicyChanged(
+                                    state.returnPolicy.copy(
+                                        allowRefunds = enabled,
+                                        defaultDestination = destination
+                                    )
+                                )
+                            },
+                            compact = isCompact
+                        )
+                        SettingToggle(
+                            label = "Reembolso solo con factura pagada",
+                            checked = state.returnPolicy.requirePaidInvoiceForRefund,
+                            onCheckedChange = { enabled ->
+                                action.onReturnPolicyChanged(
+                                    state.returnPolicy.copy(requirePaidInvoiceForRefund = enabled)
+                                )
+                            },
+                            enabled = state.returnPolicy.allowRefunds,
+                            compact = isCompact
+                        )
+                        SettingToggle(
+                            label = "Permitir retornos parciales",
+                            checked = state.returnPolicy.allowPartialReturns,
+                            onCheckedChange = { enabled ->
+                                action.onReturnPolicyChanged(
+                                    state.returnPolicy.copy(allowPartialReturns = enabled)
+                                )
+                            },
+                            compact = isCompact
+                        )
+                        SettingToggle(
+                            label = "Permitir retornos totales",
+                            checked = state.returnPolicy.allowFullReturns,
+                            onCheckedChange = { enabled ->
+                                action.onReturnPolicyChanged(
+                                    state.returnPolicy.copy(allowFullReturns = enabled)
+                                )
+                            },
+                            compact = isCompact
+                        )
+                        SettingToggle(
+                            label = "Requerir motivo",
+                            checked = state.returnPolicy.requireReason,
+                            onCheckedChange = { enabled ->
+                                action.onReturnPolicyChanged(
+                                    state.returnPolicy.copy(requireReason = enabled)
+                                )
+                            },
+                                compact = isCompact,
+                                showDivider = false
+                            )
+                        }
+                    }
+
+                    if (sectionVisible(query, listOf("alerta", "invent", "stock", "notific"))) {
+                        SettingSection(
+                            title = strings.settings.inventoryAlertsTitle,
+                            description = strings.settings.inventoryAlertsTimeHint,
+                            icon = Icons.Outlined.Notifications,
+                            compact = isCompact
+                        ) {
+                            SettingToggle(
+                                label = strings.settings.inventoryAlertsEnabledLabel,
+                                checked = state.inventoryAlertsEnabled,
+                                onCheckedChange = action.onInventoryAlertsEnabledChanged,
+                                compact = isCompact
                         )
                         SettingItem(
                             label = strings.settings.inventoryAlertsTimeLabel,
                             value = formatTime(state.inventoryAlertHour, state.inventoryAlertMinute),
-                            onClick = { showAlertTimeDialog = true },
-                            enabled = state.inventoryAlertsEnabled
-                        )
+                                onClick = { showAlertTimeDialog = true },
+                                enabled = state.inventoryAlertsEnabled,
+                                compact = isCompact,
+                                showDivider = false
+                            )
+                        }
                     }
 
-                    SettingSection(
-                        title = strings.settings.salesTargetTitle,
-                        description = strings.settings.salesTargetHint
-                    ) {
-                        SettingItem(
-                            label = strings.settings.salesTargetEditLabel,
-                            value = formatCurrency(
-                                state.salesTargetBaseCurrency,
-                                state.salesTargetMonthly
+                    if (sectionVisible(query, listOf("meta", "ventas", "objetivo", "target"))) {
+                        ExpandableSection(
+                            title = strings.settings.salesTargetTitle,
+                            description = strings.settings.salesTargetHint,
+                            icon = Icons.AutoMirrored.Outlined.TrendingUp,
+                            compact = isCompact,
+                            initiallyExpanded = false
+                        ) {
+                            SettingItem(
+                                label = strings.settings.salesTargetEditLabel,
+                                value = formatCurrency(
+                                    state.salesTargetBaseCurrency,
+                                    state.salesTargetMonthly
                             ),
-                            onClick = { showSalesTargetDialog = true }
+                            onClick = { showSalesTargetDialog = true },
+                            compact = isCompact,
+                            showDivider = false
                         )
                         TargetRow(
                             label = strings.settings.salesTargetMonthlyLabel,
@@ -307,31 +470,47 @@ fun PosSettingsScreen(
                             colors = ButtonDefaults.buttonColors(
                                 containerColor = MaterialTheme.colorScheme.primary
                             )
-                        ) {
-                            Text(strings.settings.salesTargetSyncLabel)
+                            ,
+                            modifier = Modifier.padding(top = if (isCompact) 6.dp else 10.dp)
+                            ) {
+                                Text(strings.settings.salesTargetSyncLabel)
+                            }
                         }
                     }
 
-                    SettingSection(title = strings.settings.hardwareTitle) {
-                        SettingToggle(
-                            label = strings.settings.printerEnabledLabel,
-                            checked = state.settings.printerEnabled,
-                            onCheckedChange = action.onPrinterEnabledChanged
+                    if (sectionVisible(query, listOf("hardware", "impres", "cajon", "printer"))) {
+                        SettingSection(
+                            title = strings.settings.hardwareTitle,
+                            icon = Icons.Outlined.Print,
+                            compact = isCompact
+                        ) {
+                            SettingToggle(
+                                label = strings.settings.printerEnabledLabel,
+                                checked = state.settings.printerEnabled,
+                                onCheckedChange = action.onPrinterEnabledChanged,
+                                compact = isCompact
                         )
                         SettingToggle(
                             label = strings.settings.cashDrawerEnabledLabel,
                             checked = state.settings.cashDrawerEnabled,
-                            onCheckedChange = action.onCashDrawerEnabledChanged
-                        )
+                                onCheckedChange = action.onCashDrawerEnabledChanged,
+                                compact = isCompact,
+                                showDivider = false
+                            )
+                        }
                     }
 
-                    SettingSection(
-                        title = strings.settings.languageTitle,
-                        description = strings.settings.languageInstantHint
-                    ) {
-                        LanguageSelector(
-                            currentLanguage = state.language,
-                            onLanguageSelected = action.onLanguageSelected
+                    if (sectionVisible(query, listOf("idioma", "lenguaje", "tema", "color", "apariencia"))) {
+                        SettingSection(
+                            title = strings.settings.languageTitle,
+                            description = strings.settings.languageInstantHint,
+                            icon = Icons.Outlined.Language,
+                            compact = isCompact
+                        ) {
+                            LanguageSelector(
+                                currentLanguage = state.language,
+                                onLanguageSelected = action.onLanguageSelected,
+                                compact = isCompact
                         )
                         ThemeChipSelector(
                             currentTheme = state.theme,
@@ -340,6 +519,14 @@ fun PosSettingsScreen(
                         ThemeModeChipSelector(
                             currentMode = state.themeMode,
                             onModeSelected = action.onThemeModeSelected
+                        )
+                        }
+                    }
+
+                    if (sectionVisible(query, listOf("log", "historial", "errores", "sync"))) {
+                        SyncLogSection(
+                            entries = state.syncLog,
+                            compact = isCompact
                         )
                     }
                 }
@@ -365,6 +552,9 @@ private fun SettingsOverviewRow(
     syncSettings: SyncSettings,
     syncState: SyncState,
     onSyncNow: () -> Unit,
+    onCancelSync: () -> Unit,
+    compact: Boolean,
+    isOnline: Boolean
 ) {
     BoxWithConstraints {
         val isWide = maxWidth > 780.dp
@@ -373,12 +563,16 @@ private fun SettingsOverviewRow(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                SettingsInfoCard(settings = settings, modifier = Modifier.weight(0.35f))
+                SettingsInfoCard(settings = settings, modifier = Modifier.weight(0.42f), compact = compact)
                 SettingsHeroCard(
                     syncSettings = syncSettings,
                     syncState = syncState,
                     onSyncNow = onSyncNow,
-                    modifier = Modifier.weight(0.65f)
+                    onCancelSync = onCancelSync,
+                    modifier = Modifier.weight(0.65f),
+                    compact = compact,
+                    isOnline = isOnline,
+                    offlineMode = settings.offlineMode
                 )
             }
         } else {
@@ -386,11 +580,15 @@ private fun SettingsOverviewRow(
                 modifier = Modifier.fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                SettingsInfoCard(settings = settings)
+                SettingsInfoCard(settings = settings, compact = compact)
                 SettingsHeroCard(
                     syncSettings = syncSettings,
                     syncState = syncState,
-                    onSyncNow = onSyncNow
+                    onSyncNow = onSyncNow,
+                    onCancelSync = onCancelSync,
+                    compact = compact,
+                    isOnline = isOnline,
+                    offlineMode = settings.offlineMode
                 )
             }
         }
@@ -400,43 +598,39 @@ private fun SettingsOverviewRow(
 @Composable
 private fun SettingsInfoCard(
     settings: POSSettingBO,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    compact: Boolean
 ) {
     val strings = LocalAppStrings.current
+    val tokens = settingsTokens()
     ElevatedCard(
         modifier = modifier,
-        shape = RoundedCornerShape(20.dp),
-        elevation = CardDefaults.elevatedCardElevation(defaultElevation = 12.dp)
+        shape = RoundedCornerShape(24.dp),
+        elevation = CardDefaults.elevatedCardElevation(defaultElevation = 1.dp),
+        colors = CardDefaults.elevatedCardColors(
+            containerColor = tokens.cardContainer
+        ),
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
+        Column(modifier = Modifier.padding(if (compact) 14.dp else 18.dp)) {
             Text(
-                text = strings.settings.generalTitle,
-                style = MaterialTheme.typography.labelLarge
+                text = "Contexto POS",
+                style = MaterialTheme.typography.titleSmall.copy(
+                    fontWeight = FontWeight.SemiBold,
+                    letterSpacing = 0.1.sp
+                ),
+                color = tokens.titleColor
             )
-            Spacer(modifier = Modifier.height(14.dp))
-            InfoLine(label = strings.settings.companyLabel, value = settings.company)
-            InfoLine(label = strings.settings.posProfileLabel, value = settings.posProfile)
-            InfoLine(label = strings.settings.warehouseLabel, value = settings.warehouse)
-            InfoLine(label = strings.settings.priceListLabel, value = settings.priceList)
+            Spacer(modifier = Modifier.height(if (compact) 8.dp else 12.dp))
+            SummaryGrid(
+                items = listOf(
+                    SummaryField(strings.settings.companyLabel, settings.company),
+                    SummaryField(strings.settings.posProfileLabel, settings.posProfile),
+                    SummaryField("Apertura (POE)", settings.openingEntryId),
+                    SummaryField(strings.settings.warehouseLabel, settings.warehouse),
+                    SummaryField(strings.settings.priceListLabel, settings.priceList)
+                )
+            )
         }
-    }
-}
-
-@Composable
-private fun InfoLine(label: String, value: String) {
-    Column(modifier = Modifier.padding(bottom = 8.dp)) {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        Text(
-            text = value,
-            style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Medium),
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            color = MaterialTheme.colorScheme.onSurface
-        )
     }
 }
 
@@ -445,12 +639,17 @@ private fun SettingsHeroCard(
     syncSettings: SyncSettings,
     syncState: SyncState,
     onSyncNow: () -> Unit,
-    modifier: Modifier = Modifier
+    onCancelSync: () -> Unit,
+    modifier: Modifier = Modifier,
+    compact: Boolean,
+    isOnline: Boolean,
+    offlineMode: Boolean
 ) {
+    val tokens = settingsTokens()
     val gradient = Brush.verticalGradient(
         colors = listOf(
-            MaterialTheme.colorScheme.primaryContainer,
-            MaterialTheme.colorScheme.secondaryContainer
+            tokens.heroPrimary,
+            tokens.heroSecondary
         )
     )
     val strings = LocalAppStrings.current
@@ -460,53 +659,104 @@ private fun SettingsHeroCard(
         is SyncState.ERROR -> strings.settings.syncStatusError
         is SyncState.SYNCING -> strings.settings.syncStatusSyncing
     }
+    val statusStyle = when (syncState) {
+        SyncState.IDLE -> StatusStyle(
+            container = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.15f),
+            content = MaterialTheme.colorScheme.onPrimaryContainer
+        )
+        SyncState.SUCCESS -> StatusStyle(
+            container = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.15f),
+            content = MaterialTheme.colorScheme.onPrimaryContainer
+        )
+        is SyncState.ERROR -> StatusStyle(
+            container = MaterialTheme.colorScheme.errorContainer,
+            content = MaterialTheme.colorScheme.onErrorContainer
+        )
+        is SyncState.SYNCING -> StatusStyle(
+            container = MaterialTheme.colorScheme.tertiaryContainer,
+            content = MaterialTheme.colorScheme.onTertiaryContainer
+        )
+    }
 
     ElevatedCard(
         modifier = modifier,
-        shape = RoundedCornerShape(24.dp),
-        elevation = CardDefaults.elevatedCardElevation(defaultElevation = 16.dp)
+        shape = RoundedCornerShape(26.dp),
+        elevation = CardDefaults.elevatedCardElevation(defaultElevation = 4.dp),
     ) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .background(gradient)
                 .graphicsLayer { clip = true }
-                .padding(20.dp)
+                .padding(if (compact) 14.dp else 18.dp)
         ) {
             Column {
-                Text(
-                    text = strings.settings.syncTitle,
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer
-                )
-                Spacer(modifier = Modifier.height(6.dp))
-                Text(
-                    text = strings.settings.syncStatusLabel,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f)
-                )
-                Text(
-                    text = statusLabel,
-                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                    color = MaterialTheme.colorScheme.onPrimaryContainer
-                )
-                Spacer(modifier = Modifier.height(12.dp))
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = strings.settings.syncTitle,
+                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
+                        color = tokens.heroText
+                    )
+                    StatusPill(
+                        text = statusLabel,
+                        containerColor = statusStyle.container,
+                        contentColor = statusStyle.content
+                    )
+                }
+                Spacer(modifier = Modifier.height(if (compact) 6.dp else 8.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    StatusPill(
+                        text = if (isOnline) "Conectado" else "Sin conexión",
+                        containerColor = if (isOnline) {
+                            tokens.heroText.copy(alpha = 0.16f)
+                        } else {
+                            MaterialTheme.colorScheme.errorContainer
+                        },
+                        contentColor = if (isOnline) {
+                            tokens.heroText
+                        } else {
+                            MaterialTheme.colorScheme.onErrorContainer
+                        }
+                    )
+                    StatusPill(
+                        text = if (offlineMode) "Modo offline activo" else "Modo offline: off",
+                        containerColor = tokens.heroText.copy(alpha = 0.12f),
+                        contentColor = tokens.heroText
+                    )
+                }
+                Spacer(modifier = Modifier.height(if (compact) 8.dp else 10.dp))
                 Text(
                     text = syncSettings.lastSyncAt?.toErpDateTime()
                         ?: strings.settings.lastSyncNever,
                     style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                    color = tokens.heroText
                 )
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(if (compact) 10.dp else 14.dp))
                 Button(
                     onClick = onSyncNow,
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                        contentColor = MaterialTheme.colorScheme.primary
+                        containerColor = tokens.heroButton,
+                        contentColor = tokens.heroButtonText
                     ),
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Text(strings.settings.syncNowButton)
+                }
+                if (syncState is SyncState.SYNCING) {
+                    Spacer(modifier = Modifier.height(6.dp))
+                    OutlinedButton(
+                        onClick = onCancelSync,
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            contentColor = tokens.heroButtonText
+                        )
+                    ) {
+                        Text(strings.settings.syncCancelButton)
+                    }
                 }
             }
         }
@@ -517,29 +767,120 @@ private fun SettingsHeroCard(
 private fun SettingSection(
     title: String,
     description: String? = null,
+    icon: androidx.compose.ui.graphics.vector.ImageVector? = null,
+    compact: Boolean = false,
     modifier: Modifier = Modifier,
     content: @Composable ColumnScope.() -> Unit
 ) {
+    val tokens = settingsTokens()
     ElevatedCard(
         modifier = modifier
             .fillMaxWidth()
-            .padding(bottom = 18.dp),
-        shape = RoundedCornerShape(20.dp),
-        elevation = CardDefaults.elevatedCardElevation(defaultElevation = 8.dp)
+            .padding(bottom = 14.dp),
+        shape = RoundedCornerShape(22.dp),
+        elevation = CardDefaults.elevatedCardElevation(defaultElevation = 1.dp),
+        colors = CardDefaults.elevatedCardColors(
+            containerColor = tokens.cardContainer
+        ),
     ) {
-        Column(modifier = Modifier.padding(18.dp)) {
-            Text(text = title, style = MaterialTheme.typography.titleMedium)
+        Column(modifier = Modifier.padding(if (compact) 14.dp else 16.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (icon != null) {
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = null,
+                        tint = tokens.iconTint
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                }
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
+                    color = tokens.titleColor
+                )
+            }
             if (description != null) {
                 Text(
                     text = description,
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = tokens.subtleText,
                     modifier = Modifier.padding(top = 4.dp, bottom = 12.dp)
                 )
             } else {
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(10.dp))
             }
             content()
+        }
+    }
+}
+
+@Composable
+private fun ExpandableSection(
+    title: String,
+    description: String? = null,
+    icon: androidx.compose.ui.graphics.vector.ImageVector? = null,
+    compact: Boolean = false,
+    initiallyExpanded: Boolean = true,
+    content: @Composable ColumnScope.() -> Unit
+) {
+    val tokens = settingsTokens()
+    var expanded by remember { mutableStateOf(initiallyExpanded) }
+    ElevatedCard(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(bottom = 14.dp)
+            .animateContentSize(),
+        shape = RoundedCornerShape(22.dp),
+        elevation = CardDefaults.elevatedCardElevation(defaultElevation = 1.dp),
+        colors = CardDefaults.elevatedCardColors(
+            containerColor = tokens.cardContainer
+        ),
+    ) {
+        Column(modifier = Modifier.padding(if (compact) 14.dp else 16.dp)) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { expanded = !expanded }
+            ) {
+                if (icon != null) {
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = null,
+                        tint = tokens.iconTint
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                }
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = title,
+                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
+                        color = tokens.titleColor
+                    )
+                    if (description != null && expanded) {
+                        Text(
+                            text = description,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = tokens.subtleText,
+                            modifier = Modifier.padding(top = 4.dp)
+                        )
+                    }
+                }
+                Icon(
+                    imageVector = if (expanded) Icons.Outlined.ExpandLess else Icons.Outlined.ExpandMore,
+                    contentDescription = null,
+                    tint = tokens.iconTint
+                )
+            }
+            AnimatedVisibility(
+                visible = expanded,
+                enter = expandVertically() + fadeIn(),
+                exit = shrinkVertically() + fadeOut()
+            ) {
+                Column(modifier = Modifier.padding(top = if (compact) 10.dp else 12.dp)) {
+                    content()
+                }
+            }
         }
     }
 }
@@ -549,37 +890,51 @@ private fun SettingItem(
     label: String,
     value: String,
     onClick: () -> Unit,
-    enabled: Boolean = true
+    enabled: Boolean = true,
+    compact: Boolean = false,
+    showDivider: Boolean = true
 ) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(enabled = enabled) { onClick() }
-            .padding(vertical = 8.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Column {
-            Text(label, style = MaterialTheme.typography.bodyMedium)
-            Text(
-                text = value,
-                style = MaterialTheme.typography.bodySmall,
-                color = if (enabled) {
-                    MaterialTheme.colorScheme.primary
+    val tokens = settingsTokens()
+    Column {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(enabled = enabled) { onClick() }
+                .padding(vertical = if (compact) 8.dp else 10.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    label,
+                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
+                    maxLines = 2,
+                    color = tokens.titleColor
+                )
+                Text(
+                    text = value,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (enabled) {
+                        tokens.valueColor
+                    } else {
+                        tokens.mutedText
+                    }
+                )
+            }
+            Spacer(modifier = Modifier.width(12.dp))
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                contentDescription = null,
+                tint = if (enabled) {
+                    tokens.accent
                 } else {
-                    MaterialTheme.colorScheme.onSurfaceVariant
+                    tokens.mutedText
                 }
             )
         }
-        Icon(
-            imageVector = Icons.AutoMirrored.Filled.ArrowForward,
-            contentDescription = null,
-            tint = if (enabled) {
-                MaterialTheme.colorScheme.primary
-            } else {
-                MaterialTheme.colorScheme.onSurfaceVariant
-            }
-        )
+        if (showDivider) {
+            HorizontalDivider(color = tokens.divider)
+        }
     }
 }
 
@@ -588,25 +943,50 @@ private fun SettingToggle(
     label: String,
     checked: Boolean,
     onCheckedChange: (Boolean) -> Unit,
-    enabled: Boolean = true
+    enabled: Boolean = true,
+    supportingText: String? = null,
+    compact: Boolean = false,
+    showDivider: Boolean = true
 ) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 8.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(label, style = MaterialTheme.typography.bodyMedium)
-        Switch(
-            checked = checked,
-            onCheckedChange = onCheckedChange,
-            enabled = enabled,
-            colors = androidx.compose.material3.SwitchDefaults.colors(
-                checkedThumbColor = MaterialTheme.colorScheme.primary,
-                uncheckedThumbColor = MaterialTheme.colorScheme.onSurface
+    val tokens = settingsTokens()
+    Column {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(enabled = enabled) { onCheckedChange(!checked) }
+                .padding(vertical = if (compact) 8.dp else 10.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    label,
+                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
+                    maxLines = 2,
+                    color = tokens.titleColor
+                )
+                if (supportingText != null) {
+                    Text(
+                        text = supportingText,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = tokens.subtleText
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.width(12.dp))
+            Switch(
+                checked = checked,
+                onCheckedChange = onCheckedChange,
+                enabled = enabled,
+                colors = androidx.compose.material3.SwitchDefaults.colors(
+                    checkedThumbColor = tokens.accent,
+                    uncheckedThumbColor = tokens.titleColor
+                )
             )
-        )
+        }
+        if (showDivider) {
+            HorizontalDivider(color = tokens.divider)
+        }
     }
 }
 
@@ -713,16 +1093,18 @@ private fun TargetRow(
     secondaryCurrency: String?,
     secondaryAmount: Double?
 ) {
+    val roundedBase = ceil(baseAmount)
+    val roundedSecondary = secondaryAmount?.let { ceil(it) }
     Column(modifier = Modifier.padding(vertical = 6.dp)) {
         Text(label, style = MaterialTheme.typography.bodyMedium)
         Text(
-            text = formatCurrency(baseCurrency, baseAmount),
+            text = formatCurrency(baseCurrency, roundedBase),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.primary
         )
-        if (secondaryCurrency != null && secondaryAmount != null) {
+        if (secondaryCurrency != null && roundedSecondary != null) {
             Text(
-                text = formatCurrency(secondaryCurrency, secondaryAmount),
+                text = formatCurrency(secondaryCurrency, roundedSecondary),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -767,18 +1149,105 @@ private fun SalesTargetDialog(
 }
 
 @Composable
+private fun ReturnPolicyDaysDialog(
+    initialValue: Int,
+    onDismiss: () -> Unit,
+    onConfirm: (Int) -> Unit
+) {
+    var input by remember { mutableStateOf(initialValue.toString()) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Límite de días") },
+        text = {
+            OutlinedTextField(
+                value = input,
+                onValueChange = { input = it },
+                label = { Text("Días (0 = sin límite)") },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(
+                    imeAction = ImeAction.Done
+                )
+            )
+        },
+        confirmButton = {
+            Button(onClick = {
+                val value = input.toIntOrNull()?.coerceAtLeast(0) ?: 0
+                onConfirm(value)
+            }) {
+                Text("Guardar")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancelar") }
+        }
+    )
+}
+
+@Composable
+private fun ReturnPolicyDestinationDialog(
+    current: ReturnDestinationPolicy,
+    allowRefunds: Boolean,
+    onDismiss: () -> Unit,
+    onConfirm: (ReturnDestinationPolicy) -> Unit
+) {
+    var selected by remember { mutableStateOf(current) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Destino por defecto") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    "Define si el retorno genera reembolso inmediato o crédito a favor."
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FilterChip(
+                        selected = selected == ReturnDestinationPolicy.CREDIT,
+                        onClick = { selected = ReturnDestinationPolicy.CREDIT },
+                        label = { Text("Crédito") }
+                    )
+                    FilterChip(
+                        selected = selected == ReturnDestinationPolicy.REFUND,
+                        onClick = { selected = ReturnDestinationPolicy.REFUND },
+                        label = { Text("Reembolso") },
+                        enabled = allowRefunds
+                    )
+                }
+                if (!allowRefunds) {
+                    Text(
+                        "Los reembolsos están deshabilitados.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = { onConfirm(selected) }
+            ) { Text("Guardar") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancelar") }
+        }
+    )
+}
+
+@Composable
 private fun SyncSection(
     syncSettings: SyncSettings,
-    syncState: SyncState,
     onAutoSyncChanged: (Boolean) -> Unit,
     onSyncOnStartupChanged: (Boolean) -> Unit,
     onWifiOnlyChanged: (Boolean) -> Unit,
     onUseTtlChanged: (Boolean) -> Unit,
-    onSyncNow: () -> Unit,
-    onCancelSync: () -> Unit,
+    compact: Boolean
 ) {
     val strings = LocalAppStrings.current
-    SettingSection(title = strings.settings.syncTitle) {
+    val tokens = settingsTokens()
+    SettingSection(
+        title = strings.settings.syncTitle,
+        icon = Icons.Outlined.Sync,
+        compact = compact
+    ) {
         SyncTogglesRow(
             autoSync = syncSettings.autoSync,
             syncOnStartup = syncSettings.syncOnStartup,
@@ -788,61 +1257,37 @@ private fun SyncSection(
             onSyncOnStartupChanged = onSyncOnStartupChanged,
             onWifiOnlyChanged = onWifiOnlyChanged,
             onUseTtlChanged = onUseTtlChanged,
+            compact = compact
         )
-        Spacer(modifier = Modifier.height(12.dp))
+        Spacer(modifier = Modifier.height(if (compact) 4.dp else 6.dp))
         Text(
-            text = when (syncState) {
-                SyncState.IDLE -> strings.settings.syncStatusIdle
-                SyncState.SUCCESS -> strings.settings.syncStatusSuccess
-                is SyncState.ERROR -> strings.settings.syncStatusError
-                is SyncState.SYNCING -> strings.settings.syncStatusSyncing
-            },
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.primary
-        )
-        Text(
-            text = strings.settings.syncLastLabel + ": " +
-                    (syncSettings.lastSyncAt?.toErpDateTime() ?: strings.settings.lastSyncNever),
+            text = "Estos ajustes se aplican en segundo plano cuando el dispositivo tiene conexión.",
             style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+            color = tokens.subtleText
         )
-        Spacer(modifier = Modifier.height(12.dp))
-        Button(
-            onClick = onSyncNow,
-            modifier = Modifier.fillMaxWidth(),
-            enabled = syncState !is SyncState.SYNCING,
-            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
-        ) {
-            Text(strings.settings.syncNowButton)
-        }
-        if (syncState is SyncState.SYNCING) {
-            Spacer(modifier = Modifier.height(8.dp))
-            OutlinedButton(
-                onClick = onCancelSync,
-                modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.outlinedButtonColors(
-                    contentColor = MaterialTheme.colorScheme.error
-                )
-            ) {
-                Text(strings.settings.syncCancelButton)
-            }
-        }
     }
 }
 
 @Composable
 private fun SyncLogSection(
-    entries: List<com.erpnext.pos.domain.models.SyncLogEntry>
+    entries: List<com.erpnext.pos.domain.models.SyncLogEntry>,
+    compact: Boolean
 ) {
     val strings = LocalAppStrings.current
-    SettingSection(title = strings.settings.syncLogTitle) {
+    val tokens = settingsTokens()
+    ExpandableSection(
+        title = strings.settings.syncLogTitle,
+        icon = Icons.Outlined.History,
+        compact = compact,
+        initiallyExpanded = false
+    ) {
         if (entries.isEmpty()) {
             Text(
                 text = strings.settings.syncLogEmpty,
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                color = tokens.subtleText
             )
-            return@SettingSection
+            return@ExpandableSection
         }
         entries.take(6).forEach { entry ->
             val statusLabel = when (entry.status) {
@@ -856,27 +1301,27 @@ private fun SyncLogSection(
                     text = statusLabel,
                     style = MaterialTheme.typography.labelLarge,
                     color = when (entry.status) {
-                        com.erpnext.pos.domain.models.SyncLogStatus.SUCCESS -> MaterialTheme.colorScheme.primary
+                        com.erpnext.pos.domain.models.SyncLogStatus.SUCCESS -> tokens.accent
                         com.erpnext.pos.domain.models.SyncLogStatus.PARTIAL -> MaterialTheme.colorScheme.tertiary
                         com.erpnext.pos.domain.models.SyncLogStatus.ERROR -> MaterialTheme.colorScheme.error
-                        com.erpnext.pos.domain.models.SyncLogStatus.CANCELED -> MaterialTheme.colorScheme.onSurfaceVariant
+                        com.erpnext.pos.domain.models.SyncLogStatus.CANCELED -> tokens.mutedText
                     }
                 )
                 Text(
                     text = entry.message,
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = tokens.subtleText
                 )
                 Text(
                     text = entry.startedAt.toErpDateTime(),
                     style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = tokens.subtleText
                 )
                 if (entry.failedSteps.isNotEmpty()) {
                     Text(
                         text = entry.failedSteps.joinToString(" · "),
                         style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = tokens.subtleText
                     )
                 }
             }
@@ -893,7 +1338,8 @@ private fun SyncTogglesRow(
     onAutoSyncChanged: (Boolean) -> Unit,
     onSyncOnStartupChanged: (Boolean) -> Unit,
     onWifiOnlyChanged: (Boolean) -> Unit,
-    onUseTtlChanged: (Boolean) -> Unit
+    onUseTtlChanged: (Boolean) -> Unit,
+    compact: Boolean
 ) {
     val strings = LocalAppStrings.current
 
@@ -901,36 +1347,193 @@ private fun SyncTogglesRow(
         SettingToggle(
             label = strings.settings.autoSyncLabel,
             checked = autoSync,
-            onCheckedChange = onAutoSyncChanged
+            onCheckedChange = onAutoSyncChanged,
+            compact = compact
         )
         SettingToggle(
             label = strings.settings.syncOnStartupLabel,
             checked = syncOnStartup,
-            onCheckedChange = onSyncOnStartupChanged
+            onCheckedChange = onSyncOnStartupChanged,
+            compact = compact
         )
         SettingToggle(
             label = strings.settings.wifiOnlyLabel,
             checked = wifiOnly,
-            onCheckedChange = onWifiOnlyChanged
+            onCheckedChange = onWifiOnlyChanged,
+            compact = compact
         )
         SettingToggle(
             label = strings.settings.useTtlLabel,
             checked = useTtl,
-            onCheckedChange = onUseTtlChanged
+            onCheckedChange = onUseTtlChanged,
+            compact = compact,
+            showDivider = false
+        )
+    }
+}
+
+private data class SummaryField(
+    val label: String,
+    val value: String
+)
+
+@Composable
+private fun SummaryGrid(items: List<SummaryField>) {
+    val rows = items.chunked(2)
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        rows.forEach { row ->
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                SummaryItem(row[0], modifier = Modifier.weight(1f))
+                if (row.size > 1) {
+                    SummaryItem(row[1], modifier = Modifier.weight(1f))
+                } else {
+                    Spacer(modifier = Modifier.weight(1f))
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SummaryItem(item: SummaryField, modifier: Modifier = Modifier) {
+    val tokens = settingsTokens()
+    Column(modifier = modifier) {
+        Text(
+            text = item.label,
+            style = MaterialTheme.typography.labelSmall,
+            color = tokens.subtleText
+        )
+        Text(
+            text = item.value,
+            style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            color = tokens.titleColor
+        )
+    }
+}
+
+private data class StatusStyle(
+    val container: Color,
+    val content: Color
+)
+
+@Composable
+private fun StatusPill(
+    text: String,
+    containerColor: Color,
+    contentColor: Color
+) {
+    Box(
+        modifier = Modifier
+            .background(containerColor, RoundedCornerShape(999.dp))
+            .padding(horizontal = 10.dp, vertical = 4.dp)
+    ) {
+        Text(
+            text = text,
+            style = MaterialTheme.typography.labelSmall,
+            color = contentColor
         )
     }
 }
 
 @Composable
+private fun SettingsSearchBar(
+    query: String,
+    onQueryChange: (String) -> Unit,
+    compact: Boolean
+) {
+    val tokens = settingsTokens()
+    OutlinedTextField(
+        value = query,
+        onValueChange = onQueryChange,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(bottom = if (compact) 10.dp else 12.dp),
+        placeholder = { Text("Buscar configuración…") },
+        singleLine = true,
+        leadingIcon = {
+            Icon(
+                imageVector = Icons.Outlined.Search,
+                contentDescription = null,
+                tint = tokens.mutedText
+            )
+        },
+        trailingIcon = {
+            if (query.isNotBlank()) {
+                Icon(
+                    imageVector = Icons.Outlined.Clear,
+                    contentDescription = "Limpiar",
+                    tint = tokens.mutedText,
+                    modifier = Modifier.clickable { onQueryChange("") }
+                )
+            }
+        },
+        colors = TextFieldDefaults.colors(
+            focusedIndicatorColor = tokens.cardBorder,
+            unfocusedIndicatorColor = tokens.cardBorder,
+            cursorColor = tokens.accent
+        )
+    )
+}
+
+private fun sectionVisible(query: String, keywords: List<String>): Boolean {
+    val normalized = query.trim().lowercase()
+    if (normalized.isBlank()) return true
+    return keywords.any { it.contains(normalized) || normalized.contains(it) }
+}
+
+private data class SettingsTokens(
+    val cardContainer: Color,
+    val cardBorder: Color,
+    val divider: Color,
+    val titleColor: Color,
+    val valueColor: Color,
+    val subtleText: Color,
+    val mutedText: Color,
+    val accent: Color,
+    val iconTint: Color,
+    val heroPrimary: Color,
+    val heroSecondary: Color,
+    val heroBorder: Color,
+    val heroText: Color,
+    val heroButton: Color,
+    val heroButtonText: Color,
+)
+
+@Composable
+private fun settingsTokens(): SettingsTokens {
+    val scheme = MaterialTheme.colorScheme
+    return SettingsTokens(
+        cardContainer = scheme.surface,
+        cardBorder = scheme.outlineVariant.copy(alpha = 0.55f),
+        divider = scheme.outlineVariant.copy(alpha = 0.35f),
+        titleColor = scheme.onSurface,
+        valueColor = scheme.onSurfaceVariant,
+        subtleText = scheme.onSurfaceVariant.copy(alpha = 0.9f),
+        mutedText = scheme.onSurfaceVariant.copy(alpha = 0.7f),
+        accent = scheme.primary,
+        iconTint = scheme.onSurfaceVariant,
+        heroPrimary = scheme.primaryContainer.copy(alpha = 0.96f),
+        heroSecondary = scheme.secondaryContainer.copy(alpha = 0.96f),
+        heroBorder = scheme.outlineVariant.copy(alpha = 0.4f),
+        heroText = scheme.onPrimaryContainer,
+        heroButton = scheme.onPrimaryContainer,
+        heroButtonText = scheme.primary
+    )
+}
+
+@Composable
 private fun LanguageSelector(
     currentLanguage: AppLanguage,
-    onLanguageSelected: (AppLanguage) -> Unit
+    onLanguageSelected: (AppLanguage) -> Unit,
+    compact: Boolean
 ) {
     val strings = LocalAppStrings.current
     var expanded by remember { mutableStateOf(false) }
     ExposedDropdownMenuBox(
         expanded = expanded,
-        onExpandedChange = { }
+        onExpandedChange = { expanded = !expanded }
     ) {
         OutlinedTextField(
             value = when (currentLanguage) {
@@ -943,7 +1546,12 @@ private fun LanguageSelector(
                 .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable),
             readOnly = true,
             label = { Text(strings.settings.languageLabel) },
-            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) }
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+            textStyle = if (compact) {
+                MaterialTheme.typography.bodyMedium
+            } else {
+                MaterialTheme.typography.bodyLarge
+            }
         )
         ExposedDropdownMenu(
             expanded = expanded,
@@ -968,10 +1576,49 @@ private fun LanguageSelector(
 }
 
 @Composable
+private fun MissingContextBanner() {
+    ElevatedCard(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(bottom = 14.dp),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.elevatedCardColors(
+            containerColor = MaterialTheme.colorScheme.tertiaryContainer
+        ),
+        elevation = CardDefaults.elevatedCardElevation(defaultElevation = 4.dp)
+    ) {
+        Row(
+            modifier = Modifier.padding(14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Outlined.Info,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onTertiaryContainer
+            )
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = "Configuración limitada",
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.onTertiaryContainer
+                )
+                Text(
+                    text = "No se encontró un perfil POS activo. Abre una caja o selecciona un perfil para ver datos completos.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onTertiaryContainer
+                )
+            }
+        }
+    }
+}
+
+@Composable
 private fun ThemeChipSelector(
     currentTheme: AppColorTheme,
     onThemeSelected: (AppColorTheme) -> Unit
 ) {
+    val tokens = settingsTokens()
     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         AppColorTheme.entries.forEach { theme ->
             FilterChip(
@@ -981,8 +1628,8 @@ private fun ThemeChipSelector(
                 colors = FilterChipDefaults.filterChipColors(
                     selectedContainerColor = MaterialTheme.colorScheme.secondaryContainer,
                     selectedLabelColor = MaterialTheme.colorScheme.onSecondaryContainer,
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                    labelColor = MaterialTheme.colorScheme.onSurface
+                    containerColor = tokens.cardContainer,
+                    labelColor = tokens.titleColor
                 ),
             )
         }
@@ -994,6 +1641,7 @@ private fun ThemeModeChipSelector(
     currentMode: AppThemeMode,
     onModeSelected: (AppThemeMode) -> Unit
 ) {
+    val tokens = settingsTokens()
     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         AppThemeMode.entries.forEach { mode ->
             FilterChip(
@@ -1003,8 +1651,8 @@ private fun ThemeModeChipSelector(
                 colors = FilterChipDefaults.filterChipColors(
                     selectedContainerColor = MaterialTheme.colorScheme.tertiaryContainer,
                     selectedLabelColor = MaterialTheme.colorScheme.onTertiaryContainer,
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                    labelColor = MaterialTheme.colorScheme.onSurface,
+                    containerColor = tokens.cardContainer,
+                    labelColor = tokens.titleColor,
                 ),
                 elevation = FilterChipDefaults.elevatedFilterChipElevation(),
             )

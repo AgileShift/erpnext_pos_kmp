@@ -30,6 +30,7 @@ import com.erpnext.pos.remoteSource.dto.POSClosingEntryDto
 import com.erpnext.pos.remoteSource.dto.POSClosingEntryResponse
 import com.erpnext.pos.remoteSource.dto.POSClosingEntrySummaryDto
 import com.erpnext.pos.remoteSource.dto.POSOpeningEntryDto
+import com.erpnext.pos.remoteSource.dto.POSOpeningEntryDetailDto
 import com.erpnext.pos.remoteSource.dto.POSOpeningEntryResponseDto
 import com.erpnext.pos.remoteSource.dto.POSOpeningEntrySummaryDto
 import com.erpnext.pos.remoteSource.dto.POSProfileDto
@@ -513,6 +514,47 @@ class APIService(
                 "docstatus" eq 1
                 "status" eq "Open"
             }
+        )
+    }
+
+    suspend fun getOpenPOSOpeningEntriesForProfile(
+        posProfile: String
+    ): List<POSOpeningEntrySummaryDto> {
+        val url = authStore.getCurrentSite()
+        return client.getERPList(
+            ERPDocType.POSOpeningEntry.path,
+            fields = listOf(
+                "name",
+                "pos_profile",
+                "user",
+                "status",
+                "docstatus",
+                "period_start_date"
+            ),
+            baseUrl = url,
+            filters = filters {
+                "pos_profile" eq posProfile
+                "docstatus" eq 1
+                "status" eq "Open"
+            }
+        )
+    }
+
+    suspend fun getPOSOpeningEntry(name: String): POSOpeningEntryDetailDto {
+        val url = authStore.getCurrentSite()
+        return client.getERPSingle(
+            doctype = ERPDocType.POSOpeningEntry.path,
+            fields = listOf(
+                "name",
+                "pos_profile",
+                "company",
+                "period_start_date",
+                "posting_date",
+                "user",
+                "balance_details"
+            ),
+            name = name.encodeURLParameter(),
+            baseUrl = url
         )
     }
 

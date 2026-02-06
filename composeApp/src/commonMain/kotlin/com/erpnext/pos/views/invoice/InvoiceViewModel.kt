@@ -9,10 +9,13 @@ import com.erpnext.pos.domain.models.SalesInvoiceBO
 import com.erpnext.pos.domain.usecases.CancelSalesInvoiceInput
 import com.erpnext.pos.domain.usecases.CancelSalesInvoiceUseCase
 import com.erpnext.pos.domain.usecases.FetchPendingInvoiceUseCase
+import com.erpnext.pos.domain.usecases.FetchSalesInvoiceLocalUseCase
 import com.erpnext.pos.domain.usecases.InvoiceCancellationAction
 import com.erpnext.pos.domain.usecases.PendingInvoiceInput
 import com.erpnext.pos.navigation.NavRoute
 import com.erpnext.pos.navigation.NavigationManager
+import com.erpnext.pos.localSource.preferences.ReturnPolicyPreferences
+import com.erpnext.pos.utils.parseErpDateTimeToEpochMillis
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.Flow
@@ -23,11 +26,14 @@ import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
+import kotlin.time.Clock
 
 @OptIn(FlowPreview::class, ExperimentalCoroutinesApi::class)
 class InvoiceViewModel(
     private val fetchPendingInvoiceUseCase: FetchPendingInvoiceUseCase,
     private val cancelSalesInvoiceUseCase: CancelSalesInvoiceUseCase,
+    private val fetchSalesInvoiceLocalUseCase: FetchSalesInvoiceLocalUseCase,
+    private val returnPolicyPreferences: ReturnPolicyPreferences,
     private val navManager: NavigationManager
 ) : BaseViewModel() {
 
@@ -77,12 +83,37 @@ class InvoiceViewModel(
     ) {
         viewModelScope.launch {
             _feedbackMessage.value = null
+            if (action == InvoiceCancellationAction.RETURN) {
+                val policy = returnPolicyPreferences.get()
+                if (!policy.allowFullReturns) {
+                    _feedbackMessage.value = "Los retornos totales están deshabilitados por política."
+                    return@launch
+                }
+                if (policy.requireReason && reason.isNullOrBlank()) {
+                    _feedbackMessage.value = "Debes indicar un motivo para el retorno."
+                    return@launch
+                }
+                if (policy.maxDaysAfterInvoice > 0) {
+                    val invoice = fetchSalesInvoiceLocalUseCase(invoiceId)
+                    val invoiceMillis = parseErpDateTimeToEpochMillis(invoice?.postingDate)
+                    val now = Clock.System.now().toEpochMilliseconds()
+                    if (invoiceMillis != null) {
+                        val days = ((now - invoiceMillis) / (24 * 60 * 60 * 1000.0)).toInt()
+                        if (days > policy.maxDaysAfterInvoice) {
+                            _feedbackMessage.value =
+                                "El retorno excede el límite de ${policy.maxDaysAfterInvoice} días."
+                            return@launch
+                        }
+                    }
+                }
+            }
             val result = runCatching {
                 cancelSalesInvoiceUseCase(
                     CancelSalesInvoiceInput(
                         invoiceName = invoiceId,
                         action = action,
-                        reason = reason
+                        reason = reason,
+                        applyRefund = false
                     )
                 )
             }

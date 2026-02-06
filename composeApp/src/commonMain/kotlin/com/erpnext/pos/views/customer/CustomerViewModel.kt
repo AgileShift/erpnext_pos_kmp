@@ -33,6 +33,7 @@ import com.erpnext.pos.localSource.dao.ModeOfPaymentDao
 import com.erpnext.pos.localSource.dao.CompanyDao
 import com.erpnext.pos.localSource.entities.ModeOfPaymentEntity
 import com.erpnext.pos.localSource.entities.SalesInvoiceWithItemsAndPayments
+import com.erpnext.pos.localSource.preferences.ReturnPolicyPreferences
 import com.erpnext.pos.remoteSource.mapper.toDto
 import com.erpnext.pos.utils.NetworkMonitor
 import com.erpnext.pos.utils.buildPaymentModeDetailMap
@@ -42,6 +43,7 @@ import com.erpnext.pos.utils.resolvePaymentToReceivableRate
 import com.erpnext.pos.utils.roundToCurrency
 import com.erpnext.pos.utils.toCurrencySymbol
 import com.erpnext.pos.utils.toErpDateTime
+import com.erpnext.pos.utils.parseErpDateTimeToEpochMillis
 import com.erpnext.pos.views.CashBoxManager
 import com.erpnext.pos.views.billing.PaymentLine
 import com.erpnext.pos.views.payment.PaymentHandler
@@ -94,7 +96,8 @@ class CustomerViewModel(
     private val companyDao: CompanyDao,
     private val cancelSalesInvoiceUseCase: CancelSalesInvoiceUseCase,
     private val partialReturnUseCase: PartialReturnUseCase,
-    private val networkMonitor: NetworkMonitor
+    private val networkMonitor: NetworkMonitor,
+    private val returnPolicyPreferences: ReturnPolicyPreferences
 ) : BaseViewModel() {
 
     private val _stateFlow: MutableStateFlow<CustomerState> =
@@ -124,6 +127,10 @@ class CustomerViewModel(
 
     private val _historyActionBusy = MutableStateFlow(false)
     val historyActionBusy = _historyActionBusy.asStateFlow()
+
+    private val _returnPolicy =
+        MutableStateFlow(com.erpnext.pos.domain.models.ReturnPolicySettings())
+    val returnPolicy = _returnPolicy.asStateFlow()
 
     private var historyCustomerId: String? = null
     private var outstandingCustomerId: String? = null
@@ -164,6 +171,11 @@ class CustomerViewModel(
     init {
         preloadPaymentState()
         loadDialogData()
+        viewModelScope.launch {
+            returnPolicyPreferences.settings.collect { settings ->
+                _returnPolicy.value = settings
+            }
+        }
         viewModelScope.launch {
             if (!didRebuildSummaries) {
                 didRebuildSummaries = true
@@ -620,6 +632,16 @@ class CustomerViewModel(
         viewModelScope.launch {
             _historyActionBusy.value = true
             try {
+                val policyMessage = validateReturnPolicy(
+                    invoiceId = invoiceId,
+                    isPartial = true,
+                    applyRefund = applyRefund,
+                    reason = reason
+                )
+                if (policyMessage != null) {
+                    _historyMessage.value = policyMessage
+                    return@launch
+                }
                 val filtered = itemsToReturnByCode.filterValues { it > 0.0 }
                 if (filtered.isEmpty()) {
                     throw IllegalArgumentException("Selecciona al menos un artículo para devolver.")
@@ -664,6 +686,18 @@ class CustomerViewModel(
             }
             _historyActionBusy.value = true
             try {
+                if (action == InvoiceCancellationAction.RETURN) {
+                    val policyMessage = validateReturnPolicy(
+                        invoiceId = invoiceId,
+                        isPartial = false,
+                        applyRefund = applyRefund,
+                        reason = reason
+                    )
+                    if (policyMessage != null) {
+                        _historyMessage.value = policyMessage
+                        return@launch
+                    }
+                }
                 val trimmedReason = reason?.takeIf { it.isNotBlank() }
                 val result = cancelSalesInvoiceUseCase(
                     CancelSalesInvoiceInput(
@@ -689,5 +723,45 @@ class CustomerViewModel(
                 historyCustomerId?.let { loadInvoiceHistory(it) }
             }
         }
+    }
+
+    private suspend fun validateReturnPolicy(
+        invoiceId: String,
+        isPartial: Boolean,
+        applyRefund: Boolean,
+        reason: String?
+    ): String? {
+        val policy = returnPolicyPreferences.get()
+        if (isPartial && !policy.allowPartialReturns) {
+            return "Los retornos parciales están deshabilitados por política."
+        }
+        if (!isPartial && !policy.allowFullReturns) {
+            return "Los retornos totales están deshabilitados por política."
+        }
+        if (policy.requireReason && reason.isNullOrBlank()) {
+            return "Debes indicar un motivo para el retorno."
+        }
+        if (applyRefund && !policy.allowRefunds) {
+            return "Los reembolsos están deshabilitados por política."
+        }
+        if (policy.maxDaysAfterInvoice > 0) {
+            val invoice = fetchSalesInvoiceLocalUseCase(invoiceId)
+            val invoiceMillis = parseErpDateTimeToEpochMillis(invoice?.postingDate)
+            val now = Clock.System.now().toEpochMilliseconds()
+            if (invoiceMillis != null) {
+                val days = ((now - invoiceMillis) / (24 * 60 * 60 * 1000.0)).toInt()
+                if (days > policy.maxDaysAfterInvoice) {
+                    return "El retorno excede el límite de ${policy.maxDaysAfterInvoice} días."
+                }
+            }
+        }
+        if (applyRefund && policy.requirePaidInvoiceForRefund) {
+            val invoice = fetchSalesInvoiceLocalUseCase(invoiceId)
+            val hasPayments = (invoice?.paidAmount ?: 0.0) > 0.0
+            if (!hasPayments) {
+                return "Solo se permite reembolso si la factura tiene pagos."
+            }
+        }
+        return null
     }
 }

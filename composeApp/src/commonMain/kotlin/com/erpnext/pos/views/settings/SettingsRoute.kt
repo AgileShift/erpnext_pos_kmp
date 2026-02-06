@@ -27,6 +27,7 @@ fun rememberSettingsActions(coordinator: SettingsCoordinator): POSSettingAction 
             onInventoryAlertsEnabledChanged = coordinator::onInventoryAlertsEnabledChanged,
             onInventoryAlertTimeChanged = coordinator::onInventoryAlertTimeChanged,
             onSalesTargetChanged = coordinator::onSalesTargetChanged,
+            onReturnPolicyChanged = coordinator::onReturnPolicyChanged,
             onSyncSalesTarget = coordinator::onSyncSalesTarget,
             onSelect = coordinator::onSelect,
             onSyncNow = coordinator::onSyncNow,

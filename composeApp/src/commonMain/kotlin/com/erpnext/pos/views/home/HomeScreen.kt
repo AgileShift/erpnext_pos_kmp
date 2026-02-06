@@ -83,6 +83,7 @@ import com.erpnext.pos.utils.view.SnackbarType
 import kotlinx.coroutines.flow.MutableStateFlow
 import org.jetbrains.compose.ui.tooling.preview.Preview
 import org.koin.compose.koinInject
+import kotlin.math.ceil
 import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
 
@@ -100,6 +101,7 @@ fun HomeScreen(
     val strings = LocalAppStrings.current
     val homeMetrics by actions.homeMetrics.collectAsState()
     val openingState by actions.openingState.collectAsState()
+    val openingEntryId by actions.openingEntryId.collectAsState()
     val isCashboxOpen by actions.isCashboxOpen().collectAsState()
     val inventoryAlertMessage by actions.inventoryAlertMessage.collectAsState()
 
@@ -302,6 +304,14 @@ fun HomeScreen(
 
                         Spacer(Modifier.height(12.dp))
 
+                        if (isCashboxOpen && !openingEntryId.isNullOrBlank()) {
+                            Text(
+                                text = "POE actual: $openingEntryId",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(bottom = 8.dp)
+                            )
+                        }
                         // Botón abrir caja
                         if (!isCashboxOpen) {
                             Button(
@@ -697,9 +707,9 @@ private fun SalesTargetCard(
         Column(modifier = Modifier.padding(16.dp)) {
             val targetInMetricCurrency = resolveTargetForCurrency(target, metric.currency)
             val targetCurrency = targetInMetricCurrency?.currency ?: target.baseCurrency
-            val dailyGoal = targetInMetricCurrency?.daily ?: target.dailyBase
-            val weeklyGoal = targetInMetricCurrency?.weekly ?: target.weeklyBase
-            val monthlyGoal = targetInMetricCurrency?.monthly ?: target.monthlyBase
+            val dailyGoal = roundUpTarget(targetInMetricCurrency?.daily ?: target.dailyBase)
+            val weeklyGoal = roundUpTarget(targetInMetricCurrency?.weekly ?: target.weeklyBase)
+            val monthlyGoal = roundUpTarget(targetInMetricCurrency?.monthly ?: target.monthlyBase)
 
             Text(
                 text = title,
@@ -795,6 +805,8 @@ private data class TargetCurrencyValues(
     val daily: Double
 )
 
+private fun roundUpTarget(value: Double): Double = ceil(value)
+
 private fun resolveTargetForCurrency(
     target: SalesTargetMetric,
     currency: String
@@ -823,15 +835,16 @@ private fun resolveTargetForCurrency(
 
 @Composable
 private fun TargetProgressTile(row: TargetProgressRow, modifier: Modifier = Modifier) {
+    val roundedGoal = roundUpTarget(row.goal)
     val progressRaw =
-        if (row.goal <= 0.0) 0f else (row.actual / row.goal).toFloat().coerceIn(0f, 1f)
+        if (roundedGoal <= 0.0) 0f else (row.actual / roundedGoal).toFloat().coerceIn(0f, 1f)
     val progress by animateFloatAsState(
         targetValue = progressRaw,
         animationSpec = tween(durationMillis = 700),
         label = "target_progress"
     )
-    val reached = row.actual >= row.goal
-    val pending = (row.goal - row.actual).coerceAtLeast(0.0)
+    val reached = row.actual >= roundedGoal
+    val pending = (roundedGoal - row.actual).coerceAtLeast(0.0)
     val progressColor = Color(0xFF2E7D32)
     val trackColor = Color(0xFFD32F2F).copy(alpha = 0.30f)
 
@@ -858,7 +871,7 @@ private fun TargetProgressTile(row: TargetProgressRow, modifier: Modifier = Modi
                 text = "${formatCurrency(row.currency, row.actual)} / ${
                     formatCurrency(
                         row.currency,
-                        row.goal
+                        roundedGoal
                     )
                 }",
                 style = MaterialTheme.typography.bodyMedium

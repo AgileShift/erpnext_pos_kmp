@@ -1281,27 +1281,24 @@ class BillingViewModel(
         val total = roundForCurrency(totals.total, invoiceCurrency)
         val netTotal = roundForCurrency((total - taxes).coerceAtLeast(0.0), invoiceCurrency)
 
-        val rawPayments = if (usePosInvoice) {
+        val isPosSale = true
+        require(!posOpeningEntry.isNullOrBlank()) {
+            "Falta POS Opening Entry para crear factura POS."
+        }
+        val rawPayments = run {
             val paymentMode = paymentLines.firstOrNull()?.modeOfPayment
                 ?: current.paymentModes.firstOrNull()?.modeOfPayment
-                ?: error("No hay modo de pago disponible para crear la factura POS.")
             paymentLines.map { line ->
                 SalesInvoicePaymentDto(
-                    modeOfPayment = line.modeOfPayment.ifBlank { paymentMode },
+                    modeOfPayment = line.modeOfPayment.ifBlank { paymentMode ?: line.modeOfPayment },
                     amount = line.baseAmount,
                     paymentReference = line.referenceNumber,
                     account = paymentModeDetails[line.modeOfPayment]?.account
                 )
             }
-        } else {
-            emptyList()
         }
-        val resolvedPaid = if (usePosInvoice) {
-            roundForCurrency(paymentStatus.paidAmount, invoiceCurrency)
-        } else {
-            roundForCurrency(paymentStatus.paidAmount, invoiceCurrency)
-        }
-        val payments = if (usePosInvoice) {
+        val resolvedPaid = roundForCurrency(paymentStatus.paidAmount, invoiceCurrency)
+        val payments = if (rawPayments.isNotEmpty()) {
             adjustPosPaymentsToMatchTotal(
                 payments = rawPayments,
                 targetAmount = resolvedPaid,
@@ -1310,21 +1307,13 @@ class BillingViewModel(
         } else {
             rawPayments
         }
-        val resolvedStatus = if (usePosInvoice) "Paid" else paymentStatus.status
+        val resolvedStatus = paymentStatus.status
         // En ERPNext: paid/outstanding están en moneda de factura (invoice currency).
-        val resolvedOutstanding = if (usePosInvoice) {
-            0.0
-        } else {
-            roundForCurrency(paymentStatus.outstandingAmount, invoiceCurrency)
-        }
-        val resolvedChange = if (usePosInvoice) {
-            roundForCurrency(
-                (resolvedPaid - rounding.roundedTotal).coerceAtLeast(0.0),
-                invoiceCurrency
-            )
-        } else {
-            roundForCurrency((resolvedPaid - rounding.roundedTotal).coerceAtLeast(0.0), invoiceCurrency)
-        }
+        val resolvedOutstanding = roundForCurrency(paymentStatus.outstandingAmount, invoiceCurrency)
+        val resolvedChange = roundForCurrency(
+            (resolvedPaid - rounding.roundedTotal).coerceAtLeast(0.0),
+            invoiceCurrency
+        )
 
         val hasRounding = kotlin.math.abs(rounding.roundingAdjustment) > 0.0001
         val roundedTotalField = if (hasRounding) roundForCurrency(rounding.roundedTotal, invoiceCurrency) else null
@@ -1345,11 +1334,11 @@ class BillingViewModel(
             roundedTotal = roundedTotalField,
             roundingAdjustment = roundingAdjustmentField,
             disableRoundedTotal = true,
-            outstandingAmount = if (usePosInvoice) resolvedOutstanding else null,
+            outstandingAmount = resolvedOutstanding,
             totalTaxesAndCharges = taxes,
             netTotal = netTotal,
-            paidAmount = if (usePosInvoice) resolvedPaid else null,
-            changeAmount = if (usePosInvoice) resolvedChange.takeIf { it > 0.0 } else null,
+            paidAmount = resolvedPaid,
+            changeAmount = resolvedChange.takeIf { it > 0.0 },
             items = items,
             payments = payments,
             paymentSchedule = paymentSchedule,
@@ -1360,7 +1349,7 @@ class BillingViewModel(
             customExchangeRate = null,
             updateStock = true,
             docStatus = 0,
-            isPos = false,
+            isPos = isPosSale,
             doctype = "Sales Invoice"
         )
     }

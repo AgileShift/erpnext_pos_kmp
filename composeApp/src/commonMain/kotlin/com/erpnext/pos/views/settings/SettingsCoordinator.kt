@@ -5,6 +5,7 @@ import androidx.compose.runtime.remember
 import com.erpnext.pos.localization.AppLanguage
 import AppColorTheme
 import AppThemeMode
+import com.erpnext.pos.domain.models.ReturnPolicySettings
 import org.koin.compose.viewmodel.koinViewModel
 
 class SettingsCoordinator(
@@ -23,6 +24,7 @@ class SettingsCoordinator(
         viewModel.setInventoryAlertTime(hour, minute)
     fun onSalesTargetChanged(value: Double) = viewModel.setSalesTargetMonthly(value)
     fun onSyncSalesTarget() = viewModel.syncSalesTargetFromERPNext()
+    fun onReturnPolicyChanged(settings: ReturnPolicySettings) = viewModel.setReturnPolicy(settings)
 
     fun onSelect(s: String) {}
 

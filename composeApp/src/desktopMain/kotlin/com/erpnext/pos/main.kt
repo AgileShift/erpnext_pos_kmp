@@ -25,7 +25,7 @@ fun main() = application {
     )
 
     Window(
-        undecorated = true,
+        undecorated = false,
         transparent = false,
         icon = rememberVectorPainter(Icons.Default.PointOfSale),
         onCloseRequest = ::exitApplication,

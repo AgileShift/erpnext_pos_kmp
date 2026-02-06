@@ -8,6 +8,7 @@ import androidx.lifecycle.viewModelScope
 import com.erpnext.pos.base.BaseViewModel
 import com.erpnext.pos.localSource.preferences.GeneralPreferences
 import com.erpnext.pos.localSource.preferences.LanguagePreferences
+import com.erpnext.pos.localSource.preferences.ReturnPolicyPreferences
 import com.erpnext.pos.localSource.preferences.SyncLogPreferences
 import com.erpnext.pos.localSource.preferences.SyncPreferences
 import com.erpnext.pos.localSource.preferences.SyncSettings
@@ -40,6 +41,7 @@ class SettingsViewModel(
     private val generalPreferences: GeneralPreferences,
     private val languagePreferences: LanguagePreferences,
     private val themePreferences: ThemePreferences,
+    private val returnPolicyPreferences: ReturnPolicyPreferences,
     private val salesTargetRepository: SalesTargetRepository,
     private val exchangeRateLocalSource: ExchangeRateLocalSource
 ) : BaseViewModel() {
@@ -52,6 +54,7 @@ class SettingsViewModel(
         viewModelScope.launch {
             combine(
                 cashBoxManager.contextFlow,
+                cashBoxManager.activeOpeningEntryId(),
                 syncPreferences.settings,
                 syncManager.state,
                 syncLogPreferences.log,
@@ -63,31 +66,34 @@ class SettingsViewModel(
                 generalPreferences.printerEnabled,
                 generalPreferences.cashDrawerEnabled,
                 generalPreferences.allowNegativeStock,
+                returnPolicyPreferences.settings,
                 generalPreferences.inventoryAlertsEnabled,
                 generalPreferences.inventoryAlertHour,
                 generalPreferences.inventoryAlertMinute,
                 generalPreferences.salesTargetMonthly
             ) { args: Array<Any?> ->
-                val ctx = args[0] as POSContext
-                val syncSettings = args[1] as SyncSettings
-                val syncState = args[2] as SyncState
-                val syncLog = args[3] as List<*>
-                val language = args[4] as AppLanguage
-                val theme = args[5] as AppColorTheme
-                val themeMode = args[6] as AppThemeMode
-                val taxes = args[7] as Boolean
-                val offline = args[8] as Boolean
-                val printer = args[9] as Boolean
-                val drawer = args[10] as Boolean
-                val allowNegativeStock = args[11] as Boolean
-                val inventoryAlertsEnabled = args[12] as Boolean
-                val inventoryAlertHour = args[13] as Int
-                val inventoryAlertMinute = args[14] as Int
-                val salesTargetMonthly = args[15] as Double
+                val ctx = args[0] as POSContext?
+                val openingEntryId = args[1] as String?
+                val syncSettings = args[2] as SyncSettings
+                val syncState = args[3] as SyncState
+                val syncLog = args[4] as List<*>
+                val language = args[5] as AppLanguage
+                val theme = args[6] as AppColorTheme
+                val themeMode = args[7] as AppThemeMode
+                val taxes = args[8] as Boolean
+                val offline = args[9] as Boolean
+                val printer = args[10] as Boolean
+                val drawer = args[11] as Boolean
+                val allowNegativeStock = args[12] as Boolean
+                val returnPolicy = args[13] as com.erpnext.pos.domain.models.ReturnPolicySettings
+                val inventoryAlertsEnabled = args[14] as Boolean
+                val inventoryAlertHour = args[15] as Int
+                val inventoryAlertMinute = args[16] as Int
+                val salesTargetMonthly = args[17] as Double
 
-                val baseCurrency = normalizeCurrency(ctx.companyCurrency)
-                val secondaryCurrency = normalizeCurrency(ctx.currency)
-                    .takeIf { it != baseCurrency }
+                val baseCurrency = normalizeCurrency(ctx?.companyCurrency)
+                val secondaryCurrency = ctx?.currency?.let { normalizeCurrency(it) }
+                    ?.takeIf { it != baseCurrency }
                 val now = Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault())
                 val daysInMonth = daysInMonth(now.year, now.month.number)
                 val weeksInMonth = weeksInMonth(now.year, now.month.number, daysInMonth)
@@ -113,21 +119,24 @@ class SettingsViewModel(
                 val convertedDaily = rateValue?.let { targetDaily * it }
                 POSSettingState.Success(
                     settings = POSSettingBO(
-                        company = ctx.company,
-                        posProfile = ctx.profileName,
-                        warehouse = ctx.warehouse ?: "-",
-                        priceList = ctx.priceList ?: ctx.currency,
+                        company = ctx?.company ?: "-",
+                        posProfile = ctx?.profileName ?: "-",
+                        openingEntryId = openingEntryId ?: "-",
+                        warehouse = ctx?.warehouse ?: "-",
+                        priceList = ctx?.priceList ?: ctx?.currency ?: "-",
                         taxesIncluded = taxes,
                         offlineMode = offline,
                         printerEnabled = printer,
                         cashDrawerEnabled = drawer,
                         allowNegativeStock = allowNegativeStock
                     ),
+                    hasContext = ctx != null,
                     syncSettings = syncSettings,
                     syncState = syncState,
                     language = language,
                     theme = theme,
                     themeMode = themeMode,
+                    returnPolicy = returnPolicy,
                     inventoryAlertsEnabled = inventoryAlertsEnabled,
                     inventoryAlertHour = inventoryAlertHour,
                     inventoryAlertMinute = inventoryAlertMinute,
@@ -205,6 +214,10 @@ class SettingsViewModel(
 
     fun setSalesTargetMonthly(value: Double) {
         viewModelScope.launch { generalPreferences.setSalesTargetMonthly(value) }
+    }
+
+    fun setReturnPolicy(settings: com.erpnext.pos.domain.models.ReturnPolicySettings) {
+        viewModelScope.launch { returnPolicyPreferences.save(settings) }
     }
 
     fun syncSalesTargetFromERPNext() {

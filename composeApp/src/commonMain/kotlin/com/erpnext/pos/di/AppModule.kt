@@ -350,6 +350,7 @@ val appModule = module {
             exchangeRateRepository = get(),
             openingEntrySyncRepository = get(),
             closingEntrySyncRepository = get(),
+            posOpeningRepository = get(),
             paymentMethodLocalRepository = get(),
             salesInvoiceDao = get(),
             generalPreferences = get(),
@@ -469,7 +470,10 @@ val appModule = module {
             openingEntryLinkDao = get(),
             openingEntryDao = get(),
             closingDao = get(),
-            salesInvoiceDao = get()
+            salesInvoiceDao = get(),
+            posProfileDao = get(),
+            paymentMethodLocalRepository = get(),
+            exchangeRateRepository = get()
         )
     }
     //endregion
@@ -519,7 +523,8 @@ val appModule = module {
             companyDao = get(),
             cancelSalesInvoiceUseCase = get(),
             partialReturnUseCase = get(),
-            networkMonitor = get()
+            networkMonitor = get(),
+            returnPolicyPreferences = get()
         )
     }
     //endregion
@@ -542,6 +547,7 @@ val appModule = module {
             navManager = get(),
             loadHomeMetricsUseCase = get(),
             loadInventoryAlertsUseCase = get(),
+            salesTargetRepository = get(),
             posProfileGate = get(),
             openingGate = get(),
             homeRefreshController = get(),
@@ -556,10 +562,10 @@ val appModule = module {
 
     //region Invoices
     single { SalesInvoiceRemoteSource(get(named("apiService")), get()) }
-    single { InvoiceViewModel(get(), get(), get()) }
+    single { InvoiceViewModel(get(), get(), get(), get(), get()) }
     single { SalesInvoiceRepository(get(), get(), get(), get(), get()) }
     single { CreateSalesInvoiceUseCase(get()) }
-    single { CancelSalesInvoiceUseCase(get(), get(), get(), get()) }
+    single { CancelSalesInvoiceUseCase(get(), get(), get(), get(), get()) }
     //endregion
 
     //region Payment Terms
@@ -613,8 +619,10 @@ val appModule = module {
 
     //region Settings
     single { GeneralPreferences(get()) }
+    single { com.erpnext.pos.localSource.preferences.ReturnPolicyPreferences(get()) }
     single {
         SettingsViewModel(
+            get(),
             get(),
             get(),
             get(),
@@ -661,7 +669,7 @@ val appModule = module {
     single { FetchUserInfoUseCase(get()) }
     single { RegisterInvoicePaymentUseCase(get()) }
     single { CreatePaymentEntryUseCase(get()) }
-    single { PartialReturnUseCase(get(), get(), get(), get()) }
+    single { PartialReturnUseCase(get(), get(), get(), get(), get()) }
     single { LoadHomeMetricsUseCase(get()) }
     single { InventoryAlertRepository(get(), get(), get(named("apiService")), get(), get()) }
     single { LoadInventoryAlertsUseCase(get()) }

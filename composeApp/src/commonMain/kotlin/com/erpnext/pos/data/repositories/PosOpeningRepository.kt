@@ -23,6 +23,18 @@ class PosOpeningRepository(
         }
     }
 
+    suspend fun getOpenSessionsForProfile(posProfile: String): List<POSOpeningEntrySummaryDto> {
+        return try {
+            apiService.getOpenPOSOpeningEntriesForProfile(posProfile)
+        } catch (e: FrappeException) {
+            AppLogger.warn("getOpenSessionsForProfile failed", e)
+            throw e
+        } catch (e: Exception) {
+            AppLogger.warn("getOpenSessionsForProfile failed", e)
+            throw e
+        }
+    }
+
     suspend fun createOpeningEntry(payload: POSOpeningEntryDto): POSOpeningEntryResponseDto {
         return apiService.openCashbox(payload)
     }

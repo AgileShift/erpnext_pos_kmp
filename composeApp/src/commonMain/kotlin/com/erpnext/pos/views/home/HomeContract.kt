@@ -36,6 +36,7 @@ data class HomeAction(
     val inventoryAlertMessage: StateFlow<String?> = MutableStateFlow(null),
     val openingState: StateFlow<CashboxOpeningProfileState> =
         MutableStateFlow(CashboxOpeningProfileState()),
+    val openingEntryId: StateFlow<String?> = MutableStateFlow(null),
     val loadInitialData: () -> Unit = {},
     val initialState: () -> Unit = {},
     val onPosSelected: (pos: POSProfileSimpleBO) -> Unit = {},

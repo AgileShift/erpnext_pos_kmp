@@ -1,5 +1,6 @@
 package com.erpnext.pos.views
 
+import androidx.compose.runtime.collectAsState
 import com.erpnext.pos.data.mappers.buildClosingEntryDto
 import com.erpnext.pos.data.mappers.toBO
 import com.erpnext.pos.domain.models.POSCurrencyOption
@@ -16,11 +17,13 @@ import com.erpnext.pos.localSource.dao.UserDao
 import com.erpnext.pos.localSource.entities.BalanceDetailsEntity
 import com.erpnext.pos.localSource.entities.CashboxEntity
 import com.erpnext.pos.localSource.entities.CashboxWithDetails
+import com.erpnext.pos.localSource.entities.CompanyEntity
 import com.erpnext.pos.localSource.entities.POSOpeningEntryEntity
 import com.erpnext.pos.localSource.entities.POSOpeningEntryLinkEntity
 import com.erpnext.pos.localSource.preferences.ExchangeRatePreferences
 import com.erpnext.pos.remoteSource.api.APIService
 import com.erpnext.pos.remoteSource.mapper.toEntity
+import com.erpnext.pos.data.repositories.PosOpeningRepository
 import com.erpnext.pos.data.repositories.ExchangeRateRepository
 import com.erpnext.pos.data.repositories.ClosingEntrySyncRepository
 import com.erpnext.pos.data.repositories.OpeningEntrySyncRepository
@@ -31,9 +34,12 @@ import com.erpnext.pos.utils.AppLogger
 import com.erpnext.pos.utils.parseErpDateTimeToEpochMillis
 import com.erpnext.pos.utils.toErpDateTime
 import com.erpnext.pos.localSource.entities.SalesInvoiceEntity
+import com.erpnext.pos.localSource.entities.UserEntity
 import io.ktor.util.date.getTimeMillis
 import com.erpnext.pos.auth.SessionRefresher
 import com.erpnext.pos.utils.NetworkMonitor
+import com.erpnext.pos.utils.buildPaymentReconciliationSeeds
+import com.erpnext.pos.utils.normalizeCurrency
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.IO
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -46,6 +52,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.withContext
 import com.erpnext.pos.data.repositories.CurrencySettingsRepository
+import kotlinx.coroutines.flow.StateFlow
 
 data class PaymentModeWithAmount(
     val mode: PaymentModesBO, val amount: Double
@@ -87,6 +94,7 @@ class CashBoxManager(
     private val exchangeRateRepository: ExchangeRateRepository,
     private val openingEntrySyncRepository: OpeningEntrySyncRepository,
     private val closingEntrySyncRepository: ClosingEntrySyncRepository,
+    private val posOpeningRepository: PosOpeningRepository,
     private val paymentMethodLocalRepository: PosProfilePaymentMethodLocalRepository,
     private val salesInvoiceDao: SalesInvoiceDao,
     private val generalPreferences: com.erpnext.pos.localSource.preferences.GeneralPreferences,
@@ -108,6 +116,8 @@ class CashBoxManager(
         val user = userDao.getUserInfo() ?: return@withContext null
         val isOnline = networkMonitor.isConnected.firstOrNull() == true
         if (isOnline && sessionRefresher.ensureValidSession()) {
+            runCatching { openingEntrySyncRepository.pushPending() }
+                .onFailure { AppLogger.warn("initializeContext: sync openings failed", it) }
             openingEntrySyncRepository.repairActiveOpenings()
             runCatching { closingEntrySyncRepository.reconcileRemoteClosingsForActiveCashboxes() }
                 .onFailure { AppLogger.warn("initializeContext: reconcile remote closings failed", it) }
@@ -120,6 +130,27 @@ class CashBoxManager(
             cashboxDao.getActiveEntry(user.email, it.profileName).firstOrNull()
         }
         val resolvedCashbox = activeCashbox ?: cashboxDao.getActiveEntryForUser(user.email)
+        if (resolvedCashbox == null && isOnline && activeProfile != null) {
+            val remoteOpen = resolveRemoteOpenSession(user, activeProfile.profileName)
+            if (remoteOpen != null) {
+                val restored = runCatching {
+                    restoreRemoteOpening(activeProfile, remoteOpen.name, user.email)
+                }.getOrNull()
+                if (restored != null) {
+                    val restoredCashbox =
+                        cashboxDao.getActiveEntry(user.email, activeProfile.profileName).firstOrNull()
+                    if (restoredCashbox != null) {
+                        _cashboxState.update { true }
+                        return@withContext buildContextFrom(
+                            user = user,
+                            profile = activeProfile,
+                            cashboxId = restoredCashbox.cashbox.localId,
+                            company = company
+                        )
+                    }
+                }
+            }
+        }
         val profile = when {
             activeProfile != null && activeCashbox != null -> activeProfile
             resolvedCashbox != null -> profileDao.getPOSProfile(resolvedCashbox.cashbox.posProfile)
@@ -172,6 +203,12 @@ class CashBoxManager(
         val user = userDao.getUserInfo() ?: return@withContext null
         val existing = cashboxDao.getActiveEntry(user.email, entry.name).firstOrNull()
         if (existing != null) {
+            if (isOnline) {
+                val remoteOpen = resolveRemoteOpenSession(user, entry.name)
+                if (remoteOpen != null) {
+                    adoptRemoteOpening(existing, remoteOpen.name)
+                }
+            }
             val remoteName = openingEntryLinkDao.getRemoteOpeningEntryName(existing.cashbox.localId)
             val needsSync = remoteName.isNullOrBlank() ||
                 existing.cashbox.openingEntryId?.startsWith("LOCAL-", ignoreCase = true) == true
@@ -212,6 +249,30 @@ class CashBoxManager(
             )
             _contextFlow.value = currentContext
             return@withContext currentContext
+        }
+        if (isOnline) {
+            val remoteOpen = resolveRemoteOpenSession(user, entry.name)
+            if (remoteOpen != null) {
+                val restored = runCatching {
+                    restoreRemoteOpening(
+                        profileDao.getPOSProfile(entry.name),
+                        remoteOpen.name,
+                        user.email,
+                        amounts
+                    )
+                }.getOrNull()
+                if (restored != null) {
+                    _cashboxState.update { true }
+                    currentContext = buildContextFrom(
+                        user = user,
+                        profile = profileDao.getPOSProfile(entry.name),
+                        cashboxId = restored,
+                        company = companyDao.getCompanyInfo()
+                    )
+                    _contextFlow.value = currentContext
+                    return@withContext currentContext
+                }
+            }
         }
         val now = getTimeMillis()
         val periodStart = now.toErpDateTime()
@@ -292,6 +353,174 @@ class CashBoxManager(
         currentContext!!
     }
 
+    private suspend fun adoptRemoteOpening(
+        existing: CashboxWithDetails,
+        remoteName: String
+    ) {
+        val localName = existing.cashbox.openingEntryId
+        if (localName != null && localName.equals(remoteName, ignoreCase = true)) return
+        val detail = runCatching { api.getPOSOpeningEntry(remoteName) }.getOrNull()
+        val periodStart = detail?.periodStartDate ?: existing.cashbox.periodStartDate
+        val postingDate = detail?.postingDate ?: periodStart
+        val openingEntry = POSOpeningEntryEntity(
+            name = remoteName,
+            posProfile = existing.cashbox.posProfile,
+            company = detail?.company ?: existing.cashbox.company,
+            periodStartDate = periodStart,
+            postingDate = postingDate,
+            user = detail?.user ?: existing.cashbox.user,
+            pendingSync = false
+        )
+        openingDao.insert(openingEntry)
+        cashboxDao.updateOpeningEntryId(existing.cashbox.localId, remoteName)
+        val link = openingEntryLinkDao.getByCashboxId(existing.cashbox.localId)
+        if (link == null) {
+            openingEntryLinkDao.insert(
+                POSOpeningEntryLinkEntity(
+                    cashboxId = existing.cashbox.localId,
+                    localOpeningEntryName = localName ?: remoteName,
+                    remoteOpeningEntryName = remoteName,
+                    pendingSync = false
+                )
+            )
+        } else {
+            openingEntryLinkDao.updateRemoteName(link.id, remoteName)
+            openingEntryLinkDao.markSynced(link.id, remoteName)
+        }
+        if (!localName.isNullOrBlank() && !localName.equals(remoteName, ignoreCase = true)) {
+            cashboxDao.updateBalanceDetailsOpeningEntry(localName, remoteName)
+            salesInvoiceDao.updateInvoicesOpeningEntry(localName, remoteName)
+            salesInvoiceDao.updatePaymentsOpeningEntry(localName, remoteName)
+        }
+        if (existing.cashbox.pendingSync) {
+            cashboxDao.updatePendingSync(existing.cashbox.localId, false)
+        }
+    }
+
+    private suspend fun restoreRemoteOpening(
+        profile: com.erpnext.pos.localSource.entities.POSProfileEntity,
+        remoteName: String,
+        userEmail: String,
+        fallbackAmounts: List<PaymentModeWithAmount> = emptyList()
+    ): Long {
+        val detail = runCatching { api.getPOSOpeningEntry(remoteName) }.getOrNull()
+        val periodStart = detail?.periodStartDate ?: getTimeMillis().toErpDateTime()
+        val postingDate = detail?.postingDate ?: periodStart
+        val openingEntry = POSOpeningEntryEntity(
+            name = remoteName,
+            posProfile = profile.profileName,
+            company = detail?.company ?: profile.company,
+            periodStartDate = periodStart,
+            postingDate = postingDate,
+            user = detail?.user ?: userEmail,
+            pendingSync = false
+        )
+        openingDao.insert(openingEntry)
+        val cashbox = CashboxEntity(
+            localId = 0,
+            posProfile = profile.profileName,
+            company = detail?.company ?: profile.company,
+            periodStartDate = periodStart,
+            user = detail?.user ?: userEmail,
+            status = true,
+            pendingSync = false,
+            openingEntryId = remoteName,
+        )
+        val balanceDetails = if (!detail?.balanceDetails.isNullOrEmpty()) {
+            detail!!.balanceDetails.map {
+                BalanceDetailsEntity(
+                    cashboxId = 0,
+                    posOpeningEntry = remoteName,
+                    modeOfPayment = it.modeOfPayment,
+                    openingAmount = it.openingAmount,
+                    closingAmount = null
+                )
+            }
+        } else {
+            fallbackAmounts.map {
+                BalanceDetailsEntity(
+                    cashboxId = 0,
+                    posOpeningEntry = remoteName,
+                    modeOfPayment = it.mode.modeOfPayment,
+                    openingAmount = it.amount,
+                    closingAmount = null
+                )
+            }
+        }
+        val cashboxId = cashboxDao.insert(cashbox, balanceDetails)
+        openingEntryLinkDao.insert(
+            POSOpeningEntryLinkEntity(
+                cashboxId = cashboxId,
+                localOpeningEntryName = remoteName,
+                remoteOpeningEntryName = remoteName,
+                pendingSync = false
+            )
+        )
+        return cashboxId
+    }
+
+    private suspend fun buildContextFrom(
+        user: UserEntity,
+        profile: com.erpnext.pos.localSource.entities.POSProfileEntity,
+        cashboxId: Long,
+        company: CompanyEntity?
+    ): POSContext {
+        val exchangeRate = resolveExchangeRate(profile.currency)
+        val allowedCurrencies = resolveSupportedCurrencies(profile.profileName, profile.currency)
+        val paymentModes = resolvePaymentModes(profile.profileName)
+        return POSContext(
+            cashier = user.toBO(),
+            username = user.username ?: user.name,
+            profileName = profile.profileName,
+            company = company?.companyName ?: profile.company,
+            companyCurrency = company?.defaultCurrency ?: profile.currency,
+            allowNegativeStock = generalPreferences.allowNegativeStock.firstOrNull() == true,
+            warehouse = profile.warehouse,
+            route = profile.route,
+            territory = profile.route,
+            priceList = profile.sellingPriceList,
+            isCashBoxOpen = true,
+            cashboxId = cashboxId,
+            incomeAccount = profile.incomeAccount,
+            expenseAccount = profile.expenseAccount,
+            branch = profile.branch,
+            currency = profile.currency,
+            exchangeRate = exchangeRate,
+            allowedCurrencies = allowedCurrencies,
+            paymentModes = paymentModes,
+            partyAccountCurrency = company?.defaultCurrency ?: profile.currency
+        )
+    }
+
+    private suspend fun resolveRemoteOpenSession(
+        user: UserEntity,
+        profileName: String
+    ): com.erpnext.pos.remoteSource.dto.POSOpeningEntrySummaryDto? {
+        val candidates = listOfNotNull(
+            user.email?.takeIf { it.isNotBlank() },
+            user.username?.takeIf { it.isNotBlank() },
+            user.name?.takeIf { it.isNotBlank() }
+        ).distinct()
+        candidates.forEach { candidate ->
+            val remote = runCatching {
+                posOpeningRepository.getOpenSession(candidate, profileName)
+            }.onFailure {
+                AppLogger.warn("resolveRemoteOpenSession failed for user=$candidate profile=$profileName", it)
+            }.getOrNull()
+            if (remote != null) return remote
+        }
+        val byProfile = runCatching {
+            posOpeningRepository.getOpenSessionsForProfile(profileName)
+        }.onFailure {
+            AppLogger.warn("resolveRemoteOpenSession profile lookup failed for profile=$profileName", it)
+        }.getOrNull().orEmpty()
+        val normalized = candidates.map { it.trim().lowercase() }.toSet()
+        return byProfile.firstOrNull { summary ->
+            val remoteUser = summary.user?.trim()?.lowercase()
+            remoteUser != null && normalized.contains(remoteUser)
+        }
+    }
+
     //TODO Armar y enviar el POSClosingEntry
     suspend fun closeCashBox(): POSContext? = withContext(Dispatchers.IO) {
         val isOnline = networkMonitor.isConnected.firstOrNull() == true
@@ -317,13 +546,23 @@ class CashBoxManager(
         }
         val localOpeningEntryId = entry.cashbox.openingEntryId?.takeIf { it.isNotBlank() }
         val openingEntryId = remoteOpeningEntryId ?: localOpeningEntryId ?: return@withContext null
-        val shiftInvoices = openingEntryId.takeIf { it.isNotBlank() }?.let {
-            salesInvoiceDao.getInvoicesForOpeningEntry(it)
-        } ?: salesInvoiceDao.getInvoicesForShift(
-            profileId = ctx.profileName,
-            startMillis = startMillis,
-            endMillis = endMillis
-        )
+        val shiftInvoices = buildList {
+            if (openingEntryId.isNotBlank()) {
+                addAll(salesInvoiceDao.getInvoicesForOpeningEntry(openingEntryId))
+            }
+            if (isEmpty() && localOpeningEntryId != null && localOpeningEntryId != openingEntryId) {
+                addAll(salesInvoiceDao.getInvoicesForOpeningEntry(localOpeningEntryId))
+            }
+            if (isEmpty()) {
+                addAll(
+                    salesInvoiceDao.getInvoicesForShift(
+                        profileId = ctx.profileName,
+                        startMillis = startMillis,
+                        endMillis = endMillis
+                    )
+                )
+            }
+        }
         val resolvedInvoices = if (isOnline) {
             reconcileRemoteInvoicesForClosing(
                 openingEntryId = openingEntryId,
@@ -333,13 +572,51 @@ class CashBoxManager(
         } else {
             shiftInvoices
         }
+        resolvedInvoices.forEach { invoice ->
+            val name = invoice.invoiceName?.trim().orEmpty()
+            if (name.isBlank() || name.startsWith("LOCAL-", ignoreCase = true)) return@forEach
+            if (invoice.posOpeningEntry != openingEntryId || invoice.profileId != ctx.profileName) {
+                salesInvoiceDao.updateInvoiceOpeningAndProfile(
+                    invoiceName = name,
+                    posOpeningEntry = openingEntryId,
+                    profileId = ctx.profileName
+                )
+                salesInvoiceDao.updatePaymentsOpeningForInvoice(name, openingEntryId)
+            }
+        }
+        val paymentRows = buildList {
+            if (openingEntryId.isNotBlank()) {
+                addAll(salesInvoiceDao.getPaymentsForOpeningEntry(openingEntryId))
+            }
+            if (isEmpty() && localOpeningEntryId != null && localOpeningEntryId != openingEntryId) {
+                addAll(salesInvoiceDao.getPaymentsForOpeningEntry(localOpeningEntryId))
+            }
+            if (isEmpty()) {
+                addAll(salesInvoiceDao.getShiftPayments(ctx.profileName, startMillis, endMillis))
+            }
+        }
+        val modeCurrency = runCatching {
+            paymentMethodLocalRepository.getMethodsForProfile(ctx.profileName)
+        }.getOrElse { emptyList() }
+            .associate { method ->
+                val currency = normalizeCurrency(method.currency ?: ctx.currency)
+                method.mopName to currency
+            }
+        val paymentReconciliation = buildPaymentReconciliationSeeds(
+            balanceDetails = entry.details,
+            paymentRows = paymentRows,
+            invoices = resolvedInvoices,
+            modeCurrency = modeCurrency,
+            posCurrency = normalizeCurrency(ctx.currency),
+            rateResolver = { from, to -> exchangeRateRepository.getRate(from, to) }
+        )
         val endDate = getTimeMillis().toErpDateTime()
         val dto = buildClosingEntryDto(
             cashbox = entry.cashbox,
             openingEntryId = openingEntryId,
             postingDate = endDate,
             periodEndDate = endDate,
-            balanceDetails = entry.details,
+            paymentReconciliation = paymentReconciliation,
             invoices = resolvedInvoices
         )
         if (!remoteOpeningEntryId.isNullOrBlank()) {
@@ -393,7 +670,7 @@ class CashBoxManager(
         invoices.forEach { invoice ->
             val name = invoice.invoiceName?.trim().orEmpty()
             if (name.isBlank() || name.startsWith("LOCAL-", ignoreCase = true)) return@forEach
-            if (!invoice.isPos || invoice.docstatus != 1) return@forEach
+            if (invoice.docstatus != 1) return@forEach
             val remote = runCatching { api.getSalesInvoiceByName(name) }.getOrNull()
             if (remote == null) {
                 AppLogger.warn("closeCashBox: remote invoice missing for $name")
@@ -402,6 +679,14 @@ class CashBoxManager(
             val matches = remote.posOpeningEntry == openingEntryId &&
                 remote.posProfile == posProfile
             if (matches) {
+                if (invoice.posOpeningEntry != openingEntryId || invoice.profileId != posProfile) {
+                    salesInvoiceDao.updateInvoiceOpeningAndProfile(
+                        invoiceName = name,
+                        posOpeningEntry = openingEntryId,
+                        profileId = posProfile
+                    )
+                    salesInvoiceDao.updatePaymentsOpeningForInvoice(name, openingEntryId)
+                }
                 resolved += invoice
                 return@forEach
             }
@@ -424,6 +709,12 @@ class CashBoxManager(
                 false
             }
             if (updated) {
+                salesInvoiceDao.updateInvoiceOpeningAndProfile(
+                    invoiceName = name,
+                    posOpeningEntry = openingEntryId,
+                    profileId = posProfile
+                )
+                salesInvoiceDao.updatePaymentsOpeningForInvoice(name, openingEntryId)
                 resolved += invoice
             } else {
                 AppLogger.warn(
@@ -459,6 +750,23 @@ class CashBoxManager(
         emitAll(
             cashboxDao.getActiveEntry(user.email, ctx.profileName)
                 .map { it?.cashbox?.periodStartDate }
+        )
+    }
+
+    fun activeOpeningEntryId(): Flow<String?> = flow {
+        val ctx = currentContext ?: initializeContext()
+        if (ctx == null) {
+            emit(null)
+            return@flow
+        }
+        val user = userDao.getUserInfo()
+        if (user == null) {
+            emit(null)
+            return@flow
+        }
+        emitAll(
+            cashboxDao.getActiveEntry(user.email, ctx.profileName)
+                .map { it?.cashbox?.openingEntryId }
         )
     }
 

@@ -26,6 +26,7 @@ fun CustomerRoute(
     val historyBusy by coordinator.historyActionBusy.collectAsState(false)
     val customerMessage by coordinator.customerMessage.collectAsState(null)
     val dialogDataState by coordinator.dialogDataState.collectAsState(CustomerDialogDataState())
+    val returnPolicy by coordinator.returnPolicy.collectAsState()
     val navManager: NavigationManager = koinInject()
     val salesFlowStore: SalesFlowContextStore = koinInject()
     val actions = rememberCustomerActions(coordinator, navManager, salesFlowStore)
@@ -43,6 +44,7 @@ fun CustomerRoute(
         historyBusy = historyBusy,
         customerMessage = customerMessage,
         dialogDataState = dialogDataState,
+        returnPolicy = returnPolicy,
         actions = actions
     )
 }

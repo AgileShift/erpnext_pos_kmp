@@ -42,6 +42,19 @@ class OpeningEntrySyncRepository(
                 cashboxDao.updatePendingSync(candidate.cashbox.localId, false)
                 hasChanges = true
             }.onFailure { error ->
+                if (isCashierAssignedError(error)) {
+                    val remote = resolveRemoteOpenSession(candidate) ?: return@onFailure
+                    val remoteName = remote.name
+                    openingEntryLinkDao.updateRemoteName(candidate.link.id, remoteName)
+                    cashboxDao.updateOpeningEntryId(candidate.cashbox.localId, remoteName)
+                    ensureRemoteOpeningEntry(remoteName, candidate.openingEntry)
+                    updateOpeningEntryRefs(candidate.openingEntry.name, remoteName)
+                    openingEntryLinkDao.markSynced(candidate.link.id, remoteName)
+                    openingEntryDao.update(candidate.openingEntry.copy(pendingSync = false))
+                    cashboxDao.updatePendingSync(candidate.cashbox.localId, false)
+                    hasChanges = true
+                    return@onFailure
+                }
                 AppLogger.warn("OpeningEntrySyncRepository pushPending failed", error)
             }
         }
@@ -142,5 +155,28 @@ class OpeningEntrySyncRepository(
                 )
             }
         }
+    }
+
+    private fun isCashierAssignedError(error: Throwable): Boolean {
+        val frappe = error as? com.erpnext.pos.remoteSource.sdk.FrappeException
+        val messages = buildList {
+            error.message?.let { add(it) }
+            frappe?.errorResponse?._server_messages?.let { add(it) }
+            frappe?.errorResponse?.exception?.let { add(it) }
+        }.map { it.lowercase() }
+        return messages.any { msg ->
+            msg.contains("cashier") && msg.contains("assigned") && msg.contains("pos")
+        }
+    }
+
+    private suspend fun resolveRemoteOpenSession(
+        candidate: com.erpnext.pos.localSource.entities.PendingOpeningEntrySync
+    ): com.erpnext.pos.remoteSource.dto.POSOpeningEntrySummaryDto? {
+        val user = candidate.openingEntry.user
+            ?: candidate.cashbox.user
+            ?: return null
+        return runCatching {
+            posOpeningRepository.getOpenSession(user, candidate.openingEntry.posProfile)
+        }.getOrNull()
     }
 }

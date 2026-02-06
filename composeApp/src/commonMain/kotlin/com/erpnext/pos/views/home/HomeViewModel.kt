@@ -15,6 +15,7 @@ import com.erpnext.pos.domain.usecases.LogoutUseCase
 import com.erpnext.pos.auth.SessionRefresher
 import com.erpnext.pos.localSource.dao.POSProfileDao
 import com.erpnext.pos.data.repositories.PosProfilePaymentMethodLocalRepository
+import com.erpnext.pos.data.repositories.SalesTargetRepository
 import com.erpnext.pos.navigation.NavRoute
 import com.erpnext.pos.navigation.NavigationManager
 import com.erpnext.pos.localSource.preferences.SyncPreferences
@@ -38,6 +39,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
 import kotlinx.datetime.DatePeriod
@@ -45,6 +48,7 @@ import kotlinx.datetime.DayOfWeek
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.atTime
+import kotlinx.datetime.number
 import kotlinx.datetime.toLocalDateTime
 import kotlinx.datetime.plus
 import kotlinx.datetime.toInstant
@@ -65,6 +69,7 @@ class HomeViewModel(
     private val navManager: NavigationManager,
     private val loadHomeMetricsUseCase: LoadHomeMetricsUseCase,
     private val loadInventoryAlertsUseCase: LoadInventoryAlertsUseCase,
+    private val salesTargetRepository: SalesTargetRepository,
     private val posProfileGate: PosProfileGate,
     private val openingGate: OpeningGate,
     private val homeRefreshController: HomeRefreshController,
@@ -95,6 +100,8 @@ class HomeViewModel(
 
     private val _openingState = MutableStateFlow(CashboxOpeningProfileState())
     val openingState: StateFlow<CashboxOpeningProfileState> = _openingState.asStateFlow()
+    val openingEntryId = contextManager.activeOpeningEntryId()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
     private var userInfo: UserBO = UserBO()
     private var posProfiles: List<POSProfileSimpleBO> = emptyList()
@@ -192,6 +199,7 @@ class HomeViewModel(
                 GateResult.Ready -> Unit
             }
             posProfiles = fetchPosProfileUseCase.invoke(userInfo.email)
+            syncSalesTargetFromRemote()
             _homeMetrics.value =
                 loadHomeMetricsUseCase(HomeMetricInput(7, Clock.System.now().toEpochMilliseconds()))
             refreshInventoryAlerts()
@@ -205,6 +213,7 @@ class HomeViewModel(
     fun refreshMetrics() {
         executeUseCase(
             action = {
+                syncSalesTargetFromRemote()
                 _homeMetrics.value = loadHomeMetricsUseCase(
                     HomeMetricInput(
                         7,
@@ -300,8 +309,8 @@ class HomeViewModel(
                 .takeIf { it != baseCurrency }
 
             val now = Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault())
-            val daysInMonth = daysInMonth(now.year, now.monthNumber)
-            val weeksInMonth = weeksInMonth(now.year, now.monthNumber, daysInMonth)
+            val daysInMonth = daysInMonth(now.year, now.month.number)
+            val weeksInMonth = weeksInMonth(now.year, now.month.number, daysInMonth)
 
             val daily = if (daysInMonth > 0) monthly / daysInMonth.toDouble() else 0.0
             val weekly = if (weeksInMonth > 0) monthly / weeksInMonth.toDouble() else 0.0
@@ -332,6 +341,18 @@ class HomeViewModel(
                         conversionStale = stale
                     )
                 )
+            }
+        }
+    }
+
+    private suspend fun syncSalesTargetFromRemote() {
+        val ctx = contextManager.getContext() ?: return
+        val companyId = ctx.company
+        if (companyId.isBlank()) return
+        runCatching {
+            val remote = salesTargetRepository.fetchMonthlyCompanyTarget(companyId)
+            if (remote != null && remote > 0.0) {
+                generalPreferences.setSalesTargetMonthly(remote)
             }
         }
     }

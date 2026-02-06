@@ -1,21 +1,22 @@
 package com.erpnext.pos.data.mappers
 
-import com.erpnext.pos.localSource.entities.BalanceDetailsEntity
 import com.erpnext.pos.localSource.entities.CashboxEntity
 import com.erpnext.pos.localSource.entities.SalesInvoiceEntity
 import com.erpnext.pos.remoteSource.dto.POSClosingEntryDto
-import com.erpnext.pos.remoteSource.dto.POSClosingInvoiceDto
-import com.erpnext.pos.remoteSource.mapper.toDto
+import com.erpnext.pos.remoteSource.dto.POSClosingSalesInvoiceDto
+import com.erpnext.pos.remoteSource.dto.PaymentReconciliationDto
+import com.erpnext.pos.utils.roundToCurrency
+import com.erpnext.pos.utils.PaymentReconciliationSeed
 
 fun buildClosingEntryDto(
     cashbox: CashboxEntity,
     openingEntryId: String,
     postingDate: String,
     periodEndDate: String,
-    balanceDetails: List<BalanceDetailsEntity>,
+    paymentReconciliation: List<PaymentReconciliationSeed>,
     invoices: List<SalesInvoiceEntity>
 ): POSClosingEntryDto {
-    val invoiceDetails = buildClosingInvoiceRows(invoices)
+    val invoiceDetails = buildClosingSalesInvoiceRows(invoices)
     return POSClosingEntryDto(
         posProfile = cashbox.posProfile,
         posOpeningEntry = openingEntryId,
@@ -24,25 +25,24 @@ fun buildClosingEntryDto(
         postingDate = postingDate,
         periodStartDate = cashbox.periodStartDate,
         periodEndDate = periodEndDate,
-        balanceDetails = balanceDetails.toDto(),
-        posTransactions = invoiceDetails,
+        paymentReconciliation = paymentReconciliation.map { it.toDto() },
+        salesInvoices = invoiceDetails,
         docStatus = 0
     )
 }
 
-private fun buildClosingInvoiceRows(
+private fun buildClosingSalesInvoiceRows(
     invoices: List<SalesInvoiceEntity>
-): List<POSClosingInvoiceDto> {
+): List<POSClosingSalesInvoiceDto> {
     val seen = mutableSetOf<String>()
     return invoices.mapNotNull { invoice ->
         val rawName = invoice.invoiceName?.trim() ?: return@mapNotNull null
         if (!isRemoteInvoiceName(rawName)) return@mapNotNull null
         if (invoice.docstatus != 1) return@mapNotNull null
-        if (!invoice.isPos) return@mapNotNull null
+        if ((invoice.paidAmount ?: 0.0) <= 0.0001) return@mapNotNull null
         if (!seen.add(rawName)) return@mapNotNull null
-        POSClosingInvoiceDto(
+        POSClosingSalesInvoiceDto(
             salesInvoice = rawName,
-            posInvoice = rawName.takeIf { invoice.isPos },
             postingDate = invoice.postingDate,
             customer = invoice.customer,
             grandTotal = invoice.grandTotal,
@@ -58,4 +58,18 @@ private fun isRemoteInvoiceName(name: String): Boolean {
     if (name.startsWith("LOCAL-", ignoreCase = true)) return false
     if (name.equals("none", ignoreCase = true)) return false
     return true
+}
+
+private fun PaymentReconciliationSeed.toDto(): PaymentReconciliationDto {
+    val expectedRounded = roundToCurrency(expectedAmount)
+    val closingRounded = roundToCurrency(closingAmount)
+    val openingRounded = roundToCurrency(openingAmount)
+    val difference = roundToCurrency(closingRounded - expectedRounded)
+    return PaymentReconciliationDto(
+        modeOfPayment = modeOfPayment,
+        openingAmount = openingRounded,
+        expectedAmount = expectedRounded,
+        closingAmount = closingRounded,
+        difference = difference
+    )
 }
