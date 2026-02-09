@@ -38,7 +38,7 @@ Reference: <https://docs.frappe.io/erpnext/user/manual/en/sales-integration>
 3. **Delivery Note creation**
    * Delivery Notes represent stock movement and fulfillment. The POS currently treats stock reduction as part of the direct Sales Invoice flow.
 
-> Note: The codebase already includes v2 repositories and sync units for **Quotation**, **Sales Order**, and **Delivery Note** (e.g. `QuotationRepository`, `SalesOrderRepository`, `DeliveryNoteRepository`), but they are not wired into the Billing flow or exposed as POS actions.
+> Note: The codebase already includes arquitectura paralela repositories and sync units for **Quotation**, **Sales Order**, and **Delivery Note** (e.g. `QuotationRepository`, `SalesOrderRepository`, `DeliveryNoteRepository`), but they are not wired into the Billing flow or exposed as POS actions.
 
 ## Compatibility adjustments for the official cycle
 
@@ -54,7 +54,7 @@ Reference: <https://docs.frappe.io/erpnext/user/manual/en/sales-integration>
 ## Next steps to enable optional Sales Order / Quotation / Delivery Note creation
 
 * Add POS UI actions to choose the document type (Quotation, Sales Order, Delivery Note, or Sales Invoice).
-* Populate the corresponding DTOs and sync units in the existing v2 layer.
+* Populate the corresponding DTOs and sync units in the existing arquitectura paralela layer.
 * When creating a Sales Invoice **from** Delivery Note or Sales Order:
   * Set `update_stock = false` if stock was already updated by a Delivery Note.
   * Populate `sales_order`/`so_detail` and/or `delivery_note`/`dn_detail` on invoice items.
