@@ -1,6 +1,6 @@
 # Plan de refactorización (v1)
 
-Este plan mantiene la arquitectura v1 y evita mezclarla con v2. El objetivo es estabilizar pagos multimoneda, sincronización offline-first y UX de POS.
+Este plan mantiene la arquitectura v1 y evita mezclarla con arquitectura paralela. El objetivo es estabilizar pagos multimoneda, sincronización offline-first y UX de POS.
 
 ## Objetivos principales
 - Flujo de pagos consistente (Billing y Customer) con conversión correcta.
@@ -23,7 +23,7 @@ Este plan mantiene la arquitectura v1 y evita mezclarla con v2. El objetivo es e
 - Evitar duplicados usando paymentReference determinístico.
 
 ## Fase 2: Sync offline-first (2-3 días)
-- Push v1 de facturas pendientes (sin depender de repos v2).
+- Push v1 de facturas pendientes (sin depender de repos arquitectura paralela).
 - Definir estrategia para pagos offline:
   - Opción A: PaymentEntry local + push dedicado.
   - Opción B: Ajuste de invoice + push invoice.
@@ -57,4 +57,4 @@ Este plan mantiene la arquitectura v1 y evita mezclarla con v2. El objetivo es e
 - Diferencias de tasa entre POS y servidor (solución: enviar conversion_rate).
 
 ## Nota
-Este plan es incremental y mantiene v1 en producción sin introducir dependencias con v2.
+Este plan es incremental y mantiene v1 en producción sin introducir dependencias con arquitectura paralela.

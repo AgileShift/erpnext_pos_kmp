@@ -57,6 +57,6 @@ Pago 2 (cambio con NIO):
 - delivered: **2.73 USD**
 - Si outstanding restante es **0.73 USD**, se aplica **0.73 USD** y se calcula cambio.
 
-## 7) DI v2 (cross)
-- `appModulev2` se carga junto al `appModule` en `initKoin`.
-- Se removieron bindings duplicados de v2 en `appModule` para evitar conflictos.
+## 7) DI arquitectura paralela (cross)
+- `appModulearquitectura paralela` se carga junto al `appModule` en `initKoin`.
+- Se removieron bindings duplicados de arquitectura paralela en `appModule` para evitar conflictos.
