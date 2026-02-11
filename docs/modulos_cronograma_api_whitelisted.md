@@ -1,120 +1,120 @@
-# Technical execution plan (8 weeks): endpoint migration to ERPNext `@frappe.whitelist` + KMP app integration
+# Plan técnico de ejecución (8 semanas): migración de endpoints a ERPNext `@frappe.whitelist` + integración KMP
 
-## Objective
-Deliver, in **maximum 2 months (8 weeks)**, a controlled migration focused on:
-1. Replacing business endpoints currently used by the mobile POS app with domain `@frappe.whitelist` methods.
-2. Keeping authentication endpoints **directly from Frappe OAuth** (no custom whitelist for exchange/login/refresh/revoke).
-3. Limiting app impact to endpoint mapping + response/error adaptation, without changing core business behavior.
+## Objetivo
+Entregar, en **máximo 2 meses (8 semanas)**, una migración controlada enfocada en:
+1. Reemplazar los endpoints de negocio usados por la app móvil POS con métodos de dominio `@frappe.whitelist`.
+2. Mantener los endpoints de autenticación **directamente en Frappe OAuth** (sin métodos whitelist para exchange/login/refresh/revoke).
+3. Limitar el impacto en la app a mapeo de endpoints + adaptación de respuestas/errores, sin cambiar el comportamiento de negocio principal.
 
 ---
 
-## 1) Non-negotiable scope and constraints
+## 1) Alcance y restricciones no negociables
 
-### In scope
-- ERPNext API development for business domains (`pos`, `sales`, `payment`, `customer`, `sync`, optional `bootstrap`).
-- KMP integration changes only in transport/integration layer (`APIService`, endpoint routing, response/error mapping).
-- Standardized error handling and response normalization for new endpoints.
-- Parallel workstream execution (ERP API + mobile integration).
+### En alcance
+- Desarrollo de API ERPNext para dominios de negocio (`pos`, `sales`, `payment`, `customer`, `sync`, `bootstrap` opcional).
+- Cambios KMP solo en la capa de transporte/integración (`APIService`, ruteo de endpoints, mapeo de respuestas/errores).
+- Estandarización de manejo de errores y normalización de respuestas para endpoints nuevos.
+- Ejecución en paralelo de ambos frentes (API ERP + integración móvil).
 
-### Out of scope
-- Rewriting business logic in app modules (billing, inventory logic, sync decision engine).
-- UI redesign or flow redesign.
-- Replacing OAuth with custom methods.
+### Fuera de alcance
+- Reescritura de lógica de negocio en módulos de app (billing, lógica de inventario, motor de decisiones de sync).
+- Rediseño de UI o de flujos funcionales.
+- Reemplazo de OAuth por métodos personalizados.
 
-### Authentication rule (fixed)
-The following endpoints remain direct Frappe methods:
+### Regla fija de autenticación
+Los siguientes endpoints se mantienen como métodos directos de Frappe:
 - `/api/method/frappe.integrations.oauth2.get_token` (exchange + refresh)
 - `/api/method/frappe.integrations.oauth2.revoke_token`
-- Current login/session bootstrap path already used by app
+- Ruta actual de login/session bootstrap ya usada por la app
 
 ---
 
-## 2) Target architecture (minimal-change migration)
+## 2) Arquitectura objetivo (migración de mínimo impacto)
 
-## A. ERPNext side (new)
-- New namespace: `erpnext_pos.api.mobile.v1.*`
-- New business methods by domain with stable request/response contracts.
-- No auth replacement.
+## A. Lado ERPNext (nuevo)
+- Nuevo namespace: `erpnext_pos.api.mobile.v1.*`
+- Nuevos métodos de negocio por dominio con contratos estables request/response.
+- Sin reemplazo de auth.
 
-## B. App KMP side (minimal change)
-- Keep existing domain/use-case behavior.
-- Replace endpoint URLs in integration layer.
-- Add response adapter to parse both legacy (`data/message`) and new (`ok/data/error/meta`) during transition.
-- Add robust typed error mapping for UI-safe failures and retry logic.
+## B. Lado app KMP (mínimo cambio)
+- Mantener el comportamiento actual de dominio/use cases.
+- Reemplazar URLs de endpoints en la capa de integración.
+- Agregar adaptador de respuesta para parsear legado (`data/message`) y nuevo (`ok/data/error/meta`) durante transición.
+- Agregar mapeo robusto de errores tipados para fallas seguras en UI y lógica de reintentos.
 
 ---
 
-## 3) Parallel Gantt (specific, ERP API + App integration)
+## 3) Gantt paralelo (específico: API ERP + integración app)
 
 ```mermaid
 gantt
-    title POS Migration Plan (8 weeks) - Parallel ERPNext API + KMP Integration
+    title Plan de migración POS (8 semanas) - API ERPNext + integración KMP en paralelo
     dateFormat  YYYY-MM-DD
     axisFormat  %d-%b
 
-    section Track A - ERPNext API (@whitelist)
-    A1 Contract freeze per domain (sales/pos/payment/customer/sync)     :a1, 2026-02-17, 4d
-    A2 Implement pos.open_shift + pos.close_shift                       :a2, after a1, 4d
-    A3 Implement sales.create_invoice + submit_invoice + cancel_invoice :a3, 2026-02-26, 5d
-    A4 Implement payment.create_entry + submit_entry                    :a4, 2026-03-05, 4d
-    A5 Implement customer.create + update_contact + update_address      :a5, 2026-03-11, 4d
-    A6 Implement sync.pull_changes + sync.push_batch                    :a6, 2026-03-17, 5d
-    A7 ERP hardening (permissions/idempotency/observability)            :a7, 2026-03-24, 6d
-    A8 UAT fixes + production readiness checklist                        :a8, 2026-04-01, 4d
+    section Track A - API ERPNext (@whitelist)
+    A1 Cierre de contratos por dominio (sales/pos/payment/customer/sync) :a1, 2026-02-17, 4d
+    A2 Implementar pos.open_shift + pos.close_shift                      :a2, after a1, 4d
+    A3 Implementar sales.create_invoice + submit_invoice + cancel_invoice:a3, 2026-02-26, 5d
+    A4 Implementar payment.create_entry + submit_entry                   :a4, 2026-03-05, 4d
+    A5 Implementar customer.create + update_contact + update_address     :a5, 2026-03-11, 4d
+    A6 Implementar sync.pull_changes + sync.push_batch                   :a6, 2026-03-17, 5d
+    A7 Hardening ERP (permisos/idempotencia/observabilidad)              :a7, 2026-03-24, 6d
+    A8 Ajustes UAT + checklist de salida a producción                    :a8, 2026-04-01, 4d
 
-    section Track B - KMP App Integration (endpoint-only)
-    B1 Endpoint routing abstraction in APIService                        :b1, 2026-02-17, 3d
-    B2 Keep OAuth direct Frappe path (exchange/refresh/revoke)          :b2, after b1, 2d
-    B3 Integrate POS endpoints (open/close) with same payloads          :b3, 2026-02-26, 4d
-    B4 Integrate Sales endpoints (create/submit/cancel)                 :b4, 2026-03-03, 4d
-    B5 Integrate Payment + Customer endpoints                           :b5, 2026-03-10, 4d
-    B6 Integrate Sync endpoints (pull/push)                             :b6, 2026-03-17, 4d
-    B7 Response adapter + typed error mapping + retry tuning            :b7, 2026-03-24, 5d
-    B8 Cutover by feature flags + legacy fallback removal               :b8, 2026-04-01, 4d
+    section Track B - Integración app KMP (solo endpoints)
+    B1 Abstracción de ruteo de endpoints en APIService                   :b1, 2026-02-17, 3d
+    B2 Mantener OAuth directo a Frappe (exchange/refresh/revoke)         :b2, after b1, 2d
+    B3 Integrar endpoints POS (open/close) con payloads actuales         :b3, 2026-02-26, 4d
+    B4 Integrar endpoints Sales (create/submit/cancel)                   :b4, 2026-03-03, 4d
+    B5 Integrar endpoints Payment + Customer                             :b5, 2026-03-10, 4d
+    B6 Integrar endpoints Sync (pull/push)                               :b6, 2026-03-17, 4d
+    B7 Adaptador de respuesta + errores tipados + ajuste de reintentos   :b7, 2026-03-24, 5d
+    B8 Cutover con feature flags + retiro de fallback legado             :b8, 2026-04-01, 4d
 
-    section Track C - Joint validation
-    C1 Contract tests (ERP responses vs app DTO expectations)           :c1, 2026-03-12, 4d
-    C2 End-to-end offline/online sync scenarios                         :c2, 2026-03-20, 5d
-    C3 Regression + go-live decision                                    :milestone, c3, 2026-04-07, 0d
+    section Track C - Validación conjunta
+    C1 Tests de contrato (respuestas ERP vs expectativas DTO app)        :c1, 2026-03-12, 4d
+    C2 Escenarios E2E offline/online y sincronización                    :c2, 2026-03-20, 5d
+    C3 Regresión final + decisión de go-live                             :milestone, c3, 2026-04-07, 0d
 ```
 
-> Total duration: 8 weeks, with explicit parallel execution.
+> Duración total: 8 semanas, con ejecución explícitamente paralela.
 
 ---
 
-## 4) Weekly plan (parallel deliverables)
+## 4) Plan semanal (entregables en paralelo)
 
-| Week | ERPNext `@whitelist` deliverable | KMP integration deliverable | Validation gate |
+| Semana | Entregable ERPNext `@whitelist` | Entregable integración KMP | Puerta de validación |
 |---|---|---|---|
-| W1 | Contract freeze for all business domains | Endpoint abstraction and route table in API layer | Contract review approved |
-| W2 | POS methods ready (`open_shift`, `close_shift`) | POS route switch in app, no behavior changes | POS integration smoke test |
-| W3 | Sales methods ready (`create/submit/cancel`) | Sales route switch in app | Invoice E2E (draft-submit-cancel) |
-| W4 | Payment + Customer methods ready | Payment/Customer route switch in app | Customer+Payment regression |
-| W5 | Sync methods ready (`pull_changes`, `push_batch`) | Sync route switch in app | Offline queue + recovery tests |
-| W6 | Permissions/idempotency hardening | Error mapper + retry policy tuning | Error matrix approval |
-| W7 | UAT fixes + observability finalization | Feature-flagged cutover in staging | Staging sign-off |
-| W8 | Production readiness and release support | Legacy fallback removal (if stable) | Go-live + post-release checks |
+| W1 | Cierre de contratos para todos los dominios de negocio | Abstracción de endpoints y tabla de rutas en capa API | Contratos aprobados |
+| W2 | Métodos POS listos (`open_shift`, `close_shift`) | Cambio de rutas POS en app, sin alterar comportamiento | Smoke test POS |
+| W3 | Métodos Sales listos (`create/submit/cancel`) | Cambio de rutas Sales en app | E2E factura (draft-submit-cancel) |
+| W4 | Métodos Payment + Customer listos | Cambio de rutas Payment/Customer en app | Regresión Customer+Payment |
+| W5 | Métodos Sync listos (`pull_changes`, `push_batch`) | Cambio de rutas Sync en app | Pruebas cola offline + recuperación |
+| W6 | Hardening de permisos/idempotencia | Ajuste de mapeo de errores + política de reintentos | Matriz de errores aprobada |
+| W7 | Ajustes UAT + observabilidad final | Cutover con feature flags en staging | Sign-off de staging |
+| W8 | Preparación final de producción y soporte de release | Retiro de fallback legado (si estable) | Go-live + post-checks |
 
 ---
 
-## 5) Endpoint migration matrix (updated rules)
+## 5) Matriz de migración de endpoints (reglas actualizadas)
 
-| Flow | Current endpoint | Target endpoint |
+| Flujo | Endpoint actual | Endpoint objetivo |
 |---|---|---|
-| OAuth exchange code | `/api/method/frappe.integrations.oauth2.get_token` | **Keep current (no whitelist migration)** |
-| OAuth refresh token | `/api/method/frappe.integrations.oauth2.get_token` | **Keep current (no whitelist migration)** |
-| OAuth revoke | `/api/method/frappe.integrations.oauth2.revoke_token` | **Keep current (no whitelist migration)** |
-| POS open/close | Current create/submit flow | `/api/method/erpnext_pos.api.mobile.v1.pos.open_shift` / `close_shift` |
+| OAuth exchange code | `/api/method/frappe.integrations.oauth2.get_token` | **Se mantiene actual (no migra a whitelist)** |
+| OAuth refresh token | `/api/method/frappe.integrations.oauth2.get_token` | **Se mantiene actual (no migra a whitelist)** |
+| OAuth revoke | `/api/method/frappe.integrations.oauth2.revoke_token` | **Se mantiene actual (no migra a whitelist)** |
+| POS open/close | Flujo actual de create/submit | `/api/method/erpnext_pos.api.mobile.v1.pos.open_shift` / `close_shift` |
 | Sales create/submit/cancel | `resource + frappe.client.submit/cancel` | `/api/method/erpnext_pos.api.mobile.v1.sales.*` |
 | Payment create/submit | `resource + frappe.client.submit` | `/api/method/erpnext_pos.api.mobile.v1.payment.*` |
 | Customer create/update | `resource + frappe.client.set_value` | `/api/method/erpnext_pos.api.mobile.v1.customer.*` |
-| Sync pull/push | mixed `resource` queries | `/api/method/erpnext_pos.api.mobile.v1.sync.*` |
+| Sync pull/push | consultas mixtas `resource` | `/api/method/erpnext_pos.api.mobile.v1.sync.*` |
 
 ---
 
-## 6) Standard response/error adaptation (for safe integration)
+## 6) Adaptación estándar de respuesta/error (integración segura)
 
-### Recommended whitelist response envelope
+### Envelope recomendado para éxito
 ```json
 {
   "ok": true,
@@ -128,7 +128,7 @@ gantt
 }
 ```
 
-### Recommended error envelope
+### Envelope recomendado para error
 ```json
 {
   "ok": false,
@@ -148,19 +148,19 @@ gantt
 }
 ```
 
-### App-side mapping rules (minimal code impact)
-- Keep current DTOs where possible.
-- Add adapter layer in API integration to support:
-  - legacy: `{"data": ...}` or `{"message": ...}`
+### Reglas de mapeo en app (impacto mínimo)
+- Mantener DTO actuales siempre que sea posible.
+- Agregar una capa adaptadora en integración API para soportar:
+  - legado: `{"data": ...}` o `{"message": ...}`
   - whitelist: `{"ok":...,"data":...,"error":...,"meta":...}`
-- Convert server errors to typed app errors:
-  - `AUTH_EXPIRED` → session refresh flow
-  - `BUSINESS_RULE_VIOLATION` → user-facing validation message
-  - `RETRYABLE_NETWORK_ERROR` → retry/backoff in sync
+- Convertir errores servidor a errores tipados de app:
+  - `AUTH_EXPIRED` → flujo de refresh de sesión
+  - `BUSINESS_RULE_VIOLATION` → mensaje de validación al usuario
+  - `RETRYABLE_NETWORK_ERROR` → retry/backoff en sync
 
 ---
 
-## 7) Method list to implement in ERPNext (business only)
+## 7) Lista de métodos a implementar en ERPNext (solo negocio)
 
 ### POS
 - `erpnext_pos.api.mobile.v1.pos.open_shift`
@@ -184,32 +184,32 @@ gantt
 - `erpnext_pos.api.mobile.v1.sync.pull_changes`
 - `erpnext_pos.api.mobile.v1.sync.push_batch`
 
-> Optional (if needed for performance):
+> Opcional (si se requiere optimización de performance):
 - `erpnext_pos.api.mobile.v1.bootstrap.get_context`
 
 ---
 
-## 8) Detailed implementation steps (execution order)
+## 8) Pasos detallados de implementación (orden de ejecución)
 
-1. Freeze domain contracts and error catalog (`W1`).
-2. Build ERP methods by domain (`W2-W5`) with permissions and idempotency from day one.
-3. Integrate endpoints in app by domain (`W2-W5`) without changing business logic.
-4. Enable adapter for mixed responses during transition (`W3-W6`).
-5. Run joint contract + E2E tests after each domain switch.
-6. Activate feature flags for staged cutover and controlled rollback.
-7. Remove legacy fallback only after stable staging + production canary.
-
----
-
-## 9) Acceptance criteria (Done)
-- OAuth/login/refresh/revoke still using direct Frappe endpoints.
-- All business operations migrated to `erpnext_pos.api.mobile.v1.*`.
-- No behavioral regressions in POS flow (same business results before/after migration).
-- Typed error handling operational for auth/business/network categories.
-- Offline-first sync validated with pull/push on new methods.
-- Legacy business endpoints deprecated after stable release.
+1. Cerrar contratos de dominio y catálogo de errores (`W1`).
+2. Construir métodos ERP por dominio (`W2-W5`) con permisos e idempotencia desde el inicio.
+3. Integrar endpoints en app por dominio (`W2-W5`) sin tocar lógica funcional.
+4. Habilitar adaptador para respuestas mixtas durante transición (`W3-W6`).
+5. Ejecutar pruebas conjuntas de contrato + E2E después de cada cambio de dominio.
+6. Activar feature flags para cutover gradual y rollback controlado.
+7. Retirar fallback legado solo tras estabilidad en staging + canary en producción.
 
 ---
 
-## 10) Final expected result after 8 weeks
-A low-risk endpoint migration where the app keeps its current business behavior, authentication remains on direct Frappe OAuth, and business APIs are standardized through ERPNext `@frappe.whitelist` methods with robust error handling and parallel delivery.
+## 9) Criterios de aceptación (Done)
+- OAuth/login/refresh/revoke continúan usando endpoints directos de Frappe.
+- Todas las operaciones de negocio migradas a `erpnext_pos.api.mobile.v1.*`.
+- Sin regresiones de comportamiento en flujo POS (mismos resultados antes/después de migrar endpoints).
+- Manejo de errores tipados operativo para categorías auth/business/network.
+- Offline-first sync validado con pull/push en endpoints nuevos.
+- Endpoints de negocio legados deprecados tras release estable.
+
+---
+
+## 10) Resultado esperado al final de 8 semanas
+Migración de endpoints de bajo riesgo donde la app mantiene su comportamiento de negocio actual, la autenticación permanece en Frappe OAuth directo y las APIs de negocio quedan estandarizadas mediante métodos ERPNext `@frappe.whitelist` con manejo robusto de errores y ejecución paralela de frentes.
