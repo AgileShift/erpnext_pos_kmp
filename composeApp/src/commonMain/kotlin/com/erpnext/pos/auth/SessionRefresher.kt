@@ -40,6 +40,10 @@ class SessionRefresher(
 
         if (TokenUtils.isValid(tokens.id_token) && !isNearExpiry) {
             AppLogger.info("SessionRefresher: token valid, skip refresh")
+            if (!apiService.isSessionBoundToCurrentUser()) {
+                AppLogger.warn("SessionRefresher: server session user mismatch, invalidating")
+                return invalidateSession()
+            }
             invalidated = false
             return true
         }
@@ -49,13 +53,21 @@ class SessionRefresher(
             AppLogger.info("SessionRefresher: refreshing token")
             val refreshed = apiService.refreshToken(refreshToken)
             tokenStore.save(refreshed)
+            if (!apiService.isSessionBoundToCurrentUser()) {
+                AppLogger.warn("SessionRefresher: mismatch after refresh, invalidating")
+                return invalidateSession()
+            }
             invalidated = false
             true
         } catch (t: Throwable) {
             AppSentry.capture(t, "SessionRefresher.refresh failed")
             AppLogger.warn("SessionRefresher: refresh failed", t)
             if (TokenUtils.isValid(tokens.id_token)) {
-                AppLogger.info("SessionRefresher: refresh failed but token still valid")
+                AppLogger.info("SessionRefresher: refresh failed but token still valid, checking server binding")
+                if (!apiService.isSessionBoundToCurrentUser()) {
+                    AppLogger.warn("SessionRefresher: mismatch after failed refresh, invalidating")
+                    return invalidateSession()
+                }
                 invalidated = false
                 true
             } else {

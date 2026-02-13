@@ -130,6 +130,29 @@ class CashBoxManager(
             cashboxDao.getActiveEntry(user.email, it.profileName).firstOrNull()
         }
         val resolvedCashbox = activeCashbox ?: cashboxDao.getActiveEntryForUser(user.email)
+        if (resolvedCashbox == null && isOnline) {
+            val bootstrapShift = runCatching { api.getBootstrapOpenShift() }.getOrNull()
+            if (bootstrapShift != null) {
+                val bootstrapProfile = runCatching {
+                    profileDao.getPOSProfile(bootstrapShift.posProfile)
+                }.getOrNull()
+                if (bootstrapProfile != null) {
+                    val restored = runCatching {
+                        restoreRemoteOpening(bootstrapProfile, bootstrapShift.name, user.email)
+                    }.getOrNull()
+                    if (restored != null) {
+                        profileDao.updateProfileState(user.username, bootstrapProfile.profileName, true)
+                        _cashboxState.update { true }
+                        return@withContext buildContextFrom(
+                            user = user,
+                            profile = bootstrapProfile,
+                            cashboxId = restored,
+                            company = company
+                        )
+                    }
+                }
+            }
+        }
         if (resolvedCashbox == null && isOnline && activeProfile != null) {
             val remoteOpen = resolveRemoteOpenSession(user, activeProfile.profileName)
             if (remoteOpen != null) {

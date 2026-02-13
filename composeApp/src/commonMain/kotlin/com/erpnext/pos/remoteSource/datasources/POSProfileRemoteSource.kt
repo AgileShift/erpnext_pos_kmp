@@ -12,7 +12,8 @@ class POSProfileRemoteSource(
     private val posProfileDao: POSProfileDao
 ) {
     suspend fun getPOSProfile(assignedTo: String? = null): List<POSProfileSimpleDto> {
-        return api.getPOSProfiles(assignedTo)
+        assignedTo
+        return api.getPOSProfiles()
     }
 
     //TODO: Tengo que crear una tabla para poder guardar el estado actual de la caja, la informacion seria

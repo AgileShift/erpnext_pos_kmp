@@ -60,76 +60,19 @@ suspend inline fun <reified T> HttpClient.getERPList(
     additionalHeaders: Map<String, String> = emptyMap(),
     noinline block: (FiltersBuilder.() -> Unit)? = null
 ): List<T> {
-    require(baseUrl != null && baseUrl.isNotBlank()) { "baseUrl no puede ser nulo o vacío" }
-
-    val endpoint = baseUrl.trimEnd('/') + "/api/method/erpnext_pos.api.v1.__legacy_resource_endpoint_disabled__/${encodeURIComponent(doctype)}"
-    val finalFilters = mutableListOf<Filter>().apply {
-        addAll(filters)
-        block?.let { addAll(FiltersBuilder().apply(it).build()) }
-    }
-
-    try {
-        val response: HttpResponse = withRetries {
-            this.get {
-                url {
-                    takeFrom(endpoint)
-                    limit?.let { parameters.append("limit_page_length", it.toString()) }
-                    offset?.let { parameters.append("limit_start", it.toString()) }
-
-                    if (fields.isNotEmpty()) {
-                        parameters.append("fields", json.encodeToString(fields))
-                    }
-
-                    if (finalFilters.isNotEmpty()) {
-                        parameters.append("filters", buildFiltersJson(finalFilters))
-                    }
-
-                    orderBy?.let {
-                        parameters.append("order_by", it)
-                        parameters.append("order_type", orderType)
-                    }
-                }
-
-                if (additionalHeaders.isNotEmpty()) {
-                    headers {
-                        additionalHeaders.forEach { (k, v) -> append(k, v) }
-                    }
-                }
-
-                accept(ContentType.Application.Json)
-                timeout {
-                    requestTimeoutMillis = 60_000
-                    connectTimeoutMillis = 30_000
-                    socketTimeoutMillis = 60_000
-                }
-            }
-        }
-
-        val responseBodyText = response.bodyAsText()
-        if (!response.status.isSuccess()) {
-            try {
-                val err = json.decodeFromString<FrappeErrorResponse>(responseBodyText)
-                throw FrappeException(err.exception ?: "Error: ${response.status}", err)
-            } catch (e: Exception) {
-                throw Exception("Error en petición: ${response.status} - $responseBodyText", e)
-            }
-        }
-
-        return try {
-            val parsed = json.parseToJsonElement(responseBodyText).jsonObject
-            val dataElement = parsed["data"]
-                ?: throw FrappeException("La respuesta no contiene 'data'. Respuesta: $responseBodyText")
-            json.decodeFromJsonElement(dataElement)
-        } catch (e: Exception) {
-            throw Exception(
-                "Error parseando respuesta ERPNext: ${e.message}. Body: $responseBodyText",
-                e
-            )
-        }
-    } catch (e: Exception) {
-        captureFetchError("getERPList($doctype)", e)
-        throw e
-    }
+    doctype
+    fields
+    filters
+    limit
+    offset
+    orderBy
+    orderType
+    baseUrl
+    additionalHeaders
+    block
+    throw UnsupportedOperationException(
+        "getERPList deshabilitado: usa endpoints API v1/sync.bootstrap."
+    )
 }
 
 suspend inline fun <reified T> HttpClient.getERPSingle(
@@ -139,52 +82,14 @@ suspend inline fun <reified T> HttpClient.getERPSingle(
     fields: List<String> = emptyList(),
     additionalHeaders: Map<String, String> = emptyMap()
 ): T {
-    require(!baseUrl.isNullOrBlank()) { "baseUrl no puede ser nulo o vacío" }
-
-    val endpoint = baseUrl.trimEnd('/') + "/api/method/erpnext_pos.api.v1.__legacy_resource_endpoint_disabled__/${encodeURIComponent(doctype)}/$name"
-
-    try {
-        val response: HttpResponse = withRetries {
-            this.get {
-                url {
-                    takeFrom(endpoint)
-                    if (fields.isNotEmpty()) {
-                        parameters.append("fields", json.encodeToString(fields))
-                    }
-                }
-
-                if (additionalHeaders.isNotEmpty()) headers {
-                    additionalHeaders.forEach { (k, v) -> append(k, v) }
-                }
-
-                accept(ContentType.Application.Json)
-                timeout {
-                    requestTimeoutMillis = 60_000
-                    connectTimeoutMillis = 30_000
-                    socketTimeoutMillis = 60_000
-                }
-            }
-        }
-
-        val bodyText = response.bodyAsText()
-        if (!response.status.isSuccess()) {
-            try {
-                val err = json.decodeFromString<FrappeErrorResponse>(bodyText)
-                throw FrappeException(err.exception ?: "Error: ${response.status}", err)
-            } catch (e: Exception) {
-                throw Exception("Error en petición: ${response.status} - $bodyText", e)
-            }
-        }
-
-        val parsed = json.parseToJsonElement(bodyText).jsonObject
-        val dataElement = parsed["data"]
-            ?: throw FrappeException("La respuesta no contiene 'data'. Respuesta: $bodyText")
-
-        return json.decodeFromJsonElement<T>(dataElement)
-    } catch (e: Exception) {
-        captureFetchError("getERPSingle($doctype)", e)
-        throw e
-    }
+    doctype
+    name
+    baseUrl
+    fields
+    additionalHeaders
+    throw UnsupportedOperationException(
+        "getERPSingle deshabilitado: usa endpoints API v1/sync.bootstrap."
+    )
 }
 
 
@@ -194,39 +99,13 @@ suspend inline fun <reified T, reified R> HttpClient.postERP(
     baseUrl: String?,
     additionalHeaders: Map<String, String> = emptyMap()
 ): R {
-    require(baseUrl != null && baseUrl.isNotBlank()) { "baseUrl no puede ser nulo o vacío" }
-
-    val endpoint = baseUrl.trimEnd('/') + "/api/method/erpnext_pos.api.v1.__legacy_resource_endpoint_disabled__/${encodeURIComponent(doctype)}"
-    try {
-        val bodyText = withRetries {
-            this.post {
-                url { takeFrom(endpoint) }
-                contentType(ContentType.Application.Json)
-                setBody(json.encodeToString(payload))
-                if (additionalHeaders.isNotEmpty()) headers {
-                    additionalHeaders.forEach { (k, v) ->
-                        append(
-                            k,
-                            v
-                        )
-                    }
-                }
-                timeout {
-                    requestTimeoutMillis = 60_000
-                    connectTimeoutMillis = 30_000
-                    socketTimeoutMillis = 60_000
-                }
-            }.bodyAsText()
-        }
-
-        val parsed = json.parseToJsonElement(bodyText).jsonObject
-        val dataElement = parsed["data"]
-            ?: throw FrappeException("La respuesta no contiene 'data'. Respuesta: $bodyText")
-        return json.decodeFromJsonElement(dataElement)
-    } catch (e: Exception) {
-        captureFetchError("postERP($doctype)", e)
-        throw e
-    }
+    doctype
+    payload
+    baseUrl
+    additionalHeaders
+    throw UnsupportedOperationException(
+        "postERP deshabilitado: usa endpoints API v1/sync.bootstrap."
+    )
 }
 
 suspend inline fun <reified T, reified R> HttpClient.putERP(
@@ -236,41 +115,14 @@ suspend inline fun <reified T, reified R> HttpClient.putERP(
     baseUrl: String?,
     additionalHeaders: Map<String, String> = emptyMap()
 ): R {
-    require(baseUrl != null && baseUrl.isNotBlank()) { "baseUrl no puede ser nulo o vacío" }
-
-    val endpoint = baseUrl.trimEnd('/') + "/api/method/erpnext_pos.api.v1.__legacy_resource_endpoint_disabled__/${encodeURIComponent(doctype)}/${
-        encodeURIComponent(name)
-    }"
-    try {
-        val bodyText = withRetries {
-            this.put {
-                url { takeFrom(endpoint) }
-                contentType(ContentType.Application.Json)
-                setBody(json.encodeToString(payload))
-                if (additionalHeaders.isNotEmpty()) headers {
-                    additionalHeaders.forEach { (k, v) ->
-                        append(
-                            k,
-                            v
-                        )
-                    }
-                }
-                timeout {
-                    requestTimeoutMillis = 60_000
-                    connectTimeoutMillis = 30_000
-                    socketTimeoutMillis = 60_000
-                }
-            }.bodyAsText()
-        }
-
-        val parsed = json.parseToJsonElement(bodyText).jsonObject
-        val dataElement = parsed["data"]
-            ?: throw FrappeException("La respuesta no contiene 'data'. Respuesta: $bodyText")
-        return json.decodeFromJsonElement(dataElement)
-    } catch (e: Exception) {
-        captureFetchError("putERP($doctype)", e)
-        throw e
-    }
+    doctype
+    name
+    payload
+    baseUrl
+    additionalHeaders
+    throw UnsupportedOperationException(
+        "putERP deshabilitado: usa endpoints API v1/sync.bootstrap."
+    )
 }
 
 suspend fun HttpClient.deleteERP(
@@ -279,44 +131,13 @@ suspend fun HttpClient.deleteERP(
     baseUrl: String?,
     additionalHeaders: Map<String, String> = emptyMap()
 ) {
-    require(baseUrl != null && baseUrl.isNotBlank()) { "baseUrl no puede ser nulo o vacío" }
-
-    val endpoint = baseUrl.trimEnd('/') + "/api/method/erpnext_pos.api.v1.__legacy_resource_endpoint_disabled__/${encodeURIComponent(doctype)}/${
-        encodeURIComponent(name)
-    }"
-    try {
-        val response = withRetries {
-            this.delete {
-                url { takeFrom(endpoint) }
-                if (additionalHeaders.isNotEmpty()) headers {
-                    additionalHeaders.forEach { (k, v) ->
-                        append(
-                            k,
-                            v
-                        )
-                    }
-                }
-                timeout {
-                    requestTimeoutMillis = 60_000
-                    connectTimeoutMillis = 30_000
-                    socketTimeoutMillis = 60_000
-                }
-            }
-        }
-
-        if (!response.status.isSuccess()) {
-            val body = response.bodyAsText()
-            try {
-                val err = json.decodeFromString<FrappeErrorResponse>(body)
-                throw FrappeException(err.exception ?: "Error: ${response.status}", err)
-            } catch (e: Exception) {
-                throw Exception("Error en deleteERP: ${response.status} - $body", e)
-            }
-        }
-    } catch (e: Exception) {
-        captureFetchError("deleteERP($doctype)", e)
-        throw e
-    }
+    doctype
+    name
+    baseUrl
+    additionalHeaders
+    throw UnsupportedOperationException(
+        "deleteERP deshabilitado: usa endpoints API v1/sync.bootstrap."
+    )
 }
 
 // -----------------------------

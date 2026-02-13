@@ -49,3 +49,16 @@ data class BootstrapDataDto(
     @SerialName("activity_events")
     val activityEvents: List<JsonObject> = emptyList()
 )
+
+@Serializable
+data class BootstrapPosSyncDto(
+    @SerialName("pos_profiles")
+    val posProfiles: List<POSProfileDto>? = null,
+    @SerialName("payment_methods")
+    val paymentMethods: List<PaymentModesDto>? = null,
+    @SerialName("payment_modes")
+    val paymentModes: List<PaymentModesDto>? = null
+) {
+    val resolvedPaymentMethods: List<PaymentModesDto>?
+        get() = paymentMethods ?: paymentModes
+}

@@ -4,11 +4,13 @@ import com.erpnext.pos.BuildKonfig
 import com.erpnext.pos.base.getPlatformName
 import com.erpnext.pos.remoteSource.dto.BinDto
 import com.erpnext.pos.remoteSource.dto.BootstrapDataDto
+import com.erpnext.pos.remoteSource.dto.BootstrapPosSyncDto
 import com.erpnext.pos.remoteSource.dto.BootstrapRequestDto
 import com.erpnext.pos.remoteSource.dto.CategoryDto
 import com.erpnext.pos.remoteSource.dto.CurrencyDto
 import com.erpnext.pos.remoteSource.dto.ContactChildDto
 import com.erpnext.pos.remoteSource.dto.ContactListDto
+import com.erpnext.pos.remoteSource.dto.LinkRefDto
 import com.erpnext.pos.remoteSource.dto.ContactUpdateDto
 import com.erpnext.pos.remoteSource.dto.CustomerDto
 import com.erpnext.pos.remoteSource.dto.CustomerCreateDto
@@ -31,6 +33,7 @@ import com.erpnext.pos.remoteSource.dto.OutstandingInfo
 import com.erpnext.pos.remoteSource.dto.POSClosingEntryDto
 import com.erpnext.pos.remoteSource.dto.POSClosingEntryResponse
 import com.erpnext.pos.remoteSource.dto.POSClosingEntrySummaryDto
+import com.erpnext.pos.remoteSource.dto.BalanceDetailsDto
 import com.erpnext.pos.remoteSource.dto.POSOpeningEntryDto
 import com.erpnext.pos.remoteSource.dto.POSOpeningEntryDetailDto
 import com.erpnext.pos.remoteSource.dto.POSOpeningEntryResponseDto
@@ -60,11 +63,7 @@ import com.erpnext.pos.remoteSource.sdk.ERPDocType
 import com.erpnext.pos.remoteSource.sdk.FrappeErrorResponse
 import com.erpnext.pos.remoteSource.sdk.FrappeException
 import com.erpnext.pos.remoteSource.sdk.filters
-import com.erpnext.pos.remoteSource.sdk.getERPList
-import com.erpnext.pos.remoteSource.sdk.getERPSingle
 import com.erpnext.pos.remoteSource.sdk.getFields
-import com.erpnext.pos.remoteSource.sdk.postERP
-import com.erpnext.pos.remoteSource.sdk.putERP
 import com.erpnext.pos.remoteSource.sdk.withRetries
 import com.erpnext.pos.utils.view.DateTimeProvider
 import io.ktor.client.HttpClient
@@ -125,22 +124,15 @@ class APIService(
     private var bootstrapCache: BootstrapCacheEntry? = null
 
     private suspend fun fetchInvoicesByStatus(
-        doctype: String,
         posProfile: String,
         startDate: String,
         statuses: List<String>
     ): List<SalesInvoiceDto> {
-        val url = authStore.getCurrentSite()
-        return client.getERPList(
-            doctype = doctype,
-            fields = ERPDocType.SalesInvoice.getFields(),
-            baseUrl = url,
-            filters = filters {
-                "pos_profile" eq posProfile
-                "posting_date" gte startDate
-                "status" `in` statuses
-            }
-        )
+        return fetchAllInvoicesCombined(posProfile, recentPaidOnly = false)
+            .asSequence()
+            .filter { it.status in statuses }
+            .filter { it.postingDate.take(10) >= startDate }
+            .toList()
     }
     suspend fun getCompanyInfo(): List<CompanyDto> {
         val bootstrapCompany = runCatching {
@@ -171,7 +163,7 @@ class APIService(
         }
         if (fromBootstrap != null) return listOf(fromBootstrap)
 
-        val profiles = getPOSProfiles(assignedTo = null)
+        val profiles = getPOSProfiles()
         val first = profiles.firstOrNull()
             ?: throw IllegalStateException("Company info not available")
         return listOf(
@@ -185,16 +177,8 @@ class APIService(
     }
 
     suspend fun getCompanyMonthlySalesTarget(companyId: String): Double? {
-        val url = authStore.getCurrentSite()
-        val rows = client.getERPList<CompanySalesTargetDto>(
-            doctype = ERPDocType.Company.path,
-            fields = listOf("name", "monthly_sales_target"),
-            limit = 1,
-            baseUrl = url
-        ) {
-            "name" eq companyId
-        }
-        return rows.firstOrNull()?.monthlySalesTarget
+        companyId
+        return null
     }
 
     suspend fun getStockSettings(): List<StockSettingsDto> {
@@ -222,90 +206,121 @@ class APIService(
     suspend fun fetchInvoicesForTerritoryFromDate(
         territory: String, fromDate: String
     ): List<SalesInvoiceDto> {
-        val url = authStore.getCurrentSite()
-        return client.getERPList(
-            ERPDocType.SalesInvoice.path,
-            ERPDocType.SalesInvoice.getFields(),
-            baseUrl = url,
-            orderBy = "posting_date desc",
-            filters = filters {
-                "territory" eq territory
-                "posting_date" gte fromDate
-            })
+        val payload = BootstrapRequestDto(
+            includeInventory = false,
+            includeCustomers = false,
+            includeInvoices = true,
+            includeAlerts = false,
+            includeActivity = false,
+            territory = territory,
+            route = territory,
+            recentPaidOnly = false
+        )
+        return fetchBootstrap(payload).invoices
+            .asSequence()
+            .filter { it.postingDate.take(10) >= fromDate }
+            .sortedByDescending { it.postingDate }
+            .toList()
     }
 
     suspend fun fetchPaymentTerms(): List<PaymentTermDto> {
-        val url = authStore.getCurrentSite()
-        return client.getERPList(
-            ERPDocType.PaymentTerm.path, listOf(
-                "payment_term_name",
-                "invoice_portion",
-                "mode_of_payment",
-                "due_date_based_on",
-                "credit_days",
-                "credit_months",
-                "discount_type",
-                "discount",
-                "description",
-                "discount_validity",
-                "discount_validity_based_on"
-            ), baseUrl = url
+        val payload = BootstrapRequestDto(
+            includeInventory = false,
+            includeCustomers = false,
+            includeInvoices = false,
+            includeAlerts = false,
+            includeActivity = false,
+            recentPaidOnly = true
         )
+        val raw = fetchBootstrapRaw(payload)
+        return raw["payment_terms"]?.let { json.decodeFromJsonElement<List<PaymentTermDto>>(it) }
+            .orEmpty()
     }
 
     suspend fun fetchDeliveryCharges(): List<DeliveryChargeDto> {
-        val url = authStore.getCurrentSite()
-        return client.getERPList(
-            ERPDocType.DeliveryCharges.path, ERPDocType.DeliveryCharges.getFields(), baseUrl = url
+        val payload = BootstrapRequestDto(
+            includeInventory = false,
+            includeCustomers = false,
+            includeInvoices = false,
+            includeAlerts = false,
+            includeActivity = false,
+            recentPaidOnly = true
         )
+        val raw = fetchBootstrapRaw(payload)
+        return raw["delivery_charges"]?.let { json.decodeFromJsonElement<List<DeliveryChargeDto>>(it) }
+            .orEmpty()
     }
 
     suspend fun fetchCustomerGroups(): List<CustomerGroupDto> {
-        val url = authStore.getCurrentSite()
-        return client.getERPList(
-            ERPDocType.CustomerGroup.path,
-            ERPDocType.CustomerGroup.getFields(),
-            baseUrl = url
+        val payload = BootstrapRequestDto(
+            includeInventory = false,
+            includeCustomers = false,
+            includeInvoices = false,
+            includeAlerts = false,
+            includeActivity = false,
+            recentPaidOnly = true
         )
+        val raw = fetchBootstrapRaw(payload)
+        return raw["customer_groups"]?.let { json.decodeFromJsonElement<List<CustomerGroupDto>>(it) }
+            .orEmpty()
     }
 
     suspend fun fetchTerritories(): List<TerritoryDto> {
-        val url = authStore.getCurrentSite()
-        return client.getERPList(
-            ERPDocType.Territory.path,
-            ERPDocType.Territory.getFields(),
-            baseUrl = url
+        val payload = BootstrapRequestDto(
+            includeInventory = false,
+            includeCustomers = false,
+            includeInvoices = false,
+            includeAlerts = false,
+            includeActivity = false,
+            recentPaidOnly = true
         )
+        val raw = fetchBootstrapRaw(payload)
+        return raw["territories"]?.let { json.decodeFromJsonElement<List<TerritoryDto>>(it) }
+            .orEmpty()
     }
 
     suspend fun fetchCustomerContacts(): List<ContactListDto> {
-        val url = authStore.getCurrentSite()
-        return client.getERPList(
-            ERPDocType.CustomerContact.path,
-            listOf("name", "email_id", "mobile_no", "phone", "links"),
-            baseUrl = url
+        val payload = BootstrapRequestDto(
+            includeInventory = false,
+            includeCustomers = true,
+            includeInvoices = false,
+            includeAlerts = false,
+            includeActivity = false,
+            recentPaidOnly = true
         )
+        return fetchBootstrap(payload).customers.map { customer ->
+            ContactListDto(
+                name = "CONTACT-${customer.name}",
+                emailId = customer.email,
+                mobileNo = customer.mobileNo,
+                phone = customer.mobileNo,
+                links = listOf(LinkRefDto(linkDoctype = "Customer", linkName = customer.name))
+            )
+        }
     }
 
     suspend fun fetchCustomerAddresses(): List<AddressListDto> {
-        val url = authStore.getCurrentSite()
-        return client.getERPList(
-            ERPDocType.Address.path,
-            listOf(
-                "name",
-                "address_title",
-                "address_type",
-                "address_line1",
-                "address_line2",
-                "city",
-                "state",
-                "country",
-                "email_id",
-                "phone",
-                "links"
-            ),
-            baseUrl = url
+        val payload = BootstrapRequestDto(
+            includeInventory = false,
+            includeCustomers = true,
+            includeInvoices = false,
+            includeAlerts = false,
+            includeActivity = false,
+            recentPaidOnly = true
         )
+        return fetchBootstrap(payload).customers
+            .filter { !it.address.isNullOrBlank() }
+            .map { customer ->
+                AddressListDto(
+                    name = customer.address!!.trim(),
+                    addressTitle = customer.customerName,
+                    addressType = "Billing",
+                    country = null,
+                    emailId = customer.email,
+                    phone = customer.mobileNo,
+                    links = listOf(LinkRefDto(linkDoctype = "Customer", linkName = customer.name))
+                )
+            }
     }
 
     suspend fun createCustomer(payload: CustomerCreateDto): DocNameResponseDto {
@@ -318,69 +333,6 @@ class APIService(
             ?: body.stringOrNull("customer_name")
             ?: throw IllegalStateException("customer.upsert_atomic no retornó identificador")
         return DocNameResponseDto(name)
-    }
-
-    suspend fun createAddress(payload: AddressCreateDto): DocNameResponseDto {
-        val url = authStore.getCurrentSite()
-        return client.postERP(ERPDocType.Address.path, payload, baseUrl = url)
-    }
-
-    suspend fun createContact(payload: ContactCreateDto): DocNameResponseDto {
-        val url = authStore.getCurrentSite()
-        return client.postERP(ERPDocType.CustomerContact.path, payload, baseUrl = url)
-    }
-
-    suspend fun findCustomerContacts(customerId: String): List<ContactListDto> {
-        val url = authStore.getCurrentSite()
-        val list: List<ContactListDto> = client.getERPList(
-            ERPDocType.CustomerContact.path,
-            listOf("name", "email_id", "mobile_no", "phone"),
-            baseUrl = url
-        )
-        return list.filter { dto ->
-            dto.links.any { it.linkDoctype == "Customer" && it.linkName == customerId }
-        }
-    }
-
-    suspend fun findCustomerAddresses(customerId: String): List<AddressListDto> {
-        val url = authStore.getCurrentSite()
-        val list: List<AddressListDto> = client.getERPList(
-            ERPDocType.Address.path,
-            listOf(
-                "name",
-                "address_line1",
-                "address_line2",
-                "city",
-                "state",
-                "country",
-                "email_id",
-                "phone"
-            ),
-            baseUrl = url
-        )
-        return list.filter { dto ->
-            dto.links.any { it.linkDoctype == "Customer" && it.linkName == customerId }
-        }
-    }
-
-    suspend fun updateContact(contactId: String, payload: ContactUpdateDto): ContactListDto {
-        val url = authStore.getCurrentSite()
-        return client.putERP(
-            doctype = ERPDocType.CustomerContact.path,
-            name = contactId,
-            payload = payload,
-            baseUrl = url
-        )
-    }
-
-    suspend fun updateAddress(addressId: String, payload: AddressUpdateDto): AddressListDto {
-        val url = authStore.getCurrentSite()
-        return client.putERP(
-            doctype = ERPDocType.Address.path,
-            name = addressId,
-            payload = payload,
-            baseUrl = url
-        )
     }
 
     suspend fun exchangeCode(
@@ -432,6 +384,62 @@ class APIService(
         )
     }
 
+    suspend fun getAuthenticatedServerUser(): String? {
+        val site = authStore.getCurrentSite()?.trim()?.trimEnd('/') ?: return null
+        val endpoints = listOf(
+            "$site/api/method/erpnext_pos.api.v1.auth.whoami",
+            "$site/api/method/frappe.auth.get_logged_user"
+        )
+        endpoints.forEach { endpoint ->
+            val response = runCatching {
+                withRetries {
+                    client.get { url { takeFrom(endpoint) } }
+                }
+            }.getOrElse {
+                AppLogger.warn("getAuthenticatedServerUser failed for $endpoint", it)
+                return@forEach
+            }
+            val bodyText = response.bodyAsText()
+            if (!response.status.isSuccess()) {
+                AppLogger.warn("getAuthenticatedServerUser non-success for $endpoint -> ${response.status}")
+                return@forEach
+            }
+            val parsed = runCatching {
+                json.parseToJsonElement(bodyText).jsonObject
+            }.getOrNull() ?: return@forEach
+            val message = parsed["message"] ?: return@forEach
+            val candidate = when (message) {
+                is JsonPrimitive -> message.contentOrNull
+                is JsonObject -> {
+                    val success = message["success"]?.jsonPrimitive?.contentOrNull
+                        ?.toBooleanStrictOrNull() ?: true
+                    if (!success) {
+                        null
+                    } else {
+                        val data = message["data"]
+                        when (data) {
+                            is JsonPrimitive -> data.contentOrNull
+                            is JsonObject -> data.stringOrNull("user") ?: data.stringOrNull("name")
+                            else -> message.stringOrNull("user") ?: message.stringOrNull("name")
+                        }
+                    }
+                }
+                else -> null
+            }?.trim()?.takeIf { it.isNotBlank() }
+            if (!candidate.isNullOrBlank()) return candidate
+        }
+        return null
+    }
+
+    suspend fun isSessionBoundToCurrentUser(): Boolean {
+        val localUser = store.loadUser()?.trim().orEmpty()
+        if (localUser.isBlank()) return false
+        val serverUser = getAuthenticatedServerUser()?.trim().orEmpty()
+        if (serverUser.isBlank()) return false
+        if (serverUser.equals("Guest", ignoreCase = true)) return false
+        return localUser.equals(serverUser, ignoreCase = true)
+    }
+
     suspend fun getExchangeRate(
         fromCurrency: String, toCurrency: String, date: String? = null
     ): Double? {
@@ -466,99 +474,179 @@ class APIService(
     }
 
     suspend fun getEnabledCurrencies(): List<CurrencyDto> {
-        val url = authStore.getCurrentSite() ?: return emptyList()
-        return client.getERPList(
-            doctype = "Currency",
-            fields = listOf("name", "currency_name", "symbol", "number_format"),
-            baseUrl = url,
-            filters = filters {
-                "enabled" eq 1
-            })
+        val payload = BootstrapRequestDto(
+            includeInventory = false,
+            includeCustomers = false,
+            includeInvoices = false,
+            includeAlerts = false,
+            includeActivity = false,
+            recentPaidOnly = true
+        )
+        val raw = fetchBootstrapRaw(payload)
+        return raw["currencies"]?.let { json.decodeFromJsonElement<List<CurrencyDto>>(it) }.orEmpty()
     }
 
     suspend fun getSystemSettingsRaw(): JsonObject? {
-        val url = authStore.getCurrentSite() ?: return null
-        return runCatching {
-            client.getERPSingle<JsonObject>(
-                doctype = "System Settings",
-                name = "System Settings",
-                baseUrl = url
-            )
-        }.getOrNull()
+        return null
     }
 
     suspend fun getCurrencyDetail(code: String): JsonObject? {
-        val url = authStore.getCurrentSite() ?: return null
-        val name = code.trim().uppercase().encodeURLParameter()
-        return runCatching {
-            client.getERPSingle<JsonObject>(
-                doctype = "Currency",
-                name = name,
-                baseUrl = url
-            )
-        }.getOrNull()
+        val normalized = code.trim().uppercase()
+        if (normalized.isBlank()) return null
+        val payload = BootstrapRequestDto(
+            includeInventory = false,
+            includeCustomers = false,
+            includeInvoices = false,
+            includeAlerts = false,
+            includeActivity = false,
+            recentPaidOnly = true
+        )
+        val currencies = fetchBootstrapRaw(payload)["currencies"]?.jsonArray ?: return null
+        return currencies
+            .asSequence()
+            .mapNotNull { it as? JsonObject }
+            .firstOrNull { it["name"]?.jsonPrimitive?.contentOrNull == normalized }
     }
 
     suspend fun getActiveModeOfPayment(): List<ModeOfPaymentDto> {
-        val url = authStore.getCurrentSite() ?: return emptyList()
-        return runCatching {
-            client.getERPList<ModeOfPaymentDto>(
-                doctype = ERPDocType.ModeOfPayment.path,
-                fields = ERPDocType.ModeOfPayment.getFields(),
-                baseUrl = url,
-                filters = filters {
-                    "enabled" eq 1
-                })
-        }.getOrElse {
-            AppLogger.warn("getActiveModeOfPayment failed", it)
-            emptyList()
-        }
+        val snapshot = getBootstrapPosSyncSnapshot()
+        return snapshot.resolvedPaymentMethods
+            .orEmpty()
+            .asSequence()
+            .filter { it.enabled }
+            .map { payment ->
+                ModeOfPaymentDto(
+                    name = payment.modeOfPayment,
+                    modeOfPayment = payment.modeOfPayment,
+                    currency = payment.accountCurrency ?: payment.currency,
+                    enabled = payment.enabled
+                )
+            }
+            .distinctBy { it.modeOfPayment }
+            .toList()
     }
 
     suspend fun getModeOfPaymentDetail(name: String): ModeOfPaymentDetailDto? {
-        val url = authStore.getCurrentSite() ?: return null
-        return runCatching {
-            client.getERPSingle<ModeOfPaymentDetailDto>(
-                doctype = ERPDocType.ModeOfPayment.path,
-                name = name.encodeURLParameter(),
-                baseUrl = url
-            )
-        }.getOrNull()
-    }
-
-    suspend fun getAccountDetail(name: String): AccountDetailDto? {
-        val url = authStore.getCurrentSite() ?: return null
-        return runCatching {
-            client.getERPSingle<AccountDetailDto>(
-                doctype = ERPDocType.Account.path, name = name.encodeURLParameter(), baseUrl = url
-            )
-        }.getOrNull()
-    }
-
-    suspend fun getCategories(): List<CategoryDto> {
-        val url = authStore.getCurrentSite() ?: ""
-        return client.getERPList<CategoryDto>(
-            ERPDocType.Category.path,
-            ERPDocType.Category.getFields(),
-            orderBy = "name asc",
-            baseUrl = url
+        val normalized = name.trim()
+        if (normalized.isBlank()) return null
+        val payment = getBootstrapPosSyncSnapshot().resolvedPaymentMethods
+            .orEmpty()
+            .firstOrNull { it.modeOfPayment == normalized || it.name == normalized }
+            ?: return null
+        return ModeOfPaymentDetailDto(
+            name = payment.modeOfPayment,
+            modeOfPayment = payment.modeOfPayment,
+            enabled = payment.enabled,
+            type = payment.accountType ?: payment.modeOfPaymentType,
+            accounts = payment.accounts
         )
     }
 
-    suspend fun getItemDetail(itemId: String): ItemDto {
-        val url = authStore.getCurrentSite()
-        if (url.isNullOrEmpty()) throw Exception("URL Invalida")
+    suspend fun getAccountDetail(name: String): AccountDetailDto? {
+        val normalized = name.trim()
+        if (normalized.isBlank()) return null
+        val payment = getBootstrapPosSyncSnapshot().resolvedPaymentMethods
+            .orEmpty()
+            .firstOrNull { method ->
+                method.account == normalized || method.defaultAccount == normalized ||
+                    method.accounts.any { it.defaultAccount == normalized }
+            } ?: return null
+        return AccountDetailDto(
+            name = normalized,
+            accountCurrency = payment.accountCurrency ?: payment.currency,
+            accountType = payment.accountType ?: payment.modeOfPaymentType,
+            company = payment.company
+        )
+    }
 
-        return client.getERPSingle(
-            doctype = ERPDocType.Item.path, name = itemId, baseUrl = url
+    suspend fun getCategories(): List<CategoryDto> {
+        val payload = BootstrapRequestDto(
+            includeInventory = true,
+            includeCustomers = false,
+            includeInvoices = false,
+            includeAlerts = false,
+            includeActivity = false,
+            recentPaidOnly = true
+        )
+        val raw = fetchBootstrapRaw(payload)
+        return raw["categories"]?.let { json.decodeFromJsonElement<List<CategoryDto>>(it) }
+            .orEmpty()
+    }
+
+    suspend fun getItemDetail(itemId: String): ItemDto {
+        val payload = BootstrapRequestDto(
+            includeInventory = true,
+            includeCustomers = false,
+            includeInvoices = false,
+            includeAlerts = false,
+            includeActivity = false,
+            recentPaidOnly = true
+        )
+        val item = fetchBootstrap(payload).inventoryItems.firstOrNull { it.itemCode == itemId }
+            ?: throw IllegalStateException("Item $itemId no encontrado en sync.bootstrap")
+        return ItemDto(
+            itemCode = item.itemCode,
+            itemName = item.name,
+            itemGroup = item.itemGroup,
+            description = item.description,
+            brand = item.brand,
+            image = item.image,
+            disabled = false,
+            stockUom = item.stockUom,
+            standardRate = item.price,
+            isStockItem = item.isStocked,
+            isSalesItem = true
         )
     }
 
     suspend fun openCashbox(pos: POSOpeningEntryDto): POSOpeningEntryResponseDto {
-        return postMethodWithPayload(
-            methodPath = "erpnext_pos.api.v1.pos_session.opening_create_submit",
-            payload = pos
-        )
+        val authenticatedUser = store.loadUser()?.trim().orEmpty()
+        if (authenticatedUser.isBlank()) {
+            store.clear()
+            throw IllegalStateException(
+                "Sesion invalida: no hay usuario autenticado para abrir caja. Vuelve a iniciar sesion."
+            )
+        }
+        val requestedUser = pos.user?.trim()
+        if (!requestedUser.isNullOrBlank() && !requestedUser.equals(authenticatedUser, ignoreCase = true)) {
+            throw IllegalArgumentException(
+                "payload.user ($requestedUser) no coincide con el usuario autenticado ($authenticatedUser)."
+            )
+        }
+        val payload = buildJsonObject {
+            put("pos_profile", JsonPrimitive(pos.posProfile))
+            put("company", JsonPrimitive(pos.company))
+            put("user", JsonPrimitive(authenticatedUser))
+            put("period_start_date", JsonPrimitive(pos.periodStartDate))
+            put("period_end_date", JsonPrimitive(pos.postingDate))
+            put(
+                "balance_details",
+                json.parseToJsonElement(json.encodeToString(pos.balanceDetails))
+            )
+            pos.taxes?.let { taxes ->
+                put("taxes", json.parseToJsonElement(json.encodeToString(taxes)))
+            }
+            pos.docStatus?.let { docStatus ->
+                put("docstatus", JsonPrimitive(docStatus))
+            }
+        }
+        return runCatching {
+            val response: POSOpeningEntryResponseDto = postMethodWithPayload(
+                methodPath = "erpnext_pos.api.v1.pos_session.opening_create_submit",
+                payload = payload
+            )
+            response
+        }.getOrElse { error ->
+            val mismatch = error.message
+                ?.contains("payload.user must match authenticated user", ignoreCase = true) == true
+            if (mismatch) {
+                store.clear()
+                throw IllegalStateException(
+                    "Sesion invalida: el usuario autenticado no coincide con payload.user. Vuelve a iniciar sesion."
+                )
+            }
+            throw error
+        }
     }
 
     suspend fun getOpenPOSOpeningEntries(
@@ -579,7 +667,13 @@ class APIService(
             val shiftUser = openShift.stringOrNull("user")
             val shiftProfile = openShift.stringOrNull("pos_profile")
             if (!shiftProfile.equals(posProfile, ignoreCase = true)) return@runCatching emptyList()
-            if (!shiftUser.isNullOrBlank() && !shiftUser.equals(user, ignoreCase = true)) return@runCatching emptyList()
+            val requestedUser = user.trim()
+            if (requestedUser.isNotBlank() &&
+                !shiftUser.isNullOrBlank() &&
+                !shiftUser.equals(requestedUser, ignoreCase = true)
+            ) {
+                return@runCatching emptyList()
+            }
             listOf(
                 POSOpeningEntrySummaryDto(
                     name = openShift.stringOrNull("name").orEmpty(),
@@ -617,6 +711,18 @@ class APIService(
         if (!openName.equals(name, ignoreCase = true)) {
             throw IllegalStateException("POS Opening Entry $name is not active in current shift")
         }
+        val balances = openShift["balance_details"]?.jsonArray
+            ?.mapNotNull { element ->
+                val row = element as? JsonObject ?: return@mapNotNull null
+                val mode = row.stringOrNull("mode_of_payment") ?: return@mapNotNull null
+                val opening = row["opening_amount"]?.jsonPrimitive?.doubleOrNull ?: 0.0
+                BalanceDetailsDto(
+                    modeOfPayment = mode,
+                    openingAmount = opening,
+                    closingAmount = null
+                )
+            }
+            .orEmpty()
         return POSOpeningEntryDetailDto(
             name = openName.orEmpty(),
             posProfile = openShift.stringOrNull("pos_profile").orEmpty(),
@@ -628,32 +734,22 @@ class APIService(
                 ?: openShift.stringOrNull("period_start_date")
                 ?: DateTimeProvider.todayDate(),
             user = openShift.stringOrNull("user"),
-            balanceDetails = emptyList()
+            balanceDetails = balances
         )
     }
 
-    suspend fun submitPOSOpeningEntry(name: String): SubmitResponseDto {
-        throw UnsupportedOperationException(
-            "submitPOSOpeningEntry legado removido. Usa erpnext_pos.api.v1.pos_session.opening_create_submit."
+    suspend fun getBootstrapOpenShift(): POSOpeningEntryDetailDto? {
+        val payload = BootstrapRequestDto(
+            includeInventory = false,
+            includeCustomers = false,
+            includeInvoices = false,
+            includeAlerts = false,
+            includeActivity = false,
+            recentPaidOnly = true
         )
-    }
-
-    suspend fun submitPOSClosingEntry(name: String): SubmitResponseDto {
-        throw UnsupportedOperationException(
-            "submitPOSClosingEntry legado removido. Usa erpnext_pos.api.v1.pos_session.closing_create_submit."
-        )
-    }
-
-    suspend fun submitSalesInvoice(name: String): SubmitResponseDto {
-        throw UnsupportedOperationException(
-            "submitSalesInvoice legado removido. Usa erpnext_pos.api.v1.sales_invoice.create_submit."
-        )
-    }
-
-    suspend fun submitPaymentEntry(name: String): SubmitResponseDto {
-        throw UnsupportedOperationException(
-            "submitPaymentEntry legado removido. Usa erpnext_pos.api.v1.payment_entry.create_submit."
-        )
+        val openShift = fetchBootstrapRaw(payload)["open_shift"]?.jsonObject ?: return null
+        val name = openShift.stringOrNull("name") ?: return null
+        return runCatching { getPOSOpeningEntry(name) }.getOrNull()
     }
 
     suspend fun cancelSalesInvoice(name: String): SubmitResponseDto {
@@ -689,17 +785,6 @@ class APIService(
         }
     }
 
-    suspend fun setValue(
-        doctype: String,
-        name: String,
-        fieldname: String,
-        value: String
-    ) {
-        throw UnsupportedOperationException(
-            "setValue legado removido. Usa erpnext_pos.api.v1.settings.mobile_update."
-        )
-    }
-
     private inline fun <reified T> decodeMethodMessage(bodyText: String): T {
         val parsed = json.parseToJsonElement(bodyText).jsonObject
         val messageElement = parsed["message"]
@@ -731,6 +816,17 @@ class APIService(
 
     private inline fun <reified T> decodeMethodData(bodyText: String): T {
         val messageObj = decodeMethodMessage<JsonObject>(bodyText)
+        val success = messageObj["success"]?.jsonPrimitive?.contentOrNull?.toBooleanStrictOrNull()
+            ?: true
+        if (!success) {
+            val errorMessage = messageObj["error"]
+                ?.jsonObject
+                ?.get("message")
+                ?.jsonPrimitive
+                ?.contentOrNull
+                ?: "Error en API v1"
+            throw IllegalStateException(errorMessage)
+        }
         val dataElement = messageObj["data"]
             ?: throw FrappeException("La respuesta no contiene 'message.data'. Respuesta: $bodyText")
         return json.decodeFromJsonElement(dataElement)
@@ -812,8 +908,56 @@ class APIService(
     suspend fun getPOSClosingEntriesForOpening(
         openingEntryName: String
     ): List<POSClosingEntrySummaryDto> {
-        AppLogger.warn("getPOSClosingEntriesForOpening: no dedicated whitelist endpoint available yet")
-        return emptyList()
+        val opening = openingEntryName.trim()
+        if (opening.isBlank()) return emptyList()
+
+        // Primary API v1 lookup for a closing entry bound to a specific opening entry.
+        val primary = runCatching {
+            postMethodWithPayload<JsonObject, List<POSClosingEntrySummaryDto>>(
+                methodPath = "erpnext_pos.api.v1.pos_session.closing_for_opening",
+                payload = buildJsonObject {
+                    put("pos_opening_entry", JsonPrimitive(opening))
+                }
+            )
+        }.getOrNull()
+        if (!primary.isNullOrEmpty()) return primary
+
+        // Secondary naming used in some deployments.
+        val secondary = runCatching {
+            postMethodWithPayload<JsonObject, List<POSClosingEntrySummaryDto>>(
+                methodPath = "erpnext_pos.api.v1.pos_session.get_closings_for_opening",
+                payload = buildJsonObject {
+                    put("pos_opening_entry", JsonPrimitive(opening))
+                }
+            )
+        }.getOrNull()
+        if (!secondary.isNullOrEmpty()) return secondary
+
+        // Bootstrap fallback: if backend exposes the linked closing id in open_shift payload.
+        val bootstrapShift = runCatching {
+            fetchBootstrapRaw(
+                BootstrapRequestDto(
+                    includeInventory = false,
+                    includeCustomers = false,
+                    includeInvoices = false,
+                    includeAlerts = false,
+                    includeActivity = false,
+                    recentPaidOnly = true
+                )
+            )["open_shift"]?.jsonObject
+        }.getOrNull() ?: return emptyList()
+        val openingInShift = bootstrapShift.stringOrNull("name")
+        if (!openingInShift.equals(opening, ignoreCase = true)) return emptyList()
+        val closingName = bootstrapShift.stringOrNull("pos_closing_entry") ?: return emptyList()
+        return listOf(
+            POSClosingEntrySummaryDto(
+                name = closingName,
+                posOpeningEntry = openingInShift,
+                periodEndDate = bootstrapShift.stringOrNull("period_end_date"),
+                postingDate = bootstrapShift.stringOrNull("posting_date"),
+                docstatus = 1
+            )
+        )
     }
 
     suspend fun getPOSProfileDetails(profileId: String): POSProfileDto {
@@ -825,13 +969,27 @@ class APIService(
         )
     }
 
-    suspend fun getPOSProfiles(assignedTo: String?): List<POSProfileSimpleDto> {
+    suspend fun getPOSProfiles(): List<POSProfileSimpleDto> {
         val data: JsonObject = postMethodWithPayload(
             methodPath = "erpnext_pos.api.v1.sync.my_pos_profiles",
             payload = buildJsonObject {}
         )
         val profilesElement = data["profiles"] ?: return emptyList()
         return json.decodeFromJsonElement(profilesElement)
+    }
+
+    suspend fun getBootstrapPosSyncSnapshot(profileName: String? = null): BootstrapPosSyncDto {
+        val payload = BootstrapRequestDto(
+            includeInventory = false,
+            includeCustomers = false,
+            includeInvoices = false,
+            includeAlerts = false,
+            includeActivity = false,
+            recentPaidOnly = true,
+            profileName = profileName
+        )
+        val data = fetchBootstrapRaw(payload)
+        return json.decodeFromJsonElement(data)
     }
 
     suspend fun getLoginWithSite(site: String): LoginInfo {
@@ -915,20 +1073,11 @@ class APIService(
         itemCodes: List<String>
     ): Map<String, Double> {
         if (itemCodes.isEmpty()) return emptyMap()
-        val url = authStore.getCurrentSite() ?: throw Exception("URL Invalida")
-        val bins = client.getERPList<BinDto>(
-            doctype = ERPDocType.Bin.path,
-            fields = listOf("item_code", "warehouse", "stock_uom", "actual_qty", "reserved_qty"),
-            limit = itemCodes.size,
-            baseUrl = url
-        ) {
-            "warehouse" eq warehouse
-            "item_code" `in` itemCodes
-        }
-        return bins.associate { bin ->
-            val sellableQty = (bin.actualQty - (bin.reservedQty ?: 0.0)).coerceAtLeast(0.0)
-            bin.itemCode to sellableQty
-        }
+        val lookup = itemCodes.toSet()
+        return getInventoryForWarehouse(warehouse = warehouse, priceList = null)
+            .asSequence()
+            .filter { it.itemCode in lookup }
+            .associate { it.itemCode to it.actualQty.coerceAtLeast(0.0) }
     }
 
     suspend fun fetchBinsForItems(
@@ -936,26 +1085,22 @@ class APIService(
         itemCodes: List<String>
     ): List<BinDto> {
         if (itemCodes.isEmpty()) return emptyList()
-        val url = authStore.getCurrentSite() ?: throw Exception("URL Invalida")
-        val chunkSize = 50
-        return itemCodes.chunked(chunkSize).flatMap { codes ->
-            client.getERPList<BinDto>(
-                doctype = ERPDocType.Bin.path,
-                fields = listOf(
-                    "item_code",
-                    "warehouse",
-                    "stock_uom",
-                    "actual_qty",
-                    "projected_qty",
-                    "reserved_qty"
-                ),
-                limit = codes.size,
-                baseUrl = url
-            ) {
-                "warehouse" eq warehouse
-                "item_code" `in` codes
+        val lookup = itemCodes.toSet()
+        return getInventoryForWarehouse(warehouse = warehouse, priceList = null)
+            .asSequence()
+            .filter { it.itemCode in lookup }
+            .map { item ->
+                BinDto(
+                    itemCode = item.itemCode,
+                    warehouse = warehouse,
+                    actualQty = item.actualQty,
+                    reservedQty = 0.0,
+                    projectedQty = item.projectedQty ?: item.actualQty,
+                    stockUom = item.stockUom,
+                    valuationRate = item.valuationRate
+                )
             }
-        }
+            .toList()
     }
 
     suspend fun fetchItemReordersForItems(
@@ -963,59 +1108,22 @@ class APIService(
         itemCodes: List<String>
     ): List<ItemReorderDto> {
         if (itemCodes.isEmpty()) return emptyList()
-        val url = authStore.getCurrentSite() ?: throw Exception("URL Invalida")
-        val chunkSize = 50
-        return itemCodes.chunked(chunkSize).flatMap { codes ->
-            val rows = client.getERPList<JsonObject>(
-                doctype = ERPDocType.Item.path,
-                fields = listOf("name", "reorder_levels"),
-                limit = codes.size,
-                baseUrl = url
-            ) {
-                "name" `in` codes
-            }
-
-            rows.mapNotNull { row ->
-                val itemCode = row["name"]?.jsonPrimitive?.contentOrNull ?: return@mapNotNull null
-                val reorderLevels = decodeReorderLevels(row["reorder_levels"])
-                val warehouseMatch = reorderLevels.firstOrNull {
-                    val wh = it["warehouse"]?.jsonPrimitive?.contentOrNull
-                    wh.equals(warehouse, ignoreCase = true)
-                } ?: return@mapNotNull null
-
+        val lookup = itemCodes.toSet()
+        return getInventoryForWarehouse(warehouse = warehouse, priceList = null)
+            .asSequence()
+            .filter { it.itemCode in lookup }
+            .map {
                 ItemReorderDto(
-                    itemCode = itemCode,
+                    itemCode = it.itemCode,
                     warehouse = warehouse,
-                    reorderLevel = warehouseMatch["warehouse_reorder_level"]?.asDoubleOrNull(),
-                    reorderQty = warehouseMatch["warehouse_reorder_qty"]?.asDoubleOrNull()
+                    reorderLevel = it.stockAlertReorderLevel,
+                    reorderQty = it.stockAlertReorderQty
                 )
             }
-        }
-    }
-
-    private fun decodeReorderLevels(raw: JsonElement?): List<JsonObject> {
-        if (raw == null) return emptyList()
-        val parsed: JsonElement = when (raw) {
-            is JsonArray -> raw
-            is JsonPrimitive -> {
-                val content = raw.contentOrNull ?: return emptyList()
-                runCatching { json.parseToJsonElement(content) }.getOrNull() ?: return emptyList()
-            }
-
-            else -> return emptyList()
-        }
-        return (parsed as? JsonArray)
-            ?.mapNotNull { it as? JsonObject }
-            .orEmpty()
-    }
-
-    private fun JsonElement.asDoubleOrNull(): Double? {
-        val primitive = this as? JsonPrimitive ?: return null
-        return primitive.doubleOrNull ?: primitive.contentOrNull?.toDoubleOrNull()
+            .toList()
     }
 
     suspend fun findInvoiceBySignature(
-        doctype: String,
         posOpeningEntry: String?,
         postingDate: String?,
         customer: String?,
@@ -1026,20 +1134,18 @@ class APIService(
             customer.isNullOrBlank() ||
             grandTotal == null
         ) return null
-        val url = authStore.getCurrentSite()
-        return client.getERPList<SalesInvoiceDto>(
-            doctype = doctype,
-            fields = listOf("name", "docstatus"),
-            baseUrl = url,
-            limit = 1,
-            orderBy = "modified desc",
-            filters = filters {
-                "pos_opening_entry" eq posOpeningEntry
-                "posting_date" eq postingDate
-                "customer" eq customer
-                "grand_total" eq grandTotal
+        val profiles = getPOSProfiles().map { it.profileName }.ifEmpty { listOf("") }
+        profiles.forEach { profile ->
+            val invoices = fetchAllInvoicesCombined(profile, recentPaidOnly = false)
+            val found = invoices.firstOrNull { invoice ->
+                invoice.posOpeningEntry == posOpeningEntry &&
+                    invoice.postingDate.take(10) == postingDate &&
+                    invoice.customer == customer &&
+                    invoice.grandTotal == grandTotal
             }
-        ).firstOrNull()?.name
+            if (found != null) return found.name
+        }
+        return null
     }
 
     val json = Json {
@@ -1135,41 +1241,6 @@ class APIService(
             .toList()
     }
 
-
-    suspend fun getCustomerContact(customerId: String): ContactChildDto? {
-        val url = authStore.getCurrentSite()
-        return client.getERPList<ContactChildDto>(
-            doctype = ERPDocType.CustomerContact.path,
-            fields = listOf("name", "mobile_no", "email_id", "phone"),
-            baseUrl = url,
-            filters = filters {
-                "link_doctype" eq "Customer"
-                "link_name" eq customerId
-            }
-        ).firstOrNull()
-    }
-
-    suspend fun getCustomerAddress(customerId: String): CustomerAddressDto? {
-        val url = authStore.getCurrentSite()
-        return client.getERPList<CustomerAddressDto>(
-            doctype = "Address",
-            fields = listOf(
-                "name",
-                "address_title",
-                "address_type",
-                "address_line1",
-                "address_line2",
-                "city",
-                "country"
-            ),
-            baseUrl = url,
-            filters = filters {
-                "link_doctype" eq "Customer"
-                "link_name" eq customerId
-            }
-        ).firstOrNull()
-    }
-
     // Batch method for all outstanding invoices
     suspend fun getAllOutstandingInvoices(posProfile: String): List<SalesInvoiceDto> {
         return fetchAllInvoicesCombined(posProfile, recentPaidOnly = true).filter { invoice ->
@@ -1183,19 +1254,13 @@ class APIService(
         posProfile: String, offset: Int = 0, limit: Int = Int.MAX_VALUE
     ): List<SalesInvoiceDto> {
         return try {
-            val url = authStore.getCurrentSite()
             val today = DateTimeProvider.todayDate()
             val startDate = DateTimeProvider.addDays(today, -DEFAULT_INVOICE_SYNC_DAYS)
-            client.getERPList(
-                doctype = ERPDocType.SalesInvoice.path,
-                fields = ERPDocType.SalesInvoice.getFields(),
-                offset = offset,
-                limit = limit,
-                baseUrl = url,
-                filters = filters {
-                    "pos_profile" eq posProfile
-                    "posting_date" gte startDate
-                    "status" `in` listOf(
+            fetchAllInvoicesCombined(posProfile, recentPaidOnly = false)
+                .asSequence()
+                .filter { it.postingDate.take(10) >= startDate }
+                .filter {
+                    it.status in listOf(
                         "Draft",
                         "Unpaid",
                         "Overdue",
@@ -1208,7 +1273,12 @@ class APIService(
                         "Credit Note Issued",
                         "Return"
                     )
-                })
+                }
+                .drop(offset.coerceAtLeast(0))
+                .let { seq ->
+                    if (limit == Int.MAX_VALUE) seq else seq.take(limit.coerceAtLeast(0))
+                }
+                .toList()
         } catch (e: Exception) {
             e.printStackTrace()
             AppSentry.capture(e, "fetchAllInvoices failed")
@@ -1217,51 +1287,9 @@ class APIService(
         }
     }
 
-    suspend fun fetchAllInvoicesSmart(
-        posProfile: String,
-        paidDays: Int = RECENT_PAID_INVOICE_DAYS
-    ): List<SalesInvoiceDto> {
-        return try {
-            val today = DateTimeProvider.todayDate()
-            val startDate = DateTimeProvider.addDays(today, -DEFAULT_INVOICE_SYNC_DAYS)
-            val paidStartDate = DateTimeProvider.addDays(today, -paidDays)
-            val openStatuses = listOf(
-                "Draft",
-                "Unpaid",
-                "Overdue",
-                "Partly Paid",
-                "Overdue and Discounted",
-                "Unpaid and Discounted",
-                "Partly Paid and Discounted",
-                "Cancelled",
-                "Credit Note Issued",
-                "Return"
-            )
-            val openInvoices = fetchInvoicesByStatus(
-                doctype = ERPDocType.SalesInvoice.path,
-                posProfile = posProfile,
-                startDate = startDate,
-                statuses = openStatuses
-            )
-            val paidInvoices = fetchInvoicesByStatus(
-                doctype = ERPDocType.SalesInvoice.path,
-                posProfile = posProfile,
-                startDate = paidStartDate,
-                statuses = listOf("Paid")
-            )
-            (openInvoices + paidInvoices).distinctBy { it.name }
-        } catch (e: Exception) {
-            e.printStackTrace()
-            AppSentry.capture(e, "fetchAllInvoicesSmart failed")
-            AppLogger.warn("fetchAllInvoicesSmart failed", e)
-            emptyList()
-        }
-    }
-
     suspend fun fetchAllInvoicesCombined(
         posProfile: String,
         recentPaidOnly: Boolean = false,
-        paidDays: Int = RECENT_PAID_INVOICE_DAYS
     ): List<SalesInvoiceDto> {
         val payload = BootstrapRequestDto(
             includeInventory = false,
@@ -1325,7 +1353,7 @@ class APIService(
     }
 
     suspend fun getSalesInvoiceByName(name: String): SalesInvoiceDto {
-        val profiles = getPOSProfiles(assignedTo = null).map { it.profileName }.ifEmpty { listOf("") }
+        val profiles = getPOSProfiles().map { it.profileName }.ifEmpty { listOf("") }
         profiles.forEach { profile ->
             val invoices = runCatching {
                 fetchAllInvoicesCombined(profile, recentPaidOnly = false)

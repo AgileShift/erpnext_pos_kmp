@@ -38,7 +38,6 @@ class SalesInvoiceRemoteSource(
         grandTotal: Double?
     ): String? {
         return apiService.findInvoiceBySignature(
-            doctype = ERPDocType.SalesInvoice.path,
             posOpeningEntry = posOpeningEntry,
             postingDate = postingDate,
             customer = customer,
