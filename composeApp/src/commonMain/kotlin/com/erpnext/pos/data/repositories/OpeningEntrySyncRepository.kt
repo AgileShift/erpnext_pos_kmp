@@ -36,7 +36,6 @@ class OpeningEntrySyncRepository(
                 }
                 ensureRemoteOpeningEntry(remoteName, candidate.openingEntry)
                 updateOpeningEntryRefs(candidate.openingEntry.name, remoteName)
-                posOpeningRepository.submitOpeningEntry(remoteName)
                 openingEntryLinkDao.markSynced(candidate.link.id, remoteName)
                 openingEntryDao.update(candidate.openingEntry.copy(pendingSync = false))
                 cashboxDao.updatePendingSync(candidate.cashbox.localId, false)

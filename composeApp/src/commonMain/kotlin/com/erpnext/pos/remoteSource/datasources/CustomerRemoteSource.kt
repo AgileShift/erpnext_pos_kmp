@@ -1,6 +1,7 @@
 package com.erpnext.pos.remoteSource.datasources
 
 import com.erpnext.pos.remoteSource.api.APIService
+import com.erpnext.pos.remoteSource.dto.BootstrapDataDto
 import com.erpnext.pos.remoteSource.dto.CustomerDto
 import com.erpnext.pos.remoteSource.dto.SalesInvoiceDto
 
@@ -9,6 +10,14 @@ class CustomerRemoteSource(
 ) {
     suspend fun fetchCustomers(territory: String?): List<CustomerDto> {
         return api.getCustomers(territory)
+    }
+
+    suspend fun fetchCustomersBootstrapSnapshot(
+        profileName: String?,
+        territory: String?,
+        recentPaidOnly: Boolean = false
+    ): BootstrapDataDto {
+        return api.fetchCustomersBootstrapSnapshot(profileName, territory, recentPaidOnly)
     }
 
     suspend fun fetchInvoices(

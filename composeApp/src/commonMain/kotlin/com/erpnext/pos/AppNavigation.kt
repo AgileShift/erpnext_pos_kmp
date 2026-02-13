@@ -70,7 +70,7 @@ import com.erpnext.pos.navigation.TopBarController
 import com.erpnext.pos.navigation.ShiftOpenChip
 import com.erpnext.pos.navigation.StatusIconButton
 import com.erpnext.pos.navigation.formatShiftDuration
-import com.erpnext.pos.navigation.v2.BottomBarWithCenterFab
+import com.erpnext.pos.navigation.BottomBarWithCenterFab
 import com.erpnext.pos.utils.view.SnackbarHost
 import com.erpnext.pos.utils.loading.LoadingIndicator
 import com.erpnext.pos.utils.loading.LoadingUiState
@@ -86,9 +86,11 @@ import com.erpnext.pos.sync.SyncState
 import com.erpnext.pos.domain.usecases.LogoutUseCase
 import com.erpnext.pos.views.billing.BillingResetController
 import com.erpnext.pos.remoteSource.oauth.AuthInfoStore
+import com.erpnext.pos.remoteSource.api.APIService
 import org.koin.compose.koinInject
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
+import com.erpnext.pos.utils.AppLogger
 import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
 
@@ -99,6 +101,8 @@ fun shouldShowBottomBar(currentRoute: String): Boolean {
 fun shouldShowTopBar(currentRoute: String): Boolean {
     return shouldShowBottomBar(currentRoute)
 }
+
+private const val ACTIVITY_FEED_REFRESH_INTERVAL_MS = 60_000L
 
 private fun instanceLabel(url: String?): String? {
     if (url.isNullOrBlank()) return null
@@ -163,6 +167,7 @@ fun AppNavigation() {
     val billingResetController = koinInject<BillingResetController>()
     val logoutUseCase = koinInject<LogoutUseCase>()
     val authInfoStore = koinInject<AuthInfoStore>()
+    val apiService = koinInject<APIService>()
     val topBarController = remember { TopBarController() }
     val scope = rememberCoroutineScope()
     val syncState by syncManager.state.collectAsState(initial = SyncState.IDLE)
@@ -183,6 +188,7 @@ fun AppNavigation() {
     var currentSite by remember { mutableStateOf<String?>(null) }
     var tick by remember { mutableStateOf(0L) }
     var settingsFromMenu by remember { mutableStateOf(false) }
+    var activityBadgeCount by remember { mutableStateOf(0) }
 
     LaunchedEffect(cashBoxManager) {
         cashBoxManager.initializeContext()
@@ -201,6 +207,41 @@ fun AppNavigation() {
 
     LaunchedEffect(currentRoute) {
         currentSite = authInfoStore.getCurrentSite()
+    }
+
+    LaunchedEffect(isOnline, posContext?.profileName, posContext?.territory, posContext?.route) {
+        if (!isOnline) {
+            activityBadgeCount = 0
+            return@LaunchedEffect
+        }
+        val context = posContext ?: run {
+            activityBadgeCount = 0
+            return@LaunchedEffect
+        }
+        var notifiedFailure = false
+        while (true) {
+            runCatching {
+                apiService.fetchActivityBootstrapSnapshot(
+                    profileName = context.profileName,
+                    territory = context.territory ?: context.route
+                )
+            }.onSuccess { snapshot ->
+                notifiedFailure = false
+                val count = snapshot.activityEvents.size + snapshot.inventoryAlerts.size
+                activityBadgeCount = count.coerceAtLeast(0)
+            }.onFailure { error ->
+                AppLogger.warn("activity bootstrap refresh failed", error)
+                if (!notifiedFailure) {
+                    snackbarController.show(
+                        "No se pudo actualizar la actividad en tiempo real.",
+                        com.erpnext.pos.utils.view.SnackbarType.Error,
+                        com.erpnext.pos.utils.view.SnackbarPosition.Top
+                    )
+                    notifiedFailure = true
+                }
+            }
+            delay(ACTIVITY_FEED_REFRESH_INTERVAL_MS)
+        }
     }
 
     val isDesktop = getPlatformName() == "Desktop"
@@ -286,7 +327,8 @@ fun AppNavigation() {
                         if (isDesktop && shouldShowBottomBar(currentRoute)) {
                             DesktopNavigationRail(
                                 navController = navController,
-                                contextProvider = cashBoxManager
+                                contextProvider = cashBoxManager,
+                                activityBadgeCount = activityBadgeCount
                             )
                         }
                         Column(

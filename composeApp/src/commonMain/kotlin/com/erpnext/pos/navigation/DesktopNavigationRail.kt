@@ -4,6 +4,11 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationRail
 import androidx.compose.material3.NavigationRailItem
@@ -22,7 +27,8 @@ import com.erpnext.pos.views.CashBoxManager
 @Composable
 fun DesktopNavigationRail(
     navController: NavController,
-    contextProvider: CashBoxManager
+    contextProvider: CashBoxManager,
+    activityBadgeCount: Int = 0
 ) {
     val isCashBoxOpen by contextProvider.cashboxState.collectAsState()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
@@ -68,6 +74,9 @@ fun DesktopNavigationRail(
             }
 
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                ActivityNavigationRailEntry(
+                    activityBadgeCount = activityBadgeCount
+                )
                 secondaryItems.forEach { navRoute ->
                     NavigationRailEntry(
                         navController = navController,
@@ -79,6 +88,41 @@ fun DesktopNavigationRail(
             }
         }
     }
+}
+
+@Composable
+private fun ActivityNavigationRailEntry(
+    activityBadgeCount: Int
+) {
+    val hasBadge = activityBadgeCount > 0
+    val badgeText = if (activityBadgeCount > 99) "99+" else activityBadgeCount.toString()
+    NavigationRailItem(
+        selected = false,
+        onClick = {},
+        icon = {
+            BadgedBox(
+                badge = {
+                    if (hasBadge) {
+                        Badge {
+                            Text(text = badgeText)
+                        }
+                    }
+                }
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.Notifications,
+                    contentDescription = "Actividad",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        },
+        label = {
+            Text(
+                text = "Actividad",
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    )
 }
 
 @Composable

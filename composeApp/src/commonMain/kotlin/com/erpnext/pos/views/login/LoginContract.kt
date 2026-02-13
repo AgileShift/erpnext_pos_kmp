@@ -14,6 +14,7 @@ data class LoginAction(
     val existingSites: () -> Unit = { },
     val onSiteSelected: (site: Site) -> Unit = { },
     val onToggleFavorite: (site: Site) -> Unit = { },
+    val onDeleteSite: (site: Site) -> Unit = { },
     val onAddSite: (String) -> Unit = {},
     val isAuthenticated: (TokenResponse) -> Unit = { },
     val onError: (error: String) -> Unit = {},

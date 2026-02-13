@@ -7,8 +7,8 @@ import com.erpnext.pos.localSource.entities.ModeOfPaymentEntity
 import com.erpnext.pos.localSource.entities.SalesInvoiceWithItemsAndPayments
 import com.erpnext.pos.remoteSource.dto.SalesInvoiceDto
 import com.erpnext.pos.remoteSource.dto.SalesInvoiceItemDto
-import com.erpnext.pos.remoteSource.dto.v2.PaymentEntryCreateDto
-import com.erpnext.pos.remoteSource.dto.v2.PaymentEntryReferenceCreateDto
+import com.erpnext.pos.remoteSource.dto.PaymentEntryCreateDto
+import com.erpnext.pos.remoteSource.dto.PaymentEntryReferenceCreateDto
 import com.erpnext.pos.remoteSource.mapper.toEntity
 import com.erpnext.pos.remoteSource.mapper.toDto
 import com.erpnext.pos.utils.NetworkMonitor

@@ -128,7 +128,7 @@ class SyncManager(
         }
         lastSyncAttemptAt = now
 
-        /* TODO: Agregar POS Profiles con sus detalles, esto lo vamos a remover en la v2
+        /* TODO: Agregar POS Profiles con sus detalles, esto se removera en una futura iteracion
             Porque los perfiles ya vendran en el initial data y solo los que pertenecen al usuario
          */
         syncJob = scope.launch {

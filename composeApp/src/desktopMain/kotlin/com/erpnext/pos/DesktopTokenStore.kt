@@ -59,9 +59,13 @@ class DesktopTokenStore(
     }
 
     private fun prefKey(key: String) = "secret.$key"
-    private suspend fun siteScopedKey(key: String): String {
-        val siteKey = instanceKeyFromUrl(getCurrentSite())
+    private fun siteScopedKeyForUrl(url: String?, key: String): String {
+        val siteKey = instanceKeyFromUrl(url)
         return "${siteKey}_$key"
+    }
+
+    private suspend fun siteScopedKey(key: String): String {
+        return siteScopedKeyForUrl(getCurrentSite(), key)
     }
 
     private inline fun <T> runKeyring(block: (Keyring) -> T): Result<T> {
@@ -197,6 +201,37 @@ class DesktopTokenStore(
 
     override suspend fun getCurrentSite(): String? =
         prefs.get("current_site", null)
+
+    override suspend fun deleteSite(url: String): Boolean = mutex.withLock {
+        val list = loadAuthInfo()
+        if (list.none { it.url == url }) return@withLock false
+        val updated = list.filterNot { it.url == url }
+
+        deleteSecret(siteScopedKeyForUrl(url, "access_token"))
+        deleteSecret(siteScopedKeyForUrl(url, "refresh_token"))
+        deleteSecret(siteScopedKeyForUrl(url, "id_token"))
+        prefs.remove(siteScopedKeyForUrl(url, "expires_in"))
+        prefs.remove(siteScopedKeyForUrl(url, "userId"))
+
+        val currentSite = getCurrentSite()
+        if (currentSite == url) {
+            stateFlow.update { null }
+            val nextSite = updated.firstOrNull()?.url
+            if (nextSite.isNullOrBlank()) {
+                prefs.remove("current_site")
+            } else {
+                prefs.put("current_site", nextSite)
+            }
+        }
+
+        if (updated.isEmpty()) {
+            prefs.remove("sitesInfo")
+        } else {
+            prefs.put("sitesInfo", json.encodeToString(updated))
+        }
+        prefs.flush()
+        true
+    }
 
     override suspend fun updateSiteMeta(
         url: String,

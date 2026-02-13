@@ -15,18 +15,21 @@ import com.erpnext.pos.localSource.datasources.InventoryLocalSource
 import com.erpnext.pos.localSource.entities.ItemEntity
 import com.erpnext.pos.remoteSource.datasources.InventoryRemoteSource
 import com.erpnext.pos.remoteSource.mapper.toEntity
-import com.erpnext.pos.sync.SyncTTL
 import com.erpnext.pos.utils.RepoTrace
 import com.erpnext.pos.views.CashBoxManager
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
+import kotlin.time.Clock
 
 class InventoryRepository(
     private val remoteSource: InventoryRemoteSource,
     private val localSource: InventoryLocalSource,
     private val context: CashBoxManager
 ) : IInventoryRepository {
+    private companion object {
+        const val ONLINE_REFRESH_TTL_MINUTES = 5L
+    }
 
     suspend fun decrementStock(warehouse: String, deltas: List<StockDelta>) {
         localSource.decrementStock(warehouse, deltas)
@@ -79,9 +82,10 @@ class InventoryRepository(
             },
             onFetchFailed = { RepoTrace.capture("InventoryRepository", "getItems", it) },
             shouldFetch = { localData ->
-                localData.isEmpty() ||
-                        SyncTTL.isExpired(localData.maxOf { it.lastSyncedAt?.toDouble() ?: 0.0 }
-                            .toLong())
+                if (localData.isEmpty()) return@networkBoundResource true
+                val newest = localData.maxOfOrNull { it.lastSyncedAt ?: 0L } ?: 0L
+                val elapsed = Clock.System.now().toEpochMilliseconds() - newest
+                elapsed >= ONLINE_REFRESH_TTL_MINUTES * 60_000L
             }
         ).map { resource ->
             resource.data ?: emptyList()
@@ -111,7 +115,10 @@ class InventoryRepository(
             clearLocalData = { localSource.deleteAll() },
             shouldFetch = {
                 val first = localSource.getOldestItem()
-                first == null || SyncTTL.isExpired(first.lastSyncedAt)
+                if (first == null) return@networkBoundResourcePaged true
+                val lastSyncedAt = first.lastSyncedAt ?: 0L
+                val elapsed = Clock.System.now().toEpochMilliseconds() - lastSyncedAt
+                elapsed >= ONLINE_REFRESH_TTL_MINUTES * 60_000L
             },
             pageSize = 50
         )

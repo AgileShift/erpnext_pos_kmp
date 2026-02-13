@@ -126,11 +126,7 @@ class LoginViewModel(
             val receiver = if (isDesktop) OAuthCallbackReceiver() else null
             try {
                 AppLogger.info("LoginViewModel.onSiteSelected -> ${site.url}")
-                val loginInfo = runCatching {
-                    oauthService.getLoginWithSite(site.url)
-                }.getOrElse {
-                    authStore.loadAuthInfoByUrl(site.url)
-                }
+                val loginInfo = oauthService.getLoginWithSite(site.url)
                 authStore.saveAuthInfo(loginInfo)
                 val oauthConfig = loginInfo.toOAuthConfig()
                 val request = if (isDesktop) {
@@ -181,16 +177,19 @@ class LoginViewModel(
     }
 
     fun onAddSite(url: String) {
-        _stateFlow.update { LoginState.Loading }
+        onSiteSelected(Site(url = url.trim(), name = url.trim()))
+    }
+
+    fun deleteSite(site: Site) {
         viewModelScope.launch {
-            AppLogger.info("LoginViewModel.onAddSite -> $url")
-            val loginInfo = oauthService.getLoginWithSite(url)
-            authStore.saveAuthInfo(loginInfo)
-            //val sites = authStore.loadAuthInfo().map { Site(it.url, it.name) }
-            val oauthConfig = loginInfo.toOAuthConfig()
-            val request = buildAuthorizeRequest(oauthConfig)
-            doLogin(request.url)
-            //_stateFlow.update { LoginState.Success(sites) }
+            runCatching {
+                authStore.deleteSite(site.url)
+            }.onFailure { error ->
+                AppLogger.warn("LoginViewModel.deleteSite -> error", error)
+                _stateFlow.update { LoginState.Error(error.message ?: "No se pudo eliminar la instancia") }
+            }.onSuccess {
+                fetchSites()
+            }
         }
     }
 

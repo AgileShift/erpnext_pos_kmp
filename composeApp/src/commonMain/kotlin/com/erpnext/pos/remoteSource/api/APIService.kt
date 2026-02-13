@@ -3,6 +3,8 @@ package com.erpnext.pos.remoteSource.api
 import com.erpnext.pos.BuildKonfig
 import com.erpnext.pos.base.getPlatformName
 import com.erpnext.pos.remoteSource.dto.BinDto
+import com.erpnext.pos.remoteSource.dto.BootstrapDataDto
+import com.erpnext.pos.remoteSource.dto.BootstrapRequestDto
 import com.erpnext.pos.remoteSource.dto.CategoryDto
 import com.erpnext.pos.remoteSource.dto.CurrencyDto
 import com.erpnext.pos.remoteSource.dto.ContactChildDto
@@ -45,9 +47,9 @@ import com.erpnext.pos.remoteSource.dto.UserDto
 import com.erpnext.pos.remoteSource.dto.WarehouseItemDto
 import com.erpnext.pos.remoteSource.dto.CustomerGroupDto
 import com.erpnext.pos.remoteSource.dto.TerritoryDto
-import com.erpnext.pos.remoteSource.dto.v2.CompanyDto
-import com.erpnext.pos.remoteSource.dto.v2.CustomerAddressDto
-import com.erpnext.pos.remoteSource.dto.v2.PaymentEntryCreateDto
+import com.erpnext.pos.remoteSource.dto.CompanyDto
+import com.erpnext.pos.remoteSource.dto.CustomerAddressDto
+import com.erpnext.pos.remoteSource.dto.PaymentEntryCreateDto
 import com.erpnext.pos.remoteSource.oauth.AuthInfoStore
 import com.erpnext.pos.remoteSource.oauth.OAuthConfig
 import com.erpnext.pos.remoteSource.oauth.Pkce
@@ -94,20 +96,33 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import com.erpnext.pos.utils.AppLogger
 import com.erpnext.pos.utils.AppSentry
+import com.erpnext.pos.utils.normalizeUrl
 import io.ktor.client.statement.HttpResponse
 import io.ktor.http.takeFrom
 import kotlinx.serialization.json.put
+import kotlin.time.Clock
+import kotlin.time.ExperimentalTime
 
+@OptIn(ExperimentalTime::class)
 class APIService(
     private val client: HttpClient,
     private val store: TokenStore,
     private val authStore: AuthInfoStore,
     private val tokenClient: HttpClient
 ) {
+    private data class BootstrapCacheEntry(
+        val key: String,
+        val data: BootstrapDataDto,
+        val createdAtMillis: Long
+    )
+
     private companion object {
         const val DEFAULT_INVOICE_SYNC_DAYS = 90
         const val RECENT_PAID_INVOICE_DAYS = 7
+        const val BOOTSTRAP_CACHE_WINDOW_MS = 15_000L
     }
+
+    private var bootstrapCache: BootstrapCacheEntry? = null
 
     private suspend fun fetchInvoicesByStatus(
         doctype: String,
@@ -128,12 +143,44 @@ class APIService(
         )
     }
     suspend fun getCompanyInfo(): List<CompanyDto> {
-        val url = authStore.getCurrentSite()
-        return client.getERPSingle(
-            doctype = ERPDocType.Company.path,
-            fields = ERPDocType.Company.getFields(),
-            name = "",
-            baseUrl = url,
+        val bootstrapCompany = runCatching {
+            val payload = BootstrapRequestDto(
+                includeInventory = false,
+                includeCustomers = false,
+                includeInvoices = false,
+                includeAlerts = false,
+                includeActivity = false,
+                recentPaidOnly = true
+            )
+            fetchBootstrapRaw(payload)["company"]?.jsonObject
+        }.getOrNull()
+
+        val fromBootstrap = bootstrapCompany?.let { company ->
+            val name = company.stringOrNull("company")
+            val defaultCurrency = company.stringOrNull("default_currency")
+            if (!name.isNullOrBlank() && !defaultCurrency.isNullOrBlank()) {
+                CompanyDto(
+                    company = name,
+                    defaultCurrency = defaultCurrency,
+                    taxId = company.stringOrNull("tax_id"),
+                    country = company.stringOrNull("country")
+                )
+            } else {
+                null
+            }
+        }
+        if (fromBootstrap != null) return listOf(fromBootstrap)
+
+        val profiles = getPOSProfiles(assignedTo = null)
+        val first = profiles.firstOrNull()
+            ?: throw IllegalStateException("Company info not available")
+        return listOf(
+            CompanyDto(
+                company = first.company,
+                defaultCurrency = first.currency.ifBlank { "USD" },
+                taxId = null,
+                country = null
+            )
         )
     }
 
@@ -151,19 +198,24 @@ class APIService(
     }
 
     suspend fun getStockSettings(): List<StockSettingsDto> {
-        val url = authStore.getCurrentSite()
-        return client.getERPSingle(
-            doctype = ERPDocType.StockSettings.path,
-            fields = ERPDocType.StockSettings.getFields(),
-            name = "",
-            baseUrl = url,
-        )
+        return runCatching {
+            val payload = BootstrapRequestDto(
+                includeInventory = false,
+                includeCustomers = false,
+                includeInvoices = false,
+                includeAlerts = false,
+                includeActivity = false,
+                recentPaidOnly = true
+            )
+            val stock = fetchBootstrapRaw(payload)["stock_settings"] ?: JsonObject(emptyMap())
+            listOf(json.decodeFromJsonElement<StockSettingsDto>(stock))
+        }.getOrDefault(listOf(StockSettingsDto()))
     }
 
     suspend fun createPaymentEntry(entry: PaymentEntryCreateDto): SubmitResponseDto {
-        val url = authStore.getCurrentSite()
-        return client.postERP(
-            ERPDocType.PaymentEntry.path, payload = entry, baseUrl = url
+        return postMethodWithPayload(
+            methodPath = "erpnext_pos.api.v1.payment_entry.create_submit",
+            payload = entry
         )
     }
 
@@ -257,8 +309,15 @@ class APIService(
     }
 
     suspend fun createCustomer(payload: CustomerCreateDto): DocNameResponseDto {
-        val url = authStore.getCurrentSite()
-        return client.postERP(ERPDocType.Customer.path, payload, baseUrl = url)
+        val body: JsonObject = postMethodWithPayload(
+            methodPath = "erpnext_pos.api.v1.customer.upsert_atomic",
+            payload = payload
+        )
+        val name = body.stringOrNull("customer")
+            ?: body.stringOrNull("name")
+            ?: body.stringOrNull("customer_name")
+            ?: throw IllegalStateException("customer.upsert_atomic no retornó identificador")
+        return DocNameResponseDto(name)
     }
 
     suspend fun createAddress(payload: AddressCreateDto): DocNameResponseDto {
@@ -359,15 +418,17 @@ class APIService(
         refreshAuthToken(tokenClient, authStore, refresh)
 
     suspend fun getUserInfo(): UserDto {
-        val url = authStore.getCurrentSite()
-        if (url.isNullOrEmpty()) throw Exception("URL Invalida")
-
         val userId = store.loadUser()
-
-        if (userId.isNullOrEmpty()) throw Exception("Usuario Invalido")
-
-        return client.getERPSingle(
-            ERPDocType.User.path, userId, url
+        if (userId.isNullOrBlank()) throw Exception("Usuario Invalido")
+        val username = userId.substringBefore("@").ifBlank { userId }
+        return UserDto(
+            name = userId,
+            username = username,
+            firstName = username,
+            lastName = null,
+            email = userId,
+            language = "es",
+            enabled = true
         )
     }
 
@@ -440,29 +501,38 @@ class APIService(
 
     suspend fun getActiveModeOfPayment(): List<ModeOfPaymentDto> {
         val url = authStore.getCurrentSite() ?: return emptyList()
-        return client.getERPList(
-            doctype = ERPDocType.ModeOfPayment.path,
-            fields = ERPDocType.ModeOfPayment.getFields(),
-            baseUrl = url,
-            filters = filters {
-                "enabled" eq 1
-            })
+        return runCatching {
+            client.getERPList<ModeOfPaymentDto>(
+                doctype = ERPDocType.ModeOfPayment.path,
+                fields = ERPDocType.ModeOfPayment.getFields(),
+                baseUrl = url,
+                filters = filters {
+                    "enabled" eq 1
+                })
+        }.getOrElse {
+            AppLogger.warn("getActiveModeOfPayment failed", it)
+            emptyList()
+        }
     }
 
     suspend fun getModeOfPaymentDetail(name: String): ModeOfPaymentDetailDto? {
         val url = authStore.getCurrentSite() ?: return null
-        return client.getERPSingle(
-            doctype = ERPDocType.ModeOfPayment.path,
-            name = name.encodeURLParameter(),
-            baseUrl = url
-        )
+        return runCatching {
+            client.getERPSingle<ModeOfPaymentDetailDto>(
+                doctype = ERPDocType.ModeOfPayment.path,
+                name = name.encodeURLParameter(),
+                baseUrl = url
+            )
+        }.getOrNull()
     }
 
     suspend fun getAccountDetail(name: String): AccountDetailDto? {
         val url = authStore.getCurrentSite() ?: return null
-        return client.getERPSingle(
-            doctype = ERPDocType.Account.path, name = name.encodeURLParameter(), baseUrl = url
-        )
+        return runCatching {
+            client.getERPSingle<AccountDetailDto>(
+                doctype = ERPDocType.Account.path, name = name.encodeURLParameter(), baseUrl = url
+            )
+        }.getOrNull()
     }
 
     suspend fun getCategories(): List<CategoryDto> {
@@ -485,9 +555,9 @@ class APIService(
     }
 
     suspend fun openCashbox(pos: POSOpeningEntryDto): POSOpeningEntryResponseDto {
-        val url = authStore.getCurrentSite()
-        return client.postERP(
-            ERPDocType.POSOpeningEntry.path, pos, url
+        return postMethodWithPayload(
+            methodPath = "erpnext_pos.api.v1.pos_session.opening_create_submit",
+            payload = pos
         )
     }
 
@@ -495,87 +565,128 @@ class APIService(
         user: String,
         posProfile: String
     ): List<POSOpeningEntrySummaryDto> {
-        val url = authStore.getCurrentSite()
-        return client.getERPList(
-            ERPDocType.POSOpeningEntry.path,
-            fields = listOf(
-                "name",
-                "pos_profile",
-                "user",
-                "status",
-                "docstatus",
-                "period_start_date"
-            ),
-            baseUrl = url,
-            filters = filters {
-                // ASSUMPTION: POS Opening Entry uses status = "Open" for active sessions.
-                "pos_profile" eq posProfile
-                "user" eq user
-                "docstatus" eq 1
-                "status" eq "Open"
-            }
-        )
+        return runCatching {
+            val payload = BootstrapRequestDto(
+                includeInventory = false,
+                includeCustomers = false,
+                includeInvoices = false,
+                includeAlerts = false,
+                includeActivity = false,
+                profileName = posProfile,
+                recentPaidOnly = true
+            )
+            val openShift = fetchBootstrapRaw(payload)["open_shift"]?.jsonObject ?: return@runCatching emptyList()
+            val shiftUser = openShift.stringOrNull("user")
+            val shiftProfile = openShift.stringOrNull("pos_profile")
+            if (!shiftProfile.equals(posProfile, ignoreCase = true)) return@runCatching emptyList()
+            if (!shiftUser.isNullOrBlank() && !shiftUser.equals(user, ignoreCase = true)) return@runCatching emptyList()
+            listOf(
+                POSOpeningEntrySummaryDto(
+                    name = openShift.stringOrNull("name").orEmpty(),
+                    posProfile = shiftProfile.orEmpty(),
+                    user = shiftUser,
+                    status = openShift.stringOrNull("status"),
+                    docStatus = openShift.intOrNull("docstatus"),
+                    periodStartDate = openShift.stringOrNull("period_start_date")
+                )
+            ).filter { it.name.isNotBlank() && it.posProfile.isNotBlank() }
+        }.getOrElse {
+            AppLogger.warn("getOpenPOSOpeningEntries failed", it)
+            emptyList()
+        }
     }
 
     suspend fun getOpenPOSOpeningEntriesForProfile(
         posProfile: String
     ): List<POSOpeningEntrySummaryDto> {
-        val url = authStore.getCurrentSite()
-        return client.getERPList(
-            ERPDocType.POSOpeningEntry.path,
-            fields = listOf(
-                "name",
-                "pos_profile",
-                "user",
-                "status",
-                "docstatus",
-                "period_start_date"
-            ),
-            baseUrl = url,
-            filters = filters {
-                "pos_profile" eq posProfile
-                "docstatus" eq 1
-                "status" eq "Open"
-            }
-        )
+        return getOpenPOSOpeningEntries(user = "", posProfile = posProfile)
     }
 
     suspend fun getPOSOpeningEntry(name: String): POSOpeningEntryDetailDto {
-        val url = authStore.getCurrentSite()
-        return client.getERPSingle(
-            doctype = ERPDocType.POSOpeningEntry.path,
-            fields = listOf(
-                "name",
-                "pos_profile",
-                "company",
-                "period_start_date",
-                "posting_date",
-                "user",
-                "balance_details"
-            ),
-            name = name.encodeURLParameter(),
-            baseUrl = url
+        val payload = BootstrapRequestDto(
+            includeInventory = false,
+            includeCustomers = false,
+            includeInvoices = false,
+            includeAlerts = false,
+            includeActivity = false,
+            recentPaidOnly = true
+        )
+        val openShift = fetchBootstrapRaw(payload)["open_shift"]?.jsonObject
+            ?: throw IllegalStateException("Open shift not available for POS Opening Entry lookup")
+        val openName = openShift.stringOrNull("name")
+        if (!openName.equals(name, ignoreCase = true)) {
+            throw IllegalStateException("POS Opening Entry $name is not active in current shift")
+        }
+        return POSOpeningEntryDetailDto(
+            name = openName.orEmpty(),
+            posProfile = openShift.stringOrNull("pos_profile").orEmpty(),
+            company = openShift.stringOrNull("company").orEmpty(),
+            periodStartDate = openShift.stringOrNull("period_start_date")
+                ?: openShift.stringOrNull("posting_date")
+                ?: DateTimeProvider.todayDate(),
+            postingDate = openShift.stringOrNull("posting_date")
+                ?: openShift.stringOrNull("period_start_date")
+                ?: DateTimeProvider.todayDate(),
+            user = openShift.stringOrNull("user"),
+            balanceDetails = emptyList()
         )
     }
 
     suspend fun submitPOSOpeningEntry(name: String): SubmitResponseDto {
-        return submitDoc(ERPDocType.POSOpeningEntry.path, name, "submitPOSOpeningEntry")
+        throw UnsupportedOperationException(
+            "submitPOSOpeningEntry legado removido. Usa erpnext_pos.api.v1.pos_session.opening_create_submit."
+        )
     }
 
     suspend fun submitPOSClosingEntry(name: String): SubmitResponseDto {
-        return submitDoc(ERPDocType.POSClosingEntry.path, name, "submitPOSClosingEntry")
+        throw UnsupportedOperationException(
+            "submitPOSClosingEntry legado removido. Usa erpnext_pos.api.v1.pos_session.closing_create_submit."
+        )
     }
 
     suspend fun submitSalesInvoice(name: String): SubmitResponseDto {
-        return submitDoc(ERPDocType.SalesInvoice.path, name, "submitSalesInvoice")
+        throw UnsupportedOperationException(
+            "submitSalesInvoice legado removido. Usa erpnext_pos.api.v1.sales_invoice.create_submit."
+        )
     }
 
     suspend fun submitPaymentEntry(name: String): SubmitResponseDto {
-        return submitDoc(ERPDocType.PaymentEntry.path, name, "submitPaymentEntry")
+        throw UnsupportedOperationException(
+            "submitPaymentEntry legado removido. Usa erpnext_pos.api.v1.payment_entry.create_submit."
+        )
     }
 
     suspend fun cancelSalesInvoice(name: String): SubmitResponseDto {
-        return cancelDoc(ERPDocType.SalesInvoice.path, name, "cancelSalesInvoice")
+        val url = authStore.getCurrentSite()
+        if (url.isNullOrBlank()) throw Exception("URL Invalida")
+        val endpoint = url.trimEnd('/') + "/api/method/erpnext_pos.api.v1.sales_invoice.cancel"
+        return try {
+            val response = withRetries {
+                client.post {
+                    url { takeFrom(endpoint) }
+                    contentType(ContentType.Application.Json)
+                    setBody(
+                        buildJsonObject {
+                            put("payload", buildJsonObject { put("name", JsonPrimitive(name)) })
+                        }
+                    )
+                }
+            }
+            val bodyText = response.bodyAsText()
+            if (!response.status.isSuccess()) {
+                try {
+                    val err = json.decodeFromString<FrappeErrorResponse>(bodyText)
+                    throw FrappeException(err.exception ?: "Error: ${response.status.value}", err)
+                } catch (e: Exception) {
+                    throw Exception("Error en cancelSalesInvoice: ${response.status} - $bodyText", e)
+                }
+            }
+            decodeMethodData(bodyText)
+        } catch (e: Exception) {
+            AppSentry.capture(e, "cancelSalesInvoice failed")
+            AppLogger.warn("cancelSalesInvoice failed", e)
+            throw e
+        }
     }
 
     suspend fun setValue(
@@ -584,244 +695,195 @@ class APIService(
         fieldname: String,
         value: String
     ) {
+        throw UnsupportedOperationException(
+            "setValue legado removido. Usa erpnext_pos.api.v1.settings.mobile_update."
+        )
+    }
+
+    private inline fun <reified T> decodeMethodMessage(bodyText: String): T {
+        val parsed = json.parseToJsonElement(bodyText).jsonObject
+        val messageElement = parsed["message"]
+            ?: throw FrappeException(
+                "La respuesta no contiene 'message'. Respuesta: $bodyText"
+            )
+        return json.decodeFromJsonElement(messageElement)
+    }
+
+    private fun decodeMethodMessageAsObject(bodyText: String): JsonObject {
+        return decodeMethodMessage(bodyText)
+    }
+
+    private fun extractMethodDataOrThrow(message: JsonObject): JsonObject {
+        val success = message["success"]?.jsonPrimitive?.contentOrNull?.toBooleanStrictOrNull()
+            ?: true
+        if (!success) {
+            val errorMessage = message["error"]
+                ?.jsonObject
+                ?.get("message")
+                ?.jsonPrimitive
+                ?.contentOrNull
+                ?: "Error en API v1"
+            throw IllegalStateException(errorMessage)
+        }
+        return message["data"]?.jsonObject
+            ?: throw FrappeException("La respuesta no contiene 'message.data'.")
+    }
+
+    private inline fun <reified T> decodeMethodData(bodyText: String): T {
+        val messageObj = decodeMethodMessage<JsonObject>(bodyText)
+        val dataElement = messageObj["data"]
+            ?: throw FrappeException("La respuesta no contiene 'message.data'. Respuesta: $bodyText")
+        return json.decodeFromJsonElement(dataElement)
+    }
+
+    private suspend inline fun <reified T, reified R> postMethodWithPayload(
+        methodPath: String,
+        payload: T
+    ): R {
         val url = authStore.getCurrentSite()
         if (url.isNullOrBlank()) throw Exception("URL Invalida")
-        val endpoint = url.trimEnd('/') + "/api/method/frappe.client.set_value"
+        val endpoint = url.trimEnd('/') + "/api/method/$methodPath"
         val response = withRetries {
             client.post {
                 url { takeFrom(endpoint) }
-                contentType(ContentType.Application.FormUrlEncoded)
+                contentType(ContentType.Application.Json)
                 setBody(
-                    FormDataContent(
-                        Parameters.build {
-                            append("doctype", doctype)
-                            append("name", name)
-                            append("fieldname", fieldname)
-                            append("value", value)
-                        }
-                    )
-                )
-            }
-        }
-        if (!response.status.isSuccess()) {
-            val bodyText = response.bodyAsText()
-            throw Exception("Error en setValue: ${response.status} - $bodyText")
-        }
-    }
-
-    private suspend fun submitDoc(
-        doctype: String,
-        name: String,
-        logContext: String
-    ): SubmitResponseDto {
-        val url = authStore.getCurrentSite()
-        if (url.isNullOrBlank()) throw Exception("URL Invalida")
-        val endpoint = url.trimEnd('/') + "/api/method/frappe.client.submit"
-        suspend fun fetchSubmitDoc(): JsonObject {
-            val doc = client.getERPSingle<JsonObject>(
-                doctype = doctype,
-                name = name.encodeURLParameter(),
-                baseUrl = url,
-                fields = emptyList()
-            )
-            return buildJsonObject {
-                put("doctype", doctype)
-                doc.forEach { (key, value) -> put(key, value) }
-            }
-        }
-        return try {
-            suspend fun submitWithDoc(doc: JsonObject): HttpResponse {
-                return withRetries {
-                    client.post {
-                        url { takeFrom(endpoint) }
-                        contentType(ContentType.Application.FormUrlEncoded)
-                        setBody(
-                            FormDataContent(
-                                Parameters.build {
-                                    val docJson = json.encodeToString(doc)
-                                    append("doc", docJson)
-                                }
-                            )
-                        )
+                    buildJsonObject {
+                        put("payload", json.parseToJsonElement(json.encodeToString(payload)))
                     }
-                }
-            }
-
-            var doc = fetchSubmitDoc()
-            var response = submitWithDoc(doc)
-            var bodyText = response.bodyAsText()
-            if (!response.status.isSuccess() && bodyText.contains("TimestampMismatchError")) {
-                doc = fetchSubmitDoc()
-                response = submitWithDoc(doc)
-                bodyText = response.bodyAsText()
-            }
-            if (!response.status.isSuccess()) {
-                try {
-                    val err = json.decodeFromString<FrappeErrorResponse>(bodyText)
-                    throw FrappeException(
-                        err.exception ?: "Error: ${response.status.value}",
-                        err
-                    )
-                } catch (e: Exception) {
-                    throw Exception(
-                        "Error en $logContext: ${response.status} - $bodyText",
-                        e
-                    )
-                }
-            }
-
-            val parsed = json.parseToJsonElement(bodyText).jsonObject
-            val messageElement = parsed["message"] ?: parsed["data"]
-            if (messageElement == null) {
-                throw FrappeException(
-                    "La respuesta no contiene 'message'. Respuesta: $bodyText"
                 )
             }
-            json.decodeFromJsonElement(messageElement)
-        } catch (e: Exception) {
-            AppSentry.capture(e, "$logContext failed")
-            AppLogger.warn("$logContext failed", e)
-            throw e
         }
+        val bodyText = response.bodyAsText()
+        if (!response.status.isSuccess()) {
+            try {
+                val err = json.decodeFromString<FrappeErrorResponse>(bodyText)
+                throw FrappeException(err.exception ?: "Error: ${response.status.value}", err)
+            } catch (e: Exception) {
+                throw Exception("Error en $methodPath: ${response.status} - $bodyText", e)
+            }
+        }
+        return decodeMethodData(bodyText)
     }
 
-    private suspend fun cancelDoc(
-        doctype: String,
-        name: String,
-        logContext: String
-    ): SubmitResponseDto {
-        val url = authStore.getCurrentSite()
-        if (url.isNullOrBlank()) throw Exception("URL Invalida")
-        val endpoint = url.trimEnd('/') + "/api/method/frappe.client.cancel"
-
-        return try {
-            val response = withRetries {
-                client.post {
-                    url { takeFrom(endpoint) }
-                    contentType(ContentType.Application.FormUrlEncoded)
-                    setBody(
-                        FormDataContent(
-                            Parameters.build {
-                                append("doctype", doctype)
-                                append("name", name)
-                            }
-                        )
-                    )
-                }
+    private suspend fun fetchBootstrap(payload: BootstrapRequestDto): BootstrapDataDto {
+        val cacheKey = json.encodeToString(payload)
+        val now = Clock.System.now().toEpochMilliseconds()
+        bootstrapCache?.let { cached ->
+            if (cached.key == cacheKey && now - cached.createdAtMillis <= BOOTSTRAP_CACHE_WINDOW_MS) {
+                return cached.data
             }
-
-            val bodyText = response.bodyAsText()
-            if (!response.status.isSuccess()) {
-                try {
-                    val err = json.decodeFromString<FrappeErrorResponse>(bodyText)
-                    throw FrappeException(
-                        err.exception ?: "Error: ${response.status.value}",
-                        err
-                    )
-                } catch (e: Exception) {
-                    throw Exception("Error en $logContext: ${response.status} - $bodyText", e)
-                }
-            }
-
-            val parsed = json.parseToJsonElement(bodyText).jsonObject
-            val messageElement = parsed["message"] ?: parsed["data"]
-            if (messageElement == null) {
-                throw FrappeException(
-                    "La respuesta no contiene 'message'. Respuesta: $bodyText"
-                )
-            }
-            json.decodeFromJsonElement(messageElement)
-        } catch (e: Exception) {
-            AppSentry.capture(e, "$logContext failed")
-            AppLogger.warn("$logContext failed", e)
-            throw e
         }
+        val fresh: BootstrapDataDto = postMethodWithPayload(
+            methodPath = "erpnext_pos.api.v1.sync.bootstrap",
+            payload = payload
+        )
+        bootstrapCache = BootstrapCacheEntry(
+            key = cacheKey,
+            data = fresh,
+            createdAtMillis = now
+        )
+        return fresh
+    }
+
+    private suspend fun fetchBootstrapRaw(payload: BootstrapRequestDto): JsonObject {
+        return postMethodWithPayload(
+            methodPath = "erpnext_pos.api.v1.sync.bootstrap",
+            payload = payload
+        )
+    }
+
+    private fun JsonObject.stringOrNull(key: String): String? {
+        return this[key]?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() }
+    }
+
+    private fun JsonObject.intOrNull(key: String): Int? {
+        val raw = this[key]?.jsonPrimitive?.contentOrNull ?: return null
+        return raw.toIntOrNull()
     }
 
     suspend fun closeCashbox(entry: POSClosingEntryDto): POSClosingEntryResponse {
-        val url = authStore.getCurrentSite()
-        return client.postERP(
-            ERPDocType.POSClosingEntry.path, entry, url
+        return postMethodWithPayload(
+            methodPath = "erpnext_pos.api.v1.pos_session.closing_create_submit",
+            payload = entry
         )
     }
 
     suspend fun getPOSClosingEntriesForOpening(
         openingEntryName: String
     ): List<POSClosingEntrySummaryDto> {
-        val url = authStore.getCurrentSite()
-        return client.getERPList(
-            ERPDocType.POSClosingEntry.path,
-            fields = listOf(
-                "name",
-                "pos_opening_entry",
-                "period_end_date",
-                "posting_date",
-                "docstatus"
-            ),
-            baseUrl = url,
-            limit = 1,
-            orderBy = "period_end_date",
-            orderType = "desc",
-            filters = filters {
-                "pos_opening_entry" eq openingEntryName
+        AppLogger.warn("getPOSClosingEntriesForOpening: no dedicated whitelist endpoint available yet")
+        return emptyList()
+    }
+
+    suspend fun getPOSProfileDetails(profileId: String): POSProfileDto {
+        return postMethodWithPayload(
+            methodPath = "erpnext_pos.api.v1.pos_profile.detail",
+            payload = buildJsonObject {
+                put("profile_name", JsonPrimitive(profileId))
             }
         )
     }
 
-    suspend fun getPOSProfileDetails(profileId: String): POSProfileDto {
-        val url = authStore.getCurrentSite()
-        val fields = ERPDocType.POSProfileDetails.getFields()
-        return client.getERPSingle(
-            doctype = ERPDocType.POSProfile.path,
-            fields = fields,
-            name = profileId.encodeURLParameter(),
-            baseUrl = url,
-        )
-    }
-
     suspend fun getPOSProfiles(assignedTo: String?): List<POSProfileSimpleDto> {
-        val url = authStore.getCurrentSite()
-        return try {
-            client.getERPList(
-                doctype = ERPDocType.POSProfile.path,
-                fields = ERPDocType.POSProfile.getFields(),
-                baseUrl = url,
-                filters = filters {
-                    "disabled" eq false
-                })
-        } catch (e: Exception) {
-            e.printStackTrace()
-            AppSentry.capture(e, "getPOSProfiles failed")
-            AppLogger.warn("getPOSProfiles failed", e)
-            emptyList()
-        }
+        val data: JsonObject = postMethodWithPayload(
+            methodPath = "erpnext_pos.api.v1.sync.my_pos_profiles",
+            payload = buildJsonObject {}
+        )
+        val profilesElement = data["profiles"] ?: return emptyList()
+        return json.decodeFromJsonElement(profilesElement)
     }
 
-    //TODO: Cuando tenga el API lo cambiamos
-    //TODO: Tenemos que discriminar desde el API la plataforma
-    fun getLoginWithSite(site: String): LoginInfo {
-        return if (getPlatformName() == "Desktop") {
-            LoginInfo(
-                BuildKonfig.BASE_URL,
-                BuildKonfig.DESKTOP_REDIRECT_URI,
-                BuildKonfig.DESKTOP_CLIENT_ID,
-                BuildKonfig.DESKTOP_CLIENT_SECRET,
-                listOf("all", "openid"),
-                "ERP-POS Clothing Center - Desktop"
-            )
-        } else {
-            LoginInfo(
-                BuildKonfig.BASE_URL,
-                BuildKonfig.REDIRECT_URI,
-                BuildKonfig.CLIENT_ID,
-                BuildKonfig.CLIENT_SECRET,
-                listOf("all", "openid"),
-                "ERP-POS Clothing Center"
-            )
-        }/*return  client.get("") {
-             contentType(ContentType.Application.Json)
-             setBody(site)
-         }.body()*/
+    suspend fun getLoginWithSite(site: String): LoginInfo {
+        val normalizedSite = normalizeUrl(site)
+        val platform = if (getPlatformName() == "Desktop") "desktop" else "mobile"
+        val endpoint = normalizedSite.trimEnd('/') + "/api/method/erpnext_pos.api.v1.discovery.resolve_site"
+        val response = withRetries {
+            client.post {
+                url { takeFrom(endpoint) }
+                contentType(ContentType.Application.Json)
+                setBody(
+                    buildJsonObject {
+                        put("site_url", JsonPrimitive(normalizedSite))
+                        put("platform", JsonPrimitive(platform))
+                    }
+                )
+            }
+        }
+        val bodyText = response.bodyAsText()
+        if (!response.status.isSuccess()) {
+            try {
+                val err = json.decodeFromString<FrappeErrorResponse>(bodyText)
+                throw FrappeException(err.exception ?: "Error: ${response.status.value}", err)
+            } catch (e: Exception) {
+                throw Exception("Error en discovery.resolve_site: ${response.status} - $bodyText", e)
+            }
+        }
+        val message = decodeMethodMessageAsObject(bodyText)
+        val data = extractMethodDataOrThrow(message)
+        val clientId = data.stringOrNull("clientId") ?: data.stringOrNull("client_id")
+        if (clientId.isNullOrBlank()) {
+            throw IllegalStateException("Discovery no retornó clientId/client_id")
+        }
+        val redirectUri = data.stringOrNull("redirect_uri")
+            ?: if (platform == "desktop") BuildKonfig.DESKTOP_REDIRECT_URI else BuildKonfig.REDIRECT_URI
+        val scopes = data["scopes"]?.jsonArray?.mapNotNull { it.jsonPrimitive.contentOrNull }
+            ?.filter { it.isNotBlank() }
+            .orEmpty()
+            .ifEmpty { listOf("all", "openid") }
+        val name = data.stringOrNull("name")
+            ?: if (platform == "desktop") "ERPNext POS Desktop" else "ERPNext POS Mobile"
+        val clientSecret = data.stringOrNull("clientSecret")
+            ?: data.stringOrNull("client_secret")
+            ?: ""
+        return LoginInfo(
+            url = normalizedSite,
+            redirectUrl = redirectUri,
+            clientId = clientId,
+            clientSecret = clientSecret,
+            scopes = scopes,
+            name = name
+        )
     }
 
     // Para Inventario Total: Fetch batch con extras
@@ -831,138 +893,21 @@ class APIService(
         offset: Int? = null,
         limit: Int? = null,
     ): List<WarehouseItemDto> {
-        val url = authStore.getCurrentSite() ?: throw Exception("URL Invalida")
         val warehouseId = warehouse?.trim().orEmpty()
         require(warehouseId.isNotEmpty()) { "Bodega es requerida para la carga de productos" }
-
-        val chunkSize = 50
-        val pageSize = limit ?: 50
-        val startOffset = offset ?: 0
-
-        suspend fun fetchBins(batchOffset: Int, batchLimit: Int): List<BinDto> {
-            return client.getERPList<BinDto>(
-                doctype = ERPDocType.Bin.path,
-                fields = listOf(
-                    "item_code",
-                    "warehouse",
-                    "stock_uom",
-                    "actual_qty",
-                    "reserved_qty",
-                    "valuation_rate"
-                ),
-                limit = batchLimit,
-                offset = batchOffset,
-                orderBy = "item_code",
-                baseUrl = url
-            ) {
-                "warehouse" eq warehouseId
-                "actual_qty" gt 0.0
-            }
-        }
-
-        suspend fun mapBinsToInventory(bins: List<BinDto>): List<WarehouseItemDto> {
-            val itemCodes = bins.map { it.itemCode }.distinct()
-            if (itemCodes.isEmpty()) return emptyList()
-
-            // Fetch Items batch con fields extras (chunked to avoid URL length limits)
-            val itemFields = listOf(
-                "item_code",
-                "item_name",
-                "item_group",
-                "description",
-                "brand",
-                "image",
-                "stock_uom",
-                "standard_rate",
-                "is_stock_item",
-                "is_sales_item",
-                "disabled"
-            )
-            val items = itemCodes
-                .chunked(chunkSize)
-                .flatMap { codes ->
-                    client.getERPList<ItemDto>(
-                        doctype = ERPDocType.Item.path,
-                        fields = itemFields,
-                        limit = codes.size,
-                        baseUrl = url
-                    ) {
-                        "name" `in` codes
-                    }
-                }
-
-            val itemMap = items.associateBy { it.itemCode }
-
-            // Fetch precios batch (chunked to avoid URL length limits)
-            val prices = itemCodes
-                .chunked(chunkSize)
-                .flatMap { codes ->
-                    client.getERPList<ItemPriceDto>(
-                        doctype = ERPDocType.ItemPrice.path,
-                        fields = ERPDocType.ItemPrice.getFields(),
-                        limit = codes.size,
-                        baseUrl = url
-                    ) {
-                        "item_code" `in` codes
-                        if (!priceList.isNullOrEmpty())
-                            "price_list" eq priceList
-                    }
-                }
-
-            val priceMap = prices.associate { it.itemCode to it.priceListRate }
-            val priceCurrency = prices.associate { it.itemCode to it.currency }
-
-            // Combina todo en WarehouseItemDto
-            return bins.mapNotNull { bin ->
-                val item = itemMap[bin.itemCode]
-                if (item == null) {
-                    AppLogger.warn("Inventario: item no encontrado ${bin.itemCode}")
-                    return@mapNotNull null
-                }
-                val price = priceMap[bin.itemCode] ?: item.standardRate
-                val currency = priceCurrency[bin.itemCode] ?: ""
-                val barcode = ""  // No en JSON; "" default
-                val isStocked = item.isStockItem
-                val isService =
-                    !isStocked || (item.itemGroup == "COMPLEMENTARIOS")  // Infer de group en JSON
-                val sellableQty = (bin.actualQty - (bin.reservedQty ?: 0.0)).coerceAtLeast(0.0)
-
-                WarehouseItemDto(
-                    itemCode = bin.itemCode,
-                    actualQty = sellableQty,
-                    price = price,
-                    valuationRate = bin.valuationRate,
-                    name = item.itemName,
-                    itemGroup = item.itemGroup,
-                    description = item.description,
-                    barcode = barcode,
-                    image = item.image ?: "",
-                    discount = 0.0,  // No field; default 0
-                    isService = isService,
-                    isStocked = isStocked,
-                    stockUom = item.stockUom,
-                    brand = item.brand ?: "",
-                    currency = currency
-                )
-            }
-        }
-
-        // Paged mode
-        if (limit != null) {
-            val bins = fetchBins(startOffset, pageSize)
-            return mapBinsToInventory(bins)
-        }
-
-        // Full sync mode: page through bins
-        val results = mutableListOf<WarehouseItemDto>()
-        var currentOffset = startOffset
-        while (true) {
-            val bins = fetchBins(currentOffset, pageSize)
-            if (bins.isEmpty()) break
-            results += mapBinsToInventory(bins)
-            currentOffset += pageSize
-        }
-        return results
+        val payload = BootstrapRequestDto(
+            includeInventory = true,
+            includeCustomers = false,
+            includeInvoices = false,
+            includeAlerts = true,
+            includeActivity = false,
+            recentPaidOnly = true,
+            warehouse = warehouseId,
+            priceList = priceList?.trim(),
+            offset = offset,
+            limit = limit
+        )
+        return fetchBootstrap(payload).inventoryItems
     }
 
     suspend fun fetchStockForItems(
@@ -1103,62 +1048,73 @@ class APIService(
     }
 
     suspend fun getCustomers(territory: String?): List<CustomerDto> {
-        val url = authStore.getCurrentSite()
-        return client.getERPList(
-            ERPDocType.Customer.path,
-            ERPDocType.Customer.getFields(),
-            baseUrl = url,
-            offset = 0,
-            limit = Int.MAX_VALUE,
-            orderBy = "customer_name asc",
-            filters = filters {
-                "disabled" eq false
-                if (!territory.isNullOrEmpty()) "territory" eq territory
-            })
+        val payload = BootstrapRequestDto(
+            includeInventory = false,
+            includeCustomers = true,
+            includeInvoices = false,
+            includeAlerts = false,
+            includeActivity = false,
+            route = territory,
+            territory = territory,
+            recentPaidOnly = true
+        )
+        return fetchBootstrap(payload).customers
+    }
 
-        /*val detailFields = listOf("name", "credit_limit", "bypass_credit_limit_check", "company")
-        val detailMap = customers.associateWith { customer ->
-            runCatching {
-                client.getERPSingle<CustomerDto>(
-                    doctype = ERPDocType.Customer.path,
-                    name = customer.name,
-                    baseUrl = url,
-                    fields = detailFields
-                )
-            }.getOrNull()
-        }
+    suspend fun fetchCustomersBootstrapSnapshot(
+        profileName: String?,
+        territory: String?,
+        recentPaidOnly: Boolean
+    ): BootstrapDataDto {
+        val payload = BootstrapRequestDto(
+            includeInventory = false,
+            includeCustomers = true,
+            includeInvoices = true,
+            includeAlerts = false,
+            includeActivity = false,
+            recentPaidOnly = recentPaidOnly,
+            profileName = profileName,
+            route = territory,
+            territory = territory
+        )
+        return fetchBootstrap(payload)
+    }
 
-        return customers.map { customer ->
-            detailMap[customer]?.let { detail ->
-                customer.copy(
-                    creditLimits = detail.creditLimits,
-                )
-            } ?: customer
-        }*/
+    suspend fun fetchActivityBootstrapSnapshot(
+        profileName: String?,
+        territory: String?
+    ): BootstrapDataDto {
+        val payload = BootstrapRequestDto(
+            includeInventory = false,
+            includeCustomers = false,
+            includeInvoices = false,
+            includeAlerts = true,
+            includeActivity = true,
+            recentPaidOnly = true,
+            profileName = profileName,
+            route = territory,
+            territory = territory
+        )
+        return fetchBootstrap(payload)
     }
 
     //Para monto total pendientes y List (method whitelisted)
     suspend fun getCustomerOutstanding(customer: String, posProfile: String): OutstandingInfo {
-        val url = authStore.getCurrentSite()
-        val invoices = client.getERPList<SalesInvoiceDto>(
-            doctype = ERPDocType.SalesInvoice.path,
-            fields = ERPDocType.SalesInvoice.getFields(),
-            baseUrl = url,
-            filters = filters {
-                "customer" eq customer
-                "pos_profile" eq posProfile
-                "status" `in` listOf(
-                    "Unpaid",
-                    "Overdue",
-                    "Partly Paid",
-                    "Overdue and Discounted",
-                    "Unpaid and Discounted",
-                    "Partly Paid and Discounted"
-                )
-            })
-        val totalOutstanding = invoices.sumOf { invoice ->
-            invoice.outstandingAmount ?: (invoice.grandTotal - (invoice.paidAmount ?: 0.0))
-        }
+        val data: JsonObject = postMethodWithPayload(
+            methodPath = "erpnext_pos.api.v1.customer.outstanding",
+            payload = buildJsonObject {
+                put("customer", JsonPrimitive(customer))
+                put("pos_profile", JsonPrimitive(posProfile))
+            }
+        )
+        val invoices = runCatching {
+            json.decodeFromJsonElement<List<SalesInvoiceDto>>(data["pendingInvoices"] ?: JsonArray(emptyList()))
+        }.getOrElse { emptyList() }
+        val totalOutstanding = data["totalOutstanding"]?.jsonPrimitive?.doubleOrNull
+            ?: data["outstanding"]?.jsonPrimitive?.doubleOrNull
+            ?: invoices.sumOf { invoice ->
+                invoice.outstandingAmount ?: (invoice.grandTotal - (invoice.paidAmount ?: 0.0))
+            }
         return OutstandingInfo(totalOutstanding, invoices)
     }
 
@@ -1168,18 +1124,15 @@ class APIService(
         endDate: String,
         posProfile: String
     ): List<SalesInvoiceDto> {
-        val url = authStore.getCurrentSite()
-        return client.getERPList(
-            ERPDocType.SalesInvoice.path,
-            ERPDocType.SalesInvoice.getFields(),
-            baseUrl = url,
-            orderBy = "posting_date desc",
-            filters = filters {
-                "customer" eq customer
-                "pos_profile" eq posProfile
-                "posting_date" gte startDate
-                "posting_date" lte endDate
-            })
+        return fetchAllInvoicesCombined(posProfile, recentPaidOnly = false)
+            .asSequence()
+            .filter { it.customer == customer }
+            .filter { invoice ->
+                val posting = invoice.postingDate.take(10)
+                posting >= startDate && posting <= endDate
+            }
+            .sortedByDescending { it.postingDate }
+            .toList()
     }
 
 
@@ -1219,25 +1172,10 @@ class APIService(
 
     // Batch method for all outstanding invoices
     suspend fun getAllOutstandingInvoices(posProfile: String): List<SalesInvoiceDto> {
-        val url = authStore.getCurrentSite()
-        val today = DateTimeProvider.todayDate()
-        val startDate = DateTimeProvider.addDays(today, -DEFAULT_INVOICE_SYNC_DAYS)
-        return client.getERPList<SalesInvoiceDto>(
-            doctype = ERPDocType.SalesInvoice.path,
-            fields = ERPDocType.SalesInvoice.getFields(),
-            baseUrl = url,
-            filters = filters {
-                "pos_profile" eq posProfile
-                "posting_date" gte startDate
-                "status" `in` listOf(
-                    "Unpaid",
-                    "Overdue",
-                    "Partly Paid",
-                    "Overdue and Discounted",
-                    "Unpaid and Discounted",
-                    "Partly Paid and Discounted"
-                )
-            })
+        return fetchAllInvoicesCombined(posProfile, recentPaidOnly = true).filter { invoice ->
+            val outstanding = invoice.outstandingAmount ?: (invoice.grandTotal - (invoice.paidAmount ?: 0.0))
+            outstanding > 0.0
+        }
     }
 
     //Para facturas pendientes (lista simple de overdue)
@@ -1325,95 +1263,82 @@ class APIService(
         recentPaidOnly: Boolean = false,
         paidDays: Int = RECENT_PAID_INVOICE_DAYS
     ): List<SalesInvoiceDto> {
-        return if (recentPaidOnly) fetchAllInvoicesSmart(posProfile, paidDays)
-        else fetchAllInvoices(posProfile)
+        val payload = BootstrapRequestDto(
+            includeInventory = false,
+            includeCustomers = false,
+            includeInvoices = true,
+            includeAlerts = false,
+            includeActivity = false,
+            profileName = posProfile,
+            recentPaidOnly = recentPaidOnly
+        )
+        return fetchBootstrap(payload).invoices
     }
 
     suspend fun fetchPaymentEntries(fromDate: String): List<PaymentEntryDto> {
-        val url = authStore.getCurrentSite()
-        return client.getERPList(
-            doctype = ERPDocType.PaymentEntry.path,
-            fields = listOf(
-                "name",
-                "posting_date",
-                "party",
-                "party_type",
-                "payment_type",
-                "mode_of_payment",
-                "paid_amount",
-                "received_amount",
-                "paid_from_account_currency",
-                "paid_to_account_currency"
-            ),
-            orderBy = "posting_date desc",
-            baseUrl = url,
-            filters = filters {
-                "posting_date" gte fromDate
-                "docstatus" eq 1
-                "party_type" eq "Customer"
-                "payment_type" eq "Receive"
-            }
+        val payload = BootstrapRequestDto(
+            includeInventory = false,
+            includeCustomers = false,
+            includeInvoices = false,
+            includeAlerts = false,
+            includeActivity = false,
+            recentPaidOnly = true
         )
+        return fetchBootstrap(payload).paymentEntries
+            .asSequence()
+            .filter { (it.postingDate?.take(10) ?: "") >= fromDate }
+            .sortedByDescending { it.postingDate }
+            .toList()
     }
 
     suspend fun getPaymentEntryByName(name: String): PaymentEntryDto {
-        val url = authStore.getCurrentSite()
-        return client.getERPSingle(
-            doctype = ERPDocType.PaymentEntry.path,
-            name = name,
-            baseUrl = url
-        )
+        val fromDate = DateTimeProvider.addDays(DateTimeProvider.todayDate(), -90)
+        return fetchPaymentEntries(fromDate).firstOrNull { it.name == name }
+            ?: throw IllegalStateException("Payment Entry $name no encontrado en bootstrap")
     }
 
     suspend fun fetchReturnInvoiceNames(
         returnAgainst: String,
         posProfile: String
     ): List<String> {
-        return try {
-            val url = authStore.getCurrentSite()
-            client.getERPList<SalesInvoiceDto>(
-                doctype = ERPDocType.SalesInvoice.path,
-                fields = listOf("name"),
-                baseUrl = url,
-                filters = filters {
-                    "return_against" eq returnAgainst
-                    "is_return" eq 1
-                    "pos_profile" eq posProfile
-                }
-            ).mapNotNull { it.name }
-        } catch (e: Exception) {
-            e.printStackTrace()
-            AppSentry.capture(e, "fetchReturnInvoiceNames failed")
-            AppLogger.warn("fetchReturnInvoiceNames failed", e)
-            emptyList()
-        }
+        return fetchAllInvoicesCombined(posProfile, recentPaidOnly = false)
+            .asSequence()
+            .filter { it.returnAgainst == returnAgainst && it.isReturn == 1 }
+            .mapNotNull { it.name }
+            .toList()
     }
 
     //region Invoice - Checkout
     suspend fun createSalesInvoice(data: SalesInvoiceDto): SalesInvoiceDto {
-        val url = authStore.getCurrentSite()
-        val result: SalesInvoiceDto = client.postERP(
-            doctype = ERPDocType.SalesInvoice.path,
-            payload = data,
-            baseUrl = url,
+        val created: JsonObject = postMethodWithPayload(
+            methodPath = "erpnext_pos.api.v1.sales_invoice.create_submit",
+            payload = data
         )
-
-        return result
+        return data.copy(
+            name = created.stringOrNull("name") ?: data.name,
+            docStatus = created.intOrNull("docstatus") ?: 1,
+            status = created.stringOrNull("status") ?: data.status,
+            postingDate = created.stringOrNull("posting_date") ?: data.postingDate,
+            outstandingAmount = created["outstanding_amount"]?.jsonPrimitive?.doubleOrNull
+                ?: data.outstandingAmount
+        )
     }
 
     suspend fun getSalesInvoiceByName(name: String): SalesInvoiceDto {
-        val url = authStore.getCurrentSite()
-        return client.getERPSingle(
-            doctype = ERPDocType.SalesInvoice.path,
-            name = name,
-            baseUrl = url,
-        )
+        val profiles = getPOSProfiles(assignedTo = null).map { it.profileName }.ifEmpty { listOf("") }
+        profiles.forEach { profile ->
+            val invoices = runCatching {
+                fetchAllInvoicesCombined(profile, recentPaidOnly = false)
+            }.getOrElse { emptyList() }
+            val found = invoices.firstOrNull { it.name == name }
+            if (found != null) return found
+        }
+        throw IllegalStateException("Sales Invoice $name no encontrada en bootstrap")
     }
 
     suspend fun updateSalesInvoice(name: String, data: SalesInvoiceDto): SalesInvoiceDto {
-        val url = authStore.getCurrentSite()
-        return client.putERP(
-            doctype = ERPDocType.SalesInvoice.path, name = name, payload = data, baseUrl = url
+        throw UnsupportedOperationException(
+            "updateSalesInvoice no soportado en API v1. Usa sales_invoice.create_submit con idempotencia."
         )
     }
     //endregion

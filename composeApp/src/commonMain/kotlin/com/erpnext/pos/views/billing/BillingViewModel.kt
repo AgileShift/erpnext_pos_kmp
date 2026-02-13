@@ -33,8 +33,8 @@ import com.erpnext.pos.domain.models.POSPaymentModeOption
 import com.erpnext.pos.domain.usecases.AdjustLocalInventoryInput
 import com.erpnext.pos.domain.usecases.AdjustLocalInventoryUseCase
 import com.erpnext.pos.domain.usecases.StockDelta
-import com.erpnext.pos.domain.usecases.v2.LoadSourceDocumentsInput
-import com.erpnext.pos.domain.usecases.v2.LoadSourceDocumentsUseCase
+import com.erpnext.pos.domain.usecases.LoadSourceDocumentsInput
+import com.erpnext.pos.domain.usecases.LoadSourceDocumentsUseCase
 import com.erpnext.pos.remoteSource.dto.SalesInvoicePaymentDto
 import com.erpnext.pos.views.CashBoxManager
 import com.erpnext.pos.views.POSContext

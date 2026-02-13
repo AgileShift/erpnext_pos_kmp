@@ -1,7 +1,7 @@
 package com.erpnext.pos.domain.usecases
 
 import com.erpnext.pos.data.repositories.PaymentEntryRepository
-import com.erpnext.pos.remoteSource.dto.v2.PaymentEntryCreateDto
+import com.erpnext.pos.remoteSource.dto.PaymentEntryCreateDto
 
 data class CreatePaymentEntryInput(val entry: PaymentEntryCreateDto)
 

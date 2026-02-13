@@ -21,7 +21,6 @@ data class CurrencyPrecisionSnapshot(
 )
 
 object CurrencyPrecisionResolver {
-    @Volatile
     private var snapshot: CurrencyPrecisionSnapshot = CurrencyPrecisionSnapshot()
 
     fun update(newSnapshot: CurrencyPrecisionSnapshot) {

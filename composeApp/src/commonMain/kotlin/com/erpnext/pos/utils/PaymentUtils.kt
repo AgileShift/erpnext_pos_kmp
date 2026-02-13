@@ -7,8 +7,8 @@ import com.erpnext.pos.domain.models.CustomerBO
 import com.erpnext.pos.domain.models.POSPaymentModeOption
 import com.erpnext.pos.localSource.entities.POSInvoicePaymentEntity
 import com.erpnext.pos.remoteSource.api.APIService
-import com.erpnext.pos.remoteSource.dto.v2.PaymentEntryCreateDto
-import com.erpnext.pos.remoteSource.dto.v2.PaymentEntryReferenceCreateDto
+import com.erpnext.pos.remoteSource.dto.PaymentEntryCreateDto
+import com.erpnext.pos.remoteSource.dto.PaymentEntryReferenceCreateDto
 import com.erpnext.pos.utils.oauth.CurrencySpec
 import com.erpnext.pos.utils.oauth.bd
 import com.erpnext.pos.utils.oauth.coerceAtLeastZero

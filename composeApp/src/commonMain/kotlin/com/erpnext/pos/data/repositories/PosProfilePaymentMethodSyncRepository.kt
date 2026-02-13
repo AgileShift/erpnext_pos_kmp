@@ -10,7 +10,7 @@ import com.erpnext.pos.localSource.entities.PosProfilePaymentMethodEntity
 import com.erpnext.pos.remoteSource.api.APIService
 import com.erpnext.pos.remoteSource.dto.POSProfileDto
 import com.erpnext.pos.remoteSource.mapper.toEntity
-import com.erpnext.pos.remoteSource.datasources.ModeOfPaymentRemoteSource
+import com.erpnext.pos.utils.AppLogger
 import com.erpnext.pos.utils.RepoTrace
 import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
@@ -18,7 +18,6 @@ import kotlin.time.ExperimentalTime
 @OptIn(ExperimentalTime::class)
 class PosProfilePaymentMethodSyncRepository(
     private val apiService: APIService,
-    private val modeOfPaymentRemoteSource: ModeOfPaymentRemoteSource,
     private val posProfileDao: POSProfileDao,
     private val posProfileLocalDao: PosProfileLocalDao,
     private val posProfilePaymentMethodDao: PosProfilePaymentMethodDao,
@@ -59,8 +58,18 @@ class PosProfilePaymentMethodSyncRepository(
     suspend fun syncProfilesWithPayments(assignedTo: String?): List<PosProfileLocalEntity> {
         RepoTrace.breadcrumb("PosProfilePaymentMethodSyncRepository", "syncProfilesWithPayments")
         val profiles = syncProfiles(assignedTo)
+        val failures = mutableListOf<String>()
         profiles.forEach { profile ->
-            syncProfilePayments(profile.profileName)
+            runCatching { syncProfilePayments(profile.profileName) }
+                .onFailure {
+                    AppLogger.warn("syncProfilePayments failed for ${profile.profileName}", it)
+                    failures.add("${profile.profileName}: ${it.message ?: "unknown error"}")
+                }
+        }
+        if (failures.isNotEmpty()) {
+            throw IllegalStateException(
+                "Failed syncing POS profile payments for ${failures.joinToString("; ")}"
+            )
         }
         return profiles
     }
@@ -102,36 +111,33 @@ class PosProfilePaymentMethodSyncRepository(
             posProfilePaymentMethodDao.softDeleteStaleForProfile(profile.profileName, mopNames)
         }
 
-        syncModeOfPaymentDetails(profile, paymentEntities.map { it.mopName }, now)
+        syncModeOfPaymentDetails(profile, now)
         return profile
     }
 
     private suspend fun syncModeOfPaymentDetails(
         profile: POSProfileDto,
-        mopNames: List<String>,
         now: Long
     ) {
         val company = profile.company
-        val uniqueMops = mopNames.distinct()
-        val existing = modeOfPaymentDao.getByNames(uniqueMops).associateBy { it.modeOfPayment }
-        val missing = uniqueMops.filter { mopName ->
-            val stored = existing[mopName]
-            stored == null || stored.currency.isNullOrBlank() || stored.account.isNullOrBlank()
-        }
-        if (missing.isEmpty()) return
-
-        val resolved = missing.mapNotNull { mopName ->
-            val detail = modeOfPaymentRemoteSource.getModeDetail(mopName) ?: return@mapNotNull null
-            val account = detail.accounts.firstOrNull { it.company == company }?.defaultAccount
-                ?: detail.accounts.firstOrNull()?.defaultAccount
-            val accountDetail = account?.let { modeOfPaymentRemoteSource.getAccountDetail(it) }
-            val currency = accountDetail?.accountCurrency?.takeIf { it.isNotBlank() }
+        val resolved = profile.payments.mapNotNull { payment ->
+            val modeName = payment.modeOfPayment.trim()
+            if (modeName.isBlank()) return@mapNotNull null
+            val account = payment.defaultAccount
+                ?: payment.account
+                ?: payment.accounts.firstOrNull { it.company == company }?.defaultAccount
+                ?: payment.accounts.firstOrNull()?.defaultAccount
+            val currency = payment.accountCurrency
+                ?: payment.currency
+            val type = payment.accountType
+                ?: payment.modeOfPaymentType
+                ?: "Cash"
             ModeOfPaymentEntity(
-                name = detail.name,
-                modeOfPayment = detail.modeOfPayment,
+                name = payment.name.ifBlank { modeName },
+                modeOfPayment = modeName,
                 company = company,
-                type = accountDetail?.accountType ?: detail.type ?: "Cash",
-                enabled = detail.enabled,
+                type = type,
+                enabled = payment.enabled,
                 currency = currency,
                 account = account,
                 lastSyncedAt = now
@@ -139,6 +145,12 @@ class PosProfilePaymentMethodSyncRepository(
         }
         if (resolved.isNotEmpty()) {
             modeOfPaymentDao.insertAllModes(resolved)
+            val names = resolved.map { it.name }
+            modeOfPaymentDao.hardDeleteDeletedNotIn(company, names)
+            modeOfPaymentDao.softDeleteNotIn(company, names)
+        } else {
+            modeOfPaymentDao.hardDeleteAllDeletedForCompany(company)
+            modeOfPaymentDao.softDeleteAllForCompany(company)
         }
     }
 }

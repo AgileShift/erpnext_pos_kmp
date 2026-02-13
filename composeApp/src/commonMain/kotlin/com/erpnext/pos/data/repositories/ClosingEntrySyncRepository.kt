@@ -285,14 +285,12 @@ class ClosingEntrySyncRepository(
             )
 
             if (remoteClosing != null) {
-                val submitOk = if (remoteClosing.docstatus == 1) {
-                    true
-                } else {
-                    runCatching { api.submitPOSClosingEntry(remoteClosing.name) }
-                        .onFailure { AppLogger.warn("ClosingEntrySyncRepository submit failed", it) }
-                        .getOrNull() != null
+                val pendingSync = remoteClosing.docstatus != 1
+                if (pendingSync) {
+                    AppLogger.warn(
+                        "ClosingEntrySyncRepository: remote closing ${remoteClosing.name} en borrador; submit legacy removido."
+                    )
                 }
-                val pendingSync = !submitOk
                 val resolvedEndDate = remoteClosing.periodEndDate ?: periodEnd
                 cashboxDao.updateStatus(
                     cashbox.localId,
@@ -320,10 +318,12 @@ class ClosingEntrySyncRepository(
                 com.erpnext.pos.remoteSource.dto.POSClosingEntryResponse(existingRemote)
             }
             if (response == null) return@forEach
-            val submitOk = runCatching { api.submitPOSClosingEntry(response.name) }
-                .onFailure { AppLogger.warn("ClosingEntrySyncRepository submit failed", it) }
-                .getOrNull()
-            val pendingSync = submitOk == null
+            val pendingSync = existingRemote != null
+            if (pendingSync) {
+                AppLogger.warn(
+                    "ClosingEntrySyncRepository: closing ${response.name} requiere revision manual; submit legacy removido."
+                )
+            }
             cashboxDao.updateStatus(
                 cashbox.localId,
                 status = false,

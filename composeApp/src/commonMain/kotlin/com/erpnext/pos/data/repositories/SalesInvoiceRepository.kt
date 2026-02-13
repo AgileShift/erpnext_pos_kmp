@@ -504,10 +504,7 @@ class SalesInvoiceRepository(
                 )
             )
         )
-        val created = remoteSource.createInvoice(draft)
-        val createdName = created.name!!
-        submitSalesInvoice(createdName)
-        return remoteSource.fetchInvoice(createdName)!!
+        return remoteSource.createInvoice(draft)
     }
 
     override suspend fun updateRemoteInvoice(
@@ -554,8 +551,12 @@ class SalesInvoiceRepository(
 
     private suspend fun handleRemoteInvoice(invoice: SalesInvoiceWithItemsAndPayments) {
         val localName = invoice.invoice.invoiceName ?: return
-        submitSalesInvoice(localName)
         val remote = remoteSource.fetchInvoice(localName) ?: return
+        if ((remote.docStatus ?: 0) == 0) {
+            throw IllegalStateException(
+                "Factura remota en borrador ($localName). El submit legado fue removido y requiere endpoint API v1."
+            )
+        }
         updateLocalInvoiceFromRemote(localName, remote)
     }
 
@@ -603,11 +604,13 @@ class SalesInvoiceRepository(
 
         val dto = ensureDraftDocStatus(enrichPaymentsWithAccount(invoice.toDto()))
         val created = remoteSource.createInvoice(dto)
-        val createdName = created.name ?: return
         updateLocalInvoiceFromRemote(localName, created)
-        submitSalesInvoice(createdName)
-        val remote = remoteSource.fetchInvoice(createdName) ?: return
-        updateLocalInvoiceFromRemote(createdName, remote)
+        if ((created.docStatus ?: 0) == 0) {
+            val createdName = created.name ?: localName
+            throw IllegalStateException(
+                "Factura remota en borrador ($createdName). El submit legado fue removido y requiere endpoint API v1."
+            )
+        }
     }
 
     private suspend fun handleCancelledInvoice(invoice: SalesInvoiceWithItemsAndPayments) {
@@ -623,10 +626,6 @@ class SalesInvoiceRepository(
         } else {
             localSource.softDeleteByInvoiceId(localName)
         }
-    }
-
-    private suspend fun submitSalesInvoice(name: String) {
-        remoteSource.submitInvoice(name)
     }
 
     private fun resolveDocStatus(status: String?, docStatus: Int?): Int {

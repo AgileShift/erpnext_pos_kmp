@@ -1,8 +1,5 @@
 package com.erpnext.pos.utils
 
-import com.erpnext.pos.utils.normalizeCurrency
-import com.erpnext.pos.utils.roundForCurrency
-import com.erpnext.pos.utils.roundToCurrency
 import kotlin.math.abs
 
 expect fun formatAmount(symbol: String, amount: Double): String
@@ -18,5 +15,6 @@ fun formatCurrency(code: String, amount: Double): String {
         "USD", "NIO" -> 2
         else -> 2
     }
-    return symbol + " " + "%.${decimals}f".format(display)
+    val formatted = formatAmount(symbol, display)
+    return if (decimals == 2) formatted else formatAmount(symbol, roundToCurrency(display, decimals))
 }

@@ -62,7 +62,7 @@ suspend inline fun <reified T> HttpClient.getERPList(
 ): List<T> {
     require(baseUrl != null && baseUrl.isNotBlank()) { "baseUrl no puede ser nulo o vacío" }
 
-    val endpoint = baseUrl.trimEnd('/') + "/api/resource/${encodeURIComponent(doctype)}"
+    val endpoint = baseUrl.trimEnd('/') + "/api/method/erpnext_pos.api.v1.__legacy_resource_endpoint_disabled__/${encodeURIComponent(doctype)}"
     val finalFilters = mutableListOf<Filter>().apply {
         addAll(filters)
         block?.let { addAll(FiltersBuilder().apply(it).build()) }
@@ -141,7 +141,7 @@ suspend inline fun <reified T> HttpClient.getERPSingle(
 ): T {
     require(!baseUrl.isNullOrBlank()) { "baseUrl no puede ser nulo o vacío" }
 
-    val endpoint = baseUrl.trimEnd('/') + "/api/resource/${encodeURIComponent(doctype)}/$name"
+    val endpoint = baseUrl.trimEnd('/') + "/api/method/erpnext_pos.api.v1.__legacy_resource_endpoint_disabled__/${encodeURIComponent(doctype)}/$name"
 
     try {
         val response: HttpResponse = withRetries {
@@ -196,7 +196,7 @@ suspend inline fun <reified T, reified R> HttpClient.postERP(
 ): R {
     require(baseUrl != null && baseUrl.isNotBlank()) { "baseUrl no puede ser nulo o vacío" }
 
-    val endpoint = baseUrl.trimEnd('/') + "/api/resource/${encodeURIComponent(doctype)}"
+    val endpoint = baseUrl.trimEnd('/') + "/api/method/erpnext_pos.api.v1.__legacy_resource_endpoint_disabled__/${encodeURIComponent(doctype)}"
     try {
         val bodyText = withRetries {
             this.post {
@@ -238,7 +238,7 @@ suspend inline fun <reified T, reified R> HttpClient.putERP(
 ): R {
     require(baseUrl != null && baseUrl.isNotBlank()) { "baseUrl no puede ser nulo o vacío" }
 
-    val endpoint = baseUrl.trimEnd('/') + "/api/resource/${encodeURIComponent(doctype)}/${
+    val endpoint = baseUrl.trimEnd('/') + "/api/method/erpnext_pos.api.v1.__legacy_resource_endpoint_disabled__/${encodeURIComponent(doctype)}/${
         encodeURIComponent(name)
     }"
     try {
@@ -281,7 +281,7 @@ suspend fun HttpClient.deleteERP(
 ) {
     require(baseUrl != null && baseUrl.isNotBlank()) { "baseUrl no puede ser nulo o vacío" }
 
-    val endpoint = baseUrl.trimEnd('/') + "/api/resource/${encodeURIComponent(doctype)}/${
+    val endpoint = baseUrl.trimEnd('/') + "/api/method/erpnext_pos.api.v1.__legacy_resource_endpoint_disabled__/${encodeURIComponent(doctype)}/${
         encodeURIComponent(name)
     }"
     try {

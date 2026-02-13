@@ -1,7 +1,7 @@
 package com.erpnext.pos.data.repositories
 
 import com.erpnext.pos.remoteSource.api.APIService
-import com.erpnext.pos.remoteSource.dto.v2.PaymentEntryCreateDto
+import com.erpnext.pos.remoteSource.dto.PaymentEntryCreateDto
 import com.erpnext.pos.utils.RepoTrace
 
 class PaymentEntryRepository(
@@ -11,7 +11,6 @@ class PaymentEntryRepository(
         RepoTrace.breadcrumb("PaymentEntryRepository", "createPaymentEntry")
         return runCatching {
             val created = api.createPaymentEntry(entry)
-            api.submitPaymentEntry(created.name)
             created.name
         }
             .getOrElse {

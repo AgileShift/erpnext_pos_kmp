@@ -68,9 +68,13 @@ class IosTokenStore : TokenStore, TransientAuthStore, AuthInfoStore {
     private val json = Json { ignoreUnknownKeys = true }
     private val defaults = NSUserDefaults.standardUserDefaults
 
-    private suspend fun siteScopedKey(key: String): String {
-        val siteKey = instanceKeyFromUrl(getCurrentSite())
+    private fun siteScopedKeyForUrl(url: String?, key: String): String {
+        val siteKey = instanceKeyFromUrl(url)
         return "${siteKey}_$key"
+    }
+
+    private suspend fun siteScopedKey(key: String): String {
+        return siteScopedKeyForUrl(getCurrentSite(), key)
     }
 
     private fun saveInternal(key: String, value: String) = keychainSet(key, value)
@@ -166,6 +170,36 @@ class IosTokenStore : TokenStore, TransientAuthStore, AuthInfoStore {
 
     override suspend fun getCurrentSite(): String? =
         defaults.stringForKey("current_site")
+
+    override suspend fun deleteSite(url: String): Boolean = mutex.withLock {
+        val list = loadAuthInfo()
+        if (list.none { it.url == url }) return@withLock false
+        val updated = list.filterNot { it.url == url }
+
+        deleteInternal(siteScopedKeyForUrl(url, "access_token"))
+        deleteInternal(siteScopedKeyForUrl(url, "refresh_token"))
+        deleteInternal(siteScopedKeyForUrl(url, "expires"))
+        deleteInternal(siteScopedKeyForUrl(url, "id_token"))
+        defaults.removeObjectForKey(siteScopedKeyForUrl(url, "userId"))
+
+        val currentSite = getCurrentSite()
+        if (currentSite == url) {
+            _flow.value = null
+            val nextSite = updated.firstOrNull()?.url
+            if (nextSite.isNullOrBlank()) {
+                defaults.removeObjectForKey("current_site")
+            } else {
+                defaults.setObject(nextSite, forKey = "current_site")
+            }
+        }
+
+        if (updated.isEmpty()) {
+            defaults.removeObjectForKey("sitesInfo")
+        } else {
+            defaults.setObject(json.encodeToString(updated), forKey = "sitesInfo")
+        }
+        true
+    }
 
     override suspend fun updateSiteMeta(
         url: String,

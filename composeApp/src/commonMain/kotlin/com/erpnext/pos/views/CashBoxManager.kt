@@ -633,14 +633,9 @@ class CashBoxManager(
         } else {
             null
         }
-        val submitOk = pce?.let { it ->
-            runCatching { api.submitPOSClosingEntry(it.name) }
-                .onFailure { AppLogger.warn("closeCashBox: submit closing failed", it) }
-                .getOrNull()
-        }
         val closingEntryId = pce?.name
             ?: buildLocalClosingEntryId(ctx.profileName, user.email, endMillis)
-        val pendingSync = pce == null || submitOk == null
+        val pendingSync = pce == null
 
         cashboxDao.updateStatus(
             entry.cashbox.localId,
@@ -690,37 +685,9 @@ class CashBoxManager(
                 resolved += invoice
                 return@forEach
             }
-            val updated = runCatching {
-                api.setValue(
-                    com.erpnext.pos.remoteSource.sdk.ERPDocType.SalesInvoice.path,
-                    name,
-                    "pos_opening_entry",
-                    openingEntryId
-                )
-                api.setValue(
-                    com.erpnext.pos.remoteSource.sdk.ERPDocType.SalesInvoice.path,
-                    name,
-                    "pos_profile",
-                    posProfile
-                )
-                true
-            }.getOrElse {
-                AppLogger.warn("closeCashBox: set_value failed for $name", it)
-                false
-            }
-            if (updated) {
-                salesInvoiceDao.updateInvoiceOpeningAndProfile(
-                    invoiceName = name,
-                    posOpeningEntry = openingEntryId,
-                    profileId = posProfile
-                )
-                salesInvoiceDao.updatePaymentsOpeningForInvoice(name, openingEntryId)
-                resolved += invoice
-            } else {
-                AppLogger.warn(
-                    "closeCashBox: remote invoice $name without opening entry $openingEntryId"
-                )
-            }
+            AppLogger.warn(
+                "closeCashBox: remote invoice $name sin apertura/perfil esperado; set_value legacy removido."
+            )
         }
         return resolved
     }

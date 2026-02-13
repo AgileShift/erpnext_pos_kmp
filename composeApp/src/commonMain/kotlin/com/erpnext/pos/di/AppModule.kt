@@ -95,7 +95,6 @@ import com.erpnext.pos.localSource.preferences.ThemePreferences
 import com.erpnext.pos.localSource.preferences.CurrencySettingsPreferences
 import com.erpnext.pos.remoteSource.api.APIService
 import com.erpnext.pos.remoteSource.api.defaultEngine
-import com.erpnext.pos.remoteSource.api.v2.APIServiceV2
 import com.erpnext.pos.remoteSource.oauth.refreshAuthToken
 import com.erpnext.pos.remoteSource.datasources.CustomerRemoteSource
 import com.erpnext.pos.remoteSource.datasources.InventoryRemoteSource
@@ -114,7 +113,6 @@ import com.erpnext.pos.sync.SyncManager
 import com.erpnext.pos.sync.SyncOrchestrator
 import com.erpnext.pos.sync.OpeningGate
 import com.erpnext.pos.sync.PosProfileGate
-import com.erpnext.pos.di.v2.appModulev2
 import com.erpnext.pos.utils.AppLogger
 import com.erpnext.pos.utils.AppSentry
 import com.erpnext.pos.utils.TokenUtils
@@ -141,7 +139,6 @@ import com.erpnext.pos.views.payment.PaymentHandler
 import com.erpnext.pos.views.reconciliation.ReconciliationViewModel
 import com.erpnext.pos.auth.AppLifecycleObserver
 import com.erpnext.pos.auth.TokenHeartbeat
-import com.erpnext.pos.data.repositories.v2.SourceDocumentRepository
 import com.erpnext.pos.data.repositories.CurrencySettingsRepository
 import com.erpnext.pos.domain.usecases.CancelSalesInvoiceUseCase
 import com.erpnext.pos.domain.usecases.FetchSalesInvoiceWithItemsUseCase
@@ -149,7 +146,7 @@ import com.erpnext.pos.domain.usecases.PartialReturnUseCase
 import com.erpnext.pos.domain.usecases.FetchPosProfileInfoLocalUseCase
 import com.erpnext.pos.domain.usecases.FetchPosProfileInfoUseCase
 import com.erpnext.pos.domain.usecases.RebuildCustomerSummariesUseCase
-import com.erpnext.pos.domain.usecases.v2.LoadSourceDocumentsUseCase
+import com.erpnext.pos.domain.usecases.LoadSourceDocumentsUseCase
 import io.ktor.client.HttpClient
 import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.plugins.auth.Auth
@@ -281,7 +278,7 @@ val appModule = module {
         }
     }
 
-    single(named("apiService")) {
+    single {
         APIService(
             client = get(),
             store = get(),
@@ -300,7 +297,7 @@ val appModule = module {
     single {
         SessionRefresher(
             tokenStore = get(),
-            apiService = get(named("apiService")),
+            apiService = get(),
             navigationManager = get(),
             networkMonitor = get(),
             cashBoxManager = lazy { get<CashBoxManager>() }
@@ -317,7 +314,7 @@ val appModule = module {
     }
     single {
         PaymentHandler(
-            api = get(named("apiService")),
+            api = get(),
             createPaymentEntryUseCase = get(),
             saveInvoicePaymentsUseCase = get(),
             exchangeRateRepository = get(),
@@ -332,13 +329,13 @@ val appModule = module {
     single { SyncLogPreferences(get()) }
     single { SyncPreferences(get()) }
     single { ThemePreferences(get()) }
-    single { StockSettingsRepository(get(named("apiService")), get()) }
+    single { StockSettingsRepository(get(), get()) }
     single { CurrencySettingsPreferences(get()) }
-    single { CurrencySettingsRepository(get(named("apiService")), get()) }
+    single { CurrencySettingsRepository(get(), get()) }
     single<DatePolicy> { DefaultPolicy(PolicyInput()) }
     single<CashBoxManager> {
         CashBoxManager(
-            api = get(named("apiService")),
+            api = get(),
             profileDao = get(),
             openingDao = get(),
             openingEntryLinkDao = get(),
@@ -359,8 +356,6 @@ val appModule = module {
             networkMonitor = get()
         )
     }
-    single(named("apiServiceV2")) { APIServiceV2(get(), get(), get()) }
-
     single<PushSyncRunner> {
         LegacyPushSyncManager(
             invoiceRepository = get(),
@@ -410,33 +405,32 @@ val appModule = module {
     //endregion
 
     //region Login DI
-    single { LoginViewModel(get(), get(named("apiService")), get(), get(), get(), get(), get()) }
+    single { LoginViewModel(get(), get(), get(), get(), get(), get(), get()) }
     //endregion
 
     //region Splash DI
-    single { SplashViewModel(get(), get(), get(), get(named("apiService"))) }
+    single { SplashViewModel(get(), get(), get(), get()) }
     //endregion
 
     //region Company
-    single { CompanyRepository(get(named("apiService")), get()) }
+    single { CompanyRepository(get(), get()) }
     //endregion
 
     //region Inventory
-    single { InventoryRemoteSource(get(named("apiService"))) }
+    single { InventoryRemoteSource(get()) }
     single { InventoryLocalSource(get(), get()) }
     single { InventoryRepository(get(), get(), get()) }
     single { InventoryViewModel(get(), get(), get()) }
     //endregion
 
     //region Mode of Payment
-    single { ModeOfPaymentRemoteSource(get(named("apiService"))) }
+    single { ModeOfPaymentRemoteSource(get()) }
     single { ModeOfPaymentLocalSource(get()) }
-    single { ModeOfPaymentRepository(get(), get(), get()) }
+    single { ModeOfPaymentRepository(get(), get()) }
     single { PosProfilePaymentMethodLocalRepository(get()) }
     single {
         PosProfilePaymentMethodSyncRepository(
-            apiService = get(named("apiService")),
-            modeOfPaymentRemoteSource = get(),
+            apiService = get(),
             posProfileDao = get(),
             posProfileLocalDao = get(),
             posProfilePaymentMethodDao = get(),
@@ -451,7 +445,7 @@ val appModule = module {
         )
     }
     single { OpeningGate(get(), get()) }
-    single { PosProfileGate(get(), get(), get()) }
+    single { PosProfileGate(get(), get(), get(), get()) }
     single {
         OpeningEntrySyncRepository(
             posOpeningRepository = get(),
@@ -465,7 +459,7 @@ val appModule = module {
     }
     single {
         ClosingEntrySyncRepository(
-            api = get(named("apiService")),
+            api = get(),
             cashboxDao = get(),
             openingEntryLinkDao = get(),
             openingEntryDao = get(),
@@ -480,28 +474,28 @@ val appModule = module {
 
     //region POS Profile
     single { POSProfileLocalSource(get(), get()) }
-    single { POSProfileRemoteSource(get(named("apiService")), get()) }
+    single { POSProfileRemoteSource(get(), get()) }
     single<IPOSRepository> { POSProfileRepository(get(), get()) }
     single { POSProfileViewModel(get(), get(), get()) }
     //endregion
 
     //region Customer
-    single { CustomerRemoteSource(get(named("apiService"))) }
+    single { CustomerRemoteSource(get()) }
     single { CustomerLocalSource(get(), get()) }
     single { CustomerOutboxLocalSource(get()) }
     single { CustomerRepository(get(), get(), get(), get()) }
-    single { CustomerSyncRepository(get(named("apiService")), get(), get(), get(), get()) }
+    single { CustomerSyncRepository(get(), get(), get(), get(), get()) }
     single { FetchCustomerInvoicesLocalForPeriodUseCase(get()) }
     single { CreateCustomerUseCase(get(), get()) }
     single { PushPendingCustomersUseCase(get()) }
     single { CustomerGroupLocalSource(get()) }
     single { TerritoryLocalSource(get()) }
-    single { CustomerGroupRepository(get(named("apiService")), get()) }
-    single { TerritoryRepository(get(named("apiService")), get()) }
+    single { CustomerGroupRepository(get(), get()) }
+    single { TerritoryRepository(get(), get()) }
     single { ContactLocalSource(get()) }
     single { AddressLocalSource(get()) }
-    single { ContactRepository(get(named("apiService")), get()) }
-    single { AddressRepository(get(named("apiService")), get()) }
+    single { ContactRepository(get(), get()) }
+    single { AddressRepository(get(), get()) }
     single {
         CustomerViewModel(
             cashboxManager = get(),
@@ -530,7 +524,7 @@ val appModule = module {
     //endregion
 
     //region Home
-    single { UserRemoteSource(get(named("apiService")), get()) }
+    single { UserRemoteSource(get(), get()) }
     single { FetchPosProfileInfoUseCase(get()) }
     single { FetchPosProfileInfoLocalUseCase(get()) }
     single {
@@ -561,7 +555,7 @@ val appModule = module {
     //endregion
 
     //region Invoices
-    single { SalesInvoiceRemoteSource(get(named("apiService")), get()) }
+    single { SalesInvoiceRemoteSource(get(), get()) }
     single { InvoiceViewModel(get(), get(), get(), get(), get()) }
     single { SalesInvoiceRepository(get(), get(), get(), get(), get()) }
     single { CreateSalesInvoiceUseCase(get()) }
@@ -572,10 +566,10 @@ val appModule = module {
     single { PaymentTermLocalSource(get()) }
     single { DeliveryChargeLocalSource(get()) }
     single { ExchangeRateLocalSource(get()) }
-    single { PaymentTermsRepository(get(named("apiService")), get()) }
-    single { DeliveryChargesRepository(get(named("apiService")), get()) }
-    single { ExchangeRateRepository(get(), get(named("apiService"))) }
-    single { PosOpeningRepository(get(named("apiService"))) }
+    single { PaymentTermsRepository(get(), get()) }
+    single { DeliveryChargesRepository(get(), get()) }
+    single { ExchangeRateRepository(get(), get()) }
+    single { PosOpeningRepository(get()) }
     //endregion
 
     //region Quotation/Sales Order/Delivery Note
@@ -586,12 +580,10 @@ val appModule = module {
     //endregion
 
     //region Checkout
-    //single(named("apiServiceV2")) { APIServiceV2(get(), get(), get()) }
-    single { SourceDocumentRepository(get(named("apiServiceV2"))) }
-    single { LoadSourceDocumentsUseCase(get()) }
+    single { LoadSourceDocumentsUseCase() }
 
     single { AdjustLocalInventoryUseCase(get()) }
-    single { PaymentEntryRepository(get(named("apiService"))) }
+    single { PaymentEntryRepository(get()) }
     single {
         BillingViewModel(
             customersUseCase = get<FetchCustomersLocalUseCase>(),
@@ -612,7 +604,7 @@ val appModule = module {
             billingResetController = get()
         )
     }
-    single { SalesInvoiceRemoteSource(get(named("apiService")), get()) }
+    single { SalesInvoiceRemoteSource(get(), get()) }
     single { InvoiceLocalSource(get()) }
     single { CheckoutRepository(get(), get()) }
     //endregion
@@ -637,7 +629,7 @@ val appModule = module {
     //endregion
 
     //region UseCases DI
-    single { LogoutUseCase(get(named("apiService"))) }
+    single { LogoutUseCase(get()) }
     single { FetchBillingProductsWithPriceUseCase(get()) }
     single { FetchBillingProductsLocalUseCase(get()) }
     single { CheckCustomerCreditUseCase(get()) }
@@ -671,9 +663,9 @@ val appModule = module {
     single { CreatePaymentEntryUseCase(get()) }
     single { PartialReturnUseCase(get(), get(), get(), get(), get()) }
     single { LoadHomeMetricsUseCase(get()) }
-    single { InventoryAlertRepository(get(), get(), get(named("apiService")), get(), get()) }
+    single { InventoryAlertRepository(get(), get(), get(), get(), get()) }
     single { LoadInventoryAlertsUseCase(get()) }
-    single { SalesTargetRepository(get(named("apiService")), get(), get()) }
+    single { SalesTargetRepository(get(), get(), get()) }
     single { GetCompanyInfoUseCase(get()) }
     //endregion
 }
@@ -699,7 +691,7 @@ fun initKoin(
 ) {
     startKoin {
         config?.invoke(this)
-        modules(appModule + appModulev2 + modules)
+        modules(appModule + modules)
         koin.get<AppDatabase> { parametersOf(builder) }
     }
 }
