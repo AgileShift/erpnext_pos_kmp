@@ -505,10 +505,11 @@ class CustomerViewModel(
                     "Cambio: $symbol ${formatDoubleToString(change, 2)}"
                 }
 
+                val invoiceLabel = invoice.invoiceName?.takeIf { it.isNotBlank() } ?: invoiceId
                 val baseMessage = if (paymentResult.remotePaymentsSucceeded) {
-                    "Pago registrado correctamente."
+                    "Pago registrado correctamente en factura $invoiceLabel."
                 } else {
-                    "Pago registrado localmente. Se sincronizará cuando haya conexión."
+                    "Pago guardado localmente para factura $invoiceLabel. Se sincronizará cuando haya conexión."
                 }
 
                 val finalMessage = listOfNotNull(baseMessage, changeText).joinToString(" ")
@@ -519,7 +520,8 @@ class CustomerViewModel(
             },
             exceptionHandler = {
                 _paymentState.value = buildPaymentState(
-                    errorMessage = it.message ?: "No se pudo registrar el pago."
+                    errorMessage = it.message?.takeIf { msg -> msg.isNotBlank() }
+                        ?: "No se pudo registrar el pago de la factura $invoiceId."
                 )
             },
             loadingMessage = "Registrando pago..."

@@ -77,9 +77,15 @@ class SalesInvoiceRepository(
         }
         val ctx = context.getContext()
         val activeCashbox = context.getActiveCashboxWithDetails()?.cashbox
-        val openingEntryId = invoice.posOpeningEntry
-            ?: activeCashbox?.openingEntryId
-        val ensuredProfile = invoice.profileId ?: ctx?.profileName
+        val ensuredProfile = invoice.profileId?.takeIf { it.isNotBlank() } ?: ctx?.profileName
+        val openingEntryId = invoice.posOpeningEntry?.takeIf { it.isNotBlank() }
+            ?: activeCashbox
+                ?.takeIf { box ->
+                    ensuredProfile.isNullOrBlank() ||
+                        box.posProfile.equals(ensuredProfile, ignoreCase = true)
+                }
+                ?.openingEntryId
+                ?.takeIf { it.isNotBlank() }
         val ensuredWarehouse = invoice.warehouse ?: ctx?.warehouse
 
         val normalizedInvoice = invoice.copy(
@@ -212,8 +218,15 @@ class SalesInvoiceRepository(
         if (uniquePayments.isEmpty()) return
         val ctx = context.getContext()
         val activeCashbox = context.getActiveCashboxWithDetails()?.cashbox
-        val ensuredProfile = invoice.profileId ?: ctx?.profileName
-        val ensuredOpening = invoice.posOpeningEntry ?: activeCashbox?.openingEntryId
+        val ensuredProfile = invoice.profileId?.takeIf { it.isNotBlank() } ?: ctx?.profileName
+        val ensuredOpening = invoice.posOpeningEntry?.takeIf { it.isNotBlank() }
+            ?: activeCashbox
+                ?.takeIf { box ->
+                    ensuredProfile.isNullOrBlank() ||
+                        box.posProfile.equals(ensuredProfile, ignoreCase = true)
+                }
+                ?.openingEntryId
+                ?.takeIf { it.isNotBlank() }
         if (ensuredProfile.isNullOrBlank() || ensuredOpening.isNullOrBlank()) {
             throw IllegalStateException("Falta POS Profile o apertura de caja activa para registrar pagos.")
         }
@@ -462,7 +475,8 @@ class SalesInvoiceRepository(
             modeOfPayment = remote.payments.firstOrNull()?.modeOfPayment,
             debitTo = remote.debitTo,
             remarks = remote.remarks,
-            posOpeningEntry = remote.posOpeningEntry ?: localInvoice?.posOpeningEntry,
+            posOpeningEntry = remote.posOpeningEntry?.takeIf { it.isNotBlank() }
+                ?: localInvoice?.posOpeningEntry,
             isReturn = remote.isReturn == 1,
             isPos = remote.isPos,
             syncStatus = "Synced",
@@ -732,9 +746,11 @@ class SalesInvoiceRepository(
             },
             saveFetchResult = {
                 val profileId = context.requireContext().profileName
+                val activeOpeningId = resolveActiveOpeningForProfile(profileId)
                 it.toEntities().forEach { payload ->
                     val ensured = ensureProfileId(payload, profileId)
-                    val merged = normalizeBaseOutstanding(mergeLocalInvoiceFields(ensured))
+                    val withOpening = ensurePosOpeningEntry(ensured, profileId, activeOpeningId)
+                    val merged = normalizeBaseOutstanding(mergeLocalInvoiceFields(withOpening))
                     localSource.saveInvoiceLocally(
                         merged.invoice,
                         merged.items,
@@ -742,6 +758,7 @@ class SalesInvoiceRepository(
                     )
                 }
                 backfillMissingInvoiceItems(profileId)
+                backfillMissingOutstandingPosOpenings(profileId, activeOpeningId)
                 reconcileOutstandingWithRemote(it)
                 syncPaymentEntriesForPeriod()
             },
@@ -762,10 +779,15 @@ class SalesInvoiceRepository(
 
         if (!remoteInvoices.isNullOrEmpty()) {
             val profileId = context.getContext()?.profileName
+            val activeOpeningId = profileId?.let { resolveActiveOpeningForProfile(it) }
             val entities = remoteInvoices.toEntities()
             entities.forEach { payload ->
                 val ensured = ensureProfileId(payload, profileId)
-                saveInvoiceLocally(ensured.invoice, ensured.items, ensured.payments)
+                val withOpening = ensurePosOpeningEntry(ensured, profileId, activeOpeningId)
+                saveInvoiceLocally(withOpening.invoice, withOpening.items, withOpening.payments)
+            }
+            if (!profileId.isNullOrBlank()) {
+                backfillMissingOutstandingPosOpenings(profileId, activeOpeningId)
             }
         }
 
@@ -848,6 +870,65 @@ class SalesInvoiceRepository(
                 ?: local.partyAccountCurrency
         )
         return payload.copy(invoice = mergedInvoice)
+    }
+
+    private suspend fun resolveActiveOpeningForProfile(profileId: String?): String? {
+        if (profileId.isNullOrBlank()) return null
+        val activeCashbox = context.getActiveCashboxWithDetails()?.cashbox ?: return null
+        if (!activeCashbox.posProfile.equals(profileId, ignoreCase = true)) return null
+        return activeCashbox.openingEntryId?.takeIf { it.isNotBlank() }
+    }
+
+    private fun ensurePosOpeningEntry(
+        payload: SalesInvoiceWithItemsAndPayments,
+        profileId: String?,
+        openingEntryId: String?
+    ): SalesInvoiceWithItemsAndPayments {
+        val fallbackProfile = profileId?.takeIf { it.isNotBlank() }
+        val fallbackOpening = openingEntryId?.takeIf { it.isNotBlank() }
+        val invoiceProfile = payload.invoice.profileId?.takeIf { it.isNotBlank() } ?: fallbackProfile
+        val hasOpening = !payload.invoice.posOpeningEntry.isNullOrBlank()
+        if (hasOpening || !payload.invoice.isPos || fallbackOpening.isNullOrBlank()) {
+            if (invoiceProfile == payload.invoice.profileId) return payload
+            return payload.copy(invoice = payload.invoice.copy(profileId = invoiceProfile))
+        }
+        val normalizedInvoice = payload.invoice.copy(
+            profileId = invoiceProfile,
+            posOpeningEntry = fallbackOpening
+        )
+        val normalizedPayments = payload.payments.map { payment ->
+            if (!payment.posOpeningEntry.isNullOrBlank()) payment
+            else payment.copy(posOpeningEntry = fallbackOpening)
+        }
+        return payload.copy(invoice = normalizedInvoice, payments = normalizedPayments)
+    }
+
+    private suspend fun backfillMissingOutstandingPosOpenings(
+        profileId: String,
+        openingEntryId: String?
+    ) {
+        val fallbackOpening = openingEntryId?.takeIf { it.isNotBlank() } ?: return
+        val outstanding = localSource.getOutstandingInvoiceNamesForProfile(profileId)
+        if (outstanding.isEmpty()) return
+        outstanding.forEach { invoiceName ->
+            val wrapper = localSource.getInvoiceByName(invoiceName) ?: return@forEach
+            val invoice = wrapper.invoice
+            if (!invoice.isPos || !invoice.posOpeningEntry.isNullOrBlank()) return@forEach
+            localSource.updateInvoice(
+                invoice.copy(
+                    profileId = invoice.profileId?.takeIf { it.isNotBlank() } ?: profileId,
+                    posOpeningEntry = fallbackOpening,
+                    modifiedAt = Clock.System.now().toEpochMilliseconds()
+                )
+            )
+            if (wrapper.payments.isNotEmpty()) {
+                val normalizedPayments = wrapper.payments.map { payment ->
+                    if (!payment.posOpeningEntry.isNullOrBlank()) payment
+                    else payment.copy(posOpeningEntry = fallbackOpening)
+                }
+                localSource.upsertPayments(normalizedPayments)
+            }
+        }
     }
 
     private suspend fun syncPaymentEntriesForPeriod(days: Int = 90) {

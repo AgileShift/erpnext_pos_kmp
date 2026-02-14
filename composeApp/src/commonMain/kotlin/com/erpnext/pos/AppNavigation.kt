@@ -2,30 +2,33 @@
 
 package com.erpnext.pos
 
+import AppColorTheme
 import AppTheme
 import AppThemeMode
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
-import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.tween
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.Logout
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Business
 import androidx.compose.material.icons.outlined.Print
@@ -36,61 +39,79 @@ import androidx.compose.material.icons.outlined.SwapHoriz
 import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material.icons.outlined.Wifi
 import androidx.compose.material.icons.outlined.WifiOff
-import androidx.compose.material3.*
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.DpOffset
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.material.icons.automirrored.outlined.Logout
+import androidx.compose.ui.unit.dp
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.rememberNavController
+import coil3.compose.LocalPlatformContext
+import coil3.compose.SubcomposeAsyncImage
+import coil3.request.ImageRequest
+import coil3.request.crossfade
 import com.erpnext.pos.NavGraph.Setup
 import com.erpnext.pos.base.getPlatformName
-import com.erpnext.pos.localization.ProvideAppStrings
-import com.erpnext.pos.localization.LocalAppStrings
-import com.erpnext.pos.navigation.DesktopNavigationRail
-import com.erpnext.pos.navigation.NavRoute
-import com.erpnext.pos.navigation.NavigationManager
-import com.erpnext.pos.navigation.GlobalTopBar
-import com.erpnext.pos.navigation.LocalTopBarController
-import com.erpnext.pos.navigation.TopBarController
-import com.erpnext.pos.navigation.ShiftOpenChip
-import com.erpnext.pos.navigation.StatusIconButton
-import com.erpnext.pos.navigation.formatShiftDuration
-import com.erpnext.pos.navigation.BottomBarWithCenterFab
-import com.erpnext.pos.utils.view.SnackbarHost
-import com.erpnext.pos.utils.loading.LoadingIndicator
-import com.erpnext.pos.utils.loading.LoadingUiState
-import com.erpnext.pos.views.CashBoxManager
-import com.erpnext.pos.views.home.HomeRefreshController
-import com.erpnext.pos.utils.NetworkMonitor
-import com.erpnext.pos.localSource.preferences.ThemePreferences
+import com.erpnext.pos.domain.usecases.LogoutUseCase
+import com.erpnext.pos.localSource.dao.UserDao
 import com.erpnext.pos.localSource.preferences.SyncPreferences
 import com.erpnext.pos.localSource.preferences.SyncSettings
-import com.erpnext.pos.utils.view.SnackbarController
+import com.erpnext.pos.localSource.preferences.ThemePreferences
+import com.erpnext.pos.localization.LocalAppStrings
+import com.erpnext.pos.localization.ProvideAppStrings
+import com.erpnext.pos.navigation.BottomBarWithCenterFab
+import com.erpnext.pos.navigation.DesktopNavigationRail
+import com.erpnext.pos.navigation.GlobalTopBar
+import com.erpnext.pos.navigation.LocalTopBarController
+import com.erpnext.pos.navigation.NavRoute
+import com.erpnext.pos.navigation.NavigationManager
+import com.erpnext.pos.navigation.ShiftOpenChip
+import com.erpnext.pos.navigation.StatusIconButton
+import com.erpnext.pos.navigation.TopBarController
+import com.erpnext.pos.navigation.formatShiftDuration
+import com.erpnext.pos.remoteSource.api.APIService
+import com.erpnext.pos.remoteSource.oauth.TokenStore
 import com.erpnext.pos.sync.SyncManager
 import com.erpnext.pos.sync.SyncState
-import com.erpnext.pos.domain.usecases.LogoutUseCase
-import com.erpnext.pos.views.billing.BillingResetController
-import com.erpnext.pos.remoteSource.oauth.AuthInfoStore
-import com.erpnext.pos.remoteSource.api.APIService
-import org.koin.compose.koinInject
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.delay
 import com.erpnext.pos.utils.AppLogger
+import com.erpnext.pos.utils.NetworkMonitor
+import com.erpnext.pos.utils.loading.LoadingIndicator
+import com.erpnext.pos.utils.loading.LoadingUiState
+import com.erpnext.pos.utils.view.SnackbarController
+import com.erpnext.pos.utils.view.SnackbarHost
+import com.erpnext.pos.utils.view.SnackbarPosition
+import com.erpnext.pos.utils.view.SnackbarType
+import com.erpnext.pos.views.CashBoxManager
+import com.erpnext.pos.views.billing.BillingResetController
+import com.erpnext.pos.views.home.HomeRefreshController
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import org.koin.compose.koinInject
 import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
 
@@ -104,15 +125,7 @@ fun shouldShowTopBar(currentRoute: String): Boolean {
 
 private const val ACTIVITY_FEED_REFRESH_INTERVAL_MS = 60_000L
 
-private fun instanceLabel(url: String?): String? {
-    if (url.isNullOrBlank()) return null
-    val normalized = url
-        .removePrefix("https://")
-        .removePrefix("http://")
-        .trim()
-    return normalized.substringBefore("/").removePrefix("www.").ifBlank { null }
-}
-
+//TOOD: Localizar
 private fun defaultTitleForRoute(route: String): String {
     return when {
         route == NavRoute.Home.path -> "Inicio"
@@ -147,11 +160,36 @@ private fun NavHostController.navigateSingle(route: String) {
     }
 }
 
+@Composable
+fun ImageFromUrl(
+    url: String,
+    modifier: Modifier = Modifier,
+) {
+    SubcomposeAsyncImage(
+        model = ImageRequest.Builder(LocalPlatformContext.current)
+            .data(url)
+            .crossfade(true)
+            .build(),
+        contentDescription = null,
+        modifier = modifier,
+        contentScale = ContentScale.Crop,
+        loading = {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator()
+            }
+        },
+        error = {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Text("No se pudo cargar la imagen")
+            }
+        }
+    )
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AppNavigation() {
     val navController = rememberNavController()
-    // SnackbarController global provisto por Koin para compartir mensajes entre pantallas.
     val snackbarController = koinInject<SnackbarController>()
     val themePreferences = koinInject<ThemePreferences>()
     val syncManager = koinInject<SyncManager>()
@@ -166,8 +204,9 @@ fun AppNavigation() {
     val homeRefreshController = koinInject<HomeRefreshController>()
     val billingResetController = koinInject<BillingResetController>()
     val logoutUseCase = koinInject<LogoutUseCase>()
-    val authInfoStore = koinInject<AuthInfoStore>()
+    val tokenStore = koinInject<TokenStore>()
     val apiService = koinInject<APIService>()
+    val userDao = koinInject<UserDao>()
     val topBarController = remember { TopBarController() }
     val scope = rememberCoroutineScope()
     val syncState by syncManager.state.collectAsState(initial = SyncState.IDLE)
@@ -185,29 +224,19 @@ fun AppNavigation() {
     val isCashboxOpen by cashBoxManager.cashboxState.collectAsState()
     val shiftStart by cashBoxManager.activeCashboxStart().collectAsState(null)
     var profileMenuExpanded by remember { mutableStateOf(false) }
-    var currentSite by remember { mutableStateOf<String?>(null) }
     var tick by remember { mutableStateOf(0L) }
     var settingsFromMenu by remember { mutableStateOf(false) }
     var activityBadgeCount by remember { mutableStateOf(0) }
 
-    LaunchedEffect(cashBoxManager) {
-        cashBoxManager.initializeContext()
-    }
     LaunchedEffect(Unit) {
         while (true) {
             tick = Clock.System.now().toEpochMilliseconds()
             delay(1000)
         }
     }
-    LaunchedEffect(Unit) {
-        currentSite = authInfoStore.getCurrentSite()
-    }
     val visibleEntries by navController.visibleEntries.collectAsState()
     val currentRoute = visibleEntries.lastOrNull()?.destination?.route ?: ""
 
-    LaunchedEffect(currentRoute) {
-        currentSite = authInfoStore.getCurrentSite()
-    }
 
     LaunchedEffect(isOnline, posContext?.profileName, posContext?.territory, posContext?.route) {
         if (!isOnline) {
@@ -234,8 +263,8 @@ fun AppNavigation() {
                 if (!notifiedFailure) {
                     snackbarController.show(
                         "No se pudo actualizar la actividad en tiempo real.",
-                        com.erpnext.pos.utils.view.SnackbarType.Error,
-                        com.erpnext.pos.utils.view.SnackbarPosition.Top
+                        SnackbarType.Error,
+                        SnackbarPosition.Top
                     )
                     notifiedFailure = true
                 }
@@ -299,7 +328,11 @@ fun AppNavigation() {
         .joinToString("")
         .ifBlank { "C" }
     val companyName = posContext?.company?.takeIf { it.isNotBlank() }
-    val instanceName = instanceLabel(currentSite)
+    val localUserImage by produceState<String?>(initialValue = null) {
+        value = runCatching { userDao.getUserInfo()?.image?.trim()?.takeIf { it.isNotBlank() } }
+            .getOrNull()
+    }
+    val cashierImageUrl = cashier?.image?.trim()?.takeIf { it.isNotBlank() } ?: localUserImage
 
     AppTheme(theme = appTheme, themeMode = appThemeMode) {
         ProvideAppStrings {
@@ -416,77 +449,89 @@ fun AppNavigation() {
                                         val showNewSale = (currentRoute == NavRoute.Billing.path ||
                                                 currentRoute == NavRoute.Billing.path) &&
                                                 !subtitle.isNullOrBlank()
-                                        AnimatedVisibility(
-                                            visible = showNewSale,
-                                            enter = fadeIn(tween(180)),
-                                            exit = fadeOut(tween(160))
+                                        Row(
+                                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                            verticalAlignment = Alignment.CenterVertically
                                         ) {
+                                            AnimatedVisibility(
+                                                visible = showNewSale,
+                                                enter = fadeIn(tween(180)),
+                                                exit = fadeOut(tween(160))
+                                            ) {
+                                                StatusIconButton(
+                                                    label = "Nueva venta",
+                                                    onClick = { billingResetController.reset() },
+                                                    tint = MaterialTheme.colorScheme.primary
+                                                ) {
+                                                    Icon(
+                                                        imageVector = Icons.Outlined.Add,
+                                                        contentDescription = null
+                                                    )
+                                                }
+                                            }
                                             StatusIconButton(
-                                                label = "Nueva venta",
-                                                onClick = { billingResetController.reset() },
-                                                tint = MaterialTheme.colorScheme.primary
+                                                label = if (isOnline) "Internet: Conectado" else "Internet: Sin conexión",
+                                                onClick = {},
+                                                enabled = false,
+                                                tint = if (isOnline) Color(0xFF2E7D32)
+                                                else MaterialTheme.colorScheme.error,
                                             ) {
                                                 Icon(
-                                                    imageVector = Icons.Outlined.Add,
+                                                    if (isOnline) Icons.Outlined.Wifi else Icons.Outlined.WifiOff,
                                                     contentDescription = null
                                                 )
                                             }
-                                        }
-                                        StatusIconButton(
-                                            label = if (isOnline) "Internet: Conectado" else "Internet: Sin conexión",
-                                            onClick = {},
-                                            enabled = false,
-                                            tint = if (isOnline) Color(0xFF2E7D32)
-                                            else MaterialTheme.colorScheme.error,
-                                        ) {
-                                            Icon(
-                                                if (isOnline) Icons.Outlined.Wifi else Icons.Outlined.WifiOff,
-                                                contentDescription = null
-                                            )
-                                        }
-                                        StatusIconButton(
-                                            label = dbLabel,
-                                            onClick = {
-                                                if (!isCashboxOpen) {
-                                                    snackbarController.show(
-                                                        "No podemos sincronizar sin anter aperturar caja",
-                                                        com.erpnext.pos.utils.view.SnackbarType.Error,
-                                                        com.erpnext.pos.utils.view.SnackbarPosition.Bottom
-                                                    )
+                                            StatusIconButton(
+                                                label = dbLabel,
+                                                onClick = {
+                                                    if (!isCashboxOpen) {
+                                                        snackbarController.show(
+                                                            "No podemos sincronizar sin anter aperturar caja",
+                                                            SnackbarType.Error,
+                                                            SnackbarPosition.Bottom
+                                                        )
+                                                    } else {
+                                                        scope.launch { syncManager.fullSync(force = true) }
+                                                    }
+                                                },
+                                                tint = dbTint,
+                                            ) {
+                                                if (syncState is SyncState.SYNCING) {
+                                                    CircularProgressIndicator(Modifier.size(18.dp))
                                                 } else {
-                                                    scope.launch { syncManager.fullSync(force = true) }
+                                                    Icon(
+                                                        Icons.Outlined.Storage,
+                                                        contentDescription = null
+                                                    )
                                                 }
-                                            },
-                                            tint = dbTint,
-                                        ) {
-                                            if (syncState is SyncState.SYNCING) {
-                                                CircularProgressIndicator(Modifier.size(18.dp))
-                                            } else {
+                                            }
+                                            StatusIconButton(
+                                                label = "Refrescar",
+                                                onClick = { homeRefreshController.refresh() },
+                                            ) {
                                                 Icon(
-                                                    Icons.Outlined.Storage,
+                                                    Icons.Outlined.Refresh,
+                                                    contentDescription = null
+                                                )
+                                            }
+                                            val printerConnected = false
+                                            StatusIconButton(
+                                                label = if (printerConnected) "Impresora: Conectada"
+                                                else "Impresora: Sin conexión",
+                                                onClick = {},
+                                                enabled = false,
+                                                tint = if (printerConnected) MaterialTheme.colorScheme.primary
+                                                else MaterialTheme.colorScheme.onSurfaceVariant
+                                            ) {
+                                                Icon(
+                                                    Icons.Outlined.Print,
                                                     contentDescription = null
                                                 )
                                             }
                                         }
-                                        StatusIconButton(
-                                            label = "Refrescar",
-                                            onClick = { homeRefreshController.refresh() },
-                                        ) {
-                                            Icon(Icons.Outlined.Refresh, contentDescription = null)
-                                        }
-                                        val printerConnected = false
-                                        StatusIconButton(
-                                            label = if (printerConnected) "Impresora: Conectada"
-                                            else "Impresora: Sin conexión",
-                                            onClick = {},
-                                            enabled = false,
-                                            tint = if (printerConnected) MaterialTheme.colorScheme.primary
-                                            else MaterialTheme.colorScheme.onSurfaceVariant
-                                        ) {
-                                            Icon(Icons.Outlined.Print, contentDescription = null)
-                                        }
-                                        Spacer(modifier = Modifier.width(8.dp))
+                                        //Spacer(modifier = Modifier.width(8.dp))
                                         Row(
+                                            modifier = Modifier.padding(start = 8.dp, end = 8.dp),
                                             verticalAlignment = Alignment.CenterVertically,
                                             horizontalArrangement = Arrangement.spacedBy(10.dp)
                                         ) {
@@ -578,11 +623,18 @@ fun AppNavigation() {
                                                             ) { profileMenuExpanded = true },
                                                         contentAlignment = Alignment.Center
                                                     ) {
-                                                        Text(
-                                                            text = cashierInitials,
-                                                            style = MaterialTheme.typography.labelLarge,
-                                                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                                                        )
+                                                        if (!cashierImageUrl.isNullOrBlank()) {
+                                                            ImageFromUrl(
+                                                                url = cashierImageUrl,
+                                                                modifier = Modifier.fillMaxSize()
+                                                            )
+                                                        } else {
+                                                            Text(
+                                                                text = cashierInitials,
+                                                                style = MaterialTheme.typography.labelLarge,
+                                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                            )
+                                                        }
                                                     }
                                                 }
                                                 DropdownMenu(
@@ -592,7 +644,7 @@ fun AppNavigation() {
                                                     },
                                                     offset = DpOffset(x = 0.dp, y = 8.dp)
                                                 ) {
-                                                    Column(
+                                                    /*Column(
                                                         modifier = Modifier.padding(
                                                             horizontal = 14.dp,
                                                             vertical = 8.dp
@@ -612,15 +664,8 @@ fun AppNavigation() {
                                                                 MaterialTheme.colorScheme.error
                                                             }
                                                         )
-                                                        if (instanceName != null) {
-                                                            Text(
-                                                                text = instanceName,
-                                                                style = MaterialTheme.typography.labelSmall,
-                                                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                                                            )
-                                                        }
-                                                    }
-                                                    HorizontalDivider()
+                                                    }*/
+                                                    //HorizontalDivider()
                                                     DropdownMenuItem(
                                                         text = { Text("Configuración") },
                                                         leadingIcon = {
@@ -657,6 +702,10 @@ fun AppNavigation() {
                                                         },
                                                         onClick = {
                                                             profileMenuExpanded = false
+                                                            scope.launch {
+                                                                runCatching { tokenStore.clear() }
+                                                                cashBoxManager.clearContext()
+                                                            }
                                                             navController.navigateSingle(NavRoute.Login.path)
                                                         }
                                                     )
@@ -713,20 +762,25 @@ fun AppNavigation() {
                                     )
                                 ) {
                                     Surface(
-                                        color = MaterialTheme.colorScheme.surface,
-                                        tonalElevation = 2.dp,
-                                        shadowElevation = 4.dp
+                                        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                                        shape = RoundedCornerShape(bottomStart = 12.dp, bottomEnd = 12.dp),
+                                        tonalElevation = 6.dp,
+                                        shadowElevation = 10.dp
                                     ) {
                                         Column(
                                             modifier = Modifier.fillMaxWidth()
                                         ) {
                                             val strings = LocalAppStrings.current
                                             val message = loadingState.message.ifBlank {
-                                                (syncState as? SyncState.SYNCING)?.message ?: "Procesando..."
+                                                (syncState as? SyncState.SYNCING)?.message
+                                                    ?: "Procesando..."
                                             }
                                             Text(
                                                 text = message,
-                                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                                                modifier = Modifier.padding(
+                                                    horizontal = 12.dp,
+                                                    vertical = 6.dp
+                                                ),
                                                 style = MaterialTheme.typography.labelMedium,
                                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                                             )
@@ -735,7 +789,10 @@ fun AppNavigation() {
                                             if (step != null && total != null && total > 0) {
                                                 Text(
                                                     text = "${strings.settings.syncStepLabel} $step ${strings.settings.syncStepOfLabel} $total",
-                                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp),
+                                                    modifier = Modifier.padding(
+                                                        horizontal = 12.dp,
+                                                        vertical = 2.dp
+                                                    ),
                                                     style = MaterialTheme.typography.labelSmall,
                                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                                 )
@@ -743,15 +800,25 @@ fun AppNavigation() {
                                             if (loadingState.progress != null) {
                                                 LinearProgressIndicator(
                                                     progress = { loadingState.progress ?: 0f },
-                                                    modifier = Modifier.fillMaxWidth(),
+                                                    modifier = Modifier
+                                                        .fillMaxWidth()
+                                                        .height(6.dp)
+                                                        .clip(RoundedCornerShape(bottomStart = 12.dp, bottomEnd = 12.dp)),
                                                     color = MaterialTheme.colorScheme.primary,
-                                                    trackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.25f)
+                                                    trackColor = MaterialTheme.colorScheme.primary.copy(
+                                                        alpha = 0.15f
+                                                    )
                                                 )
                                             } else {
                                                 LinearProgressIndicator(
-                                                    modifier = Modifier.fillMaxWidth(),
+                                                    modifier = Modifier
+                                                        .fillMaxWidth()
+                                                        .height(6.dp)
+                                                        .clip(RoundedCornerShape(bottomStart = 12.dp, bottomEnd = 12.dp)),
                                                     color = MaterialTheme.colorScheme.primary,
-                                                    trackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.25f)
+                                                    trackColor = MaterialTheme.colorScheme.primary.copy(
+                                                        alpha = 0.15f
+                                                    )
                                                 )
                                             }
                                         }
@@ -763,7 +830,8 @@ fun AppNavigation() {
                                     navManager.navigationEvents.collect { event ->
                                         when (event) {
                                             is NavRoute.Login -> {
-                                                val route = navController.currentBackStackEntry?.destination?.route
+                                                val route =
+                                                    navController.currentBackStackEntry?.destination?.route
                                                 if (route != NavRoute.Login.path) {
                                                     navController.navigateSingle(NavRoute.Login.path)
                                                 }

@@ -7,6 +7,7 @@ import com.erpnext.pos.remoteSource.oauth.TransientAuthStore
 import com.erpnext.pos.remoteSource.oauth.AuthInfoStore
 import com.erpnext.pos.utils.instanceKeyFromUrl
 import com.erpnext.pos.utils.TokenUtils.decodePayload
+import com.erpnext.pos.utils.TokenUtils.resolveUserIdFromClaims
 import kotlinx.cinterop.*
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -78,24 +79,62 @@ class IosTokenStore : TokenStore, TransientAuthStore, AuthInfoStore {
     }
 
     private fun saveInternal(key: String, value: String) = keychainSet(key, value)
-    private fun saveInternal(key: String, value: Long) = keychainSet(key, value)
+    private fun saveInternal(key: String, value: Long) = keychainSet(key, value.toString())
     private fun loadInternal(key: String) = keychainGet(key)
     private fun deleteInternal(key: String) = keychainDelete(key)
 
     override suspend fun save(tokens: TokenResponse) = mutex.withLock {
-        saveInternal(siteScopedKey("access_token"), tokens.access_token)
-        saveInternal(siteScopedKey("refresh_token"), tokens.refresh_token ?: "")
-        saveInternal(siteScopedKey("expires"), tokens.expires_in ?: 0L)
-        saveInternal(siteScopedKey("id_token"), tokens.id_token ?: "")
-        val claims = tokens.id_token?.let { decodePayload(it) }
-        val userId = claims?.get("email")?.toString()
-        userId?.let { defaults.setObject(it, forKey = siteScopedKey("userId")) }
-        _flow.value = tokens
+        val currentAccessToken = loadInternal(siteScopedKey("access_token"))
+        val currentRefreshToken = loadInternal(siteScopedKey("refresh_token"))
+        val currentExpiresIn = loadInternal(siteScopedKey("expires"))?.toLongOrNull()
+        val currentIdToken = loadInternal(siteScopedKey("id_token"))
+        val currentUserId = defaults.stringForKey(siteScopedKey("userId"))
+
+        val mergedAccessToken = tokens.access_token.ifBlank { currentAccessToken.orEmpty() }
+        val mergedRefreshToken = tokens.refresh_token?.takeIf { it.isNotBlank() }
+            ?: currentRefreshToken?.takeIf { it.isNotBlank() }
+        val mergedIdToken = tokens.id_token?.takeIf { it.isNotBlank() }
+            ?: currentIdToken?.takeIf { it.isNotBlank() }
+        val mergedExpiresIn = tokens.expires_in ?: currentExpiresIn ?: 0L
+
+        if (mergedAccessToken.isNotBlank()) {
+            saveInternal(siteScopedKey("access_token"), mergedAccessToken)
+        } else {
+            deleteInternal(siteScopedKey("access_token"))
+        }
+        if (mergedRefreshToken == null) {
+            deleteInternal(siteScopedKey("refresh_token"))
+        } else {
+            saveInternal(siteScopedKey("refresh_token"), mergedRefreshToken)
+        }
+        saveInternal(siteScopedKey("expires"), mergedExpiresIn)
+        if (mergedIdToken.isNullOrBlank()) {
+            deleteInternal(siteScopedKey("id_token"))
+        } else {
+            saveInternal(siteScopedKey("id_token"), mergedIdToken)
+        }
+
+        val decodedUserId = mergedIdToken?.let { resolveUserIdFromClaims(decodePayload(it)) }
+            ?.takeIf { it.isNotBlank() }
+            ?: currentUserId
+        if (decodedUserId.isNullOrBlank()) {
+            defaults.removeObjectForKey(siteScopedKey("userId"))
+        } else {
+            defaults.setObject(decodedUserId, forKey = siteScopedKey("userId"))
+        }
+        _flow.value = TokenResponse(
+            access_token = mergedAccessToken,
+            token_type = tokens.token_type,
+            expires_in = mergedExpiresIn,
+            refresh_token = mergedRefreshToken,
+            id_token = mergedIdToken,
+            scope = tokens.scope
+        )
     }
 
     override suspend fun load(): TokenResponse? = mutex.withLock {
         val at = loadInternal(siteScopedKey("access_token")) ?: return null
-        val rt = loadInternal(siteScopedKey("refresh_token")) ?: ""
+        val rt = loadInternal(siteScopedKey("refresh_token"))?.takeIf { it.isNotBlank() }
         val expires = loadInternal(siteScopedKey("expires"))?.toLongOrNull()
         val idToken = loadInternal(siteScopedKey("id_token")) ?: return null
         val t = TokenResponse(

@@ -13,6 +13,7 @@ import com.erpnext.pos.remoteSource.oauth.AuthInfoStore
 import com.erpnext.pos.remoteSource.oauth.buildAuthorizeRequest
 import com.erpnext.pos.remoteSource.oauth.toOAuthConfig
 import com.erpnext.pos.remoteSource.oauth.TransientAuthStore
+import com.erpnext.pos.remoteSource.oauth.TokenStore
 import com.erpnext.pos.utils.TokenUtils
 import com.erpnext.pos.utils.AppLogger
 import com.erpnext.pos.utils.oauth.OAuthCallbackReceiver
@@ -36,17 +37,12 @@ class LoginViewModel(
     private val navManager: NavigationManager,
     private val contextProvider: CashBoxManager,
     private val instanceSwitcher: InstanceSwitcher,
-    private val transientAuthStore: TransientAuthStore
+    private val transientAuthStore: TransientAuthStore,
+    private val tokenStore: TokenStore
 ) : BaseViewModel() {
 
     private val _stateFlow: MutableStateFlow<LoginState> = MutableStateFlow(LoginState.Loading)
     val stateFlow: StateFlow<LoginState> = _stateFlow.asStateFlow()
-
-    init {
-        viewModelScope.launch {
-            contextProvider.initializeContext()
-        }
-    }
 
     fun doLogin(url: String) {
         AppLogger.info("LoginViewModel.doLogin -> $url")
@@ -109,7 +105,16 @@ class LoginViewModel(
         viewModelScope.launch {
             AppLogger.info("LoginViewModel.fetchSites")
             val sites = authStore.loadAuthInfo()
-                .map { Site(it.url, it.name, it.lastUsedAt, it.isFavorite) }
+                .map {
+                    val displayName = it.name
+                        .takeIf { value -> value.isNotBlank() }
+                        ?: it.url
+                            .removePrefix("https://")
+                            .removePrefix("http://")
+                            .substringBefore("/")
+                            .ifBlank { it.url }
+                    Site(it.url, displayName, it.lastUsedAt, it.isFavorite)
+                }
                 .sortedWith(
                     compareByDescending<Site> { it.isFavorite }
                         .thenByDescending { it.lastUsedAt ?: 0L }
@@ -126,6 +131,7 @@ class LoginViewModel(
             val receiver = if (isDesktop) OAuthCallbackReceiver() else null
             try {
                 AppLogger.info("LoginViewModel.onSiteSelected -> ${site.url}")
+                clearCurrentSessionBeforeSwitch()
                 val loginInfo = oauthService.getLoginWithSite(site.url)
                 authStore.saveAuthInfo(loginInfo)
                 val oauthConfig = loginInfo.toOAuthConfig()
@@ -208,20 +214,34 @@ class LoginViewModel(
         .also { fetchSites() }
 
     fun isAuthenticated(tokens: TokenResponse) {
-        val isAuth = TokenUtils.isValid(tokens.id_token)
+        val isAuth = tokens.access_token.isNotBlank() &&
+            (tokens.id_token.isNullOrBlank() || TokenUtils.isValid(tokens.id_token))
         _stateFlow.update { LoginState.Success() }
         if (isAuth) {
-            navManager.navigateTo(NavRoute.Home)
             viewModelScope.launch {
+                instanceSwitcher.switchInstance(authStore.getCurrentSite())
                 authStore.getCurrentSite()?.let { url ->
                     authStore.updateSiteMeta(
                         url = url,
                         lastUsedAt = Clock.System.now().toEpochMilliseconds()
                     )
                 }
-                instanceSwitcher.switchInstance(authStore.getCurrentSite())
+                navManager.navigateTo(NavRoute.Home)
+            }
+        } else {
+            _stateFlow.update {
+                LoginState.Error("Token inválido: no se pudo completar autenticación.")
             }
         }
+    }
+
+    private suspend fun clearCurrentSessionBeforeSwitch() {
+        runCatching { tokenStore.clear() }
+            .onFailure { AppLogger.warn("LoginViewModel.clearCurrentSessionBeforeSwitch token clear failed", it) }
+        contextProvider.clearContext()
+        transientAuthStore.clearRedirectUri()
+        transientAuthStore.clearPkceVerifier()
+        transientAuthStore.clearState()
     }
 
     private companion object {

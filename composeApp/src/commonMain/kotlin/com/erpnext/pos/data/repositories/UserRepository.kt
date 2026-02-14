@@ -13,11 +13,6 @@ class UserRepository(
 ) : IUserRepository {
     override suspend fun getUserInfo(): UserBO {
         RepoTrace.breadcrumb("UserRepository", "getUserInfo")
-        val local = userDao.getUserInfo()
-        if (local != null) {
-            return local.toBO()
-        }
-
         return runCatching { remoteSource.getUserInfo().toBO() }
             .getOrElse { error ->
                 RepoTrace.capture("UserRepository", "getUserInfo", error)

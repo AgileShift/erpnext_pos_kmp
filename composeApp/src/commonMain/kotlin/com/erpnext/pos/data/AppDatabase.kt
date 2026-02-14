@@ -18,11 +18,11 @@ import com.erpnext.pos.localSource.dao.ExchangeRateDao
 import com.erpnext.pos.localSource.dao.ItemDao
 import com.erpnext.pos.localSource.dao.ItemReorderDao
 import com.erpnext.pos.localSource.dao.ModeOfPaymentDao
-import com.erpnext.pos.localSource.dao.PaymentTermDao
 import com.erpnext.pos.localSource.dao.POSClosingEntryDao
 import com.erpnext.pos.localSource.dao.POSOpeningEntryDao
 import com.erpnext.pos.localSource.dao.POSOpeningEntryLinkDao
 import com.erpnext.pos.localSource.dao.POSProfileDao
+import com.erpnext.pos.localSource.dao.PaymentTermDao
 import com.erpnext.pos.localSource.dao.PosProfileLocalDao
 import com.erpnext.pos.localSource.dao.PosProfilePaymentMethodDao
 import com.erpnext.pos.localSource.dao.SalesInvoiceDao
@@ -43,12 +43,12 @@ import com.erpnext.pos.localSource.entities.ExchangeRateEntity
 import com.erpnext.pos.localSource.entities.ItemEntity
 import com.erpnext.pos.localSource.entities.ItemReorderEntity
 import com.erpnext.pos.localSource.entities.ModeOfPaymentEntity
-import com.erpnext.pos.localSource.entities.PaymentTermEntity
 import com.erpnext.pos.localSource.entities.POSClosingEntryEntity
 import com.erpnext.pos.localSource.entities.POSInvoicePaymentEntity
 import com.erpnext.pos.localSource.entities.POSOpeningEntryEntity
 import com.erpnext.pos.localSource.entities.POSOpeningEntryLinkEntity
 import com.erpnext.pos.localSource.entities.POSProfileEntity
+import com.erpnext.pos.localSource.entities.PaymentTermEntity
 import com.erpnext.pos.localSource.entities.PosProfileLocalEntity
 import com.erpnext.pos.localSource.entities.PosProfilePaymentMethodEntity
 import com.erpnext.pos.localSource.entities.SalesInvoiceEntity
@@ -88,7 +88,7 @@ import com.erpnext.pos.localSource.entities.UserEntity
         TerritoryEntity::class,
         CustomerOutboxEntity::class,
     ],
-    version = 4,
+    version = 8,
     exportSchema = true
 )
 @ConstructedBy(AppDatabaseConstructor::class)

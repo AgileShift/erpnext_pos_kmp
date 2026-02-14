@@ -55,7 +55,7 @@ class PaymentEntryViewModel(
                 _state.update {
                     it.copy(
                         isSubmitting = false,
-                        successMessage = "Pago registrado correctamente."
+                        successMessage = "Pago registrado correctamente para la factura ${current.invoiceId}."
                     )
                 }
             },
@@ -63,7 +63,8 @@ class PaymentEntryViewModel(
                 _state.update {
                     it.copy(
                         isSubmitting = false,
-                        errorMessage = throwable.message ?: "No se pudo registrar el pago."
+                        errorMessage = throwable.message
+                            ?: "No se pudo registrar el pago para la factura ${current.invoiceId}."
                     )
                 }
             },

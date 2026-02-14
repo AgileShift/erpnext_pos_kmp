@@ -5,30 +5,36 @@ package com.erpnext.pos.views.login
 import AppTheme
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsHoveredAsState
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.itemsIndexed
-import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.collectIsPressedAsState
-import androidx.compose.foundation.interaction.collectIsHoveredAsState
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Speed
@@ -49,17 +55,11 @@ import androidx.compose.material3.SwipeToDismissBox
 import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberSwipeToDismissBoxState
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.core.tween
-import androidx.compose.foundation.layout.fillMaxHeight
-import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -71,10 +71,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.erpnext.pos.base.getPlatformName
+import com.erpnext.pos.utils.WindowHeightSizeClass
+import com.erpnext.pos.utils.WindowWidthSizeClass
 import com.erpnext.pos.utils.isValidUrlInput
 import com.erpnext.pos.utils.rememberWindowSizeClass
-import com.erpnext.pos.utils.WindowWidthSizeClass
-import com.erpnext.pos.utils.WindowHeightSizeClass
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.number
 import kotlinx.datetime.toLocalDateTime
@@ -794,7 +794,7 @@ fun UrlInputField(
 fun LoginPreview() {
     AppTheme {
         LoginScreen(
-            state = LoginState.Success(emptyList()),
+            state = LoginState.Success(listOf(Site("http://localhost:8000", "La Casita del Queso", null, true), Site("httsp://staging.clothingcenterni.com", "Clothing Center", null, false), Site("httsp://staging.gamezonenic.com", "Game Zone", null, false))),
             actions = LoginAction()
         )
     }

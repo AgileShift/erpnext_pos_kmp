@@ -154,7 +154,7 @@ fun BillingScreen(
         }
     }
 
-    LaunchedEffect(popupMessage != null) { //successDialogId, successDialogMessage, successMessage) {
+    LaunchedEffect(successDialogId, successDialogMessage, successMessage) {
         if (successDialogId == 0L) return@LaunchedEffect
         val message = (successDialogMessage ?: successMessage)
             ?.takeIf { it.isNotBlank() } ?: return@LaunchedEffect

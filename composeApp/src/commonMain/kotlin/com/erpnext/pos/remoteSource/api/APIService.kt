@@ -2,88 +2,80 @@ package com.erpnext.pos.remoteSource.api
 
 import com.erpnext.pos.BuildKonfig
 import com.erpnext.pos.base.getPlatformName
+import com.erpnext.pos.remoteSource.dto.AccountDetailDto
+import com.erpnext.pos.remoteSource.dto.AddressListDto
+import com.erpnext.pos.remoteSource.dto.BalanceDetailsDto
 import com.erpnext.pos.remoteSource.dto.BinDto
 import com.erpnext.pos.remoteSource.dto.BootstrapDataDto
 import com.erpnext.pos.remoteSource.dto.BootstrapPosSyncDto
 import com.erpnext.pos.remoteSource.dto.BootstrapRequestDto
 import com.erpnext.pos.remoteSource.dto.CategoryDto
-import com.erpnext.pos.remoteSource.dto.CurrencyDto
-import com.erpnext.pos.remoteSource.dto.ContactChildDto
+import com.erpnext.pos.remoteSource.dto.CompanyDto
 import com.erpnext.pos.remoteSource.dto.ContactListDto
-import com.erpnext.pos.remoteSource.dto.LinkRefDto
-import com.erpnext.pos.remoteSource.dto.ContactUpdateDto
-import com.erpnext.pos.remoteSource.dto.CustomerDto
+import com.erpnext.pos.remoteSource.dto.CurrencyDto
 import com.erpnext.pos.remoteSource.dto.CustomerCreateDto
-import com.erpnext.pos.remoteSource.dto.AddressCreateDto
-import com.erpnext.pos.remoteSource.dto.AddressListDto
-import com.erpnext.pos.remoteSource.dto.AddressUpdateDto
-import com.erpnext.pos.remoteSource.dto.CompanySalesTargetDto
-import com.erpnext.pos.remoteSource.dto.ContactCreateDto
-import com.erpnext.pos.remoteSource.dto.DocNameResponseDto
+import com.erpnext.pos.remoteSource.dto.CustomerDto
+import com.erpnext.pos.remoteSource.dto.CustomerGroupDto
 import com.erpnext.pos.remoteSource.dto.DeliveryChargeDto
+import com.erpnext.pos.remoteSource.dto.DocNameResponseDto
 import com.erpnext.pos.remoteSource.dto.ExchangeRateResponse
 import com.erpnext.pos.remoteSource.dto.ItemDto
-import com.erpnext.pos.remoteSource.dto.ItemPriceDto
 import com.erpnext.pos.remoteSource.dto.ItemReorderDto
+import com.erpnext.pos.remoteSource.dto.LinkRefDto
 import com.erpnext.pos.remoteSource.dto.LoginInfo
-import com.erpnext.pos.remoteSource.dto.AccountDetailDto
 import com.erpnext.pos.remoteSource.dto.ModeOfPaymentDetailDto
 import com.erpnext.pos.remoteSource.dto.ModeOfPaymentDto
 import com.erpnext.pos.remoteSource.dto.OutstandingInfo
 import com.erpnext.pos.remoteSource.dto.POSClosingEntryDto
 import com.erpnext.pos.remoteSource.dto.POSClosingEntryResponse
 import com.erpnext.pos.remoteSource.dto.POSClosingEntrySummaryDto
-import com.erpnext.pos.remoteSource.dto.BalanceDetailsDto
-import com.erpnext.pos.remoteSource.dto.POSOpeningEntryDto
 import com.erpnext.pos.remoteSource.dto.POSOpeningEntryDetailDto
+import com.erpnext.pos.remoteSource.dto.POSOpeningEntryDto
 import com.erpnext.pos.remoteSource.dto.POSOpeningEntryResponseDto
 import com.erpnext.pos.remoteSource.dto.POSOpeningEntrySummaryDto
 import com.erpnext.pos.remoteSource.dto.POSProfileDto
 import com.erpnext.pos.remoteSource.dto.POSProfileSimpleDto
-import com.erpnext.pos.remoteSource.dto.PaymentTermDto
+import com.erpnext.pos.remoteSource.dto.PaymentEntryCreateDto
 import com.erpnext.pos.remoteSource.dto.PaymentEntryDto
+import com.erpnext.pos.remoteSource.dto.PaymentTermDto
 import com.erpnext.pos.remoteSource.dto.SalesInvoiceDto
 import com.erpnext.pos.remoteSource.dto.StockSettingsDto
 import com.erpnext.pos.remoteSource.dto.SubmitResponseDto
+import com.erpnext.pos.remoteSource.dto.TerritoryDto
 import com.erpnext.pos.remoteSource.dto.TokenResponse
 import com.erpnext.pos.remoteSource.dto.UserDto
 import com.erpnext.pos.remoteSource.dto.WarehouseItemDto
-import com.erpnext.pos.remoteSource.dto.CustomerGroupDto
-import com.erpnext.pos.remoteSource.dto.TerritoryDto
-import com.erpnext.pos.remoteSource.dto.CompanyDto
-import com.erpnext.pos.remoteSource.dto.CustomerAddressDto
-import com.erpnext.pos.remoteSource.dto.PaymentEntryCreateDto
 import com.erpnext.pos.remoteSource.oauth.AuthInfoStore
 import com.erpnext.pos.remoteSource.oauth.OAuthConfig
 import com.erpnext.pos.remoteSource.oauth.Pkce
 import com.erpnext.pos.remoteSource.oauth.TokenStore
 import com.erpnext.pos.remoteSource.oauth.refreshAuthToken
 import com.erpnext.pos.remoteSource.oauth.toOAuthConfig
-import com.erpnext.pos.remoteSource.sdk.ERPDocType
 import com.erpnext.pos.remoteSource.sdk.FrappeErrorResponse
 import com.erpnext.pos.remoteSource.sdk.FrappeException
-import com.erpnext.pos.remoteSource.sdk.filters
-import com.erpnext.pos.remoteSource.sdk.getFields
 import com.erpnext.pos.remoteSource.sdk.withRetries
+import com.erpnext.pos.utils.AppLogger
+import com.erpnext.pos.utils.AppSentry
+import com.erpnext.pos.utils.TokenUtils
+import com.erpnext.pos.utils.normalizeUrl
 import com.erpnext.pos.utils.view.DateTimeProvider
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.engine.HttpClientEngine
-import io.ktor.client.request.get
 import io.ktor.client.request.forms.FormDataContent
-import io.ktor.client.request.post
+import io.ktor.client.request.get
 import io.ktor.client.request.parameter
+import io.ktor.client.request.post
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.ContentType
 import io.ktor.http.Parameters
 import io.ktor.http.contentType
-import io.ktor.http.encodeURLParameter
 import io.ktor.http.formUrlEncode
 import io.ktor.http.isSuccess
+import io.ktor.http.takeFrom
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
-import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
@@ -93,12 +85,6 @@ import kotlinx.serialization.json.doubleOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
-import com.erpnext.pos.utils.AppLogger
-import com.erpnext.pos.utils.AppSentry
-import com.erpnext.pos.utils.normalizeUrl
-import io.ktor.client.statement.HttpResponse
-import io.ktor.http.takeFrom
-import kotlinx.serialization.json.put
 import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
 
@@ -134,6 +120,7 @@ class APIService(
             .filter { it.postingDate.take(10) >= startDate }
             .toList()
     }
+
     suspend fun getCompanyInfo(): List<CompanyDto> {
         val bootstrapCompany = runCatching {
             val payload = BootstrapRequestDto(
@@ -366,78 +353,87 @@ class APIService(
         }
     }
 
-    suspend fun refreshToken(refresh: String): TokenResponse =
-        refreshAuthToken(tokenClient, authStore, refresh)
+    suspend fun refreshToken(refresh: String): TokenResponse {
+        require(refresh.isNotBlank()) { "Missing refresh token" }
+        return refreshAuthToken(tokenClient, authStore, refresh)
+    }
 
     suspend fun getUserInfo(): UserDto {
-        val userId = store.loadUser()
-        if (userId.isNullOrBlank()) throw Exception("Usuario Invalido")
-        val username = userId.substringBefore("@").ifBlank { userId }
-        return UserDto(
-            name = userId,
-            username = username,
-            firstName = username,
-            lastName = null,
-            email = userId,
-            language = "es",
-            enabled = true
+        val remoteUser = fetchAuthenticatedUser()
+        val currentSite = authStore.getCurrentSite()?.trim()?.trimEnd('/')
+        val fallbackEmail = store.loadUser()?.trim()?.takeIf { it.contains("@") }
+        val normalizedName = remoteUser.name.trim()
+            .ifBlank { remoteUser.username?.trim().orEmpty() }
+        val normalizedUsername = remoteUser.username?.trim()
+            ?.takeIf { it.isNotBlank() }
+            ?: normalizedName
+        val normalizedFirstName = remoteUser.firstName?.trim()
+            ?.takeIf { it.isNotBlank() }
+            ?: remoteUser.fullName?.trim()?.substringBefore(" ")?.takeIf { it.isNotBlank() }
+            ?: normalizedUsername
+        val normalizedEmail = remoteUser.email?.trim()
+            ?.takeIf { it.isNotBlank() }
+            ?: fallbackEmail
+            ?: normalizedUsername
+        val normalizedFullName = remoteUser.fullName?.trim()
+            ?.takeIf { it.isNotBlank() }
+            ?: listOfNotNull(normalizedFirstName, remoteUser.lastName)
+                .joinToString(" ")
+                .trim()
+        val normalizedImage = remoteUser.image
+            ?.trim()
+            ?.takeIf { it.isNotBlank() }
+            ?.let { raw ->
+                when {
+                    raw.startsWith("http://", ignoreCase = true) ||
+                            raw.startsWith("https://", ignoreCase = true) -> raw
+
+                    raw.startsWith("/") && !currentSite.isNullOrBlank() -> "$currentSite$raw"
+                    !currentSite.isNullOrBlank() -> "$currentSite/$raw"
+                    else -> raw
+                }
+            }
+        return remoteUser.copy(
+            name = normalizedName,
+            username = normalizedUsername,
+            firstName = normalizedFirstName,
+            email = normalizedEmail,
+            fullName = normalizedFullName,
+            image = normalizedImage
         )
     }
 
-    suspend fun getAuthenticatedServerUser(): String? {
-        val site = authStore.getCurrentSite()?.trim()?.trimEnd('/') ?: return null
-        val endpoints = listOf(
-            "$site/api/method/erpnext_pos.api.v1.auth.whoami",
-            "$site/api/method/frappe.auth.get_logged_user"
-        )
-        endpoints.forEach { endpoint ->
-            val response = runCatching {
-                withRetries {
-                    client.get { url { takeFrom(endpoint) } }
-                }
-            }.getOrElse {
-                AppLogger.warn("getAuthenticatedServerUser failed for $endpoint", it)
-                return@forEach
-            }
-            val bodyText = response.bodyAsText()
-            if (!response.status.isSuccess()) {
-                AppLogger.warn("getAuthenticatedServerUser non-success for $endpoint -> ${response.status}")
-                return@forEach
-            }
-            val parsed = runCatching {
-                json.parseToJsonElement(bodyText).jsonObject
-            }.getOrNull() ?: return@forEach
-            val message = parsed["message"] ?: return@forEach
-            val candidate = when (message) {
-                is JsonPrimitive -> message.contentOrNull
-                is JsonObject -> {
-                    val success = message["success"]?.jsonPrimitive?.contentOrNull
-                        ?.toBooleanStrictOrNull() ?: true
-                    if (!success) {
-                        null
-                    } else {
-                        val data = message["data"]
-                        when (data) {
-                            is JsonPrimitive -> data.contentOrNull
-                            is JsonObject -> data.stringOrNull("user") ?: data.stringOrNull("name")
-                            else -> message.stringOrNull("user") ?: message.stringOrNull("name")
-                        }
-                    }
-                }
-                else -> null
-            }?.trim()?.takeIf { it.isNotBlank() }
-            if (!candidate.isNullOrBlank()) return candidate
-        }
-        return null
+    suspend fun getIdTokenIssuerAndCurrentSite(idToken: String?): Pair<String?, String?> {
+        val issuer = TokenUtils.decodePayload(idToken ?: "")
+            ?.get("iss")
+            ?.toString()
+            ?.trim()
+            ?.takeIf { it.isNotBlank() }
+        val site = authStore.getCurrentSite()
+            ?.trim()
+            ?.takeIf { it.isNotBlank() }
+        return issuer to site
     }
 
-    suspend fun isSessionBoundToCurrentUser(): Boolean {
-        val localUser = store.loadUser()?.trim().orEmpty()
-        if (localUser.isBlank()) return false
-        val serverUser = getAuthenticatedServerUser()?.trim().orEmpty()
-        if (serverUser.isBlank()) return false
-        if (serverUser.equals("Guest", ignoreCase = true)) return false
-        return localUser.equals(serverUser, ignoreCase = true)
+    suspend fun isIdTokenIssuerBoundToCurrentSite(idToken: String?): Boolean {
+        if (idToken.isNullOrBlank()) return false
+        val (issuer, site) = getIdTokenIssuerAndCurrentSite(idToken)
+        if (issuer.isNullOrBlank() || site.isNullOrBlank()) return false
+        val normalizedIssuer = normalizeUrl(issuer).trimEnd('/').lowercase()
+        val normalizedSite = normalizeUrl(site).trimEnd('/').lowercase()
+        if (normalizedIssuer == normalizedSite) return true
+        val issuerHostPort = instanceHostPortKey(normalizedIssuer)
+        val siteHostPort = instanceHostPortKey(normalizedSite)
+        return issuerHostPort.isNotBlank() &&
+                siteHostPort.isNotBlank() &&
+                issuerHostPort == siteHostPort
+    }
+
+    private fun instanceHostPortKey(url: String): String {
+        val noScheme = url
+            .removePrefix("https://")
+            .removePrefix("http://")
+        return noScheme.substringBefore('/').trim()
     }
 
     suspend fun getExchangeRate(
@@ -483,7 +479,8 @@ class APIService(
             recentPaidOnly = true
         )
         val raw = fetchBootstrapRaw(payload)
-        return raw["currencies"]?.let { json.decodeFromJsonElement<List<CurrencyDto>>(it) }.orEmpty()
+        return raw["currencies"]?.let { json.decodeFromJsonElement<List<CurrencyDto>>(it) }
+            .orEmpty()
     }
 
     suspend fun getSystemSettingsRaw(): JsonObject? {
@@ -549,7 +546,7 @@ class APIService(
             .orEmpty()
             .firstOrNull { method ->
                 method.account == normalized || method.defaultAccount == normalized ||
-                    method.accounts.any { it.defaultAccount == normalized }
+                        method.accounts.any { it.defaultAccount == normalized }
             } ?: return null
         return AccountDetailDto(
             name = normalized,
@@ -600,17 +597,41 @@ class APIService(
     }
 
     suspend fun openCashbox(pos: POSOpeningEntryDto): POSOpeningEntryResponseDto {
-        val authenticatedUser = store.loadUser()?.trim().orEmpty()
-        if (authenticatedUser.isBlank()) {
+        val tokenUser = store.loadUser()?.trim().orEmpty()
+        if (tokenUser.isBlank()) {
             store.clear()
             throw IllegalStateException(
                 "Sesion invalida: no hay usuario autenticado para abrir caja. Vuelve a iniciar sesion."
             )
         }
+        val authenticated = runCatching { fetchAuthenticatedUser() }
+            .onFailure {
+                AppLogger.warn("openCashbox: get_authenticated_user failed", it)
+            }
+            .getOrNull()
+            ?: throw IllegalStateException(
+                "No se pudo resolver el usuario autenticado del servidor. Vuelve a iniciar sesion."
+            )
+        val authenticatedUser =
+            authenticated.name.trim().ifBlank { authenticated.username?.trim().orEmpty() }
+        if (authenticatedUser.isBlank()) {
+            throw IllegalStateException(
+                "El endpoint get_authenticated_user no devolvio un identificador de usuario valido."
+            )
+        }
         val requestedUser = pos.user?.trim()
-        if (!requestedUser.isNullOrBlank() && !requestedUser.equals(authenticatedUser, ignoreCase = true)) {
+        if (!requestedUser.isNullOrBlank() && !requestedUser.equals(
+                authenticatedUser,
+                ignoreCase = true
+            )
+        ) {
             throw IllegalArgumentException(
                 "payload.user ($requestedUser) no coincide con el usuario autenticado ($authenticatedUser)."
+            )
+        }
+        if (!tokenUser.equals(authenticatedUser, ignoreCase = true)) {
+            AppLogger.warn(
+                "openCashbox: token user ($tokenUser) differs from authenticated server user ($authenticatedUser)."
             )
         }
         val payload = buildJsonObject {
@@ -663,14 +684,15 @@ class APIService(
                 profileName = posProfile,
                 recentPaidOnly = true
             )
-            val openShift = fetchBootstrapRaw(payload)["open_shift"]?.jsonObject ?: return@runCatching emptyList()
+            val openShift = fetchBootstrapRaw(payload)["open_shift"]?.jsonObject
+                ?: return@runCatching emptyList()
             val shiftUser = openShift.stringOrNull("user")
             val shiftProfile = openShift.stringOrNull("pos_profile")
             if (!shiftProfile.equals(posProfile, ignoreCase = true)) return@runCatching emptyList()
             val requestedUser = user.trim()
             if (requestedUser.isNotBlank() &&
                 !shiftUser.isNullOrBlank() &&
-                !shiftUser.equals(requestedUser, ignoreCase = true)
+                !isSameUserIdentifier(shiftUser, requestedUser)
             ) {
                 return@runCatching emptyList()
             }
@@ -688,12 +710,6 @@ class APIService(
             AppLogger.warn("getOpenPOSOpeningEntries failed", it)
             emptyList()
         }
-    }
-
-    suspend fun getOpenPOSOpeningEntriesForProfile(
-        posProfile: String
-    ): List<POSOpeningEntrySummaryDto> {
-        return getOpenPOSOpeningEntries(user = "", posProfile = posProfile)
     }
 
     suspend fun getPOSOpeningEntry(name: String): POSOpeningEntryDetailDto {
@@ -774,7 +790,10 @@ class APIService(
                     val err = json.decodeFromString<FrappeErrorResponse>(bodyText)
                     throw FrappeException(err.exception ?: "Error: ${response.status.value}", err)
                 } catch (e: Exception) {
-                    throw Exception("Error en cancelSalesInvoice: ${response.status} - $bodyText", e)
+                    throw Exception(
+                        "Error en cancelSalesInvoice: ${response.status} - $bodyText",
+                        e
+                    )
                 }
             }
             decodeMethodData(bodyText)
@@ -863,7 +882,9 @@ class APIService(
     }
 
     private suspend fun fetchBootstrap(payload: BootstrapRequestDto): BootstrapDataDto {
-        val cacheKey = json.encodeToString(payload)
+        requireAuthenticatedSession("sync.bootstrap")
+        val site = authStore.getCurrentSite()?.trim()?.trimEnd('/').orEmpty()
+        val cacheKey = "$site::${json.encodeToString(payload)}"
         val now = Clock.System.now().toEpochMilliseconds()
         bootstrapCache?.let { cached ->
             if (cached.key == cacheKey && now - cached.createdAtMillis <= BOOTSTRAP_CACHE_WINDOW_MS) {
@@ -883,9 +904,60 @@ class APIService(
     }
 
     private suspend fun fetchBootstrapRaw(payload: BootstrapRequestDto): JsonObject {
+        requireAuthenticatedSession("sync.bootstrap")
         return postMethodWithPayload(
             methodPath = "erpnext_pos.api.v1.sync.bootstrap",
             payload = payload
+        )
+    }
+
+    private suspend fun requireAuthenticatedSession(operation: String) {
+        val tokens = store.load()
+        if (tokens?.access_token.isNullOrBlank()) {
+            throw IllegalStateException("Sesion no autenticada: $operation requiere login")
+        }
+    }
+
+    private suspend fun fetchAuthenticatedUser(): UserDto {
+        requireAuthenticatedSession("user.get_authenticated_user")
+        val data: JsonObject = postMethodWithPayload(
+            methodPath = "erpnext_pos.api.v1.user.get_authenticated_user",
+            payload = buildJsonObject {}
+        )
+        val payload = when {
+            data["data"] is JsonObject -> data["data"]!!.jsonObject
+            data["user"] is JsonObject -> data["user"]!!.jsonObject
+            else -> data
+        }
+        val userId = payload.stringOrNull("user")
+            ?: payload.stringOrNull("name")
+            ?: throw IllegalStateException(
+                "get_authenticated_user no devolvio campo user/name."
+            )
+        val username = payload.stringOrNull("username") ?: userId
+        val fullName = payload.stringOrNull("full_name")
+        val firstName = payload.stringOrNull("first_name")
+            ?: fullName?.substringBefore(" ")?.takeIf { it.isNotBlank() }
+            ?: username
+        val email = payload.stringOrNull("email")
+            ?: store.loadUser()?.trim()?.takeIf { it.contains("@") }
+            ?: username
+        val enabled = when (payload["enabled"]?.jsonPrimitive?.contentOrNull?.lowercase()) {
+            "0", "false", "no" -> false
+            "1", "true", "yes" -> true
+            else -> true
+        }
+        return UserDto(
+            name = userId,
+            username = username,
+            firstName = firstName,
+            lastName = payload.stringOrNull("last_name"),
+            email = email,
+            image = payload.stringOrNull("image"),
+            language = payload.stringOrNull("language") ?: "es",
+            timeZone = payload.stringOrNull("time_zone"),
+            fullName = fullName,
+            enabled = enabled
         )
     }
 
@@ -896,6 +968,12 @@ class APIService(
     private fun JsonObject.intOrNull(key: String): Int? {
         val raw = this[key]?.jsonPrimitive?.contentOrNull ?: return null
         return raw.toIntOrNull()
+    }
+
+    private fun isSameUserIdentifier(left: String?, right: String?): Boolean {
+        val normalizedLeft = left?.trim()?.lowercase()?.takeIf { it.isNotBlank() } ?: return false
+        val normalizedRight = right?.trim()?.lowercase()?.takeIf { it.isNotBlank() } ?: return false
+        return normalizedLeft == normalizedRight
     }
 
     suspend fun closeCashbox(entry: POSClosingEntryDto): POSClosingEntryResponse {
@@ -921,17 +999,6 @@ class APIService(
             )
         }.getOrNull()
         if (!primary.isNullOrEmpty()) return primary
-
-        // Secondary naming used in some deployments.
-        val secondary = runCatching {
-            postMethodWithPayload<JsonObject, List<POSClosingEntrySummaryDto>>(
-                methodPath = "erpnext_pos.api.v1.pos_session.get_closings_for_opening",
-                payload = buildJsonObject {
-                    put("pos_opening_entry", JsonPrimitive(opening))
-                }
-            )
-        }.getOrNull()
-        if (!secondary.isNullOrEmpty()) return secondary
 
         // Bootstrap fallback: if backend exposes the linked closing id in open_shift payload.
         val bootstrapShift = runCatching {
@@ -995,7 +1062,8 @@ class APIService(
     suspend fun getLoginWithSite(site: String): LoginInfo {
         val normalizedSite = normalizeUrl(site)
         val platform = if (getPlatformName() == "Desktop") "desktop" else "mobile"
-        val endpoint = normalizedSite.trimEnd('/') + "/api/method/erpnext_pos.api.v1.discovery.resolve_site"
+        val endpoint =
+            normalizedSite.trimEnd('/') + "/api/method/erpnext_pos.api.v1.discovery.resolve_site"
         val response = withRetries {
             client.post {
                 url { takeFrom(endpoint) }
@@ -1014,7 +1082,10 @@ class APIService(
                 val err = json.decodeFromString<FrappeErrorResponse>(bodyText)
                 throw FrappeException(err.exception ?: "Error: ${response.status.value}", err)
             } catch (e: Exception) {
-                throw Exception("Error en discovery.resolve_site: ${response.status} - $bodyText", e)
+                throw Exception(
+                    "Error en discovery.resolve_site: ${response.status} - $bodyText",
+                    e
+                )
             }
         }
         val message = decodeMethodMessageAsObject(bodyText)
@@ -1029,7 +1100,20 @@ class APIService(
             ?.filter { it.isNotBlank() }
             .orEmpty()
             .ifEmpty { listOf("all", "openid") }
-        val name = data.stringOrNull("name")
+        val companyNode = data["company"] as? JsonObject
+        val discoveryCompanyName = listOfNotNull(
+            data.stringOrNull("company_name"),
+            data.stringOrNull("companyName"),
+            data.stringOrNull("company"),
+            data.stringOrNull("organization_name"),
+            data.stringOrNull("organizationName"),
+            companyNode?.stringOrNull("company"),
+            companyNode?.stringOrNull("name"),
+            companyNode?.stringOrNull("title"),
+            companyNode?.stringOrNull("company_name")
+        ).firstOrNull { it.isNotBlank() }
+        val name = discoveryCompanyName
+            ?: data.stringOrNull("name")
             ?: if (platform == "desktop") "ERPNext POS Desktop" else "ERPNext POS Mobile"
         val clientSecret = data.stringOrNull("clientSecret")
             ?: data.stringOrNull("client_secret")
@@ -1139,9 +1223,9 @@ class APIService(
             val invoices = fetchAllInvoicesCombined(profile, recentPaidOnly = false)
             val found = invoices.firstOrNull { invoice ->
                 invoice.posOpeningEntry == posOpeningEntry &&
-                    invoice.postingDate.take(10) == postingDate &&
-                    invoice.customer == customer &&
-                    invoice.grandTotal == grandTotal
+                        invoice.postingDate.take(10) == postingDate &&
+                        invoice.customer == customer &&
+                        invoice.grandTotal == grandTotal
             }
             if (found != null) return found.name
         }
@@ -1214,7 +1298,11 @@ class APIService(
             }
         )
         val invoices = runCatching {
-            json.decodeFromJsonElement<List<SalesInvoiceDto>>(data["pendingInvoices"] ?: JsonArray(emptyList()))
+            json.decodeFromJsonElement<List<SalesInvoiceDto>>(
+                data["pendingInvoices"] ?: JsonArray(
+                    emptyList()
+                )
+            )
         }.getOrElse { emptyList() }
         val totalOutstanding = data["totalOutstanding"]?.jsonPrimitive?.doubleOrNull
             ?: data["outstanding"]?.jsonPrimitive?.doubleOrNull
@@ -1244,7 +1332,8 @@ class APIService(
     // Batch method for all outstanding invoices
     suspend fun getAllOutstandingInvoices(posProfile: String): List<SalesInvoiceDto> {
         return fetchAllInvoicesCombined(posProfile, recentPaidOnly = true).filter { invoice ->
-            val outstanding = invoice.outstandingAmount ?: (invoice.grandTotal - (invoice.paidAmount ?: 0.0))
+            val outstanding =
+                invoice.outstandingAmount ?: (invoice.grandTotal - (invoice.paidAmount ?: 0.0))
             outstanding > 0.0
         }
     }

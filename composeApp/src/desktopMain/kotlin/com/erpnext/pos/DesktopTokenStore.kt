@@ -6,7 +6,9 @@ import com.erpnext.pos.remoteSource.dto.TokenResponse
 import com.erpnext.pos.remoteSource.oauth.AuthInfoStore
 import com.erpnext.pos.remoteSource.oauth.TokenStore
 import com.erpnext.pos.remoteSource.oauth.TransientAuthStore
+import com.erpnext.pos.utils.AppLogger
 import com.erpnext.pos.utils.TokenUtils.decodePayload
+import com.erpnext.pos.utils.TokenUtils.resolveUserIdFromClaims
 import com.erpnext.pos.utils.instanceKeyFromUrl
 import com.github.javakeyring.Keyring
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -26,6 +28,12 @@ class DesktopTokenStore(
     private val stateFlow = MutableStateFlow<TokenResponse?>(null)
     private val json = Json { ignoreUnknownKeys = true }
     private val prefs: Preferences = Preferences.userRoot().node(prefsNode)
+    init {
+        AppLogger.info(
+            "DesktopTokenStore prefsNode=${prefs.absolutePath()} " +
+                "currentSite=${prefs.get("current_site", null) ?: "none"}"
+        )
+    }
 
     /**
      * Keyring best-effort:
@@ -117,11 +125,16 @@ class DesktopTokenStore(
         if (tokens.id_token.isNullOrEmpty()) return
 
         val claims = decodePayload(tokens.id_token)
-        val userId = claims?.get("email").toString()
+        val userId = resolveUserIdFromClaims(claims).orEmpty()
 
         // secretos
         setSecret(siteScopedKey("access_token"), tokens.access_token)
-        setSecret(siteScopedKey("refresh_token"), tokens.refresh_token ?: "")
+        val refreshToken = tokens.refresh_token?.takeIf { it.isNotBlank() }
+        if (refreshToken == null) {
+            deleteSecret(siteScopedKey("refresh_token"))
+        } else {
+            setSecret(siteScopedKey("refresh_token"), refreshToken)
+        }
         setSecret(siteScopedKey("id_token"), tokens.id_token)
 
         // metadatos (no secretos)
@@ -136,7 +149,7 @@ class DesktopTokenStore(
         // si falla keyring, getSecret() retorna null o usa fallback, sin crashear
         val at = getSecret(siteScopedKey("access_token")) ?: return@withLock null
         val idToken = getSecret(siteScopedKey("id_token")) ?: return@withLock null
-        val rt = getSecret(siteScopedKey("refresh_token")) ?: ""
+        val rt = getSecret(siteScopedKey("refresh_token"))?.takeIf { it.isNotBlank() }
         val expires = prefs.getLong(siteScopedKey("expires_in"), 0L)
 
         val tokens = TokenResponse(

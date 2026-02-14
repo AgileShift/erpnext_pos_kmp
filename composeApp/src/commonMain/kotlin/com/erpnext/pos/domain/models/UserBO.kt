@@ -6,6 +6,9 @@ data class UserBO(
     val firstName: String = "",
     val lastName: String? = null,
     val email: String = "",
+    val image: String? = null,
     val language: String = "",
+    val timeZone: String = "",
+    val fullName: String = "",
     val enabled: Boolean = false,
 )

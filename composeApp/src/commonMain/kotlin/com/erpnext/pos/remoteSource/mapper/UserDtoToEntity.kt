@@ -4,13 +4,22 @@ import com.erpnext.pos.localSource.entities.UserEntity
 import com.erpnext.pos.remoteSource.dto.UserDto
 
 fun UserDto.toEntity(): UserEntity {
+    val normalizedName = this.name
+    val normalizedUsername = this.username?.takeIf { it.isNotBlank() } ?: normalizedName
+    val normalizedFirstName = this.firstName?.takeIf { it.isNotBlank() }
+        ?: this.fullName?.substringBefore(" ")?.takeIf { it.isNotBlank() }
+        ?: normalizedUsername
+    val normalizedEmail = this.email?.takeIf { it.isNotBlank() } ?: normalizedUsername
     return UserEntity(
-        name = this.name,
-        firstName = this.firstName,
+        name = normalizedName,
+        firstName = normalizedFirstName,
         lastName = this.lastName,
-        username = this.username,
+        username = normalizedUsername,
+        email = normalizedEmail,
+        image = this.image,
         language = this.language,
-        email = this.email,
+        timeZone = this.timeZone,
+        fullName = this.fullName,
         enabled = this.enabled
     )
 }

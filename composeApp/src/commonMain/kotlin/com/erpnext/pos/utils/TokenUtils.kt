@@ -28,6 +28,25 @@ object TokenUtils {
         }
     }
 
+    fun resolveUserIdFromClaims(claims: Map<String, Any?>?): String? {
+        if (claims == null) return null
+        val keys = listOf(
+            "username",
+            "preferred_username",
+            "user_id",
+            "userid",
+            "sub",
+            "email"
+        )
+        keys.forEach { key ->
+            val value = claims[key]?.toString()?.trim()
+            if (!value.isNullOrBlank() && !value.equals("null", ignoreCase = true)) {
+                return value
+            }
+        }
+        return null
+    }
+
     // Función para convertir JsonElement a Any de forma flexible
     fun getJsonValue(element: JsonElement): Any? {
         return when (element) {

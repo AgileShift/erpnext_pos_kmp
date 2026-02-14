@@ -96,6 +96,7 @@ import com.erpnext.pos.localSource.preferences.CurrencySettingsPreferences
 import com.erpnext.pos.remoteSource.api.APIService
 import com.erpnext.pos.remoteSource.api.defaultEngine
 import com.erpnext.pos.remoteSource.oauth.refreshAuthToken
+import com.erpnext.pos.remoteSource.oauth.isRefreshTokenRejected
 import com.erpnext.pos.remoteSource.datasources.CustomerRemoteSource
 import com.erpnext.pos.remoteSource.datasources.InventoryRemoteSource
 import com.erpnext.pos.remoteSource.datasources.ModeOfPaymentRemoteSource
@@ -224,7 +225,7 @@ val appModule = module {
                             if (!shouldRefresh) {
                                 return@loadTokens currentTokens.toBearerToken()
                             }
-                            val refreshToken = currentTokens.refresh_token
+                            val refreshToken = currentTokens.refresh_token?.takeIf { it.isNotBlank() }
                                 ?: return@loadTokens if (TokenUtils.isValid(currentTokens.id_token)) {
                                     currentTokens.toBearerToken()
                                 } else {
@@ -236,6 +237,10 @@ val appModule = module {
                             }.getOrElse { throwable ->
                                 AppSentry.capture(throwable, "loadTokens refresh failed")
                                 AppLogger.warn("loadTokens refresh failed", throwable)
+                                if (isRefreshTokenRejected(throwable)) {
+                                    tokenStore.clear()
+                                    return@loadTokens null
+                                }
                                 return@loadTokens if (TokenUtils.isValid(currentTokens.id_token)) {
                                     currentTokens.toBearerToken()
                                 } else {
@@ -252,12 +257,17 @@ val appModule = module {
                         refreshTokens {
                             val currentTokens = tokenStore.load() ?: return@refreshTokens null
                             val refreshToken =
-                                currentTokens.refresh_token ?: return@refreshTokens null
+                                currentTokens.refresh_token?.takeIf { it.isNotBlank() }
+                                    ?: return@refreshTokens null
                             val refreshed = runCatching {
                                 refreshAuthToken(tokenRefreshClient, authInfoStore, refreshToken)
                             }.getOrElse { throwable ->
                                 AppSentry.capture(throwable, "refreshTokens failed")
                                 AppLogger.warn("refreshTokens failed", throwable)
+                                if (isRefreshTokenRejected(throwable)) {
+                                    tokenStore.clear()
+                                    return@refreshTokens null
+                                }
                                 return@refreshTokens if (TokenUtils.isValid(currentTokens.id_token)) {
                                     currentTokens.toBearerToken()
                                 } else {
@@ -322,7 +332,7 @@ val appModule = module {
         )
     }
     single { get<AppDatabase>().configurationDao() }
-    single { ConfigurationStore(get()) }
+    single { ConfigurationStore(get(), get()) }
     single { ExchangeRatePreferences(get()) }
     single { LanguagePreferences(get()) }
     single { OpeningSessionPreferences(get()) }
@@ -405,7 +415,7 @@ val appModule = module {
     //endregion
 
     //region Login DI
-    single { LoginViewModel(get(), get(), get(), get(), get(), get(), get()) }
+    single { LoginViewModel(get(), get(), get(), get(), get(), get(), get(), get()) }
     //endregion
 
     //region Splash DI
@@ -673,6 +683,7 @@ val appModule = module {
 private const val refreshThresholdSeconds = 10 * 60L
 
 private fun shouldRefreshToken(idToken: String?): Boolean {
+    if (idToken.isNullOrBlank()) return false
     if (!TokenUtils.isValid(idToken)) return true
     val secondsLeft = secondsToExpiry(idToken)
     return secondsLeft != null && secondsLeft <= refreshThresholdSeconds

@@ -19,6 +19,7 @@ import com.erpnext.pos.remoteSource.dto.LoginInfo
 import com.erpnext.pos.remoteSource.dto.TokenResponse
 import com.erpnext.pos.remoteSource.oauth.AuthInfoStore
 import com.erpnext.pos.utils.TokenUtils.decodePayload
+import com.erpnext.pos.utils.TokenUtils.resolveUserIdFromClaims
 import com.erpnext.pos.utils.instanceKeyFromUrl
 import androidx.core.content.edit
 
@@ -61,22 +62,60 @@ class AndroidTokenStore(private val context: Context) : TokenStore, TransientAut
     // ------------------------------------------------------------
 
     override suspend fun save(tokens: TokenResponse) {
-        clear()
-        if (tokens.id_token.isNullOrEmpty()) return
-        val claims = decodePayload(tokens.id_token)
-        val userId = claims?.get("email").toString()
+        mutex.withLock {
+            val currentAccessToken = prefs.getString(siteScopedKey("access_token"))
+            val currentRefreshToken = prefs.getString(siteScopedKey("refresh_token"))
+            val currentIdToken = prefs.getString(siteScopedKey("id_token"))
+            val currentExpiresIn = prefs.getLong(siteScopedKey("expires_in"), 0L)
+            val currentUser = prefs.getString(siteScopedKey("userId"))
 
-        prefs.putString(siteScopedKey("access_token"), tokens.access_token)
-        prefs.putString(siteScopedKey("refresh_token"), tokens.refresh_token ?: "")
-        prefs.putString(siteScopedKey("id_token"), tokens.id_token)
-        prefs.putLong(siteScopedKey("expires_in"), tokens.expires_in ?: 0L)
-        prefs.putString(siteScopedKey("userId"), userId)
-        stateFlow.value = tokens
+            val mergedRefreshToken = tokens.refresh_token?.takeIf { it.isNotBlank() }
+                ?: currentRefreshToken?.takeIf { it.isNotBlank() }
+            val mergedIdToken = tokens.id_token?.takeIf { it.isNotBlank() }
+                ?: currentIdToken?.takeIf { it.isNotBlank() }
+            val mergedExpiresIn = tokens.expires_in ?: currentExpiresIn
+            val mergedAccessToken = tokens.access_token.ifBlank { currentAccessToken.orEmpty() }
+
+            if (mergedAccessToken.isNotBlank()) {
+                prefs.putString(siteScopedKey("access_token"), mergedAccessToken)
+            } else {
+                prefs.remove(siteScopedKey("access_token"))
+            }
+            if (mergedRefreshToken == null) {
+                prefs.remove(siteScopedKey("refresh_token"))
+            } else {
+                prefs.putString(siteScopedKey("refresh_token"), mergedRefreshToken)
+            }
+            if (mergedIdToken == null) {
+                prefs.remove(siteScopedKey("id_token"))
+            } else {
+                prefs.putString(siteScopedKey("id_token"), mergedIdToken)
+            }
+            prefs.putLong(siteScopedKey("expires_in"), mergedExpiresIn)
+
+            val userId = mergedIdToken?.let { id ->
+                resolveUserIdFromClaims(decodePayload(id)).orEmpty()
+            }?.takeIf { it.isNotBlank() } ?: currentUser
+            if (userId.isNullOrBlank()) {
+                prefs.remove(siteScopedKey("userId"))
+            } else {
+                prefs.putString(siteScopedKey("userId"), userId)
+            }
+
+            stateFlow.value = TokenResponse(
+                access_token = mergedAccessToken,
+                token_type = tokens.token_type,
+                expires_in = mergedExpiresIn,
+                refresh_token = mergedRefreshToken,
+                id_token = mergedIdToken,
+                scope = tokens.scope
+            )
+        }
     }
 
     override suspend fun load(): TokenResponse? = mutex.withLock {
         val at = prefs.getString(siteScopedKey("access_token")) ?: return null
-        val rt = prefs.getString(siteScopedKey("refresh_token")) ?: ""
+        val rt = prefs.getString(siteScopedKey("refresh_token"))?.takeIf { it.isNotBlank() }
         val expires = prefs.getLong(siteScopedKey("expires_in"), 0L)
         val idToken = prefs.getString(siteScopedKey("id_token")) ?: return null
         val tokens = TokenResponse(

@@ -111,14 +111,14 @@ private fun ActivityNavigationRailEntry(
             ) {
                 Icon(
                     imageVector = Icons.Filled.Notifications,
-                    contentDescription = "Actividad",
+                    contentDescription = "",
                     tint = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         },
         label = {
             Text(
-                text = "Actividad",
+                text = "",
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }

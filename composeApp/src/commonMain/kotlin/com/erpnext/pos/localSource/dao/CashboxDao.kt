@@ -78,6 +78,9 @@ interface CashboxDao {
     @Query("UPDATE tabCashbox SET openingEntryId = :openingEntryId WHERE localId = :localId")
     suspend fun updateOpeningEntryId(localId: Long, openingEntryId: String)
 
+    @Query("UPDATE tabCashbox SET user = :user WHERE localId = :localId")
+    suspend fun updateUser(localId: Long, user: String)
+
     @Query("UPDATE tabCashbox SET pendingSync = :pendingSync WHERE localId = :localId")
     suspend fun updatePendingSync(localId: Long, pendingSync: Boolean)
 

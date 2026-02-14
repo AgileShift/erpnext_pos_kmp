@@ -1,3 +1,5 @@
+@file:OptIn(ExperimentalTime::class)
+
 package com.erpnext.pos.navigation
 
 import androidx.compose.foundation.clickable
@@ -17,8 +19,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.PlainTooltip
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TooltipAnchorPosition
 import androidx.compose.material3.TooltipBox
-import androidx.compose.material3.TooltipDefaults
+import androidx.compose.material3.TooltipDefaults.rememberTooltipPositionProvider
 import androidx.compose.material3.rememberTooltipState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -30,6 +33,7 @@ import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.Month
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toInstant
+import kotlin.time.ExperimentalTime
 
 @Composable
 fun ShiftOpenChip(isOpen: Boolean, duration: String, closeAction: () -> Unit = {}) {
@@ -79,7 +83,8 @@ fun StatusIconButton(
     content: @Composable () -> Unit
 ) {
     TooltipBox(
-        positionProvider = TooltipDefaults.rememberPlainTooltipPositionProvider(),
+        modifier = Modifier.size(24.dp),
+        positionProvider = rememberTooltipPositionProvider(TooltipAnchorPosition.Below),
         tooltip = { PlainTooltip { Text(label) } },
         state = rememberTooltipState()
     ) {

@@ -6,7 +6,9 @@ import com.erpnext.pos.localSource.dao.POSOpeningEntryDao
 import com.erpnext.pos.localSource.dao.POSOpeningEntryLinkDao
 import com.erpnext.pos.localSource.dao.SalesInvoiceDao
 import com.erpnext.pos.localSource.datasources.InvoiceLocalSource
+import com.erpnext.pos.localSource.entities.PendingOpeningEntrySync
 import com.erpnext.pos.remoteSource.datasources.SalesInvoiceRemoteSource
+import com.erpnext.pos.remoteSource.dto.POSOpeningEntrySummaryDto
 import com.erpnext.pos.remoteSource.mapper.toDto
 import com.erpnext.pos.utils.AppLogger
 
@@ -85,7 +87,7 @@ class OpeningEntrySyncRepository(
 
             if (link == null) {
                 val pendingSync = remoteName.isNullOrBlank() || openingEntry.pendingSync ||
-                    cashbox.pendingSync
+                        cashbox.pendingSync
                 openingEntryLinkDao.insert(
                     com.erpnext.pos.localSource.entities.POSOpeningEntryLinkEntity(
                         cashboxId = cashbox.localId,
@@ -168,14 +170,15 @@ class OpeningEntrySyncRepository(
         }
     }
 
-    private suspend fun resolveRemoteOpenSession(
-        candidate: com.erpnext.pos.localSource.entities.PendingOpeningEntrySync
-    ): com.erpnext.pos.remoteSource.dto.POSOpeningEntrySummaryDto? {
+    private suspend fun resolveRemoteOpenSession(candidate: PendingOpeningEntrySync): POSOpeningEntrySummaryDto? {
         val user = candidate.openingEntry.user
-            ?: candidate.cashbox.user
-            ?: return null
+            ?.trim()
+            ?.takeIf { it.isNotBlank() }
+            ?: candidate.cashbox.user.trim().takeIf { it.isNotBlank() }
+        val profile = candidate.openingEntry.posProfile
+        if (user.isNullOrBlank() || profile.isBlank()) return null
         return runCatching {
-            posOpeningRepository.getOpenSession(user, candidate.openingEntry.posProfile)
+            posOpeningRepository.getOpenSession(user, profile)
         }.getOrNull()
     }
 }
