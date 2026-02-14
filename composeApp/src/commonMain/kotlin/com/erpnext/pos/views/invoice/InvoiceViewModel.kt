@@ -143,11 +143,21 @@ class InvoiceViewModel(
         paging: PagingData<SalesInvoiceBO>
     ): PagingData<SalesInvoiceBO> {
         val q = query?.lowercase()?.trim()
-        if (q.isNullOrEmpty()) return paging
         return paging.filter { invoice ->
-            invoice.customer?.lowercase()?.contains(q) == true ||
+            val queryMatches = if (q.isNullOrEmpty()) {
+                true
+            } else {
+                invoice.customer?.lowercase()?.contains(q) == true ||
                     invoice.customerPhone?.lowercase()?.contains(q) == true ||
                     invoice.invoiceId.lowercase().contains(q)
+            }
+            val dateValue = date?.trim()
+            val dateMatches = if (dateValue.isNullOrEmpty()) {
+                true
+            } else {
+                invoice.postingDate?.startsWith(dateValue) == true
+            }
+            queryMatches && dateMatches
         }
     }
 }

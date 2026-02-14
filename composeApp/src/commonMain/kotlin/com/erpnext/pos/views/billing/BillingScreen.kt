@@ -22,6 +22,9 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.paging.PagingData
+import androidx.paging.LoadState
+import androidx.paging.compose.collectAsLazyPagingItems
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.foundation.BorderStroke
@@ -100,6 +103,7 @@ import com.erpnext.pos.navigation.LocalTopBarController
 import com.erpnext.pos.utils.loading.LoadingIndicator
 import com.erpnext.pos.utils.loading.LoadingUiState
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
 import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
 
@@ -108,13 +112,15 @@ data class CartItem(
     val name: String,
     val currency: String?,
     val quantity: Double,
-    val price: Double
+    val price: Double,
+    val availableQty: Double? = null
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun BillingScreen(
     state: BillingState,
+    productsPagingFlow: Flow<PagingData<ItemBO>>,
     action: BillingAction,
     snackbar: SnackbarController
 ) {
@@ -354,6 +360,7 @@ fun BillingScreen(
                         when (targetStep) {
                             LabCheckoutStep.Cart -> BillingLabContent(
                                 state = state,
+                                productsPagingFlow = productsPagingFlow,
                                 action = action,
                                 onCheckout = {
                                     if (state.selectedCustomer == null)
@@ -462,6 +469,7 @@ private enum class LabCheckoutStep {
 @Composable
 private fun BillingLabContent(
     state: BillingState.Success,
+    productsPagingFlow: Flow<PagingData<ItemBO>>,
     action: BillingAction,
     onCheckout: () -> Unit,
     modifier: Modifier = Modifier
@@ -485,14 +493,20 @@ private fun BillingLabContent(
         )
     }
 
-    val categories =
-        state.productSearchResults.mapNotNull { it.itemGroup.takeIf { g -> g.isNotBlank() } }
+    val products = productsPagingFlow.collectAsLazyPagingItems()
+    val categories = remember(products.itemSnapshotList.items) {
+        products.itemSnapshotList.items
+            .mapNotNull { it.itemGroup.takeIf { g -> g.isNotBlank() } }
             .distinct()
             .sorted()
-    var selectedCategory by rememberSaveable { mutableStateOf("Todos") }
-    val filteredProducts =
-        if (selectedCategory == "Todos") state.productSearchResults
-        else state.productSearchResults.filter { it.itemGroup == selectedCategory }
+    }
+    var selectedCategory by rememberSaveable { mutableStateOf(state.selectedProductCategory) }
+
+    LaunchedEffect(state.selectedProductCategory) {
+        if (selectedCategory != state.selectedProductCategory) {
+            selectedCategory = state.selectedProductCategory
+        }
+    }
 
     Column(
         modifier = modifier
@@ -519,7 +533,10 @@ private fun BillingLabContent(
                 LabCategoryTabs(
                     categories = categories,
                     selectedCategory = selectedCategory,
-                    onSelect = { selectedCategory = it }
+                    onSelect = {
+                        selectedCategory = it
+                        action.onProductCategorySelected(it)
+                    }
                 )
 
                 Spacer(Modifier.height(16.dp))
@@ -535,7 +552,7 @@ private fun BillingLabContent(
                         color = colors.onSurfaceVariant
                     )
                     Text(
-                        text = "(${filteredProducts.size})",
+                        text = "(${products.itemCount})",
                         style = MaterialTheme.typography.labelMedium,
                         color = colors.onSurfaceVariant.copy(alpha = 0.7f)
                     )
@@ -549,7 +566,11 @@ private fun BillingLabContent(
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                     modifier = Modifier.fillMaxSize()
                 ) {
-                    items(filteredProducts, key = { it.itemCode }) { item ->
+                    items(
+                        count = products.itemCount,
+                        key = { index -> products[index]?.itemCode ?: "billing_item_$index" }
+                    ) { index ->
+                        val item = products[index] ?: return@items
                         LabProductCard(
                             item = item,
                             baseCurrency = invoiceCurrency,
@@ -557,6 +578,18 @@ private fun BillingLabContent(
                             accent = accent,
                             onClick = { action.onProductAdded(item) }
                         )
+                    }
+                    if (products.loadState.append is LoadState.Loading) {
+                        item(span = { androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan) }) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(12.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                CircularProgressIndicator()
+                            }
+                        }
                     }
                 }
             }

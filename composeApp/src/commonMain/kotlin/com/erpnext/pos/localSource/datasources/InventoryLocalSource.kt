@@ -12,6 +12,7 @@ import kotlin.math.sqrt
 interface IInventoryLocalSource {
     suspend fun insertAll(inventory: List<ItemEntity>)
     fun getAllPaged(): PagingSource<Int, ItemEntity>
+    fun getPaged(search: String, category: String): PagingSource<Int, ItemEntity>
     suspend fun getAll(): List<ItemEntity>
     fun getItemById(id: String): PagingSource<Int, ItemEntity>
     fun getAllFilteredPaged(search: String): PagingSource<Int, ItemEntity>
@@ -53,6 +54,8 @@ class InventoryLocalSource(
     }
 
     override fun getAllPaged(): PagingSource<Int, ItemEntity> = dao.getAllItemsPaged()
+    override fun getPaged(search: String, category: String): PagingSource<Int, ItemEntity> =
+        dao.getPaged(search = search, category = category)
     override suspend fun getAll(): List<ItemEntity> = dao.getAllItems()
 
     override fun getItemById(id: String): PagingSource<Int, ItemEntity> = dao.getItemById(id)

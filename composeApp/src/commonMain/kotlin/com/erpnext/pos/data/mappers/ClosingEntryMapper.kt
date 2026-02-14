@@ -14,9 +14,15 @@ fun buildClosingEntryDto(
     postingDate: String,
     periodEndDate: String,
     paymentReconciliation: List<PaymentReconciliationSeed>,
-    invoices: List<SalesInvoiceEntity>
+    invoices: List<SalesInvoiceEntity>,
+    paidInvoiceNames: Set<String> = emptySet()
 ): POSClosingEntryDto {
-    val invoiceDetails = buildClosingSalesInvoiceRows(invoices)
+    val invoiceDetails = buildClosingSalesInvoiceRows(
+        invoices = invoices,
+        expectedProfile = cashbox.posProfile,
+        expectedOpening = openingEntryId,
+        paidInvoiceNames = paidInvoiceNames
+    )
     return POSClosingEntryDto(
         posProfile = cashbox.posProfile,
         posOpeningEntry = openingEntryId,
@@ -32,13 +38,20 @@ fun buildClosingEntryDto(
 }
 
 private fun buildClosingSalesInvoiceRows(
-    invoices: List<SalesInvoiceEntity>
+    invoices: List<SalesInvoiceEntity>,
+    expectedProfile: String,
+    expectedOpening: String,
+    paidInvoiceNames: Set<String>
 ): List<POSClosingSalesInvoiceDto> {
     val seen = mutableSetOf<String>()
     return invoices.mapNotNull { invoice ->
         val rawName = invoice.invoiceName?.trim() ?: return@mapNotNull null
         if (!isRemoteInvoiceName(rawName)) return@mapNotNull null
         if (invoice.docstatus != 1) return@mapNotNull null
+        if (!invoice.isPos) return@mapNotNull null
+        if (!invoice.profileId.equals(expectedProfile, ignoreCase = true)) return@mapNotNull null
+        if (!invoice.posOpeningEntry.equals(expectedOpening, ignoreCase = true)) return@mapNotNull null
+        if (paidInvoiceNames.isNotEmpty() && !paidInvoiceNames.contains(rawName)) return@mapNotNull null
         if ((invoice.paidAmount ?: 0.0) <= 0.0001) return@mapNotNull null
         if (!seen.add(rawName)) return@mapNotNull null
         POSClosingSalesInvoiceDto(

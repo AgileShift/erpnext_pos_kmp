@@ -9,12 +9,14 @@ import org.koin.compose.viewmodel.koinViewModel
 class BillingCoordinator(val viewModel: BillingViewModel) {
 
     val screenStateFlow = viewModel.state
+    val productsPagingFlow = viewModel.productsPagingFlow
 
     fun onCustomerSearchQueryChange(query: String) = viewModel.onCustomerSearchQueryChange(query)
     fun onCustomerSelected(customer: com.erpnext.pos.domain.models.CustomerBO) =
         viewModel.onCustomerSelected(customer)
 
     fun onProductSearchQueryChange(query: String) = viewModel.onProductSearchQueryChange(query)
+    fun onProductCategorySelected(category: String) = viewModel.onProductCategorySelected(category)
     fun onProductAdded(item: com.erpnext.pos.domain.models.ItemBO) = viewModel.onProductAdded(item)
     fun onQuantityChanged(itemCode: String, newQuantity: Double) =
         viewModel.onQuantityChanged(itemCode, newQuantity)

@@ -1,5 +1,6 @@
 package com.erpnext.pos.views.customer
 
+import androidx.paging.PagingData
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -8,9 +9,11 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import com.erpnext.pos.navigation.NavRoute
 import com.erpnext.pos.navigation.NavigationManager
+import com.erpnext.pos.domain.models.SalesInvoiceBO
 import com.erpnext.pos.views.salesflow.SalesFlowContext
 import com.erpnext.pos.views.salesflow.SalesFlowContextStore
 import com.erpnext.pos.views.salesflow.SalesFlowSource
+import kotlinx.coroutines.flow.flowOf
 import org.koin.compose.koinInject
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -19,6 +22,9 @@ fun CustomerRoute(
     coordinator: CustomerCoordinator = rememberCustomerCoordinator()
 ) {
     val uiState by coordinator.screenStateFlow.collectAsState(CustomerState.Loading)
+    val customersPagingFlow by coordinator.customersPagingFlow.collectAsState(flowOf(PagingData.empty()))
+    val outstandingInvoicesPagingFlow by coordinator.outstandingInvoicesPagingFlow.collectAsState(flowOf(PagingData.empty<SalesInvoiceBO>()))
+    val historyInvoicesPagingFlow by coordinator.historyInvoicesPagingFlow.collectAsState(flowOf(PagingData.empty<SalesInvoiceBO>()))
     val invoicesState by coordinator.invoicesState.collectAsState()
     val paymentState by coordinator.paymentState.collectAsState()
     val historyState by coordinator.historyState.collectAsState(CustomerInvoiceHistoryState.Idle)
@@ -37,6 +43,9 @@ fun CustomerRoute(
 
     CustomerListScreen(
         state = uiState,
+        customersPagingFlow = customersPagingFlow,
+        outstandingInvoicesPagingFlow = outstandingInvoicesPagingFlow,
+        historyInvoicesPagingFlow = historyInvoicesPagingFlow,
         invoicesState = invoicesState,
         paymentState = paymentState,
         historyState = historyState,
@@ -105,6 +114,7 @@ fun rememberCustomerActions(
                 navManager.navigateTo(NavRoute.Billing)
             },
             onRegisterPayment = { coordinator.loadOutstandingInvoices(it.name) },
+            onDownloadInvoicePdf = coordinator::downloadInvoicePdf,
             loadOutstandingInvoices = { coordinator.loadOutstandingInvoices(it.name) },
             clearOutstandingInvoices = coordinator::clearOutstandingInvoices,
             registerPayment = coordinator::registerPayment,

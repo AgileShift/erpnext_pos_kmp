@@ -42,7 +42,7 @@ sealed interface BillingState {
 
         // Product-related state
         val productSearchQuery: String = "",
-        val productSearchResults: List<ItemBO> = emptyList(),
+        val selectedProductCategory: String = "Todos",
 
         // Cart-related state
         val currency: String?,
@@ -109,6 +109,7 @@ data class BillingAction(
     val onCustomerSearchQueryChange: (String) -> Unit = {},
     val onCustomerSelected: (CustomerBO) -> Unit = {},
     val onProductSearchQueryChange: (String) -> Unit = {},
+    val onProductCategorySelected: (String) -> Unit = {},
     val onProductAdded: (ItemBO) -> Unit = {},
     val onQuantityChanged: (itemCode: String, newQuantity: Double) -> Unit = { _, _ -> },
     val onRemoveItem: (itemCode: String) -> Unit = {},

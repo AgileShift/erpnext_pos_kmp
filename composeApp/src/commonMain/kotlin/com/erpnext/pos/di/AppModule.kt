@@ -2,89 +2,103 @@
 
 package com.erpnext.pos.di
 
+import com.erpnext.pos.auth.AppLifecycleObserver
+import com.erpnext.pos.auth.SessionRefresher
+import com.erpnext.pos.auth.TokenHeartbeat
 import com.erpnext.pos.data.AppDatabase
 import com.erpnext.pos.data.DatabaseBuilder
-import com.erpnext.pos.data.repositories.CheckoutRepository
-import com.erpnext.pos.data.repositories.ContactRepository
 import com.erpnext.pos.data.repositories.AddressRepository
+import com.erpnext.pos.data.repositories.CheckoutRepository
+import com.erpnext.pos.data.repositories.ClosingEntrySyncRepository
 import com.erpnext.pos.data.repositories.CompanyRepository
+import com.erpnext.pos.data.repositories.ContactRepository
+import com.erpnext.pos.data.repositories.CurrencySettingsRepository
 import com.erpnext.pos.data.repositories.CustomerGroupRepository
 import com.erpnext.pos.data.repositories.CustomerRepository
 import com.erpnext.pos.data.repositories.CustomerSyncRepository
 import com.erpnext.pos.data.repositories.DeliveryChargesRepository
-import com.erpnext.pos.data.repositories.InventoryRepository
+import com.erpnext.pos.data.repositories.ExchangeRateRepository
 import com.erpnext.pos.data.repositories.InventoryAlertRepository
+import com.erpnext.pos.data.repositories.InventoryRepository
 import com.erpnext.pos.data.repositories.ModeOfPaymentRepository
-import com.erpnext.pos.data.repositories.PosProfilePaymentMethodLocalRepository
-import com.erpnext.pos.data.repositories.ClosingEntrySyncRepository
 import com.erpnext.pos.data.repositories.OpeningEntrySyncRepository
-import com.erpnext.pos.data.repositories.PosProfilePaymentMethodSyncRepository
-import com.erpnext.pos.data.repositories.PaymentTermsRepository
 import com.erpnext.pos.data.repositories.POSProfileRepository
 import com.erpnext.pos.data.repositories.PaymentEntryRepository
+import com.erpnext.pos.data.repositories.PaymentTermsRepository
+import com.erpnext.pos.data.repositories.PosOpeningRepository
+import com.erpnext.pos.data.repositories.PosProfilePaymentMethodLocalRepository
+import com.erpnext.pos.data.repositories.PosProfilePaymentMethodSyncRepository
 import com.erpnext.pos.data.repositories.SalesInvoiceRepository
 import com.erpnext.pos.data.repositories.SalesTargetRepository
-import com.erpnext.pos.data.repositories.TerritoryRepository
-import com.erpnext.pos.data.repositories.PosOpeningRepository
-import com.erpnext.pos.data.repositories.UserRepository
-import com.erpnext.pos.data.repositories.ExchangeRateRepository
 import com.erpnext.pos.data.repositories.StockSettingsRepository
+import com.erpnext.pos.data.repositories.TerritoryRepository
+import com.erpnext.pos.data.repositories.UserRepository
+import com.erpnext.pos.domain.policy.DatePolicy
+import com.erpnext.pos.domain.policy.DefaultPolicy
+import com.erpnext.pos.domain.policy.PolicyInput
 import com.erpnext.pos.domain.repositories.IPOSRepository
 import com.erpnext.pos.domain.repositories.IUserRepository
 import com.erpnext.pos.domain.usecases.AdjustLocalInventoryUseCase
+import com.erpnext.pos.domain.usecases.CancelSalesInvoiceUseCase
 import com.erpnext.pos.domain.usecases.CheckCustomerCreditUseCase
 import com.erpnext.pos.domain.usecases.CreateCustomerUseCase
 import com.erpnext.pos.domain.usecases.CreatePaymentEntryUseCase
 import com.erpnext.pos.domain.usecases.CreateSalesInvoiceLocalUseCase
 import com.erpnext.pos.domain.usecases.CreateSalesInvoiceRemoteOnlyUseCase
-import com.erpnext.pos.domain.usecases.FetchBillingProductsLocalUseCase
-import com.erpnext.pos.domain.usecases.FetchCustomersLocalUseCase
-import com.erpnext.pos.domain.usecases.FetchCustomersLocalWithStateUseCase
 import com.erpnext.pos.domain.usecases.CreateSalesInvoiceUseCase
+import com.erpnext.pos.domain.usecases.DownloadSalesInvoicePdfUseCase
+import com.erpnext.pos.domain.usecases.FetchBillingProductsLocalUseCase
 import com.erpnext.pos.domain.usecases.FetchBillingProductsWithPriceUseCase
 import com.erpnext.pos.domain.usecases.FetchCategoriesUseCase
 import com.erpnext.pos.domain.usecases.FetchClosingEntriesUseCase
 import com.erpnext.pos.domain.usecases.FetchCustomerDetailUseCase
+import com.erpnext.pos.domain.usecases.FetchCustomerGroupsLocalUseCase
+import com.erpnext.pos.domain.usecases.FetchCustomerInvoicesLocalForPeriodUseCase
+import com.erpnext.pos.domain.usecases.FetchCustomersLocalUseCase
+import com.erpnext.pos.domain.usecases.FetchCustomersLocalWithStateUseCase
 import com.erpnext.pos.domain.usecases.FetchCustomersUseCase
 import com.erpnext.pos.domain.usecases.FetchDeliveryChargesLocalUseCase
-import com.erpnext.pos.domain.usecases.FetchCustomerGroupsLocalUseCase
 import com.erpnext.pos.domain.usecases.FetchInventoryItemUseCase
-import com.erpnext.pos.domain.usecases.FetchPendingInvoiceUseCase
 import com.erpnext.pos.domain.usecases.FetchOutstandingInvoicesForCustomerUseCase
 import com.erpnext.pos.domain.usecases.FetchOutstandingInvoicesLocalForCustomerUseCase
+import com.erpnext.pos.domain.usecases.FetchPaymentTermsLocalUseCase
+import com.erpnext.pos.domain.usecases.FetchPendingInvoiceUseCase
+import com.erpnext.pos.domain.usecases.FetchPosProfileInfoLocalUseCase
+import com.erpnext.pos.domain.usecases.FetchPosProfileInfoUseCase
+import com.erpnext.pos.domain.usecases.FetchPosProfileUseCase
 import com.erpnext.pos.domain.usecases.FetchSalesInvoiceLocalUseCase
 import com.erpnext.pos.domain.usecases.FetchSalesInvoiceRemoteUseCase
-import com.erpnext.pos.domain.usecases.SyncSalesInvoiceFromRemoteUseCase
-import com.erpnext.pos.domain.usecases.FetchPaymentTermsLocalUseCase
+import com.erpnext.pos.domain.usecases.FetchSalesInvoiceWithItemsUseCase
 import com.erpnext.pos.domain.usecases.FetchTerritoriesLocalUseCase
-import com.erpnext.pos.domain.usecases.PushPendingCustomersUseCase
-import com.erpnext.pos.domain.usecases.FetchPosProfileUseCase
 import com.erpnext.pos.domain.usecases.FetchUserInfoUseCase
+import com.erpnext.pos.domain.usecases.GetCompanyInfoUseCase
 import com.erpnext.pos.domain.usecases.LoadHomeMetricsUseCase
 import com.erpnext.pos.domain.usecases.LoadInventoryAlertsUseCase
-import com.erpnext.pos.domain.usecases.MarkSalesInvoiceSyncedUseCase
+import com.erpnext.pos.domain.usecases.LoadSourceDocumentsUseCase
 import com.erpnext.pos.domain.usecases.LogoutUseCase
+import com.erpnext.pos.domain.usecases.MarkSalesInvoiceSyncedUseCase
+import com.erpnext.pos.domain.usecases.PartialReturnUseCase
+import com.erpnext.pos.domain.usecases.PushPendingCustomersUseCase
+import com.erpnext.pos.domain.usecases.RebuildCustomerSummariesUseCase
 import com.erpnext.pos.domain.usecases.RegisterInvoicePaymentUseCase
 import com.erpnext.pos.domain.usecases.SaveInvoicePaymentsUseCase
-import com.erpnext.pos.domain.policy.DatePolicy
-import com.erpnext.pos.domain.policy.DefaultPolicy
-import com.erpnext.pos.domain.policy.PolicyInput
-import com.erpnext.pos.domain.usecases.GetCompanyInfoUseCase
+import com.erpnext.pos.domain.usecases.SyncSalesInvoiceFromRemoteUseCase
 import com.erpnext.pos.domain.usecases.UpdateLocalInvoiceFromRemoteUseCase
+import com.erpnext.pos.localSource.configuration.ConfigurationStore
+import com.erpnext.pos.localSource.datasources.AddressLocalSource
+import com.erpnext.pos.localSource.datasources.ContactLocalSource
+import com.erpnext.pos.localSource.datasources.CustomerGroupLocalSource
 import com.erpnext.pos.localSource.datasources.CustomerLocalSource
 import com.erpnext.pos.localSource.datasources.CustomerOutboxLocalSource
-import com.erpnext.pos.localSource.datasources.ContactLocalSource
-import com.erpnext.pos.localSource.datasources.AddressLocalSource
-import com.erpnext.pos.localSource.datasources.InventoryLocalSource
-import com.erpnext.pos.localSource.datasources.InvoiceLocalSource
 import com.erpnext.pos.localSource.datasources.DeliveryChargeLocalSource
 import com.erpnext.pos.localSource.datasources.ExchangeRateLocalSource
+import com.erpnext.pos.localSource.datasources.InventoryLocalSource
+import com.erpnext.pos.localSource.datasources.InvoiceLocalSource
 import com.erpnext.pos.localSource.datasources.ModeOfPaymentLocalSource
-import com.erpnext.pos.localSource.datasources.PaymentTermLocalSource
-import com.erpnext.pos.localSource.datasources.CustomerGroupLocalSource
-import com.erpnext.pos.localSource.datasources.TerritoryLocalSource
 import com.erpnext.pos.localSource.datasources.POSProfileLocalSource
-import com.erpnext.pos.localSource.configuration.ConfigurationStore
+import com.erpnext.pos.localSource.datasources.PaymentTermLocalSource
+import com.erpnext.pos.localSource.datasources.TerritoryLocalSource
+import com.erpnext.pos.localSource.preferences.CurrencySettingsPreferences
 import com.erpnext.pos.localSource.preferences.ExchangeRatePreferences
 import com.erpnext.pos.localSource.preferences.GeneralPreferences
 import com.erpnext.pos.localSource.preferences.LanguagePreferences
@@ -92,11 +106,8 @@ import com.erpnext.pos.localSource.preferences.OpeningSessionPreferences
 import com.erpnext.pos.localSource.preferences.SyncLogPreferences
 import com.erpnext.pos.localSource.preferences.SyncPreferences
 import com.erpnext.pos.localSource.preferences.ThemePreferences
-import com.erpnext.pos.localSource.preferences.CurrencySettingsPreferences
 import com.erpnext.pos.remoteSource.api.APIService
 import com.erpnext.pos.remoteSource.api.defaultEngine
-import com.erpnext.pos.remoteSource.oauth.refreshAuthToken
-import com.erpnext.pos.remoteSource.oauth.isRefreshTokenRejected
 import com.erpnext.pos.remoteSource.datasources.CustomerRemoteSource
 import com.erpnext.pos.remoteSource.datasources.InventoryRemoteSource
 import com.erpnext.pos.remoteSource.datasources.ModeOfPaymentRemoteSource
@@ -105,49 +116,39 @@ import com.erpnext.pos.remoteSource.datasources.SalesInvoiceRemoteSource
 import com.erpnext.pos.remoteSource.datasources.UserRemoteSource
 import com.erpnext.pos.remoteSource.oauth.AuthInfoStore
 import com.erpnext.pos.remoteSource.oauth.TokenStore
+import com.erpnext.pos.remoteSource.oauth.isRefreshTokenRejected
+import com.erpnext.pos.remoteSource.oauth.refreshAuthToken
 import com.erpnext.pos.remoteSource.oauth.toBearerToken
-import com.erpnext.pos.auth.SessionRefresher
 import com.erpnext.pos.sync.LegacyPushSyncManager
+import com.erpnext.pos.sync.OpeningGate
+import com.erpnext.pos.sync.PosProfileGate
 import com.erpnext.pos.sync.PushSyncRunner
 import com.erpnext.pos.sync.SyncContextProvider
 import com.erpnext.pos.sync.SyncManager
 import com.erpnext.pos.sync.SyncOrchestrator
-import com.erpnext.pos.sync.OpeningGate
-import com.erpnext.pos.sync.PosProfileGate
 import com.erpnext.pos.utils.AppLogger
 import com.erpnext.pos.utils.AppSentry
 import com.erpnext.pos.utils.TokenUtils
 import com.erpnext.pos.utils.view.SnackbarController
 import com.erpnext.pos.views.CashBoxManager
+import com.erpnext.pos.views.billing.BillingResetController
 import com.erpnext.pos.views.billing.BillingViewModel
 import com.erpnext.pos.views.customer.CustomerViewModel
-import com.erpnext.pos.domain.usecases.FetchCustomerInvoicesLocalForPeriodUseCase
 import com.erpnext.pos.views.deliverynote.DeliveryNoteViewModel
-import com.erpnext.pos.views.home.HomeViewModel
 import com.erpnext.pos.views.home.HomeRefreshController
-import com.erpnext.pos.views.billing.BillingResetController
+import com.erpnext.pos.views.home.HomeViewModel
 import com.erpnext.pos.views.home.POSProfileViewModel
 import com.erpnext.pos.views.inventory.InventoryViewModel
 import com.erpnext.pos.views.invoice.InvoiceViewModel
 import com.erpnext.pos.views.login.LoginViewModel
+import com.erpnext.pos.views.payment.PaymentHandler
+import com.erpnext.pos.views.paymententry.PaymentEntryViewModel
 import com.erpnext.pos.views.quotation.QuotationViewModel
+import com.erpnext.pos.views.reconciliation.ReconciliationViewModel
+import com.erpnext.pos.views.salesflow.SalesFlowContextStore
 import com.erpnext.pos.views.salesorder.SalesOrderViewModel
 import com.erpnext.pos.views.settings.SettingsViewModel
 import com.erpnext.pos.views.splash.SplashViewModel
-import com.erpnext.pos.views.paymententry.PaymentEntryViewModel
-import com.erpnext.pos.views.salesflow.SalesFlowContextStore
-import com.erpnext.pos.views.payment.PaymentHandler
-import com.erpnext.pos.views.reconciliation.ReconciliationViewModel
-import com.erpnext.pos.auth.AppLifecycleObserver
-import com.erpnext.pos.auth.TokenHeartbeat
-import com.erpnext.pos.data.repositories.CurrencySettingsRepository
-import com.erpnext.pos.domain.usecases.CancelSalesInvoiceUseCase
-import com.erpnext.pos.domain.usecases.FetchSalesInvoiceWithItemsUseCase
-import com.erpnext.pos.domain.usecases.PartialReturnUseCase
-import com.erpnext.pos.domain.usecases.FetchPosProfileInfoLocalUseCase
-import com.erpnext.pos.domain.usecases.FetchPosProfileInfoUseCase
-import com.erpnext.pos.domain.usecases.RebuildCustomerSummariesUseCase
-import com.erpnext.pos.domain.usecases.LoadSourceDocumentsUseCase
 import io.ktor.client.HttpClient
 import io.ktor.client.plugins.HttpTimeout
 import io.ktor.client.plugins.auth.Auth
@@ -225,13 +226,14 @@ val appModule = module {
                             if (!shouldRefresh) {
                                 return@loadTokens currentTokens.toBearerToken()
                             }
-                            val refreshToken = currentTokens.refresh_token?.takeIf { it.isNotBlank() }
-                                ?: return@loadTokens if (TokenUtils.isValid(currentTokens.id_token)) {
-                                    currentTokens.toBearerToken()
-                                } else {
-                                    tokenStore.clear()
-                                    null
-                                }
+                            val refreshToken =
+                                currentTokens.refresh_token?.takeIf { it.isNotBlank() }
+                                    ?: return@loadTokens if (TokenUtils.isValid(currentTokens.id_token)) {
+                                        currentTokens.toBearerToken()
+                                    } else {
+                                        tokenStore.clear()
+                                        null
+                                    }
                             val refreshed = runCatching {
                                 refreshAuthToken(tokenRefreshClient, authInfoStore, refreshToken)
                             }.getOrElse { throwable ->
@@ -419,7 +421,7 @@ val appModule = module {
     //endregion
 
     //region Splash DI
-    single { SplashViewModel(get(), get(), get(), get()) }
+    single { SplashViewModel(get(), get(), get()) }
     //endregion
 
     //region Company
@@ -516,6 +518,7 @@ val appModule = module {
             fetchOutstandingInvoicesUseCase = get(),
             fetchCustomerInvoicesForPeriodUseCase = get(),
             fetchSalesInvoiceLocalUseCase = get(),
+            downloadSalesInvoicePdfUseCase = get(),
             fetchSalesInvoiceWithItemsUseCase = get(),
             modeOfPaymentDao = get(),
             paymentHandler = get(),
@@ -648,6 +651,7 @@ val appModule = module {
     single { FetchOutstandingInvoicesLocalForCustomerUseCase(get()) }
     single { FetchSalesInvoiceRemoteUseCase(get()) }
     single { FetchSalesInvoiceLocalUseCase(get()) }
+    single { DownloadSalesInvoicePdfUseCase(get()) }
     single { FetchSalesInvoiceWithItemsUseCase(get()) }
     single { SyncSalesInvoiceFromRemoteUseCase(get()) }
     single { CreateSalesInvoiceLocalUseCase(get()) }

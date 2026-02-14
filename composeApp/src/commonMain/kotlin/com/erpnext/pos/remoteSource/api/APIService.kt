@@ -67,6 +67,7 @@ import io.ktor.client.request.get
 import io.ktor.client.request.parameter
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
+import io.ktor.client.statement.HttpResponse
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.ContentType
 import io.ktor.http.Parameters
@@ -85,6 +86,8 @@ import kotlinx.serialization.json.doubleOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import kotlin.io.encoding.Base64
+import kotlin.io.encoding.ExperimentalEncodingApi
 import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
 
@@ -95,6 +98,19 @@ class APIService(
     private val authStore: AuthInfoStore,
     private val tokenClient: HttpClient
 ) {
+    data class InvoicePdfDownloadPayload(
+        val fileName: String,
+        val bytes: ByteArray
+    )
+
+    data class InvoicePrintOptionsPayload(
+        val name: String,
+        val doctype: String,
+        val defaultPrintFormat: String?,
+        val selectedPrintFormat: String?,
+        val availablePrintFormats: List<String>
+    )
+
     private data class BootstrapCacheEntry(
         val key: String,
         val data: BootstrapDataDto,
@@ -1457,6 +1473,130 @@ class APIService(
         throw UnsupportedOperationException(
             "updateSalesInvoice no soportado en API v1. Usa sales_invoice.create_submit con idempotencia."
         )
+    }
+
+    @OptIn(ExperimentalEncodingApi::class)
+    suspend fun downloadSalesInvoicePdf(
+        invoiceName: String,
+        printFormat: String? = null
+    ): InvoicePdfDownloadPayload {
+        val normalized = invoiceName.trim()
+        require(normalized.isNotBlank()) { "Factura inválida para descargar PDF." }
+
+        val payload = buildJsonObject {
+            put("invoice_name", JsonPrimitive(normalized))
+            put("name", JsonPrimitive(normalized))
+            printFormat?.trim()
+                ?.takeIf { it.isNotBlank() }
+                ?.let { put("print_format", JsonPrimitive(it)) }
+        }
+
+        val data: JsonObject = postMethodWithPayload(
+            methodPath = "erpnext_pos.api.v1.sales_invoice.print_pdf",
+            payload = payload
+        )
+        extractPdfPayload(data, normalized)?.let { return it }
+        throw IllegalStateException("Respuesta inválida al generar PDF para $normalized.")
+    }
+
+    suspend fun getSalesInvoicePrintOptions(invoiceName: String): InvoicePrintOptionsPayload {
+        val normalized = invoiceName.trim()
+        require(normalized.isNotBlank()) { "Factura inválida para consultar opciones de impresión." }
+        val payload = buildJsonObject {
+            put("invoice_name", JsonPrimitive(normalized))
+            put("name", JsonPrimitive(normalized))
+        }
+        val data: JsonObject = postMethodWithPayload(
+            methodPath = "erpnext_pos.api.v1.sales_invoice.print_options",
+            payload = payload
+        )
+        return InvoicePrintOptionsPayload(
+            name = data.stringOrNull("name") ?: normalized,
+            doctype = data.stringOrNull("doctype") ?: "Sales Invoice",
+            defaultPrintFormat = data.stringOrNull("default_print_format"),
+            selectedPrintFormat = data.stringOrNull("selected_print_format"),
+            availablePrintFormats = data["available_print_formats"]?.jsonArray
+                ?.mapNotNull { it.jsonPrimitive.contentOrNull }
+                .orEmpty()
+        )
+    }
+
+    @OptIn(ExperimentalEncodingApi::class)
+    private suspend fun extractPdfPayload(
+        data: JsonObject,
+        invoiceName: String
+    ): InvoicePdfDownloadPayload? {
+        val base64 = listOf(
+            "content_base64",
+            "pdf_base64",
+            "file_content_base64",
+            "base64"
+        ).firstNotNullOfOrNull { key -> data.stringOrNull(key) }
+
+        if (!base64.isNullOrBlank()) {
+            val bytes = Base64.decode(base64)
+            return InvoicePdfDownloadPayload(
+                fileName = resolvePdfFileName(
+                    raw = data.stringOrNull("filename") ?: data.stringOrNull("file_name"),
+                    invoiceName = invoiceName
+                ),
+                bytes = bytes
+            )
+        }
+
+        val fileUrlInFileObject = (data["file"] as? JsonObject)?.stringOrNull("file_url")
+        val relativeOrAbsoluteUrl = listOf(
+            "download_url",
+            "file_url",
+            "url"
+        ).firstNotNullOfOrNull { key -> data.stringOrNull(key) }
+            ?: fileUrlInFileObject
+            ?: return null
+
+        val site = authStore.getCurrentSite()?.trim()?.trimEnd('/')
+            ?: throw IllegalStateException("URL inválida")
+        val resolved = if (relativeOrAbsoluteUrl.startsWith("http://", true) ||
+            relativeOrAbsoluteUrl.startsWith("https://", true)
+        ) {
+            relativeOrAbsoluteUrl
+        } else {
+            "$site/${relativeOrAbsoluteUrl.trimStart('/')}"
+        }
+
+        val bytes = client.get(resolved).body<ByteArray>()
+        val fallbackName = resolved.substringAfterLast('/').substringBefore('?')
+        return InvoicePdfDownloadPayload(
+            fileName = resolvePdfFileName(
+                raw = data.stringOrNull("filename") ?: data.stringOrNull("file_name") ?: fallbackName,
+                invoiceName = invoiceName
+            ),
+            bytes = bytes
+        )
+    }
+
+    private suspend fun parsePdfResponse(
+        response: HttpResponse,
+        invoiceName: String
+    ): InvoicePdfDownloadPayload? {
+        if (!response.status.isSuccess()) return null
+        val contentType = response.headers["Content-Type"]?.lowercase().orEmpty()
+        if (contentType.contains("application/pdf")) {
+            val bytes = response.body<ByteArray>()
+            return InvoicePdfDownloadPayload(
+                fileName = "$invoiceName.pdf",
+                bytes = bytes
+            )
+        }
+        val bodyText = runCatching { response.bodyAsText() }.getOrNull() ?: return null
+        val data = runCatching { decodeMethodData<JsonObject>(bodyText) }.getOrNull() ?: return null
+        return extractPdfPayload(data, invoiceName)
+    }
+
+    private fun resolvePdfFileName(raw: String?, invoiceName: String): String {
+        val candidate = raw?.trim().orEmpty()
+        if (candidate.isBlank()) return "$invoiceName.pdf"
+        val safe = candidate.replace("/", "_")
+        return if (safe.endsWith(".pdf", ignoreCase = true)) safe else "$safe.pdf"
     }
     //endregion
 }

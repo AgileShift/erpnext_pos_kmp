@@ -132,6 +132,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import androidx.paging.LoadState
+import androidx.paging.PagingData
+import androidx.paging.compose.collectAsLazyPagingItems
 import coil3.compose.AsyncImage
 import coil3.compose.LocalPlatformContext
 import coil3.request.ImageRequest
@@ -173,6 +176,7 @@ import kotlinx.datetime.LocalDate
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.minus
 import kotlinx.datetime.toLocalDateTime
+import kotlinx.coroutines.flow.Flow
 import org.koin.compose.koinInject
 import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
@@ -181,6 +185,9 @@ import kotlin.time.ExperimentalTime
 @Composable
 fun CustomerListScreen(
     state: CustomerState,
+    customersPagingFlow: Flow<PagingData<CustomerBO>>,
+    outstandingInvoicesPagingFlow: Flow<PagingData<SalesInvoiceBO>>,
+    historyInvoicesPagingFlow: Flow<PagingData<SalesInvoiceBO>>,
     invoicesState: CustomerInvoicesState,
     paymentState: CustomerPaymentState,
     historyState: CustomerInvoiceHistoryState,
@@ -216,18 +223,16 @@ fun CustomerListScreen(
         )).map { normalizeCurrency(it) }.distinct()
         merged.ifEmpty { listOf(posCurrency) }
     }
-    val customers = if (state is CustomerState.Success) {
-        state.customers.sortedWith(compareByDescending<CustomerBO> {
-            val pendingAmount = it.totalPendingAmount ?: it.currentBalance ?: 0.0
-            (it.pendingInvoices ?: 0) > 0 || pendingAmount > 0.0
-        }.thenByDescending { it.totalPendingAmount ?: it.currentBalance ?: 0.0 }
-            .thenBy { it.customerName })
-    } else emptyList()
+    val customersPagingItems = customersPagingFlow.collectAsLazyPagingItems()
+    val outstandingInvoicesPagingItems = outstandingInvoicesPagingFlow.collectAsLazyPagingItems()
+    val historyInvoicesPagingItems = historyInvoicesPagingFlow.collectAsLazyPagingItems()
     var baseCounts by remember { mutableStateOf(CustomerCounts(0, 0)) }
     val isDesktop = getPlatformName() == "Desktop"
 
+    val hasCustomersLoaded =
+        customersPagingItems.itemCount > 0 || customersPagingItems.loadState.refresh is LoadState.Loading
     val filterElevation by animateDpAsState(
-        targetValue = if (customers.isNotEmpty()) 4.dp else 0.dp, label = "filterElevation"
+        targetValue = if (hasCustomersLoaded) 4.dp else 0.dp, label = "filterElevation"
     )
 
 
@@ -238,9 +243,9 @@ fun CustomerListScreen(
     }
     LaunchedEffect(state, searchQuery, selectedState) {
         if (searchQuery.isEmpty() && selectedState == "Todos" && state is CustomerState.Success) {
-            val pending = state.customers.count { (it.pendingInvoices ?: 0) > 0 }
             baseCounts = CustomerCounts(
-                total = state.customers.size, pending = pending
+                total = state.totalCount,
+                pending = state.pendingCount
             )
         }
     }
@@ -318,9 +323,11 @@ fun CustomerListScreen(
                         pendingCount = baseCounts.pending,
                         onQueryChange = {
                             searchQuery = it
+                            actions.onSearchQueryChanged(it)
                         },
                         onStateChange = {
                             selectedState = it ?: "Todos"
+                            actions.onStateSelected(it ?: "Todos")
                         },
                         modifier = Modifier.padding(horizontal = contentPadding, vertical = 8.dp)
                     )
@@ -351,33 +358,38 @@ fun CustomerListScreen(
                         }
 
                         is CustomerState.Success -> {
-                            val filtered = customers.filter { customer ->
-                                val matchesQuery = customer.customerName.contains(
-                                    searchQuery, ignoreCase = true
-                                ) || (customer.mobileNo ?: "").contains(searchQuery)
-                                val matchesState = when (selectedState) {
-                                    "Pendientes" -> (customer.pendingInvoices
-                                        ?: 0) > 0 || (customer.totalPendingAmount ?: 0.0) > 0.0
+                            val refreshState = customersPagingItems.loadState.refresh
+                            val appendState = customersPagingItems.loadState.append
+                            val isLoading = refreshState is LoadState.Loading
+                            val isEmpty = customersPagingItems.itemCount == 0 && !isLoading
+                            val hasError = refreshState is LoadState.Error || appendState is LoadState.Error
 
-                                    "Sin Pendientes" -> (customer.pendingInvoices
-                                        ?: 0) == 0 && (customer.totalPendingAmount ?: 0.0) <= 0.0
-
-                                    "Todos" -> true
-                                    else -> customer.state.equals(selectedState, ignoreCase = true)
-                                }
-                                matchesQuery && matchesState
-                            }
-
-                            if (filtered.isEmpty()) {
+                            if (hasError) {
+                                val errorMessage = (refreshState as? LoadState.Error)?.error?.message
+                                    ?: (appendState as? LoadState.Error)?.error?.message
+                                    ?: "Error al cargar clientes"
+                                FullScreenErrorMessage(
+                                    errorMessage = errorMessage,
+                                    onRetry = {
+                                        customersPagingItems.refresh()
+                                        actions.fetchAll()
+                                    }
+                                )
+                            } else if (isLoading && customersPagingItems.itemCount == 0) {
+                                CustomerShimmerList()
+                            } else if (isEmpty) {
                                 EmptyStateMessage(
                                     message = if (searchQuery.isEmpty()) strings.customer.emptyCustomers
                                     else strings.customer.emptySearchCustomers,
                                     icon = Icons.Filled.People
                                 )
                             } else {
-                                LaunchedEffect(filtered, isWideLayout) {
-                                    if (isWideLayout && selectedCustomer !in filtered) {
-                                        selectedCustomer = filtered.firstOrNull()
+                                LaunchedEffect(customersPagingItems.itemCount, isWideLayout) {
+                                    if (isWideLayout) {
+                                        val loaded = customersPagingItems.itemSnapshotList.items
+                                        if (selectedCustomer == null || loaded.none { it.name == selectedCustomer?.name }) {
+                                            selectedCustomer = loaded.firstOrNull()
+                                        }
                                     }
                                 }
                                 if (isWideLayout) {
@@ -387,7 +399,7 @@ fun CustomerListScreen(
                                     ) {
                                         Box(modifier = Modifier.weight(0.65f)) {
                                             CustomerListContent(
-                                                customers = filtered,
+                                                customers = customersPagingItems,
                                                 posCurrency = posCurrency,
                                                 companyCurrency = companyCurrency,
                                                 cashboxManager = cashboxManager,
@@ -430,7 +442,9 @@ fun CustomerListScreen(
                                                 onTabChange = { rightPanelTab = it },
                                                 paymentState = paymentState,
                                                 invoicesState = invoicesState,
+                                                outstandingInvoicesPagingItems = outstandingInvoicesPagingItems,
                                                 historyState = historyState,
+                                                historyInvoicesPagingItems = historyInvoicesPagingItems,
                                                 historyMessage = historyMessage,
                                                 historyBusy = historyBusy,
                                                 supportedCurrencies = supportedCurrencies,
@@ -447,6 +461,7 @@ fun CustomerListScreen(
                                                         referenceNumber
                                                     )
                                                 },
+                                                onDownloadInvoicePdf = actions.onDownloadInvoicePdf,
                                                 onInvoiceHistoryAction = { invoiceId, action, reason, refundMode, refundReference, applyRefund ->
                                                     actions.onInvoiceHistoryAction(
                                                         invoiceId,
@@ -464,7 +479,7 @@ fun CustomerListScreen(
                                     }
                                 } else {
                                     CustomerListContent(
-                                        customers = filtered,
+                                        customers = customersPagingItems,
                                         posCurrency = posCurrency,
                                         companyCurrency = companyCurrency,
                                         cashboxManager = cashboxManager,
@@ -523,6 +538,7 @@ fun CustomerListScreen(
             CustomerOutstandingInvoicesSheet(
                 customer = customer,
                 invoicesState = invoicesState,
+                outstandingInvoicesPagingItems = outstandingInvoicesPagingItems,
                 paymentState = paymentState,
                 onDismiss = {
                     outstandingCustomer = null
@@ -537,13 +553,16 @@ fun CustomerListScreen(
                         enteredCurrency,
                         referenceNumber
                     )
-                })
+                },
+                onDownloadInvoicePdf = actions.onDownloadInvoicePdf
+            )
         }
 
         historyCustomer?.let { customer ->
             CustomerInvoiceHistorySheet(
                 customer = customer,
                 historyState = historyState,
+                historyInvoicesPagingItems = historyInvoicesPagingItems,
                 historyMessage = historyMessage,
                 historyBusy = historyBusy,
                 paymentState = paymentState,
@@ -555,6 +574,7 @@ fun CustomerListScreen(
                         invoiceId, action, reason, refundMode, refundReference, applyRefund
                     )
                 },
+                onDownloadInvoicePdf = actions.onDownloadInvoicePdf,
                 onDismiss = {
                     historyCustomer = null
                     actions.clearInvoiceHistory()
@@ -753,7 +773,7 @@ fun SearchTextField(
 
 @Composable
 private fun CustomerListContent(
-    customers: List<CustomerBO>,
+    customers: androidx.paging.compose.LazyPagingItems<CustomerBO>,
     posCurrency: String,
     companyCurrency: String,
     cashboxManager: CashBoxManager,
@@ -772,7 +792,11 @@ private fun CustomerListContent(
             horizontalArrangement = Arrangement.spacedBy(spacing),
             contentPadding = PaddingValues(horizontal = 4.dp, vertical = 8.dp)
         ) {
-            items(customers, key = { it.name }) { customer ->
+            items(
+                count = customers.itemCount,
+                key = { index -> customers[index]?.name ?: "customer_grid_$index" }
+            ) { index ->
+                val customer = customers[index] ?: return@items
                 CustomerItem(
                     customer = customer,
                     posCurrency = posCurrency,
@@ -791,7 +815,11 @@ private fun CustomerListContent(
             contentPadding = PaddingValues(horizontal = 0.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(spacing)
         ) {
-            items(customers, key = { it.name }) { customer ->
+            items(
+                count = customers.itemCount,
+                key = { index -> customers[index]?.name ?: "customer_list_$index" }
+            ) { index ->
+                val customer = customers[index] ?: return@items
                 CustomerItem(
                     customer = customer,
                     posCurrency = posCurrency,
@@ -948,10 +976,10 @@ private fun CustomerDetailPanel(
             }
         }
 
-        if (invoicesState is CustomerInvoicesState.Success && invoicesState.invoices.isNotEmpty()) {
+        if ((customer.totalPendingAmount ?: customer.currentBalance ?: 0.0) > 0.0) {
             CustomerOutstandingSummary(
                 customer = customer,
-                invoices = invoicesState.invoices,
+                invoices = emptyList(),
                 posBaseCurrency = companyCurrency,
                 cashboxManager = cashboxManager
             )
@@ -966,7 +994,9 @@ private fun CustomerRightPanel(
     onTabChange: (CustomerPanelTab) -> Unit,
     paymentState: CustomerPaymentState,
     invoicesState: CustomerInvoicesState,
+    outstandingInvoicesPagingItems: androidx.paging.compose.LazyPagingItems<SalesInvoiceBO>,
     historyState: CustomerInvoiceHistoryState,
+    historyInvoicesPagingItems: androidx.paging.compose.LazyPagingItems<SalesInvoiceBO>,
     historyMessage: String?,
     historyBusy: Boolean,
     supportedCurrencies: List<String>,
@@ -976,6 +1006,7 @@ private fun CustomerRightPanel(
     onRegisterPayment: (
         invoiceId: String, modeOfPayment: String, enteredAmount: Double, enteredCurrency: String, referenceNumber: String
     ) -> Unit,
+    onDownloadInvoicePdf: (String) -> Unit,
     onInvoiceHistoryAction: (
         invoiceId: String,
         action: InvoiceCancellationAction,
@@ -1041,8 +1072,10 @@ private fun CustomerRightPanel(
                         CustomerOutstandingInvoicesContent(
                             customer = customer,
                             invoicesState = invoicesState,
+                            outstandingInvoicesPagingItems = outstandingInvoicesPagingItems,
                             paymentState = paymentState,
                             onRegisterPayment = onRegisterPayment,
+                            onDownloadInvoicePdf = onDownloadInvoicePdf,
                             modifier = Modifier.fillMaxSize().padding(20.dp)
                         )
                     } else {
@@ -1059,6 +1092,7 @@ private fun CustomerRightPanel(
                         CustomerInvoiceHistoryContent(
                             customer = customer,
                             historyState = historyState,
+                            historyInvoicesPagingItems = historyInvoicesPagingItems,
                             historyMessage = historyMessage,
                             historyBusy = historyBusy,
                             paymentState = paymentState,
@@ -1066,6 +1100,7 @@ private fun CustomerRightPanel(
                             cashboxManager = cashboxManager,
                             returnPolicy = returnPolicy,
                             onAction = onInvoiceHistoryAction,
+                            onDownloadInvoicePdf = onDownloadInvoicePdf,
                             loadLocalInvoice = loadLocalInvoice,
                             onSubmitPartialReturn = onSubmitPartialReturn,
                             modifier = Modifier.fillMaxSize().padding(20.dp)
@@ -1092,26 +1127,9 @@ private fun CustomerPanelHeader(
     baseCurrency: String
 ) {
     val companyCurrency = normalizeCurrency(baseCurrency)
-    val pendingInvoices = remember(invoicesState) {
-        if (invoicesState is CustomerInvoicesState.Success) {
-            filterPendingInvoices(invoicesState.invoices)
-        } else {
-            emptyList()
-        }
-    }
-    val pendingCount = if (pendingInvoices.isNotEmpty()) {
-        pendingInvoices.size
-    } else {
-        customer?.pendingInvoices ?: 0
-    }
-    val invoiceCurrency = normalizeCurrency(pendingInvoices.firstOrNull()?.currency)
-    val pendingCompanyAmount = if (pendingInvoices.isNotEmpty()) {
-        pendingInvoices.sumOf {
-            resolveInvoiceDisplayAmounts(it, companyCurrency).outstandingCompany
-        }
-    } else {
-        customer?.totalPendingAmount ?: customer?.currentBalance ?: 0.0
-    }
+    val pendingCount = customer?.pendingInvoices ?: 0
+    val invoiceCurrency = companyCurrency
+    val pendingCompanyAmount = customer?.totalPendingAmount ?: customer?.currentBalance ?: 0.0
 
     val pendingCompany =
         bd(customer?.totalPendingAmount ?: customer?.currentBalance ?: 0.0).toDouble(2)
@@ -2007,9 +2025,7 @@ private fun CustomerQuickActionsSheet(
             )
             CustomerOutstandingSummary(
                 customer = customer,
-                invoices = if (invoicesState is CustomerInvoicesState.Success) {
-                    invoicesState.invoices
-                } else emptyList(),
+                invoices = emptyList(),
                 posBaseCurrency = paymentState.baseCurrency,
                 cashboxManager = cashboxManager
             )
@@ -2032,19 +2048,23 @@ private fun CustomerQuickActionsSheet(
 private fun CustomerOutstandingInvoicesSheet(
     customer: CustomerBO,
     invoicesState: CustomerInvoicesState,
+    outstandingInvoicesPagingItems: androidx.paging.compose.LazyPagingItems<SalesInvoiceBO>,
     paymentState: CustomerPaymentState,
     onDismiss: () -> Unit,
     onRegisterPayment: (
         invoiceId: String, modeOfPayment: String, enteredAmount: Double, enteredCurrency: String, referenceNumber: String
-    ) -> Unit
+    ) -> Unit,
+    onDownloadInvoicePdf: (String) -> Unit
 ) {
     ModalBottomSheet(
         onDismissRequest = onDismiss, dragHandle = { BottomSheetDefaults.DragHandle() }) {
         CustomerOutstandingInvoicesContent(
             customer = customer,
             invoicesState = invoicesState,
+            outstandingInvoicesPagingItems = outstandingInvoicesPagingItems,
             paymentState = paymentState,
             onRegisterPayment = onRegisterPayment,
+            onDownloadInvoicePdf = onDownloadInvoicePdf,
             modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 12.dp)
         )
     }
@@ -2054,10 +2074,12 @@ private fun CustomerOutstandingInvoicesSheet(
 private fun CustomerOutstandingInvoicesContent(
     customer: CustomerBO,
     invoicesState: CustomerInvoicesState,
+    outstandingInvoicesPagingItems: androidx.paging.compose.LazyPagingItems<SalesInvoiceBO>,
     paymentState: CustomerPaymentState,
     onRegisterPayment: (
         invoiceId: String, modeOfPayment: String, enteredAmount: Double, enteredCurrency: String, referenceNumber: String
     ) -> Unit,
+    onDownloadInvoicePdf: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val strings = LocalAppStrings.current
@@ -2193,8 +2215,24 @@ private fun CustomerOutstandingInvoicesContent(
             }
 
             is CustomerInvoicesState.Success -> {
-                val visibleInvoices = filterPendingInvoices(invoicesState.invoices)
-                if (visibleInvoices.isEmpty()) {
+                val refreshState = outstandingInvoicesPagingItems.loadState.refresh
+                val appendState = outstandingInvoicesPagingItems.loadState.append
+                val isLoading = refreshState is LoadState.Loading
+                val hasError = refreshState is LoadState.Error || appendState is LoadState.Error
+                if (hasError) {
+                    Text(
+                        text = (refreshState as? LoadState.Error)?.error?.message
+                            ?: (appendState as? LoadState.Error)?.error?.message
+                            ?: "No se pudieron cargar las facturas pendientes.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                } else if (isLoading && outstandingInvoicesPagingItems.itemCount == 0) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.Center
+                    ) { CircularProgressIndicator() }
+                } else if (outstandingInvoicesPagingItems.itemCount == 0) {
                     Text(
                         text = strings.customer.emptyOsInvoices,
                         style = MaterialTheme.typography.bodyMedium
@@ -2204,7 +2242,13 @@ private fun CustomerOutstandingInvoicesContent(
                         modifier = Modifier.fillMaxWidth().heightIn(max = 320.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        items(visibleInvoices, key = { it.invoiceId }) { invoice ->
+                        items(
+                            count = outstandingInvoicesPagingItems.itemCount,
+                            key = { index ->
+                                outstandingInvoicesPagingItems[index]?.invoiceId ?: "outstanding_$index"
+                            }
+                        ) { index ->
+                            val invoice = outstandingInvoicesPagingItems[index] ?: return@items
                             val isSelected = invoice.invoiceId == selectedInvoice?.invoiceId
                             val display = resolveInvoiceDisplayAmounts(
                                 invoice = invoice,
@@ -2323,7 +2367,21 @@ private fun CustomerOutstandingInvoicesContent(
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
+                                    TextButton(
+                                        onClick = { onDownloadInvoicePdf(invoice.invoiceId) },
+                                        enabled = invoice.invoiceId.isNotBlank()
+                                    ) {
+                                        Text("Descargar PDF")
+                                    }
                                 }
+                            }
+                        }
+                        if (outstandingInvoicesPagingItems.loadState.append is LoadState.Loading) {
+                            item {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                                    horizontalArrangement = Arrangement.Center
+                                ) { CircularProgressIndicator() }
                             }
                         }
                     }
@@ -2468,6 +2526,7 @@ private fun CustomerOutstandingInvoicesContent(
 private fun CustomerInvoiceHistorySheet(
     customer: CustomerBO,
     historyState: CustomerInvoiceHistoryState,
+    historyInvoicesPagingItems: androidx.paging.compose.LazyPagingItems<SalesInvoiceBO>,
     historyMessage: String?,
     historyBusy: Boolean,
     paymentState: CustomerPaymentState,
@@ -2475,6 +2534,7 @@ private fun CustomerInvoiceHistorySheet(
     cashboxManager: CashBoxManager,
     returnPolicy: ReturnPolicySettings,
     onAction: (String, InvoiceCancellationAction, String?, String?, String?, Boolean) -> Unit,
+    onDownloadInvoicePdf: (String) -> Unit,
     onDismiss: () -> Unit,
     loadLocalInvoice: suspend (String) -> SalesInvoiceWithItemsAndPayments? = { null },
     onSubmitPartialReturn: (
@@ -3255,6 +3315,7 @@ private fun CustomerInvoiceHistorySheet(
         CustomerInvoiceHistoryContent(
             customer = customer,
             historyState = historyState,
+            historyInvoicesPagingItems = historyInvoicesPagingItems,
             historyMessage = historyMessage,
             historyBusy = historyBusy,
             paymentState = paymentState,
@@ -3262,6 +3323,7 @@ private fun CustomerInvoiceHistorySheet(
             cashboxManager = cashboxManager,
             returnPolicy = returnPolicy,
             onAction = onAction,
+            onDownloadInvoicePdf = onDownloadInvoicePdf,
             loadLocalInvoice = loadLocalInvoice,
             onSubmitPartialReturn = onSubmitPartialReturn,
             modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 12.dp)
@@ -3273,6 +3335,7 @@ private fun CustomerInvoiceHistorySheet(
 private fun CustomerInvoiceHistoryContent(
     customer: CustomerBO,
     historyState: CustomerInvoiceHistoryState,
+    historyInvoicesPagingItems: androidx.paging.compose.LazyPagingItems<SalesInvoiceBO>,
     historyMessage: String?,
     historyBusy: Boolean,
     paymentState: CustomerPaymentState,
@@ -3280,6 +3343,7 @@ private fun CustomerInvoiceHistoryContent(
     cashboxManager: CashBoxManager,
     returnPolicy: ReturnPolicySettings,
     onAction: (String, InvoiceCancellationAction, String?, String?, String?, Boolean) -> Unit,
+    onDownloadInvoicePdf: (String) -> Unit,
     loadLocalInvoice: suspend (String) -> SalesInvoiceWithItemsAndPayments? = { null },
     onSubmitPartialReturn: (
         invoiceId: String, reason: String?, refundModeOfPayment: String?, refundReferenceNo: String?, applyRefund: Boolean, itemsToReturnByCode: Map<String, Double>
@@ -3928,7 +3992,7 @@ private fun CustomerInvoiceHistoryContent(
                 )
                 val subtitle = when (historyState) {
                     is CustomerInvoiceHistoryState.Success -> {
-                        val count = historyState.invoices.count {
+                        val count = historyInvoicesPagingItems.itemSnapshotList.items.count {
                             isWithinDays(it.postingDate, selectedRangeDays)
                         }
                         "$count facturas en $selectedRangeDays días"
@@ -3969,7 +4033,7 @@ private fun CustomerInvoiceHistoryContent(
                 onClick = { selectedRangeDays = 90 })
         }
         if (historyState is CustomerInvoiceHistoryState.Success) {
-            val invoices = historyState.invoices.filter {
+            val invoices = historyInvoicesPagingItems.itemSnapshotList.items.filter {
                 isWithinDays(it.postingDate, selectedRangeDays)
             }
             val pendingCount = invoices.count {
@@ -4030,10 +4094,31 @@ private fun CustomerInvoiceHistoryContent(
             }
 
             is CustomerInvoiceHistoryState.Success -> {
-                val invoices = historyState.invoices.filter {
+                val refreshState = historyInvoicesPagingItems.loadState.refresh
+                val appendState = historyInvoicesPagingItems.loadState.append
+                val isLoading = refreshState is LoadState.Loading
+                val hasError = refreshState is LoadState.Error || appendState is LoadState.Error
+                val invoices = historyInvoicesPagingItems.itemSnapshotList.items.filter {
                     isWithinDays(it.postingDate, selectedRangeDays)
                 }
-                if (invoices.isEmpty()) {
+                if (hasError) {
+                    Text(
+                        (refreshState as? LoadState.Error)?.error?.message
+                            ?: (appendState as? LoadState.Error)?.error?.message
+                            ?: "No se pudo cargar el historial de facturas.",
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                } else if (isLoading && historyInvoicesPagingItems.itemCount == 0) {
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        CircularProgressIndicator(modifier = Modifier.size(40.dp))
+                        Spacer(Modifier.height(8.dp))
+                        Text("Cargando historial...")
+                    }
+                } else if (historyInvoicesPagingItems.itemCount == 0 || invoices.isEmpty()) {
                     Text("No se encontraron facturas en los últimos $selectedRangeDays días.")
                 } else {
                     InvoiceHistorySummary(
@@ -4046,7 +4131,14 @@ private fun CustomerInvoiceHistoryContent(
                         verticalArrangement = Arrangement.spacedBy(8.dp),
                         contentPadding = PaddingValues(bottom = 16.dp)
                     ) {
-                        items(items = invoices, key = { it.invoiceId }) { invoice ->
+                        items(
+                            count = historyInvoicesPagingItems.itemCount,
+                            key = { index ->
+                                historyInvoicesPagingItems[index]?.invoiceId ?: "history_$index"
+                            }
+                        ) { index ->
+                            val invoice = historyInvoicesPagingItems[index] ?: return@items
+                            if (!isWithinDays(invoice.postingDate, selectedRangeDays)) return@items
                             InvoiceHistoryRow(
                                 invoice = invoice,
                                 isBusy = historyBusy,
@@ -4068,7 +4160,17 @@ private fun CustomerInvoiceHistoryContent(
                                 },
                                 onPartialReturn = { invoiceId ->
                                     openPartialReturn(invoiceId)
-                                })
+                                },
+                                onDownloadPdf = onDownloadInvoicePdf
+                            )
+                        }
+                        if (historyInvoicesPagingItems.loadState.append is LoadState.Loading) {
+                            item {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                                    horizontalArrangement = Arrangement.Center
+                                ) { CircularProgressIndicator() }
+                            }
                         }
                     }
                 }
@@ -4250,7 +4352,8 @@ private fun InvoiceHistoryRow(
     returnPolicy: ReturnPolicySettings,
     onCancel: (String) -> Unit,
     onReturnTotal: (String) -> Unit,
-    onPartialReturn: (String) -> Unit = {}
+    onPartialReturn: (String) -> Unit = {},
+    onDownloadPdf: (String) -> Unit = {}
 ) {
     val display = resolveInvoiceDisplayAmounts(
         invoice = invoice,
@@ -4368,6 +4471,17 @@ private fun InvoiceHistoryRow(
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
+                }
+            }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End
+            ) {
+                TextButton(
+                    onClick = { onDownloadPdf(invoice.invoiceId) },
+                    enabled = invoice.invoiceId.isNotBlank()
+                ) {
+                    Text("Descargar PDF")
                 }
             }
             Spacer(Modifier.height(10.dp))
@@ -4603,7 +4717,7 @@ private fun CustomerOutstandingSummary(
             modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween
         ) {
             Text(strings.customer.outstandingSummaryInvoicesLabel)
-            Text("${invoices.size}")
+            Text("${if (invoices.isNotEmpty()) invoices.size else (customer.pendingInvoices ?: 0)}")
         }
         if (totalBase <= 0.0) {
             Text(strings.customer.outstandingSummaryAmountLabel)

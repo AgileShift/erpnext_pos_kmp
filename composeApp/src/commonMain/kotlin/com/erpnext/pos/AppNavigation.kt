@@ -94,11 +94,9 @@ import com.erpnext.pos.navigation.ShiftOpenChip
 import com.erpnext.pos.navigation.StatusIconButton
 import com.erpnext.pos.navigation.TopBarController
 import com.erpnext.pos.navigation.formatShiftDuration
-import com.erpnext.pos.remoteSource.api.APIService
 import com.erpnext.pos.remoteSource.oauth.TokenStore
 import com.erpnext.pos.sync.SyncManager
 import com.erpnext.pos.sync.SyncState
-import com.erpnext.pos.utils.AppLogger
 import com.erpnext.pos.utils.NetworkMonitor
 import com.erpnext.pos.utils.loading.LoadingIndicator
 import com.erpnext.pos.utils.loading.LoadingUiState
@@ -122,8 +120,6 @@ fun shouldShowBottomBar(currentRoute: String): Boolean {
 fun shouldShowTopBar(currentRoute: String): Boolean {
     return shouldShowBottomBar(currentRoute)
 }
-
-private const val ACTIVITY_FEED_REFRESH_INTERVAL_MS = 60_000L
 
 //TOOD: Localizar
 private fun defaultTitleForRoute(route: String): String {
@@ -205,7 +201,6 @@ fun AppNavigation() {
     val billingResetController = koinInject<BillingResetController>()
     val logoutUseCase = koinInject<LogoutUseCase>()
     val tokenStore = koinInject<TokenStore>()
-    val apiService = koinInject<APIService>()
     val userDao = koinInject<UserDao>()
     val topBarController = remember { TopBarController() }
     val scope = rememberCoroutineScope()
@@ -239,38 +234,7 @@ fun AppNavigation() {
 
 
     LaunchedEffect(isOnline, posContext?.profileName, posContext?.territory, posContext?.route) {
-        if (!isOnline) {
-            activityBadgeCount = 0
-            return@LaunchedEffect
-        }
-        val context = posContext ?: run {
-            activityBadgeCount = 0
-            return@LaunchedEffect
-        }
-        var notifiedFailure = false
-        while (true) {
-            runCatching {
-                apiService.fetchActivityBootstrapSnapshot(
-                    profileName = context.profileName,
-                    territory = context.territory ?: context.route
-                )
-            }.onSuccess { snapshot ->
-                notifiedFailure = false
-                val count = snapshot.activityEvents.size + snapshot.inventoryAlerts.size
-                activityBadgeCount = count.coerceAtLeast(0)
-            }.onFailure { error ->
-                AppLogger.warn("activity bootstrap refresh failed", error)
-                if (!notifiedFailure) {
-                    snackbarController.show(
-                        "No se pudo actualizar la actividad en tiempo real.",
-                        SnackbarType.Error,
-                        SnackbarPosition.Top
-                    )
-                    notifiedFailure = true
-                }
-            }
-            delay(ACTIVITY_FEED_REFRESH_INTERVAL_MS)
-        }
+        activityBadgeCount = 0
     }
 
     val isDesktop = getPlatformName() == "Desktop"
@@ -577,35 +541,39 @@ fun AppNavigation() {
                                                     }
                                                 }
                                             }
-                                            Column(horizontalAlignment = Alignment.End) {
-                                                Text(
-                                                    cashierDisplayName,
-                                                    style = MaterialTheme.typography.bodyMedium,
-                                                    fontWeight = FontWeight.SemiBold
-                                                )
-                                                Row(
-                                                    verticalAlignment = Alignment.CenterVertically,
-                                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                                                ) {
-                                                    Surface(
-                                                        color = MaterialTheme.colorScheme.primary.copy(
-                                                            alpha = 0.12f
-                                                        ),
-                                                        shape = MaterialTheme.shapes.small
-                                                    ) {
-                                                        Text(
-                                                            if (isOnline) "Online" else "Offline",
-                                                            modifier = Modifier.padding(
-                                                                horizontal = 10.dp,
-                                                                vertical = 4.dp
-                                                            ),
-                                                            style = MaterialTheme.typography.labelSmall,
-                                                            color = if (isOnline) {
-                                                                MaterialTheme.colorScheme.primary
-                                                            } else {
-                                                                MaterialTheme.colorScheme.error
-                                                            }
+                                            if (cashier != null) {
+                                                Column(horizontalAlignment = Alignment.End) {
+                                                    Text(
+                                                        cashierDisplayName,
+                                                        style = MaterialTheme.typography.bodyMedium,
+                                                        fontWeight = FontWeight.SemiBold
+                                                    )
+                                                    Row(
+                                                        verticalAlignment = Alignment.CenterVertically,
+                                                        horizontalArrangement = Arrangement.spacedBy(
+                                                            6.dp
                                                         )
+                                                    ) {
+                                                        Surface(
+                                                            color = MaterialTheme.colorScheme.primary.copy(
+                                                                alpha = 0.12f
+                                                            ),
+                                                            shape = MaterialTheme.shapes.small
+                                                        ) {
+                                                            Text(
+                                                                if (isOnline) "Online" else "Offline",
+                                                                modifier = Modifier.padding(
+                                                                    horizontal = 10.dp,
+                                                                    vertical = 4.dp
+                                                                ),
+                                                                style = MaterialTheme.typography.labelSmall,
+                                                                color = if (isOnline) {
+                                                                    MaterialTheme.colorScheme.primary
+                                                                } else {
+                                                                    MaterialTheme.colorScheme.error
+                                                                }
+                                                            )
+                                                        }
                                                     }
                                                 }
                                             }
@@ -763,7 +731,10 @@ fun AppNavigation() {
                                 ) {
                                     Surface(
                                         color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                                        shape = RoundedCornerShape(bottomStart = 12.dp, bottomEnd = 12.dp),
+                                        shape = RoundedCornerShape(
+                                            bottomStart = 12.dp,
+                                            bottomEnd = 12.dp
+                                        ),
                                         tonalElevation = 6.dp,
                                         shadowElevation = 10.dp
                                     ) {
@@ -803,7 +774,12 @@ fun AppNavigation() {
                                                     modifier = Modifier
                                                         .fillMaxWidth()
                                                         .height(6.dp)
-                                                        .clip(RoundedCornerShape(bottomStart = 12.dp, bottomEnd = 12.dp)),
+                                                        .clip(
+                                                            RoundedCornerShape(
+                                                                bottomStart = 12.dp,
+                                                                bottomEnd = 12.dp
+                                                            )
+                                                        ),
                                                     color = MaterialTheme.colorScheme.primary,
                                                     trackColor = MaterialTheme.colorScheme.primary.copy(
                                                         alpha = 0.15f
@@ -814,7 +790,12 @@ fun AppNavigation() {
                                                     modifier = Modifier
                                                         .fillMaxWidth()
                                                         .height(6.dp)
-                                                        .clip(RoundedCornerShape(bottomStart = 12.dp, bottomEnd = 12.dp)),
+                                                        .clip(
+                                                            RoundedCornerShape(
+                                                                bottomStart = 12.dp,
+                                                                bottomEnd = 12.dp
+                                                            )
+                                                        ),
                                                     color = MaterialTheme.colorScheme.primary,
                                                     trackColor = MaterialTheme.colorScheme.primary.copy(
                                                         alpha = 0.15f

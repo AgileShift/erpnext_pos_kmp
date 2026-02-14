@@ -76,17 +76,38 @@ class LegacyPushSyncManager(
 
         var hasChanges = false
         val failedIds = mutableListOf<Int>()
+        val runningOutstandingByInvoice = mutableMapOf<String, Double>()
 
-        pendingPayments.forEach { payment ->
+        pendingPayments
+            .sortedWith(compareBy({ it.parentInvoice }, { it.createdAt }, { it.id }))
+            .forEach { payment ->
             val invoiceWrapper = invoiceLocalSource.getInvoiceByName(payment.parentInvoice)
                 ?: return@forEach
             val invoice = invoiceWrapper.invoice
             val invoiceName = invoice.invoiceName ?: return@forEach
             if (invoiceName.startsWith("LOCAL-", ignoreCase = true)) return@forEach
             if (!invoice.syncStatus.equals("Synced", ignoreCase = true)) return@forEach
-            if (invoice.isPos && invoice.outstandingAmount <= 0.0001) {
-                invoiceLocalSource.updatePaymentSyncStatus(payment.id, "Synced", now, null)
-                hasChanges = true
+
+            val runningOutstanding = runningOutstandingByInvoice.getOrPut(invoiceName) {
+                val remoteOutstanding = runCatching {
+                    invoiceRepository.fetchRemoteInvoice(invoiceName)?.outstandingAmount
+                }.getOrNull()
+                if (remoteOutstanding != null && remoteOutstanding > 0.0001) {
+                    remoteOutstanding
+                } else {
+                    val syncedPaid = invoiceWrapper.payments
+                        .filter { it.syncStatus.equals("Synced", ignoreCase = true) }
+                        .sumOf { it.amount }
+                    val fromGrandTotal = (invoice.grandTotal - syncedPaid).coerceAtLeast(0.0)
+                    when {
+                        fromGrandTotal > 0.0001 -> fromGrandTotal
+                        invoice.outstandingAmount > 0.0001 -> invoice.outstandingAmount
+                        else -> invoice.grandTotal.coerceAtLeast(0.0)
+                    }
+                }
+            }
+            if (runningOutstanding <= 0.0001) {
+                failedIds += payment.id
                 return@forEach
             }
 
@@ -135,8 +156,8 @@ class LegacyPushSyncManager(
                     customer = customer,
                     postingDate = payment.paymentDate ?: invoice.postingDate,
                     invoiceId = invoiceName,
-                    invoiceTotalRc = invoice.paidAmount + invoice.outstandingAmount,
-                    outstandingRc = invoice.outstandingAmount,
+                    invoiceTotalRc = invoice.grandTotal,
+                    outstandingRc = runningOutstanding,
                     paidFromAccount = paidFrom,
                     partyAccountCurrency = receivableCurrency,
                     invoiceCurrency = invoiceCurrency,
@@ -161,6 +182,9 @@ class LegacyPushSyncManager(
                 AppLogger.warn("LegacyPushSyncManager: payment ${payment.id} failed", err)
                 failedIds += payment.id
             }.onSuccess {
+                val allocated = paymentEntry.references.firstOrNull()?.allocatedAmount ?: 0.0
+                runningOutstandingByInvoice[invoiceName] =
+                    (runningOutstanding - allocated).coerceAtLeast(0.0)
                 invoiceLocalSource.updatePaymentSyncStatus(
                     payment.id,
                     "Synced",

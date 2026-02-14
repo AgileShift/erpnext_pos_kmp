@@ -364,6 +364,22 @@ interface SalesInvoiceDao {
         """
         SELECT * FROM tabSalesInvoice
         WHERE customer = :customerName
+          AND outstanding_amount > 0
+          AND (status IS NULL OR lower(status) NOT IN ('paid','cancelled','canceled'))
+          AND docstatus != 2
+          AND is_deleted = 0
+        ORDER BY posting_date DESC
+        """
+    )
+    fun getOutstandingInvoicesForCustomerPaged(
+        customerName: String
+    ): PagingSource<Int, SalesInvoiceWithItemsAndPayments>
+
+    @Transaction
+    @Query(
+        """
+        SELECT * FROM tabSalesInvoice
+        WHERE customer = :customerName
           AND posting_date BETWEEN :startDate AND :endDate
           AND docstatus != 2
           AND is_deleted = 0
@@ -375,6 +391,23 @@ interface SalesInvoiceDao {
         startDate: String,
         endDate: String
     ): List<SalesInvoiceWithItemsAndPayments>
+
+    @Transaction
+    @Query(
+        """
+        SELECT * FROM tabSalesInvoice
+        WHERE customer = :customerName
+          AND posting_date BETWEEN :startDate AND :endDate
+          AND docstatus != 2
+          AND is_deleted = 0
+        ORDER BY posting_date DESC
+        """
+    )
+    fun getInvoicesForCustomerInRangePaged(
+        customerName: String,
+        startDate: String,
+        endDate: String
+    ): PagingSource<Int, SalesInvoiceWithItemsAndPayments>
 
     @Transaction
     @Query("SELECT * FROM tabSalesInvoice WHERE is_deleted = 0 AND posting_date BETWEEN :startDate AND :endDate ORDER BY posting_date DESC")

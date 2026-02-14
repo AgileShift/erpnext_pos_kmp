@@ -5,8 +5,6 @@ import com.erpnext.pos.localSource.dao.POSClosingEntryDao
 import com.erpnext.pos.localSource.dao.POSOpeningEntryDao
 import com.erpnext.pos.localSource.dao.POSOpeningEntryLinkDao
 import com.erpnext.pos.data.mappers.buildClosingEntryDto
-import com.erpnext.pos.data.repositories.ExchangeRateRepository
-import com.erpnext.pos.data.repositories.PosProfilePaymentMethodLocalRepository
 import com.erpnext.pos.localSource.dao.SalesInvoiceDao
 import com.erpnext.pos.localSource.dao.POSProfileDao
 import com.erpnext.pos.remoteSource.api.APIService
@@ -137,6 +135,10 @@ class ClosingEntrySyncRepository(
                 posCurrency = normalizeCurrency(profileCurrency),
                 rateResolver = { from, to -> exchangeRateRepository.getRate(from, to) }
             )
+            val paidInvoiceNames = paymentRows.asSequence()
+                .map { it.invoiceName.trim() }
+                .filter { it.isNotBlank() }
+                .toSet()
 
             val dto = buildClosingEntryDto(
                 cashbox = cashbox,
@@ -144,7 +146,8 @@ class ClosingEntrySyncRepository(
                 postingDate = resolvedEndDate,
                 periodEndDate = resolvedEndDate,
                 paymentReconciliation = paymentReconciliation,
-                invoices = shiftInvoices
+                invoices = shiftInvoices,
+                paidInvoiceNames = paidInvoiceNames
             )
 
             cashboxDao.updateStatus(
@@ -274,6 +277,10 @@ class ClosingEntrySyncRepository(
                 posCurrency = normalizeCurrency(profileCurrency),
                 rateResolver = { from, to -> exchangeRateRepository.getRate(from, to) }
             )
+            val paidInvoiceNames = paymentRows.asSequence()
+                .map { it.invoiceName.trim() }
+                .filter { it.isNotBlank() }
+                .toSet()
             ensureRemoteOpeningEntry(remoteOpeningName, cashbox.localId)
             val dto = buildClosingEntryDto(
                 cashbox = cashbox,
@@ -281,7 +288,8 @@ class ClosingEntrySyncRepository(
                 postingDate = periodEnd,
                 periodEndDate = periodEnd,
                 paymentReconciliation = paymentReconciliation,
-                invoices = shiftInvoices
+                invoices = shiftInvoices,
+                paidInvoiceNames = paidInvoiceNames
             )
 
             if (remoteClosing != null) {

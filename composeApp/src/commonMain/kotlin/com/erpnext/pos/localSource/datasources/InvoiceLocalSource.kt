@@ -8,10 +8,10 @@ import com.erpnext.pos.localSource.entities.SalesInvoiceItemEntity
 import com.erpnext.pos.localSource.entities.SalesInvoiceWithItemsAndPayments
 
 interface IInvoiceLocalSource {
-    suspend fun getPendingInvoices(today: String): PagingSource<Int, SalesInvoiceWithItemsAndPayments>
+    fun getPendingInvoices(today: String): PagingSource<Int, SalesInvoiceWithItemsAndPayments>
     suspend fun getInvoiceDetail(invoiceId: String): SalesInvoiceWithItemsAndPayments?
 
-    suspend fun getAllLocalInvoicesPaged(): PagingSource<Int, SalesInvoiceWithItemsAndPayments>
+    fun getAllLocalInvoicesPaged(): PagingSource<Int, SalesInvoiceWithItemsAndPayments>
     suspend fun getAllLocalInvoices(): List<SalesInvoiceWithItemsAndPayments>
     suspend fun getInvoiceByName(invoiceName: String): SalesInvoiceWithItemsAndPayments?
     suspend fun updatePaymentStatus(invoiceId: String, status: String)
@@ -51,19 +51,27 @@ interface IInvoiceLocalSource {
     suspend fun getOutstandingInvoicesForCustomer(
         customerName: String
     ): List<SalesInvoiceWithItemsAndPayments>
+    fun getOutstandingInvoicesForCustomerPaged(
+        customerName: String
+    ): PagingSource<Int, SalesInvoiceWithItemsAndPayments>
+    fun getInvoicesForCustomerInRangePaged(
+        customerName: String,
+        startDate: String,
+        endDate: String
+    ): PagingSource<Int, SalesInvoiceWithItemsAndPayments>
 }
 
 class InvoiceLocalSource(
     private val salesInvoiceDao: SalesInvoiceDao
 ) : IInvoiceLocalSource {
-    override suspend fun getPendingInvoices(today: String): PagingSource<Int, SalesInvoiceWithItemsAndPayments> =
+    override fun getPendingInvoices(today: String): PagingSource<Int, SalesInvoiceWithItemsAndPayments> =
         salesInvoiceDao.getOverdueInvoices(today)
 
     override suspend fun getInvoiceDetail(invoiceId: String): SalesInvoiceWithItemsAndPayments? {
         return salesInvoiceDao.getInvoiceByName(invoiceId)
     }
 
-    override suspend fun getAllLocalInvoicesPaged(): PagingSource<Int, SalesInvoiceWithItemsAndPayments> =
+    override fun getAllLocalInvoicesPaged(): PagingSource<Int, SalesInvoiceWithItemsAndPayments> =
         salesInvoiceDao.getAllInvoicesPaged()
 
     override suspend fun getAllLocalInvoices(): List<SalesInvoiceWithItemsAndPayments> =
@@ -254,5 +262,19 @@ class InvoiceLocalSource(
         customerName: String
     ): List<SalesInvoiceWithItemsAndPayments> {
         return salesInvoiceDao.getOutstandingInvoicesForCustomer(customerName)
+    }
+
+    override fun getOutstandingInvoicesForCustomerPaged(
+        customerName: String
+    ): PagingSource<Int, SalesInvoiceWithItemsAndPayments> {
+        return salesInvoiceDao.getOutstandingInvoicesForCustomerPaged(customerName)
+    }
+
+    override fun getInvoicesForCustomerInRangePaged(
+        customerName: String,
+        startDate: String,
+        endDate: String
+    ): PagingSource<Int, SalesInvoiceWithItemsAndPayments> {
+        return salesInvoiceDao.getInvoicesForCustomerInRangePaged(customerName, startDate, endDate)
     }
 }

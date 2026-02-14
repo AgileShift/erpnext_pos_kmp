@@ -1,18 +1,17 @@
 package com.erpnext.pos.data.repositories
 
+import androidx.paging.Pager
+import androidx.paging.PagingConfig
 import androidx.paging.PagingData
-import androidx.paging.PagingSource
-import androidx.paging.PagingState
 import com.erpnext.pos.base.Resource
 import com.erpnext.pos.base.networkBoundResource
-import com.erpnext.pos.base.networkBoundResourcePaged
 import com.erpnext.pos.data.mappers.toBO
+import com.erpnext.pos.data.mappers.toPagingBO
 import com.erpnext.pos.domain.models.CategoryBO
 import com.erpnext.pos.domain.models.ItemBO
 import com.erpnext.pos.domain.repositories.IInventoryRepository
 import com.erpnext.pos.domain.usecases.StockDelta
 import com.erpnext.pos.localSource.datasources.InventoryLocalSource
-import com.erpnext.pos.localSource.entities.ItemEntity
 import com.erpnext.pos.remoteSource.datasources.InventoryRemoteSource
 import com.erpnext.pos.remoteSource.mapper.toEntity
 import com.erpnext.pos.utils.RepoTrace
@@ -20,109 +19,34 @@ import com.erpnext.pos.views.CashBoxManager
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
-import kotlin.time.Clock
 
 class InventoryRepository(
     private val remoteSource: InventoryRemoteSource,
     private val localSource: InventoryLocalSource,
     private val context: CashBoxManager
 ) : IInventoryRepository {
-    private companion object {
-        const val ONLINE_REFRESH_TTL_MINUTES = 5L
-    }
 
     suspend fun decrementStock(warehouse: String, deltas: List<StockDelta>) {
         localSource.decrementStock(warehouse, deltas)
     }
 
-    fun <Key : Any, Value : Any, R : Any> PagingSource<Key, Value>.mapEntityToBO(
-        transform: (Value) -> R = { (it as ItemEntity).toBO() as R }
-    ): PagingSource<Key, R> {
-        return object : PagingSource<Key, R>() {
-
-            override suspend fun load(params: LoadParams<Key>): LoadResult<Key, R> {
-                val result = this@mapEntityToBO.load(params)
-                return when (result) {
-                    is LoadResult.Page -> LoadResult.Page(
-                        data = result.data.map(transform),
-                        prevKey = result.prevKey,
-                        nextKey = result.nextKey
-                    )
-
-                    is LoadResult.Error -> LoadResult.Error(result.throwable)
-                    is LoadResult.Invalid -> LoadResult.Invalid()
-                }
-            }
-
-            override fun getRefreshKey(state: PagingState<Key, R>): Key? =
-                null // Puedes personalizar si lo necesitas
-        }
-    }
-
     suspend fun getItems(query: String?): Flow<List<ItemBO>> {
         RepoTrace.breadcrumb("InventoryRepository", "getItems", "query=$query")
-        val context = context.requireContext()
-        return networkBoundResource(
-            query = {
-                when {
-                    query.isNullOrEmpty() -> flowOf(localSource.getAll())
-                    else -> localSource.getAllFiltered(query)
-                }.map { list -> list.map { it.toBO() } }
-            },
-            fetch = {
-                remoteSource.getItems(
-                    context.warehouse,
-                    context.priceList,
-                )
-            },
-            saveFetchResult = { remoteItems ->
-                val entities = remoteItems.toEntity()
-                localSource.insertAll(entities)
-                localSource.deleteMissing(entities.map { it.itemCode })
-            },
-            onFetchFailed = { RepoTrace.capture("InventoryRepository", "getItems", it) },
-            shouldFetch = { localData ->
-                if (localData.isEmpty()) return@networkBoundResource true
-                val newest = localData.maxOfOrNull { it.lastSyncedAt ?: 0L } ?: 0L
-                val elapsed = Clock.System.now().toEpochMilliseconds() - newest
-                elapsed >= ONLINE_REFRESH_TTL_MINUTES * 60_000L
-            }
-        ).map { resource ->
-            resource.data ?: emptyList()
-        }
+        return when {
+            query.isNullOrEmpty() -> flowOf(localSource.getAll())
+            else -> localSource.getAllFiltered(query)
+        }.map { list -> list.map { it.toBO() } }
     }
 
     override suspend fun getItemsPaged(query: String?): Flow<PagingData<ItemBO>> {
         RepoTrace.breadcrumb("InventoryRepository", "getItemsPaged", "query=$query")
-        val context = context.requireContext()
-        val items: Flow<PagingData<ItemBO>> = networkBoundResourcePaged(
-            query = {
-                localSource.getAllPaged().mapEntityToBO()
-            },
-            fetch = { page, pageSize ->
-                remoteSource.getItems(
-                    context.warehouse,
-                    context.priceList,
-                    page * pageSize,
-                    pageSize
-                )
-            },
-            saveFetchResult = { remoteItems ->
-                val entities = remoteItems.toEntity()
-                localSource.insertAll(entities)
-                localSource.deleteMissing(entities.map { it.itemCode })
-            },
-            clearLocalData = { localSource.deleteAll() },
-            shouldFetch = {
-                val first = localSource.getOldestItem()
-                if (first == null) return@networkBoundResourcePaged true
-                val lastSyncedAt = first.lastSyncedAt ?: 0L
-                val elapsed = Clock.System.now().toEpochMilliseconds() - lastSyncedAt
-                elapsed >= ONLINE_REFRESH_TTL_MINUTES * 60_000L
-            },
-            pageSize = 50
-        )
-        return items
+        return Pager(PagingConfig(pageSize = 50, prefetchDistance = 20)) {
+            if (query.isNullOrBlank()) {
+                localSource.getAllPaged()
+            } else {
+                localSource.getAllFilteredPaged(query)
+            }
+        }.flow.toPagingBO()
     }
 
     override suspend fun getItemDetails(itemId: String): ItemBO {
@@ -130,22 +54,11 @@ class InventoryRepository(
     }
 
     override suspend fun getCategories(): Flow<Resource<List<CategoryBO>>> = networkBoundResource(
-        query = {
-            localSource.getItemCategories().map { entities -> entities.map { it.toBO() } }
-        },
-        fetch = { remoteSource.getCategories() },
-        saveFetchResult = { categories ->
-            val entities = categories.map { it.toEntity() }
-            if (entities.isNotEmpty()) {
-                localSource.insertCategories(entities)
-            }
-            localSource.deleteMissingCategories(entities.map { it.name })
-        },
-        shouldFetch = { cached -> cached.isEmpty() },
-        onFetchFailed = { e ->
-            RepoTrace.capture("InventoryRepository", "getCategories", e)
-            print("Fallo la sincronizacion de categorias -> ${e.message}")
-        }
+        query = { localSource.getItemCategories().map { entities -> entities.map { it.toBO() } } },
+        fetch = { emptyList<com.erpnext.pos.remoteSource.dto.CategoryDto>() },
+        saveFetchResult = { },
+        shouldFetch = { false },
+        onFetchFailed = { }
     )
 
     override suspend fun sync(): Flow<Resource<List<ItemBO>>> {

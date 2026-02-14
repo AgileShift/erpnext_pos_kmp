@@ -1,5 +1,6 @@
 package com.erpnext.pos.views.billing
 
+import androidx.paging.PagingData
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -7,6 +8,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import com.erpnext.pos.utils.view.SnackbarController
 import androidx.navigation.NavBackStackEntry
+import kotlinx.coroutines.flow.flowOf
 import org.koin.compose.koinInject
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -15,10 +17,11 @@ fun BillingRoute(
     coordinator: BillingCoordinator = rememberBillingCoordinator()
 ) {
     val uiState by coordinator.screenStateFlow.collectAsState()
+    val productsPagingFlow by coordinator.productsPagingFlow.collectAsState(flowOf(PagingData.empty()))
     val action = rememberBillingActions(coordinator)
     val snackbar = koinInject<SnackbarController>()
 
-    BillingScreen(uiState, action, snackbar)
+    BillingScreen(uiState, productsPagingFlow, action, snackbar)
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -28,10 +31,11 @@ fun BillingLabRoute(
     coordinator: BillingCoordinator = rememberBillingLabCoordinator(backStackEntry)
 ) {
     val uiState by coordinator.screenStateFlow.collectAsState()
+    val productsPagingFlow by coordinator.productsPagingFlow.collectAsState(flowOf(PagingData.empty()))
     val action = rememberBillingActions(coordinator)
     val snackbar = koinInject<SnackbarController>()
 
-    BillingScreen(uiState, action, snackbar)
+    BillingScreen(uiState, productsPagingFlow, action, snackbar)
 }
 
 @Composable
@@ -41,6 +45,7 @@ fun rememberBillingActions(coordinator: BillingCoordinator): BillingAction {
             onCustomerSearchQueryChange = coordinator::onCustomerSearchQueryChange,
             onCustomerSelected = coordinator::onCustomerSelected,
             onProductSearchQueryChange = coordinator::onProductSearchQueryChange,
+            onProductCategorySelected = coordinator::onProductCategorySelected,
             onProductAdded = coordinator::onProductAdded,
             onQuantityChanged = coordinator::onQuantityChanged,
             onRemoveItem = coordinator::onRemoveItem,

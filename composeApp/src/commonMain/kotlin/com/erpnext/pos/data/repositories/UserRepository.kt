@@ -13,11 +13,8 @@ class UserRepository(
 ) : IUserRepository {
     override suspend fun getUserInfo(): UserBO {
         RepoTrace.breadcrumb("UserRepository", "getUserInfo")
-        return runCatching { remoteSource.getUserInfo().toBO() }
-            .getOrElse { error ->
-                RepoTrace.capture("UserRepository", "getUserInfo", error)
-                val fallback = userDao.getUserInfo()
-                fallback?.toBO() ?: throw error
-            }
+        val local = userDao.getUserInfo()
+        if (local != null) return local.toBO()
+        throw IllegalStateException("No hay usuario local cacheado. Ejecuta sincronización para cargar datos.")
     }
 }

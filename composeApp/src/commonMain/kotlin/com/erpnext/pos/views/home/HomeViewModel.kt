@@ -191,7 +191,6 @@ class HomeViewModel(
     fun loadInitialData() {
         _stateFlow.update { HomeState.Loading }
         executeUseCase(action = {
-            if (!sessionRefresher.ensureValidSession()) return@executeUseCase
             userInfo = fetchUserInfoUseCase.invoke(null)
             when (val gate = posProfileGate.ensureReady(userInfo.email)) {
                 is GateResult.Failed -> error(gate.reason)
@@ -199,7 +198,6 @@ class HomeViewModel(
                 GateResult.Ready -> Unit
             }
             posProfiles = fetchPosProfileUseCase.invoke(userInfo.email)
-            syncSalesTargetFromRemote()
             _homeMetrics.value =
                 loadHomeMetricsUseCase(HomeMetricInput(7, Clock.System.now().toEpochMilliseconds()))
             refreshInventoryAlerts()
@@ -213,7 +211,6 @@ class HomeViewModel(
     fun refreshMetrics() {
         executeUseCase(
             action = {
-                syncSalesTargetFromRemote()
                 _homeMetrics.value = loadHomeMetricsUseCase(
                     HomeMetricInput(
                         7,
@@ -341,18 +338,6 @@ class HomeViewModel(
                         conversionStale = stale
                     )
                 )
-            }
-        }
-    }
-
-    private suspend fun syncSalesTargetFromRemote() {
-        val ctx = contextManager.getContext() ?: return
-        val companyId = ctx.company
-        if (companyId.isBlank()) return
-        runCatching {
-            val remote = salesTargetRepository.fetchMonthlyCompanyTarget(companyId)
-            if (remote != null && remote > 0.0) {
-                generalPreferences.setSalesTargetMonthly(remote)
             }
         }
     }

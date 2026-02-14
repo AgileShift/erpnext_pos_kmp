@@ -16,7 +16,7 @@ interface ISaleInvoiceRepository {
     suspend fun getPendingInvoices(info: PendingInvoiceInput): Flow<PagingData<SalesInvoiceBO>>
     suspend fun getInvoiceDetail(invoiceId: String): SalesInvoiceBO
 
-    suspend fun getAllLocalInvoicesPaged(): PagingSource<Int, SalesInvoiceWithItemsAndPayments>
+    fun getAllLocalInvoicesPaged(): PagingSource<Int, SalesInvoiceWithItemsAndPayments>
     suspend fun getAllLocalInvoices() : List<SalesInvoiceWithItemsAndPayments>
     suspend fun getInvoiceByName(invoiceName: String): SalesInvoiceWithItemsAndPayments?
     suspend fun saveInvoiceLocally(

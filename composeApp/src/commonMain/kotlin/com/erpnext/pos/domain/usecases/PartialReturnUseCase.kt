@@ -43,65 +43,65 @@ class PartialReturnUseCase(
     private val networkMonitor: NetworkMonitor
 ) : UseCase<PartialReturnInput, PartialReturnResult>() {
     override suspend fun useCaseFunction(input: PartialReturnInput): PartialReturnResult {
-        var invoice = repository.getInvoiceByName(input.invoiceName)
+        val invoice = repository.getInvoiceByName(input.invoiceName)
             ?: throw IllegalArgumentException("Factura no encontrada: ${input.invoiceName}")
-        if (invoice.items.isEmpty()) {
-            repository.refreshInvoiceFromRemote(input.invoiceName)
-            invoice = repository.getInvoiceByName(input.invoiceName)
-                ?: throw IllegalArgumentException("Factura no encontrada: ${input.invoiceName}")
-        }
         if (invoice.items.isEmpty()) {
             throw IllegalStateException("La factura no tiene items cargados para devolución.")
         }
         val originalOutstanding = invoice.invoice.outstandingAmount
-
         val isOnline = networkMonitor.isConnected.firstOrNull() == true
-        if (!isOnline) {
-            throw IllegalStateException(
-                "Se requiere conexión a internet para registrar un retorno parcial."
-            )
-        }
 
         val returnItems = buildReturnItems(invoice, input.itemsToReturnByCode)
         if (returnItems.isEmpty()) {
             throw IllegalArgumentException("Selecciona al menos un artículo para devolver.")
         }
 
-        val creditNoteDto = buildCreditNoteDto(invoice, returnItems, input.reason)
-        val created = repository.createRemoteInvoice(creditNoteDto)
-        val entity = created.toEntity()
-        repository.saveInvoiceLocally(
-            invoice = entity.invoice,
-            items = entity.items,
-            payments = entity.payments
-        )
+        if (isOnline) {
+            val creditNoteDto = buildCreditNoteDto(invoice, returnItems, input.reason)
+            val created = repository.createRemoteInvoice(creditNoteDto)
+            val entity = created.toEntity()
+            repository.saveInvoiceLocally(
+                invoice = entity.invoice,
+                items = entity.items,
+                payments = entity.payments
+            )
 
-        val returnTotal = kotlin.math.abs(created.grandTotal)
-        invoice.invoice.invoiceName?.let { name ->
-            repository.refreshInvoiceFromRemote(name)
-            val refreshed = repository.getInvoiceByName(name)?.invoice
-            val expectedOutstanding = (originalOutstanding - returnTotal).coerceAtLeast(0.0)
-            if (refreshed != null && refreshed.outstandingAmount > expectedOutstanding + 0.01) {
-                repository.applyLocalReturnAdjustment(name, returnTotal)
+            val returnTotal = kotlin.math.abs(created.grandTotal)
+            invoice.invoice.invoiceName?.let { name ->
+                repository.refreshInvoiceFromRemote(name)
+                val refreshed = repository.getInvoiceByName(name)?.invoice
+                val expectedOutstanding = (originalOutstanding - returnTotal).coerceAtLeast(0.0)
+                if (refreshed != null && refreshed.outstandingAmount > expectedOutstanding + 0.01) {
+                    repository.applyLocalReturnAdjustment(name, returnTotal)
+                }
             }
+
+            val refundCreated = if (input.applyRefund) {
+                input.refundModeOfPayment?.takeIf { it.isNotBlank() }?.let { mode ->
+                    createRefundPayment(
+                        invoice = invoice,
+                        creditNote = created,
+                        refundModeOfPayment = mode,
+                        refundReferenceNo = input.refundReferenceNo
+                    )
+                } ?: false
+            } else {
+                false
+            }
+
+            return PartialReturnResult(
+                creditNoteName = created.name,
+                refundCreated = refundCreated
+            )
         }
 
-        val refundCreated = if (input.applyRefund) {
-            input.refundModeOfPayment?.takeIf { it.isNotBlank() }?.let { mode ->
-                createRefundPayment(
-                    invoice = invoice,
-                    creditNote = created,
-                    refundModeOfPayment = mode,
-                    refundReferenceNo = input.refundReferenceNo
-                )
-            } ?: false
-        } else {
-            false
+        val returnTotal = returnItems.sumOf { kotlin.math.abs(it.amount) }
+        invoice.invoice.invoiceName?.let { name ->
+            repository.applyLocalReturnAdjustment(name, returnTotal)
         }
-
         return PartialReturnResult(
-            creditNoteName = created.name,
-            refundCreated = refundCreated
+            creditNoteName = null,
+            refundCreated = false
         )
     }
 
@@ -110,11 +110,9 @@ class PartialReturnUseCase(
         requested: Map<String, Double>
     ): List<SalesInvoiceItemDto> {
         val parent = invoice.invoice
-        val remainingByItem = runCatching { buildRemainingByItem(invoice) }
-            .getOrElse { emptyMap() }
         val requestedQty = requested.mapValues { it.value.coerceAtLeast(0.0) }
         return invoice.items.mapNotNull { item ->
-            val remaining = remainingByItem[item.itemCode] ?: kotlin.math.abs(item.qty)
+            val remaining = kotlin.math.abs(item.qty)
             if (remaining <= 0.0) return@mapNotNull null
             val desired = requestedQty[item.itemCode] ?: 0.0
             if (desired <= 0.0) return@mapNotNull null
@@ -122,33 +120,6 @@ class PartialReturnUseCase(
             if (qtyToReturn <= 0.0) return@mapNotNull null
             createReturnItem(item, parent, qtyToReturn)
         }.filter { it.qty != 0.0 }
-    }
-
-    private suspend fun buildRemainingByItem(
-        invoice: SalesInvoiceWithItemsAndPayments
-    ): Map<String, Double> {
-        val originalName = invoice.invoice.invoiceName ?: return emptyMap()
-        val returnInvoices = repository.fetchRemoteReturnInvoices(
-            returnAgainst = originalName
-        )
-        if (returnInvoices.isEmpty()) {
-            return invoice.items.associate { item ->
-                item.itemCode to kotlin.math.abs(item.qty).coerceAtLeast(0.0)
-            }
-        }
-        val returnedByItem = mutableMapOf<String, Double>()
-        returnInvoices.forEach { credit ->
-            credit.items.forEach { item ->
-                val qty = kotlin.math.abs(item.qty)
-                if (qty <= 0.0) return@forEach
-                returnedByItem[item.itemCode] = (returnedByItem[item.itemCode] ?: 0.0) + qty
-            }
-        }
-        return invoice.items.associate { item ->
-            val sold = kotlin.math.abs(item.qty).coerceAtLeast(0.0)
-            val returned = returnedByItem[item.itemCode] ?: 0.0
-            item.itemCode to (sold - returned).coerceAtLeast(0.0)
-        }
     }
 
     private fun createReturnItem(

@@ -1,7 +1,6 @@
 package com.erpnext.pos.views.splash
 
 import androidx.lifecycle.viewModelScope
-import com.erpnext.pos.auth.SessionRefresher
 import com.erpnext.pos.base.BaseViewModel
 import com.erpnext.pos.navigation.NavRoute
 import com.erpnext.pos.navigation.NavigationManager
@@ -16,8 +15,7 @@ import kotlinx.coroutines.launch
 class SplashViewModel(
     private val navigationManager: NavigationManager,
     private val tokenStore: TokenStore,
-    private val contextProvider: CashBoxManager,
-    private val sessionRefresher: SessionRefresher
+    private val contextProvider: CashBoxManager
 ) : BaseViewModel() {
 
     private val _stateFlow: MutableStateFlow<SplashState> = MutableStateFlow(SplashState.Loading)
@@ -34,12 +32,8 @@ class SplashViewModel(
                 _stateFlow.update { SplashState.InvalidToken }
                 return@launch
             }
-            if (sessionRefresher.ensureValidSession()) {
-                navigationManager.navigateTo(NavRoute.Home)
-                _stateFlow.update { SplashState.Success }
-            } else {
-                _stateFlow.update { SplashState.InvalidToken }
-            }
+            navigationManager.navigateTo(NavRoute.Home)
+            _stateFlow.update { SplashState.Success }
         }
     }
 }

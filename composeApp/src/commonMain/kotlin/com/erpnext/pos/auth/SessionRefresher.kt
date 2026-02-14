@@ -69,7 +69,11 @@ class SessionRefresher(
             }
 
         return try {
-            AppLogger.info("SessionRefresher: refreshing token")
+            AppLogger.info(
+                "SessionRefresher: refreshing token " +
+                        "idTokenExpIn=${secondsLeft ?: -1}s " +
+                        "refreshToken=${maskTokenForLogs(refreshToken)}"
+            )
             val refreshed = apiService.refreshToken(refreshToken)
             tokenStore.save(refreshed)
             val refreshedIdToken = refreshed.id_token
@@ -122,4 +126,9 @@ class SessionRefresher(
         val now = kotlin.time.Clock.System.now().epochSeconds
         return exp - now
     }
+}
+
+private fun maskTokenForLogs(value: String?): String {
+    if (value.isNullOrBlank()) return "<empty>"
+    return "len=${value.length} ${value.take(8)}...${value.takeLast(6)}"
 }

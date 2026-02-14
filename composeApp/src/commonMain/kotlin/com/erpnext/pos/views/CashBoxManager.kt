@@ -102,6 +102,7 @@ class CashBoxManager(
     private val sessionRefresher: SessionRefresher,
     private val networkMonitor: NetworkMonitor
 ) {
+    private val allowRemoteReadsFromUi = false
 
     //Contexto actual del POS cargado en memoria
     private var currentContext: POSContext? = null
@@ -114,7 +115,7 @@ class CashBoxManager(
     suspend fun initializeContext(): POSContext? = withContext(Dispatchers.IO) {
         currencySettingsRepository.loadCached()
         val isOnline = networkMonitor.isConnected.firstOrNull() == true
-        val canUseRemote = isOnline && sessionRefresher.ensureValidSession()
+        val canUseRemote = isOnline && allowRemoteReadsFromUi && sessionRefresher.ensureValidSession()
         val user = resolveCurrentUser(canUseRemote) ?: return@withContext null
         val serverUser = resolveServerUserId(user)
         openingEntrySyncRepository.repairActiveOpenings()
@@ -307,7 +308,7 @@ class CashBoxManager(
         val serverUser = resolveServerUserId(user)
         val existing = findActiveCashboxForProfile(serverUser, entry.name)
         if (existing != null) {
-            if (isOnline) {
+            if (isOnline && allowRemoteReadsFromUi) {
                 val remoteOpen = resolveRemoteOpenSession(user, entry.name)
                 if (remoteOpen != null) {
                     adoptRemoteOpening(existing, remoteOpen.name)
@@ -355,7 +356,7 @@ class CashBoxManager(
             _contextFlow.value = currentContext
             return@withContext currentContext
         }
-        if (isOnline) {
+        if (isOnline && allowRemoteReadsFromUi) {
             val remoteOpen = resolveRemoteOpenSession(user, entry.name)
             if (remoteOpen != null) {
                 val restored = runCatching {
@@ -704,7 +705,7 @@ class CashBoxManager(
                 )
             }
         }
-        val resolvedInvoices = if (isOnline) {
+        val resolvedInvoices = if (isOnline && allowRemoteReadsFromUi) {
             reconcileRemoteInvoicesForClosing(
                 openingEntryId = openingEntryId,
                 posProfile = ctx.profileName,
@@ -751,6 +752,10 @@ class CashBoxManager(
             posCurrency = normalizeCurrency(ctx.currency),
             rateResolver = { from, to -> exchangeRateRepository.getRate(from, to) }
         )
+        val paidInvoiceNames = paymentRows.asSequence()
+            .map { it.invoiceName.trim() }
+            .filter { it.isNotBlank() }
+            .toSet()
         val endDate = getTimeMillis().toErpDateTime()
         val dto = buildClosingEntryDto(
             cashbox = entry.cashbox,
@@ -758,7 +763,8 @@ class CashBoxManager(
             postingDate = endDate,
             periodEndDate = endDate,
             paymentReconciliation = paymentReconciliation,
-            invoices = resolvedInvoices
+            invoices = resolvedInvoices,
+            paidInvoiceNames = paidInvoiceNames
         )
         if (!remoteOpeningEntryId.isNullOrBlank()) {
             val existing = openingDao.getByName(remoteOpeningEntryId)
@@ -977,7 +983,7 @@ class CashBoxManager(
     suspend fun resolveExchangeRateBetween(
         fromCurrency: String,
         toCurrency: String,
-        allowNetwork: Boolean = true
+        allowNetwork: Boolean = false
     ): Double? {
         val from = fromCurrency.trim().uppercase()
         val to = toCurrency.trim().uppercase()
@@ -994,7 +1000,7 @@ class CashBoxManager(
         val normalized = baseCurrency.trim().uppercase()
         if (normalized == "USD") return 1.0
 
-        val cached = exchangeRateRepository.getRate("USD", normalized)
+        val cached = exchangeRateRepository.getLocalRate("USD", normalized)
         if (cached != null && cached > 0.0) {
             return cached
         }

@@ -121,28 +121,56 @@ class DesktopTokenStore(
     // TokenStore
     // ------------------------------------------------------------
     override suspend fun save(tokens: TokenResponse) {
-        clear()
-        if (tokens.id_token.isNullOrEmpty()) return
+        mutex.withLock {
+            val currentAccessToken = getSecret(siteScopedKey("access_token"))
+            val currentRefreshToken = getSecret(siteScopedKey("refresh_token"))
+            val currentIdToken = getSecret(siteScopedKey("id_token"))
+            val currentExpiresIn = prefs.getLong(siteScopedKey("expires_in"), 0L)
+            val currentUser = prefs.get(siteScopedKey("userId"), null)
 
-        val claims = decodePayload(tokens.id_token)
-        val userId = resolveUserIdFromClaims(claims).orEmpty()
+            val mergedAccessToken = tokens.access_token.ifBlank { currentAccessToken.orEmpty() }
+            val mergedRefreshToken = tokens.refresh_token?.takeIf { it.isNotBlank() }
+                ?: currentRefreshToken?.takeIf { it.isNotBlank() }
+            val mergedIdToken = tokens.id_token?.takeIf { it.isNotBlank() }
+                ?: currentIdToken?.takeIf { it.isNotBlank() }
+            val mergedExpiresIn = tokens.expires_in ?: currentExpiresIn
 
-        // secretos
-        setSecret(siteScopedKey("access_token"), tokens.access_token)
-        val refreshToken = tokens.refresh_token?.takeIf { it.isNotBlank() }
-        if (refreshToken == null) {
-            deleteSecret(siteScopedKey("refresh_token"))
-        } else {
-            setSecret(siteScopedKey("refresh_token"), refreshToken)
+            if (mergedAccessToken.isNotBlank()) {
+                setSecret(siteScopedKey("access_token"), mergedAccessToken)
+            } else {
+                deleteSecret(siteScopedKey("access_token"))
+            }
+            if (mergedRefreshToken == null) {
+                deleteSecret(siteScopedKey("refresh_token"))
+            } else {
+                setSecret(siteScopedKey("refresh_token"), mergedRefreshToken)
+            }
+            if (mergedIdToken == null) {
+                deleteSecret(siteScopedKey("id_token"))
+            } else {
+                setSecret(siteScopedKey("id_token"), mergedIdToken)
+            }
+
+            prefs.putLong(siteScopedKey("expires_in"), mergedExpiresIn)
+            val decodedUser = mergedIdToken?.let { resolveUserIdFromClaims(decodePayload(it)) }
+                ?.takeIf { it.isNotBlank() }
+                ?: currentUser
+            if (decodedUser.isNullOrBlank()) {
+                prefs.remove(siteScopedKey("userId"))
+            } else {
+                prefs.put(siteScopedKey("userId"), decodedUser)
+            }
+            prefs.flush()
+
+            stateFlow.value = TokenResponse(
+                access_token = mergedAccessToken,
+                token_type = tokens.token_type,
+                expires_in = mergedExpiresIn,
+                refresh_token = mergedRefreshToken,
+                id_token = mergedIdToken,
+                scope = tokens.scope
+            )
         }
-        setSecret(siteScopedKey("id_token"), tokens.id_token)
-
-        // metadatos (no secretos)
-        prefs.putLong(siteScopedKey("expires_in"), tokens.expires_in ?: 0L)
-        prefs.put(siteScopedKey("userId"), userId)
-        prefs.flush()
-
-        stateFlow.value = tokens
     }
 
     override suspend fun load(): TokenResponse? = mutex.withLock {

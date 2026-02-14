@@ -1,5 +1,6 @@
 package com.erpnext.pos.localSource.datasources
 
+import androidx.paging.PagingSource
 import com.erpnext.pos.localSource.entities.CustomerEntity
 import com.erpnext.pos.localSource.dao.CustomerDao
 import com.erpnext.pos.localSource.dao.SalesInvoiceDao
@@ -11,10 +12,13 @@ interface ICustomerLocalSource {
     suspend fun insert(customer: CustomerEntity)
     suspend fun insertAll(customers: List<CustomerEntity>)
     suspend fun getAll(): Flow<List<CustomerEntity>>
+    fun getPaged(search: String, state: String): PagingSource<Int, CustomerEntity>
     fun getAllFiltered(search: String): Flow<List<CustomerEntity>>
     fun getByTerritory(territory: String, search: String?): Flow<List<CustomerEntity>>
     suspend fun getByName(name: String): CustomerEntity?
     suspend fun count(): Int
+    suspend fun countFiltered(search: String, state: String): Int
+    suspend fun countPendingFiltered(search: String, state: String): Int
     suspend fun getByCustomerState(state: String): Flow<List<CustomerEntity>>
     suspend fun getOldestCustomer(): CustomerEntity?
     suspend fun saveInvoices(invoices: List<SalesInvoiceWithItemsAndPayments>)
@@ -50,6 +54,9 @@ class CustomerLocalSource(private val dao: CustomerDao, private val invoiceDao: 
 
     override suspend fun getAll(): Flow<List<CustomerEntity>> = dao.getAll()
 
+    override fun getPaged(search: String, state: String): PagingSource<Int, CustomerEntity> =
+        dao.getPaged(search = search, state = state)
+
     override suspend fun saveInvoices(invoices: List<SalesInvoiceWithItemsAndPayments>) {
         invoiceDao.insertFullInvoices(invoices)
     }
@@ -64,6 +71,14 @@ class CustomerLocalSource(private val dao: CustomerDao, private val invoiceDao: 
 
     override suspend fun count(): Int {
         return dao.count()
+    }
+
+    override suspend fun countFiltered(search: String, state: String): Int {
+        return dao.countFiltered(search = search, state = state)
+    }
+
+    override suspend fun countPendingFiltered(search: String, state: String): Int {
+        return dao.countPendingFiltered(search = search, state = state)
     }
 
     override suspend fun getOldestCustomer(): CustomerEntity? {

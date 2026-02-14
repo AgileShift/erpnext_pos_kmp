@@ -146,7 +146,7 @@ private fun NavigationRailEntry(
             }
         },
         icon = {
-            androidx.compose.material3.Icon(
+            Icon(
                 imageVector = navRoute.icon,
                 contentDescription = navRoute.title,
                 tint = if (isSelected && isEnabled) {

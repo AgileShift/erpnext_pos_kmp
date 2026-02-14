@@ -222,10 +222,7 @@ class SettingsViewModel(
 
     fun syncSalesTargetFromERPNext() {
         viewModelScope.launch {
-            val ctx = cashBoxManager.getContext() ?: return@launch
-            val target = salesTargetRepository.fetchMonthlyCompanyTarget(ctx.company)
-                ?: return@launch
-            generalPreferences.setSalesTargetMonthly(target)
+            syncManager.fullSync(force = true)
         }
     }
 

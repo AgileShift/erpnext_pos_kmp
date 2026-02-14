@@ -15,7 +15,7 @@ import com.erpnext.pos.localSource.entities.SalesInvoiceWithItemsAndPayments
 sealed class CustomerState {
     object Loading : CustomerState()
     object Empty : CustomerState()
-    data class Success(val customers: List<CustomerBO>, val totalCount: Int, val pendingCount: Int) : CustomerState()
+    data class Success(val totalCount: Int, val pendingCount: Int) : CustomerState()
 
     data class Error(val message: String) : CustomerState()
 }
@@ -72,6 +72,7 @@ data class CustomerAction(
     val onCreateDeliveryNote: (CustomerBO) -> Unit = {},
     val onCreateInvoice: (CustomerBO) -> Unit = {},
     val onRegisterPayment: (CustomerBO) -> Unit = {},
+    val onDownloadInvoicePdf: (String) -> Unit = {},
     val loadOutstandingInvoices: (CustomerBO) -> Unit = {},
     val clearOutstandingInvoices: () -> Unit = {},
     val clearPaymentMessages: () -> Unit = {},

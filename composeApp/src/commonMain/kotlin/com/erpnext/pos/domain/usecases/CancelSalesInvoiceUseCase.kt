@@ -77,7 +77,8 @@ class CancelSalesInvoiceUseCase(
         val name = invoice.invoice.invoiceName ?: return CancelSalesInvoiceResult()
         invoiceRepository.cancelInvoice(name, isReturn = false)
         if (isOnline) {
-            invoiceRepository.cancelRemoteInvoice(name)
+            runCatching { invoiceRepository.cancelRemoteInvoice(name) }
+                .onSuccess { invoiceRepository.markAsSynced(name) }
         }
         return CancelSalesInvoiceResult(cancelled = true)
     }
@@ -90,10 +91,12 @@ class CancelSalesInvoiceUseCase(
         refundReferenceNo: String?,
         applyRefund: Boolean
     ): CancelSalesInvoiceResult {
-        if (!isOnline) {
-            throw IllegalStateException("Se requiere conexión a internet para registrar un retorno.")
-        }
         val originalName = invoice.invoice.invoiceName ?: return CancelSalesInvoiceResult()
+        if (!isOnline) {
+            invoiceRepository.cancelInvoice(originalName, isReturn = true)
+            return CancelSalesInvoiceResult(creditNoteName = null, cancelled = true)
+        }
+
         val returnItems = buildRemainingReturnItems(invoice)
         if (returnItems.isEmpty()) {
             throw IllegalStateException("La factura ya fue retornada por completo.")
