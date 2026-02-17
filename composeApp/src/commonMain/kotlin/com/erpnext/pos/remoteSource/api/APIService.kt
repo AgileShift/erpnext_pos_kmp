@@ -7,8 +7,11 @@ import com.erpnext.pos.remoteSource.dto.AddressListDto
 import com.erpnext.pos.remoteSource.dto.BalanceDetailsDto
 import com.erpnext.pos.remoteSource.dto.BinDto
 import com.erpnext.pos.remoteSource.dto.BootstrapDataDto
+import com.erpnext.pos.remoteSource.dto.BootstrapClosingEntryDto
+import com.erpnext.pos.remoteSource.dto.BootstrapFullSnapshotDto
 import com.erpnext.pos.remoteSource.dto.BootstrapPosSyncDto
 import com.erpnext.pos.remoteSource.dto.BootstrapRequestDto
+import com.erpnext.pos.remoteSource.dto.BootstrapShiftSnapshotDto
 import com.erpnext.pos.remoteSource.dto.CategoryDto
 import com.erpnext.pos.remoteSource.dto.CompanyDto
 import com.erpnext.pos.remoteSource.dto.ContactListDto
@@ -37,6 +40,7 @@ import com.erpnext.pos.remoteSource.dto.POSProfileDto
 import com.erpnext.pos.remoteSource.dto.POSProfileSimpleDto
 import com.erpnext.pos.remoteSource.dto.PaymentEntryCreateDto
 import com.erpnext.pos.remoteSource.dto.PaymentEntryDto
+import com.erpnext.pos.remoteSource.dto.PaymentReconciliationDto
 import com.erpnext.pos.remoteSource.dto.PaymentTermDto
 import com.erpnext.pos.remoteSource.dto.SalesInvoiceDto
 import com.erpnext.pos.remoteSource.dto.StockSettingsDto
@@ -54,6 +58,7 @@ import com.erpnext.pos.remoteSource.oauth.toOAuthConfig
 import com.erpnext.pos.remoteSource.sdk.FrappeErrorResponse
 import com.erpnext.pos.remoteSource.sdk.FrappeException
 import com.erpnext.pos.remoteSource.sdk.withRetries
+import com.erpnext.pos.localSource.preferences.BootstrapContextPreferences
 import com.erpnext.pos.utils.AppLogger
 import com.erpnext.pos.utils.AppSentry
 import com.erpnext.pos.utils.TokenUtils
@@ -96,7 +101,8 @@ class APIService(
     private val client: HttpClient,
     private val store: TokenStore,
     private val authStore: AuthInfoStore,
-    private val tokenClient: HttpClient
+    private val tokenClient: HttpClient,
+    private val bootstrapContextPreferences: BootstrapContextPreferences
 ) {
     data class InvoicePdfDownloadPayload(
         val fileName: String,
@@ -121,6 +127,8 @@ class APIService(
         const val DEFAULT_INVOICE_SYNC_DAYS = 90
         const val RECENT_PAID_INVOICE_DAYS = 7
         const val BOOTSTRAP_CACHE_WINDOW_MS = 15_000L
+        const val INVENTORY_BOOTSTRAP_PAGE_SIZE = 200
+        const val BOOTSTRAP_SNAPSHOT_LIMIT = 5_000
     }
 
     private var bootstrapCache: BootstrapCacheEntry? = null
@@ -138,7 +146,7 @@ class APIService(
     }
 
     suspend fun getCompanyInfo(): List<CompanyDto> {
-        val bootstrapCompany = runCatching {
+        val bootstrapRaw = runCatching {
             val payload = BootstrapRequestDto(
                 includeInventory = false,
                 includeCustomers = false,
@@ -147,24 +155,55 @@ class APIService(
                 includeActivity = false,
                 recentPaidOnly = true
             )
-            fetchBootstrapRaw(payload)["company"]?.jsonObject
+            fetchBootstrapRaw(payload)
         }.getOrNull()
 
-        val fromBootstrap = bootstrapCompany?.let { company ->
-            val name = company.stringOrNull("company")
-            val defaultCurrency = company.stringOrNull("default_currency")
-            if (!name.isNullOrBlank() && !defaultCurrency.isNullOrBlank()) {
-                CompanyDto(
-                    company = name,
-                    defaultCurrency = defaultCurrency,
-                    taxId = company.stringOrNull("tax_id"),
-                    country = company.stringOrNull("country")
+        val fromBootstrapList = buildList {
+            val companies = bootstrapRaw?.get("companies")?.jsonArray
+                ?.mapNotNull { it as? JsonObject }
+                .orEmpty()
+            companies.forEach { company ->
+                val name = company.stringOrNull("company")
+                    ?: company.stringOrNull("name")
+                val defaultCurrency = company.stringOrNull("default_currency")
+                if (name.isNullOrBlank() || defaultCurrency.isNullOrBlank()) return@forEach
+                add(
+                    CompanyDto(
+                        company = name,
+                        defaultCurrency = defaultCurrency,
+                        taxId = company.stringOrNull("tax_id"),
+                        country = company.stringOrNull("country"),
+                        defaultReceivableAccount = company.stringOrNull("default_receivable_account"),
+                        defaultReceivableAccountCurrency = company.stringOrNull(
+                            "default_receivable_account_currency"
+                        )
+                    )
                 )
-            } else {
-                null
+            }
+            if (isEmpty()) {
+                val company = bootstrapRaw?.get("company") as? JsonObject
+                val name = company?.stringOrNull("company")
+                    ?: company?.stringOrNull("name")
+                val defaultCurrency = company?.stringOrNull("default_currency")
+                if (!name.isNullOrBlank() && !defaultCurrency.isNullOrBlank()) {
+                    add(
+                        CompanyDto(
+                            company = name,
+                            defaultCurrency = defaultCurrency,
+                            taxId = company.stringOrNull("tax_id"),
+                            country = company.stringOrNull("country"),
+                            defaultReceivableAccount = company.stringOrNull(
+                                "default_receivable_account"
+                            ),
+                            defaultReceivableAccountCurrency = company.stringOrNull(
+                                "default_receivable_account_currency"
+                            )
+                        )
+                    )
+                }
             }
         }
-        if (fromBootstrap != null) return listOf(fromBootstrap)
+        if (fromBootstrapList.isNotEmpty()) return fromBootstrapList
 
         val profiles = getPOSProfiles()
         val first = profiles.firstOrNull()
@@ -174,7 +213,9 @@ class APIService(
                 company = first.company,
                 defaultCurrency = first.currency.ifBlank { "USD" },
                 taxId = null,
-                country = null
+                country = null,
+                defaultReceivableAccount = null,
+                defaultReceivableAccountCurrency = null
             )
         )
     }
@@ -593,7 +634,8 @@ class APIService(
             includeInvoices = false,
             includeAlerts = false,
             includeActivity = false,
-            recentPaidOnly = true
+            recentPaidOnly = true,
+            limit = BOOTSTRAP_SNAPSHOT_LIMIT
         )
         val item = fetchBootstrap(payload).inventoryItems.firstOrNull { it.itemCode == itemId }
             ?: throw IllegalStateException("Item $itemId no encontrado en sync.bootstrap")
@@ -700,7 +742,7 @@ class APIService(
                 profileName = posProfile,
                 recentPaidOnly = true
             )
-            val openShift = fetchBootstrapRaw(payload)["open_shift"]?.jsonObject
+            val openShift = fetchBootstrapRaw(payload)["open_shift"] as? JsonObject
                 ?: return@runCatching emptyList()
             val shiftUser = openShift.stringOrNull("user")
             val shiftProfile = openShift.stringOrNull("pos_profile")
@@ -737,7 +779,7 @@ class APIService(
             includeActivity = false,
             recentPaidOnly = true
         )
-        val openShift = fetchBootstrapRaw(payload)["open_shift"]?.jsonObject
+        val openShift = fetchBootstrapRaw(payload)["open_shift"] as? JsonObject
             ?: throw IllegalStateException("Open shift not available for POS Opening Entry lookup")
         val openName = openShift.stringOrNull("name")
         if (!openName.equals(name, ignoreCase = true)) {
@@ -770,18 +812,27 @@ class APIService(
         )
     }
 
-    suspend fun getBootstrapOpenShift(): POSOpeningEntryDetailDto? {
+    suspend fun getBootstrapShiftSnapshot(profileName: String? = null): BootstrapShiftSnapshotDto {
         val payload = BootstrapRequestDto(
             includeInventory = false,
             includeCustomers = false,
             includeInvoices = false,
             includeAlerts = false,
             includeActivity = false,
-            recentPaidOnly = true
+            recentPaidOnly = true,
+            profileName = profileName
         )
-        val openShift = fetchBootstrapRaw(payload)["open_shift"]?.jsonObject ?: return null
-        val name = openShift.stringOrNull("name") ?: return null
-        return runCatching { getPOSOpeningEntry(name) }.getOrNull()
+        val raw = fetchBootstrapRaw(payload)
+        val openShift = (raw["open_shift"] as? JsonObject)?.let { parseBootstrapOpenShift(it) }
+        val closingEntry = (raw["pos_closing_entry"] as? JsonObject)?.let { parseBootstrapClosingEntry(it) }
+        return BootstrapShiftSnapshotDto(
+            openShift = openShift,
+            posClosingEntry = closingEntry
+        )
+    }
+
+    suspend fun getBootstrapOpenShift(): POSOpeningEntryDetailDto? {
+        return getBootstrapShiftSnapshot().openShift
     }
 
     suspend fun cancelSalesInvoice(name: String): SubmitResponseDto {
@@ -900,17 +951,19 @@ class APIService(
     private suspend fun fetchBootstrap(payload: BootstrapRequestDto): BootstrapDataDto {
         requireAuthenticatedSession("sync.bootstrap")
         val site = authStore.getCurrentSite()?.trim()?.trimEnd('/').orEmpty()
-        val cacheKey = "$site::${json.encodeToString(payload)}"
+        val enrichedPayload = enrichBootstrapPayload(payload)
+        val cacheKey = "$site::${json.encodeToString(enrichedPayload)}"
         val now = Clock.System.now().toEpochMilliseconds()
         bootstrapCache?.let { cached ->
             if (cached.key == cacheKey && now - cached.createdAtMillis <= BOOTSTRAP_CACHE_WINDOW_MS) {
                 return cached.data
             }
         }
-        val fresh: BootstrapDataDto = postMethodWithPayload(
+        val freshRaw: JsonObject = postMethodWithPayload(
             methodPath = "erpnext_pos.api.v1.sync.bootstrap",
-            payload = payload
+            payload = enrichedPayload
         )
+        val fresh = decodeBootstrapDataSnapshot(freshRaw)
         bootstrapCache = BootstrapCacheEntry(
             key = cacheKey,
             data = fresh,
@@ -923,7 +976,133 @@ class APIService(
         requireAuthenticatedSession("sync.bootstrap")
         return postMethodWithPayload(
             methodPath = "erpnext_pos.api.v1.sync.bootstrap",
-            payload = payload
+            payload = enrichBootstrapPayload(payload)
+        )
+    }
+
+    private suspend fun enrichBootstrapPayload(payload: BootstrapRequestDto): BootstrapRequestDto {
+        val defaults = bootstrapContextPreferences.load()
+        val resolvedProfile = payload.profileName?.takeIf { it.isNotBlank() }
+            ?: defaults.profileName?.takeIf { it.isNotBlank() }
+            ?: ""
+        val resolvedOpening = payload.posOpeningEntry?.takeIf { it.isNotBlank() }
+            ?: defaults.posOpeningEntry?.takeIf { it.isNotBlank() }
+            ?: ""
+        val resolvedFromDate = payload.fromDate?.takeIf { it.isNotBlank() }
+            ?: defaults.fromDate?.takeIf { it.isNotBlank() }
+            ?: DateTimeProvider.addDays(DateTimeProvider.todayDate(), -DEFAULT_INVOICE_SYNC_DAYS)
+        return payload.copy(
+            profileName = resolvedProfile,
+            posOpeningEntry = resolvedOpening,
+            fromDate = resolvedFromDate
+        )
+    }
+
+    private fun extractBootstrapItems(
+        raw: JsonObject,
+        sectionKey: String
+    ): JsonArray {
+        val section = raw[sectionKey] as? JsonObject ?: return JsonArray(emptyList())
+        return section["items"] as? JsonArray ?: JsonArray(emptyList())
+    }
+
+    private fun normalizeBootstrapRaw(raw: JsonObject): JsonObject {
+        val normalized = raw.toMutableMap()
+        normalized["inventory_items"] = extractBootstrapItems(
+            raw = raw,
+            sectionKey = "inventory"
+        )
+        normalized["customers"] = extractBootstrapItems(
+            raw = raw,
+            sectionKey = "customers"
+        )
+        normalized["invoices"] = extractBootstrapItems(
+            raw = raw,
+            sectionKey = "invoices"
+        )
+        normalized["payment_entries"] = extractBootstrapItems(
+            raw = raw,
+            sectionKey = "payment_entries"
+        )
+        normalized["activity_events"] = extractBootstrapItems(
+            raw = raw,
+            sectionKey = "activity"
+        )
+        val alerts = raw["inventory_alerts"]
+        if (alerts is JsonObject) {
+            normalized["inventory_alerts"] = alerts["items"] ?: JsonArray(emptyList())
+        }
+        return JsonObject(normalized)
+    }
+
+    private fun decodeBootstrapDataSnapshot(raw: JsonObject): BootstrapDataDto {
+        return json.decodeFromJsonElement(normalizeBootstrapRaw(raw))
+    }
+
+    fun decodeBootstrapFullSnapshot(raw: JsonObject): BootstrapFullSnapshotDto {
+        return json.decodeFromJsonElement(normalizeBootstrapRaw(raw))
+    }
+
+    suspend fun getBootstrapRawSnapshot(payload: BootstrapRequestDto): JsonObject {
+        return fetchBootstrapRaw(payload)
+    }
+
+    private fun parseBootstrapOpenShift(openShift: JsonObject): POSOpeningEntryDetailDto? {
+        val name = openShift.stringOrNull("name") ?: return null
+        val balances = openShift["balance_details"]?.jsonArray
+            ?.mapNotNull { element ->
+                val row = element as? JsonObject ?: return@mapNotNull null
+                val mode = row.stringOrNull("mode_of_payment") ?: return@mapNotNull null
+                val opening = row["opening_amount"]?.jsonPrimitive?.doubleOrNull ?: 0.0
+                BalanceDetailsDto(
+                    modeOfPayment = mode,
+                    openingAmount = opening,
+                    closingAmount = null
+                )
+            }
+            .orEmpty()
+        return POSOpeningEntryDetailDto(
+            name = name,
+            posProfile = openShift.stringOrNull("pos_profile").orEmpty(),
+            company = openShift.stringOrNull("company").orEmpty(),
+            periodStartDate = openShift.stringOrNull("period_start_date")
+                ?: openShift.stringOrNull("posting_date")
+                ?: DateTimeProvider.todayDate(),
+            postingDate = openShift.stringOrNull("posting_date")
+                ?: openShift.stringOrNull("period_start_date")
+                ?: DateTimeProvider.todayDate(),
+            user = openShift.stringOrNull("user"),
+            balanceDetails = balances
+        )
+    }
+
+    private fun parseBootstrapClosingEntry(closing: JsonObject): BootstrapClosingEntryDto? {
+        val name = closing.stringOrNull("name") ?: return null
+        val reconciliation = closing["payment_reconciliation"]?.jsonArray
+            ?.mapNotNull { element ->
+                val row = element as? JsonObject ?: return@mapNotNull null
+                val mode = row.stringOrNull("mode_of_payment") ?: return@mapNotNull null
+                PaymentReconciliationDto(
+                    modeOfPayment = mode,
+                    openingAmount = row["opening_amount"]?.jsonPrimitive?.doubleOrNull ?: 0.0,
+                    expectedAmount = row["expected_amount"]?.jsonPrimitive?.doubleOrNull ?: 0.0,
+                    closingAmount = row["closing_amount"]?.jsonPrimitive?.doubleOrNull ?: 0.0,
+                    difference = row["difference"]?.jsonPrimitive?.doubleOrNull ?: 0.0
+                )
+            }
+            .orEmpty()
+        return BootstrapClosingEntryDto(
+            name = name,
+            status = closing.stringOrNull("status"),
+            posProfile = closing.stringOrNull("pos_profile"),
+            company = closing.stringOrNull("company"),
+            user = closing.stringOrNull("user"),
+            postingDate = closing.stringOrNull("posting_date"),
+            periodStartDate = closing.stringOrNull("period_start_date"),
+            periodEndDate = closing.stringOrNull("period_end_date"),
+            posOpeningEntry = closing.stringOrNull("pos_opening_entry"),
+            docStatus = closing.intOrNull("docstatus"),
+            paymentReconciliation = reconciliation
         )
     }
 
@@ -1027,7 +1206,7 @@ class APIService(
                     includeActivity = false,
                     recentPaidOnly = true
                 )
-            )["open_shift"]?.jsonObject
+            )["open_shift"] as? JsonObject
         }.getOrNull() ?: return emptyList()
         val openingInShift = bootstrapShift.stringOrNull("name")
         if (!openingInShift.equals(opening, ignoreCase = true)) return emptyList()
@@ -1073,6 +1252,23 @@ class APIService(
         )
         val data = fetchBootstrapRaw(payload)
         return json.decodeFromJsonElement(data)
+    }
+
+    suspend fun getBootstrapFullRawSnapshot(profileName: String? = null): JsonObject {
+        val payload = BootstrapRequestDto(
+            includeInventory = true,
+            includeCustomers = true,
+            includeInvoices = true,
+            includeAlerts = true,
+            includeActivity = true,
+            recentPaidOnly = true,
+            profileName = profileName
+        )
+        return fetchBootstrapRaw(payload)
+    }
+
+    suspend fun getBootstrapFullSnapshot(profileName: String? = null): BootstrapFullSnapshotDto {
+        return decodeBootstrapFullSnapshot(getBootstrapFullRawSnapshot(profileName = profileName))
     }
 
     suspend fun getLoginWithSite(site: String): LoginInfo {
@@ -1153,15 +1349,29 @@ class APIService(
     ): List<WarehouseItemDto> {
         val warehouseId = warehouse?.trim().orEmpty()
         require(warehouseId.isNotEmpty()) { "Bodega es requerida para la carga de productos" }
+        return fetchInventoryPage(
+            warehouse = warehouseId,
+            priceList = priceList?.trim(),
+            offset = offset,
+            limit = limit ?: INVENTORY_BOOTSTRAP_PAGE_SIZE
+        )
+    }
+
+    private suspend fun fetchInventoryPage(
+        warehouse: String,
+        priceList: String?,
+        offset: Int?,
+        limit: Int?
+    ): List<WarehouseItemDto> {
         val payload = BootstrapRequestDto(
             includeInventory = true,
             includeCustomers = false,
             includeInvoices = false,
-            includeAlerts = true,
+            includeAlerts = false,
             includeActivity = false,
             recentPaidOnly = true,
-            warehouse = warehouseId,
-            priceList = priceList?.trim(),
+            warehouse = warehouse,
+            priceList = priceList,
             offset = offset,
             limit = limit
         )
@@ -1174,7 +1384,11 @@ class APIService(
     ): Map<String, Double> {
         if (itemCodes.isEmpty()) return emptyMap()
         val lookup = itemCodes.toSet()
-        return getInventoryForWarehouse(warehouse = warehouse, priceList = null)
+        return getInventoryForWarehouse(
+            warehouse = warehouse,
+            priceList = null,
+            limit = BOOTSTRAP_SNAPSHOT_LIMIT
+        )
             .asSequence()
             .filter { it.itemCode in lookup }
             .associate { it.itemCode to it.actualQty.coerceAtLeast(0.0) }
@@ -1186,7 +1400,11 @@ class APIService(
     ): List<BinDto> {
         if (itemCodes.isEmpty()) return emptyList()
         val lookup = itemCodes.toSet()
-        return getInventoryForWarehouse(warehouse = warehouse, priceList = null)
+        return getInventoryForWarehouse(
+            warehouse = warehouse,
+            priceList = null,
+            limit = BOOTSTRAP_SNAPSHOT_LIMIT
+        )
             .asSequence()
             .filter { it.itemCode in lookup }
             .map { item ->
@@ -1209,7 +1427,11 @@ class APIService(
     ): List<ItemReorderDto> {
         if (itemCodes.isEmpty()) return emptyList()
         val lookup = itemCodes.toSet()
-        return getInventoryForWarehouse(warehouse = warehouse, priceList = null)
+        return getInventoryForWarehouse(
+            warehouse = warehouse,
+            priceList = null,
+            limit = BOOTSTRAP_SNAPSHOT_LIMIT
+        )
             .asSequence()
             .filter { it.itemCode in lookup }
             .map {
@@ -1262,7 +1484,8 @@ class APIService(
             includeActivity = false,
             route = territory,
             territory = territory,
-            recentPaidOnly = true
+            recentPaidOnly = true,
+            limit = BOOTSTRAP_SNAPSHOT_LIMIT
         )
         return fetchBootstrap(payload).customers
     }
@@ -1281,7 +1504,8 @@ class APIService(
             recentPaidOnly = recentPaidOnly,
             profileName = profileName,
             route = territory,
-            territory = territory
+            territory = territory,
+            limit = BOOTSTRAP_SNAPSHOT_LIMIT
         )
         return fetchBootstrap(payload)
     }
@@ -1299,7 +1523,8 @@ class APIService(
             recentPaidOnly = true,
             profileName = profileName,
             route = territory,
-            territory = territory
+            territory = territory,
+            limit = BOOTSTRAP_SNAPSHOT_LIMIT
         )
         return fetchBootstrap(payload)
     }
@@ -1403,7 +1628,8 @@ class APIService(
             includeAlerts = false,
             includeActivity = false,
             profileName = posProfile,
-            recentPaidOnly = recentPaidOnly
+            recentPaidOnly = recentPaidOnly,
+            limit = BOOTSTRAP_SNAPSHOT_LIMIT
         )
         return fetchBootstrap(payload).invoices
     }
@@ -1415,7 +1641,8 @@ class APIService(
             includeInvoices = false,
             includeAlerts = false,
             includeActivity = false,
-            recentPaidOnly = true
+            recentPaidOnly = true,
+            limit = BOOTSTRAP_SNAPSHOT_LIMIT
         )
         return fetchBootstrap(payload).paymentEntries
             .asSequence()
@@ -1452,8 +1679,25 @@ class APIService(
             docStatus = created.intOrNull("docstatus") ?: 1,
             status = created.stringOrNull("status") ?: data.status,
             postingDate = created.stringOrNull("posting_date") ?: data.postingDate,
+            dueDate = created.stringOrNull("due_date") ?: data.dueDate,
+            currency = created.stringOrNull("currency") ?: data.currency,
+            partyAccountCurrency = created.stringOrNull("party_account_currency")
+                ?: data.partyAccountCurrency,
+            conversionRate = created["conversion_rate"]?.jsonPrimitive?.doubleOrNull
+                ?: data.conversionRate,
+            customExchangeRate = created["custom_exchange_rate"]?.jsonPrimitive?.doubleOrNull
+                ?: data.customExchangeRate,
+            paidAmount = created["paid_amount"]?.jsonPrimitive?.doubleOrNull
+                ?: data.paidAmount,
             outstandingAmount = created["outstanding_amount"]?.jsonPrimitive?.doubleOrNull
-                ?: data.outstandingAmount
+                ?: data.outstandingAmount,
+            baseGrandTotal = created["base_grand_total"]?.jsonPrimitive?.doubleOrNull
+                ?: data.baseGrandTotal,
+            basePaidAmount = created["base_paid_amount"]?.jsonPrimitive?.doubleOrNull
+                ?: data.basePaidAmount,
+            baseOutstandingAmount = created["base_outstanding_amount"]?.jsonPrimitive?.doubleOrNull
+                ?: data.baseOutstandingAmount,
+            debitTo = created.stringOrNull("debit_to") ?: data.debitTo
         )
     }
 

@@ -30,11 +30,10 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -57,6 +56,7 @@ import androidx.compose.material.icons.filled.Group
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Money
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.People
@@ -108,6 +108,7 @@ import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -228,6 +229,10 @@ fun CustomerListScreen(
     val historyInvoicesPagingItems = historyInvoicesPagingFlow.collectAsLazyPagingItems()
     var baseCounts by remember { mutableStateOf(CustomerCounts(0, 0)) }
     val isDesktop = getPlatformName() == "Desktop"
+    val customerListState = rememberLazyListState()
+    val showBackToTop by remember {
+        derivedStateOf { customerListState.firstVisibleItemIndex > 0 }
+    }
 
     val hasCustomersLoaded =
         customersPagingItems.itemCount > 0 || customersPagingItems.loadState.refresh is LoadState.Loading
@@ -398,11 +403,13 @@ fun CustomerListScreen(
                                         horizontalArrangement = Arrangement.spacedBy(16.dp)
                                     ) {
                                         Box(modifier = Modifier.weight(0.65f)) {
-                                            CustomerListContent(
+                                            CustomerListPane(
                                                 customers = customersPagingItems,
                                                 posCurrency = posCurrency,
                                                 companyCurrency = companyCurrency,
                                                 cashboxManager = cashboxManager,
+                                                listState = customerListState,
+                                                showBackToTop = showBackToTop,
                                                 isWideLayout = false,
                                                 isDesktop = isDesktop,
                                                 onOpenQuickActions = {
@@ -478,11 +485,13 @@ fun CustomerListScreen(
                                         }
                                     }
                                 } else {
-                                    CustomerListContent(
+                                    CustomerListPane(
                                         customers = customersPagingItems,
                                         posCurrency = posCurrency,
                                         companyCurrency = companyCurrency,
                                         cashboxManager = cashboxManager,
+                                        listState = customerListState,
+                                        showBackToTop = showBackToTop,
                                         isWideLayout = isWideLayout,
                                         isDesktop = isDesktop,
                                         onOpenQuickActions = { quickActionsCustomer = it },
@@ -594,6 +603,48 @@ fun CustomerListScreen(
             paymentTermsOptions = dialogDataState.paymentTerms,
             companies = dialogDataState.companies
         )
+    }
+}
+
+@Composable
+private fun CustomerListPane(
+    customers: androidx.paging.compose.LazyPagingItems<CustomerBO>,
+    posCurrency: String,
+    companyCurrency: String,
+    cashboxManager: CashBoxManager,
+    listState: LazyListState,
+    showBackToTop: Boolean,
+    isWideLayout: Boolean,
+    isDesktop: Boolean,
+    onOpenQuickActions: (CustomerBO) -> Unit,
+    onSelect: (CustomerBO) -> Unit,
+    onQuickAction: (CustomerBO, CustomerQuickActionType) -> Unit
+) {
+    val scope = rememberCoroutineScope()
+    Box(modifier = Modifier.fillMaxSize()) {
+        CustomerListContent(
+            customers = customers,
+            posCurrency = posCurrency,
+            companyCurrency = companyCurrency,
+            cashboxManager = cashboxManager,
+            isWideLayout = isWideLayout,
+            isDesktop = isDesktop,
+            listState = listState,
+            onOpenQuickActions = onOpenQuickActions,
+            onSelect = onSelect,
+            onQuickAction = onQuickAction
+        )
+        if (showBackToTop) {
+            FilledTonalButton(
+                onClick = { scope.launch { listState.animateScrollToItem(0) } },
+                modifier = Modifier.align(Alignment.BottomEnd).padding(end = 52.dp, bottom = 10.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.KeyboardArrowUp,
+                    contentDescription = "Back to top"
+                )
+            }
+        }
     }
 }
 
@@ -777,6 +828,7 @@ private fun CustomerListContent(
     posCurrency: String,
     companyCurrency: String,
     cashboxManager: CashBoxManager,
+    listState: LazyListState,
     isWideLayout: Boolean,
     isDesktop: Boolean,
     onOpenQuickActions: (CustomerBO) -> Unit,
@@ -784,55 +836,80 @@ private fun CustomerListContent(
     onQuickAction: (CustomerBO, CustomerQuickActionType) -> Unit
 ) {
     val spacing = if (isWideLayout) 16.dp else 12.dp
-    if (isWideLayout) {
-        LazyVerticalGrid(
-            columns = GridCells.Adaptive(minSize = 360.dp),
-            modifier = Modifier.fillMaxSize(),
-            verticalArrangement = Arrangement.spacedBy(spacing),
-            horizontalArrangement = Arrangement.spacedBy(spacing),
-            contentPadding = PaddingValues(horizontal = 4.dp, vertical = 8.dp)
-        ) {
-            items(
-                count = customers.itemCount,
-                key = { index -> customers[index]?.name ?: "customer_grid_$index" }
-            ) { index ->
-                val customer = customers[index] ?: return@items
-                CustomerItem(
-                    customer = customer,
-                    posCurrency = posCurrency,
-                    companyCurrency = companyCurrency,
-                    isDesktop = isDesktop,
-                    onSelect = onSelect,
-                    onOpenQuickActions = { onOpenQuickActions(customer) },
-                    onQuickAction = { actionType -> onQuickAction(customer, actionType) },
-                    cashboxManager = cashboxManager
-                )
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        state = listState,
+        contentPadding = PaddingValues(horizontal = 0.dp, vertical = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(spacing)
+    ) {
+        items(
+            count = customers.itemCount,
+            key = { index -> customers[index]?.name ?: "customer_list_$index" }
+        ) { index ->
+            val customer = customers[index] ?: return@items
+            val currentLetter = customerLetter(customer)
+            val previousLetter = if (index > 0) {
+                customers[index - 1]?.let { customerLetter(it) }
+            } else {
+                null
+            }
+            if (currentLetter != previousLetter) {
+                LetterHeader(letter = currentLetter)
+            }
+            CustomerItem(
+                customer = customer,
+                posCurrency = posCurrency,
+                companyCurrency = companyCurrency,
+                isDesktop = isDesktop,
+                onSelect = onSelect,
+                onOpenQuickActions = { onOpenQuickActions(customer) },
+                onQuickAction = { actionType -> onQuickAction(customer, actionType) },
+                cashboxManager = cashboxManager
+            )
+        }
+        if (customers.loadState.append is LoadState.Loading) {
+            item(key = "customers_append_loading") {
+                Box(
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator()
+                }
             }
         }
-    } else {
-        LazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(horizontal = 0.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(spacing)
-        ) {
-            items(
-                count = customers.itemCount,
-                key = { index -> customers[index]?.name ?: "customer_list_$index" }
-            ) { index ->
-                val customer = customers[index] ?: return@items
-                CustomerItem(
-                    customer = customer,
-                    posCurrency = posCurrency,
-                    companyCurrency = companyCurrency,
-                    isDesktop = isDesktop,
-                    onSelect = onSelect,
-                    onOpenQuickActions = { onOpenQuickActions(customer) },
-                    onQuickAction = { actionType -> onQuickAction(customer, actionType) },
-                    cashboxManager = cashboxManager
-                )
+        val appendError = customers.loadState.append as? LoadState.Error
+        if (appendError != null) {
+            item(key = "customers_append_error") {
+                OutlinedButton(
+                    onClick = { customers.retry() },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Reintentar carga")
+                }
             }
         }
     }
+}
+
+@Composable
+private fun LetterHeader(letter: String) {
+    Surface(
+        shape = RoundedCornerShape(10.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant
+    ) {
+        Text(
+            text = letter,
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+}
+
+private fun customerLetter(customer: CustomerBO): String {
+    val raw = customer.customerName.ifBlank { customer.name }
+    val letter = raw.trim().firstOrNull()?.uppercase() ?: "#"
+    return if (letter[0] in 'A'..'Z') letter else "#"
 }
 
 @Composable
@@ -1006,7 +1083,7 @@ private fun CustomerRightPanel(
     onRegisterPayment: (
         invoiceId: String, modeOfPayment: String, enteredAmount: Double, enteredCurrency: String, referenceNumber: String
     ) -> Unit,
-    onDownloadInvoicePdf: (String) -> Unit,
+    onDownloadInvoicePdf: (String, InvoicePdfActionOption) -> Unit,
     onInvoiceHistoryAction: (
         invoiceId: String,
         action: InvoiceCancellationAction,
@@ -2054,7 +2131,7 @@ private fun CustomerOutstandingInvoicesSheet(
     onRegisterPayment: (
         invoiceId: String, modeOfPayment: String, enteredAmount: Double, enteredCurrency: String, referenceNumber: String
     ) -> Unit,
-    onDownloadInvoicePdf: (String) -> Unit
+    onDownloadInvoicePdf: (String, InvoicePdfActionOption) -> Unit
 ) {
     ModalBottomSheet(
         onDismissRequest = onDismiss, dragHandle = { BottomSheetDefaults.DragHandle() }) {
@@ -2079,7 +2156,7 @@ private fun CustomerOutstandingInvoicesContent(
     onRegisterPayment: (
         invoiceId: String, modeOfPayment: String, enteredAmount: Double, enteredCurrency: String, referenceNumber: String
     ) -> Unit,
-    onDownloadInvoicePdf: (String) -> Unit,
+    onDownloadInvoicePdf: (String, InvoicePdfActionOption) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val strings = LocalAppStrings.current
@@ -2367,11 +2444,40 @@ private fun CustomerOutstandingInvoicesContent(
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
-                                    TextButton(
-                                        onClick = { onDownloadInvoicePdf(invoice.invoiceId) },
-                                        enabled = invoice.invoiceId.isNotBlank()
-                                    ) {
-                                        Text("Descargar PDF")
+                                    var downloadMenuExpanded by remember(invoice.invoiceId) { mutableStateOf(false) }
+                                    Box {
+                                        TextButton(
+                                            onClick = { downloadMenuExpanded = true },
+                                            enabled = invoice.invoiceId.isNotBlank()
+                                        ) {
+                                            Text("Descargar PDF")
+                                        }
+                                        DropdownMenu(
+                                            expanded = downloadMenuExpanded,
+                                            onDismissRequest = { downloadMenuExpanded = false }
+                                        ) {
+                                            DropdownMenuItem(
+                                                text = { Text("Abrir ahora") },
+                                                onClick = {
+                                                    downloadMenuExpanded = false
+                                                    onDownloadInvoicePdf(invoice.invoiceId, InvoicePdfActionOption.OPEN_NOW)
+                                                }
+                                            )
+                                            DropdownMenuItem(
+                                                text = { Text("Guardar en...") },
+                                                onClick = {
+                                                    downloadMenuExpanded = false
+                                                    onDownloadInvoicePdf(invoice.invoiceId, InvoicePdfActionOption.SAVE_AS)
+                                                }
+                                            )
+                                            DropdownMenuItem(
+                                                text = { Text("Compartir") },
+                                                onClick = {
+                                                    downloadMenuExpanded = false
+                                                    onDownloadInvoicePdf(invoice.invoiceId, InvoicePdfActionOption.SHARE)
+                                                }
+                                            )
+                                        }
                                     }
                                 }
                             }
@@ -2534,7 +2640,7 @@ private fun CustomerInvoiceHistorySheet(
     cashboxManager: CashBoxManager,
     returnPolicy: ReturnPolicySettings,
     onAction: (String, InvoiceCancellationAction, String?, String?, String?, Boolean) -> Unit,
-    onDownloadInvoicePdf: (String) -> Unit,
+    onDownloadInvoicePdf: (String, InvoicePdfActionOption) -> Unit,
     onDismiss: () -> Unit,
     loadLocalInvoice: suspend (String) -> SalesInvoiceWithItemsAndPayments? = { null },
     onSubmitPartialReturn: (
@@ -3343,7 +3449,7 @@ private fun CustomerInvoiceHistoryContent(
     cashboxManager: CashBoxManager,
     returnPolicy: ReturnPolicySettings,
     onAction: (String, InvoiceCancellationAction, String?, String?, String?, Boolean) -> Unit,
-    onDownloadInvoicePdf: (String) -> Unit,
+    onDownloadInvoicePdf: (String, InvoicePdfActionOption) -> Unit,
     loadLocalInvoice: suspend (String) -> SalesInvoiceWithItemsAndPayments? = { null },
     onSubmitPartialReturn: (
         invoiceId: String, reason: String?, refundModeOfPayment: String?, refundReferenceNo: String?, applyRefund: Boolean, itemsToReturnByCode: Map<String, Double>
@@ -4353,7 +4459,7 @@ private fun InvoiceHistoryRow(
     onCancel: (String) -> Unit,
     onReturnTotal: (String) -> Unit,
     onPartialReturn: (String) -> Unit = {},
-    onDownloadPdf: (String) -> Unit = {}
+    onDownloadPdf: (String, InvoicePdfActionOption) -> Unit = { _, _ -> }
 ) {
     val display = resolveInvoiceDisplayAmounts(
         invoice = invoice,
@@ -4477,11 +4583,40 @@ private fun InvoiceHistoryRow(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.End
             ) {
-                TextButton(
-                    onClick = { onDownloadPdf(invoice.invoiceId) },
-                    enabled = invoice.invoiceId.isNotBlank()
-                ) {
-                    Text("Descargar PDF")
+                var downloadMenuExpanded by remember(invoice.invoiceId) { mutableStateOf(false) }
+                Box {
+                    TextButton(
+                        onClick = { downloadMenuExpanded = true },
+                        enabled = invoice.invoiceId.isNotBlank()
+                    ) {
+                        Text("Descargar PDF")
+                    }
+                    DropdownMenu(
+                        expanded = downloadMenuExpanded,
+                        onDismissRequest = { downloadMenuExpanded = false }
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("Abrir ahora") },
+                            onClick = {
+                                downloadMenuExpanded = false
+                                onDownloadPdf(invoice.invoiceId, InvoicePdfActionOption.OPEN_NOW)
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Guardar en...") },
+                            onClick = {
+                                downloadMenuExpanded = false
+                                onDownloadPdf(invoice.invoiceId, InvoicePdfActionOption.SAVE_AS)
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Compartir") },
+                            onClick = {
+                                downloadMenuExpanded = false
+                                onDownloadPdf(invoice.invoiceId, InvoicePdfActionOption.SHARE)
+                            }
+                        )
+                    }
                 }
             }
             Spacer(Modifier.height(10.dp))

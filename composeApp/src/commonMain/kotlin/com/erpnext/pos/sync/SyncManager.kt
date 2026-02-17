@@ -1,53 +1,40 @@
 package com.erpnext.pos.sync
 
-import com.erpnext.pos.base.Resource
-import com.erpnext.pos.data.repositories.CompanyRepository
-import com.erpnext.pos.data.repositories.CustomerRepository
-import com.erpnext.pos.data.repositories.CustomerGroupRepository
-import com.erpnext.pos.data.repositories.DeliveryChargesRepository
-import com.erpnext.pos.data.repositories.ExchangeRateRepository
-import com.erpnext.pos.data.repositories.InventoryRepository
-import com.erpnext.pos.data.repositories.ModeOfPaymentRepository
-import com.erpnext.pos.data.repositories.PosProfilePaymentMethodSyncRepository
-import com.erpnext.pos.data.repositories.PaymentTermsRepository
-import com.erpnext.pos.data.repositories.SalesInvoiceRepository
-import com.erpnext.pos.data.repositories.ContactRepository
-import com.erpnext.pos.data.repositories.AddressRepository
-import com.erpnext.pos.data.repositories.TerritoryRepository
-import com.erpnext.pos.data.repositories.CurrencySettingsRepository
-import com.erpnext.pos.sync.PushSyncRunner
-import com.erpnext.pos.sync.SyncContextProvider
-import com.erpnext.pos.domain.sync.SyncContext
-import com.erpnext.pos.views.CashBoxManager
-import com.erpnext.pos.localSource.dao.POSProfileDao
-import com.erpnext.pos.localSource.preferences.SyncPreferences
-import com.erpnext.pos.localSource.preferences.SyncSettings
-import com.erpnext.pos.localSource.preferences.SyncLogPreferences
-import com.erpnext.pos.utils.NetworkMonitor
-import com.erpnext.pos.utils.AppLogger
-import com.erpnext.pos.utils.AppSentry
-import com.erpnext.pos.utils.loading.LoadingIndicator
 import com.erpnext.pos.auth.SessionRefresher
-import com.erpnext.pos.domain.policy.DefaultPolicy
-import com.erpnext.pos.domain.policy.PolicyInput
+import com.erpnext.pos.data.repositories.BootstrapSyncRepository
 import com.erpnext.pos.domain.models.SyncLogEntry
 import com.erpnext.pos.domain.models.SyncLogStatus
-import kotlinx.coroutines.CoroutineScope
+import com.erpnext.pos.domain.policy.DefaultPolicy
+import com.erpnext.pos.domain.policy.PolicyInput
+import com.erpnext.pos.domain.sync.SyncContext
+import com.erpnext.pos.localSource.preferences.BootstrapContextPreferences
+import com.erpnext.pos.localSource.preferences.SyncLogPreferences
+import com.erpnext.pos.localSource.preferences.SyncPreferences
+import com.erpnext.pos.localSource.preferences.SyncSettings
+import com.erpnext.pos.utils.AppLogger
+import com.erpnext.pos.utils.AppSentry
+import com.erpnext.pos.utils.NetworkMonitor
+import com.erpnext.pos.utils.loading.LoadingIndicator
+import com.erpnext.pos.views.CashBoxManager
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.collect
-import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toLocalDateTime
 import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
+import kotlin.time.Instant
 
 interface ISyncManager {
     val state: StateFlow<SyncState>
@@ -56,31 +43,21 @@ interface ISyncManager {
     fun cancelSync()
 }
 
+@OptIn(ExperimentalTime::class)
 class SyncManager(
-    private val invoiceRepo: SalesInvoiceRepository,
-    private val customerRepo: CustomerRepository,
-    private val inventoryRepo: InventoryRepository,
-    private val modeOfPaymentRepo: ModeOfPaymentRepository,
-    private val posProfilePaymentMethodSyncRepository: PosProfilePaymentMethodSyncRepository,
-    private val stockSettingsRepository: com.erpnext.pos.data.repositories.StockSettingsRepository,
-    private val currencySettingsRepository: CurrencySettingsRepository,
-    private val paymentTermsRepo: PaymentTermsRepository,
-    private val deliveryChargesRepo: DeliveryChargesRepository,
-    private val contactRepo: ContactRepository,
-    private val addressRepo: AddressRepository,
-    private val customerGroupRepo: CustomerGroupRepository,
-    private val territoryRepo: TerritoryRepository,
-    private val exchangeRateRepo: ExchangeRateRepository,
+    private val bootstrapSyncRepository: BootstrapSyncRepository,
     private val syncPreferences: SyncPreferences,
     private val syncLogPreferences: SyncLogPreferences,
-    private val companyInfoRepo: CompanyRepository,
     private val cashBoxManager: CashBoxManager,
-    private val posProfileDao: POSProfileDao,
     private val networkMonitor: NetworkMonitor,
     private val sessionRefresher: SessionRefresher,
     private val syncContextProvider: SyncContextProvider,
-    private val pushSyncManager: PushSyncRunner
+    private val pushSyncManager: PushSyncRunner,
+    private val bootstrapContextPreferences: BootstrapContextPreferences
 ) : ISyncManager {
+    companion object {
+        private const val BOOTSTRAP_REFRESH_INTERVAL_MS = 5 * 60 * 1000L
+    }
 
     private val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
     private var syncSettingsCache =
@@ -97,21 +74,17 @@ class SyncManager(
     private val _state = MutableStateFlow<SyncState>(SyncState.IDLE)
     override val state: StateFlow<SyncState> = _state.asStateFlow()
     private var syncJob: Job? = null
+    private val bootstrapMutex = Mutex()
 
     init {
         observeSyncSettings()
         observeConnectivity()
+        observeBootstrapRefresh()
     }
 
     @OptIn(ExperimentalTime::class)
     override fun fullSync(ttlHours: Int, force: Boolean) {
         if (_state.value is SyncState.SYNCING || syncJob?.isActive == true) return
-
-        if (!cashBoxManager.cashboxState.value) {
-            AppLogger.info("SyncManager.fullSync skipped: cashbox is closed")
-            _state.value = SyncState.IDLE
-            return
-        }
         val now = Clock.System.now().toEpochMilliseconds()
         if (!force) {
             val lastAttempt = lastSyncAttemptAt
@@ -128,9 +101,6 @@ class SyncManager(
         }
         lastSyncAttemptAt = now
 
-        /* TODO: Agregar POS Profiles con sus detalles, esto se removera en una futura iteracion
-            Porque los perfiles ya vendran en el initial data y solo los que pertenecen al usuario
-         */
         syncJob = scope.launch {
             AppSentry.breadcrumb("SyncManager.fullSync start (ttl=$ttlHours)")
             AppLogger.info("SyncManager.fullSync start (ttl=$ttlHours)")
@@ -159,7 +129,8 @@ class SyncManager(
                 totalSteps = steps.size
             )
             try {
-                steps.forEachIndexed { index, step ->
+                for (index in steps.indices) {
+                    val step = steps[index]
                     ensureActive()
                     val currentStep = index + 1
                     updateSyncProgress(
@@ -170,6 +141,10 @@ class SyncManager(
                     val result = runStepWithRetry(step)
                     if (result != null) {
                         failures.add("${step.label}: $result")
+                        if (step.haltOnFailure) {
+                            AppLogger.warn("SyncManager.fullSync aborted on critical step ${step.label}")
+                            break
+                        }
                     }
                     LoadingIndicator.update(progress = currentStep.toFloat() / steps.size.toFloat())
                 }
@@ -178,7 +153,13 @@ class SyncManager(
                     AppSentry.breadcrumb("SyncManager.fullSync success")
                     AppLogger.info("SyncManager.fullSync success")
                 } else {
-                    val summary = "Sincronización parcial: ${failures.size} de ${steps.size} fallaron."
+                    val firstFailure = failures.firstOrNull().orEmpty()
+                    val summary = if (firstFailure.isNotBlank()) {
+                        "Sincronización parcial: ${failures.size} de ${steps.size} fallaron. " +
+                                "Primer error: $firstFailure"
+                    } else {
+                        "Sincronización parcial: ${failures.size} de ${steps.size} fallaron."
+                    }
                     _state.value = SyncState.ERROR(summary)
                     AppSentry.breadcrumb(summary)
                     AppLogger.warn("SyncManager.fullSync partial: ${failures.joinToString(" | ")}")
@@ -187,7 +168,7 @@ class SyncManager(
             } catch (e: CancellationException) {
                 val message = "Sincronización cancelada."
                 _state.value = SyncState.ERROR(message)
-                AppLogger.warn("SyncManager.fullSync cancelled")
+                AppLogger.warn("SyncManager.fullSync cancelled", e)
             } catch (e: Exception) {
                 e.printStackTrace()
                 AppSentry.capture(e, "SyncManager.fullSync failed")
@@ -357,17 +338,63 @@ class SyncManager(
         return null
     }
 
-    private fun buildFullSyncSteps(ttlHours: Int): List<SyncStep> {
-        return listOf(
-            SyncStep(label = "Pendientes", message = "Sincronizando documentos pendientes...") {
-                runPushQueue()
+    private fun buildFullSyncSteps(@Suppress("UNUSED_PARAMETER") ttlHours: Int): List<SyncStep> {
+        var snapshot: BootstrapSyncRepository.Snapshot? = null
+        val bootstrapSections = bootstrapSyncRepository.orderedSections()
+        val bootstrapSteps = mutableListOf<SyncStep>()
+        bootstrapSteps += SyncStep(
+            label = "Bootstrap Fetch",
+            message = "Descargando datos desde ERP...",
+            haltOnFailure = true
+        ) {
+            val ctx = cashBoxManager.getContext() ?: cashBoxManager.initializeContext()
+            val profileName = ctx?.profileName?.trim().orEmpty()
+            val activeCashbox = cashBoxManager.getActiveCashboxWithDetails()
+            val openingEntryId = activeCashbox?.cashbox?.openingEntryId?.trim().orEmpty()
+            val fromDate = resolveModifiedSinceDate()
+            bootstrapContextPreferences.update(
+                profileName = profileName,
+                posOpeningEntry = openingEntryId,
+                fromDate = fromDate,
+                lastRequestAt = Clock.System.now().toEpochMilliseconds(),
+                lastError = ""
+            )
+            try {
+                snapshot = bootstrapSyncRepository.fetchSnapshot(profileName = null)
+            } catch (e: Exception) {
+                bootstrapContextPreferences.update(lastError = e.message ?: "Bootstrap Fetch failed")
+                throw e
             }
-        )
+        }
+        bootstrapSections.forEach { section ->
+            bootstrapSteps += SyncStep(
+                label = section.label,
+                message = section.message
+            ) {
+                val resolved = snapshot
+                    ?: throw IllegalStateException("No se pudo descargar el snapshot de sync.bootstrap")
+                bootstrapSyncRepository.persistSection(resolved, section)
+            }
+        }
+        bootstrapSteps += SyncStep(
+            label = "Caja",
+            message = "Reconciliando estado de caja..."
+        ) {
+            cashBoxManager.initializeContext()
+        }
+        bootstrapSteps += SyncStep(
+            label = "Pendientes",
+            message = "Sincronizando documentos pendientes..."
+        ) {
+            runPushQueue()
+        }
+        return bootstrapSteps
     }
 
     private data class SyncStep(
         val label: String,
         val message: String,
+        val haltOnFailure: Boolean = false,
         val attempts: Int = 3,
         val initialDelayMs: Long = 600L,
         val maxDelayMs: Long = 6_000L,
@@ -392,6 +419,60 @@ class SyncManager(
                 wasConnected = connected
             }
         }
+    }
+
+    private fun observeBootstrapRefresh() {
+        scope.launch {
+            while (true) {
+                delay(BOOTSTRAP_REFRESH_INTERVAL_MS)
+                refreshBootstrapSnapshot(trigger = "interval_5m")
+            }
+        }
+    }
+
+    private suspend fun refreshBootstrapSnapshot(trigger: String): Boolean {
+        return bootstrapMutex.withLock {
+            val isOnline = networkMonitor.isConnected.first()
+            if (!isOnline) {
+                AppLogger.info("SyncManager.bootstrap skipped ($trigger): offline")
+                return@withLock false
+            }
+            if (!sessionRefresher.ensureValidSession()) {
+                AppLogger.warn("SyncManager.bootstrap skipped ($trigger): invalid session")
+                return@withLock false
+            }
+            return@withLock runCatching {
+                val ctx = cashBoxManager.getContext() ?: cashBoxManager.initializeContext()
+                val profileName = ctx?.profileName?.trim().orEmpty()
+                val activeCashbox = cashBoxManager.getActiveCashboxWithDetails()
+                val openingEntryId = activeCashbox?.cashbox?.openingEntryId?.trim().orEmpty()
+                val fromDate = resolveModifiedSinceDate()
+                bootstrapContextPreferences.update(
+                    profileName = profileName,
+                    posOpeningEntry = openingEntryId,
+                    fromDate = fromDate,
+                    lastRequestAt = Clock.System.now().toEpochMilliseconds(),
+                    lastError = ""
+                )
+                val snapshot = bootstrapSyncRepository.fetchSnapshot(profileName = null)
+                bootstrapSyncRepository.persistAll(snapshot)
+                cashBoxManager.initializeContext()
+                AppLogger.info("SyncManager.bootstrap refreshed ($trigger)")
+                true
+            }.onFailure {
+                bootstrapContextPreferences.update(lastError = it.message ?: "Bootstrap refresh failed")
+                AppSentry.capture(it, "SyncManager.bootstrap failed ($trigger)")
+                AppLogger.warn("SyncManager.bootstrap failed ($trigger)", it)
+            }.getOrElse { false }
+        }
+    }
+
+    private suspend fun resolveModifiedSinceDate(): String? {
+        val lastSyncAt = syncSettingsCache.lastSyncAt ?: return syncContextProvider.buildContext()?.fromDate
+        return Instant.fromEpochMilliseconds(lastSyncAt)
+            .toLocalDateTime(TimeZone.currentSystemDefault())
+            .date
+            .toString()
     }
 
     private fun shouldAutoSyncOnConnection(): Boolean {

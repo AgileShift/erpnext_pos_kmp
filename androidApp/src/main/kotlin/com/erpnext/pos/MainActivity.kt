@@ -13,6 +13,7 @@ import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.core.view.WindowCompat
 import com.erpnext.pos.views.login.LoginViewModel
+import com.erpnext.pos.utils.PdfSavePickerBridge
 import org.koin.androidx.viewmodel.ext.android.viewModel
 
 class MainActivity : ComponentActivity() {
@@ -24,6 +25,7 @@ class MainActivity : ComponentActivity() {
         WindowCompat.setDecorFitsSystemWindows(window, false)
         enableEdgeToEdge()
         requestNotificationPermissionIfNeeded()
+        PdfSavePickerBridge.register(this)
 
         setContent {
             AppTheme {
@@ -37,6 +39,11 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         handleIntent(intent)
+    }
+
+    override fun onDestroy() {
+        PdfSavePickerBridge.unregister()
+        super.onDestroy()
     }
 
     private fun handleIntent(intent: Intent) {

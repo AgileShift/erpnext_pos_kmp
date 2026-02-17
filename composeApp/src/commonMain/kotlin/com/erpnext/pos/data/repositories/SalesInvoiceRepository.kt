@@ -20,6 +20,7 @@ import com.erpnext.pos.localSource.entities.SalesInvoiceItemEntity
 import com.erpnext.pos.localSource.entities.SalesInvoiceWithItemsAndPayments
 import com.erpnext.pos.remoteSource.datasources.SalesInvoiceRemoteSource
 import com.erpnext.pos.remoteSource.dto.SalesInvoiceDto
+import com.erpnext.pos.remoteSource.dto.SalesInvoicePaymentDto
 import com.erpnext.pos.remoteSource.mapper.toDto
 import com.erpnext.pos.remoteSource.mapper.toEntities
 import com.erpnext.pos.remoteSource.mapper.toEntity
@@ -740,17 +741,51 @@ class SalesInvoiceRepository(
         return if (dto.docStatus == null || dto.docStatus == 0) dto else dto.copy(docStatus = 0)
     }
 
-    private fun ensurePaymentEntryOnlyInvoice(dto: SalesInvoiceDto): SalesInvoiceDto {
+    private suspend fun ensurePaymentEntryOnlyInvoice(dto: SalesInvoiceDto): SalesInvoiceDto {
         if (dto.isReturn == 1) return dto
+        val placeholderMode = resolvePosPlaceholderMode(dto)
+            ?: error("No hay modo de pago POS configurado para crear la factura.")
         val normalizedOutstanding = roundToCurrency(dto.grandTotal)
         return dto.copy(
-            payments = emptyList(),
+            payments = listOf(
+                SalesInvoicePaymentDto(
+                    modeOfPayment = placeholderMode,
+                    amount = 0.0,
+                    account = null,
+                    paymentReference = null
+                )
+            ),
             paidAmount = 0.0,
             changeAmount = null,
             writeOffAmount = null,
             outstandingAmount = normalizedOutstanding,
             status = "Unpaid"
         )
+    }
+
+    private suspend fun resolvePosPlaceholderMode(dto: SalesInvoiceDto): String? {
+        val invoiceCurrency = normalizeCurrency(dto.currency ?: dto.partyAccountCurrency)
+        val definitions = runCatching { modeOfPaymentDao.getAllModes(dto.company) }
+            .getOrElse { emptyList() }
+        val details = buildPaymentModeDetailMap(definitions)
+
+        val payloadModes = dto.payments
+            .mapNotNull { it.modeOfPayment.trim().takeIf { mode -> mode.isNotBlank() } }
+            .distinct()
+
+        payloadModes.firstOrNull { mode ->
+            val modeCurrency = details[mode]?.currency?.let { normalizeCurrency(it) }
+            !modeCurrency.isNullOrBlank() &&
+                modeCurrency.equals(invoiceCurrency, ignoreCase = true)
+        }?.let { return it }
+
+        definitions.firstOrNull { definition ->
+            val modeCurrency = definition.currency?.let { normalizeCurrency(it) }
+            !modeCurrency.isNullOrBlank() &&
+                modeCurrency.equals(invoiceCurrency, ignoreCase = true)
+        }?.modeOfPayment?.let { return it }
+
+        return payloadModes.firstOrNull() ?: definitions.firstOrNull()?.modeOfPayment
     }
 
     override suspend fun sync(): Flow<Resource<List<SalesInvoiceBO>>> {

@@ -31,6 +31,7 @@ interface IInvoiceLocalSource {
     suspend fun deleteByInvoiceId(name: String)
     suspend fun softDeleteByInvoiceId(name: String)
     suspend fun softDeleteMissingForProfile(profileId: String, invoiceNames: List<String>)
+    suspend fun softDeleteMissingRemoteInvoices(invoiceNames: List<String>)
     suspend fun applyPayments(
         invoice: SalesInvoiceEntity,
         payments: List<POSInvoicePaymentEntity>
@@ -79,6 +80,36 @@ class InvoiceLocalSource(
 
     override suspend fun getInvoiceByName(invoiceName: String): SalesInvoiceWithItemsAndPayments? {
         return salesInvoiceDao.getInvoiceByName(invoiceName)
+    }
+
+    suspend fun findRecentDebitTo(
+        company: String,
+        customer: String?,
+        partyAccountCurrency: String?
+    ): String? {
+        val normalizedCustomer = customer?.trim()?.takeIf { it.isNotBlank() }
+        val normalizedCurrency = partyAccountCurrency?.trim()?.uppercase()?.takeIf { it.isNotBlank() }
+
+        return salesInvoiceDao.findLatestDebitTo(
+            company = company,
+            customer = normalizedCustomer,
+            partyAccountCurrency = normalizedCurrency
+        )?.takeIf { it.isNotBlank() }
+            ?: salesInvoiceDao.findLatestDebitTo(
+                company = company,
+                customer = normalizedCustomer,
+                partyAccountCurrency = null
+            )?.takeIf { it.isNotBlank() }
+            ?: salesInvoiceDao.findLatestDebitTo(
+                company = company,
+                customer = null,
+                partyAccountCurrency = normalizedCurrency
+            )?.takeIf { it.isNotBlank() }
+            ?: salesInvoiceDao.findLatestDebitTo(
+                company = company,
+                customer = null,
+                partyAccountCurrency = null
+            )?.takeIf { it.isNotBlank() }
     }
 
     override suspend fun updatePaymentStatus(invoiceId: String, status: String) {
@@ -132,6 +163,12 @@ class InvoiceLocalSource(
         val names = invoiceNames.ifEmpty { listOf("__empty__") }
         salesInvoiceDao.hardDeleteDeletedNotInForProfile(profileId, names)
         salesInvoiceDao.softDeleteNotInForProfile(profileId, names)
+    }
+
+    override suspend fun softDeleteMissingRemoteInvoices(invoiceNames: List<String>) {
+        val names = invoiceNames.ifEmpty { listOf("__empty__") }
+        salesInvoiceDao.hardDeleteDeletedNotInRemote(names)
+        salesInvoiceDao.softDeleteNotInRemote(names)
     }
 
     override suspend fun applyPayments(

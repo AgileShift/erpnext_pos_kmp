@@ -43,6 +43,7 @@ sealed interface BillingState {
         // Product-related state
         val productSearchQuery: String = "",
         val selectedProductCategory: String = "Todos",
+        val productCategories: List<String> = emptyList(),
 
         // Cart-related state
         val currency: String?,
@@ -69,6 +70,7 @@ sealed interface BillingState {
         val paidAmountBase: Double = 0.0,
         val balanceDueBase: Double = 0.0,
         val changeDueBase: Double = 0.0,
+        val creditSaleTooltipMessage: String? = null,
         val paymentErrorMessage: String? = null,
         val cartErrorMessage: String? = null,
         val successMessage: String? = null,

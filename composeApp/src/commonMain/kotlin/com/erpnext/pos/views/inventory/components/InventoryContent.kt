@@ -67,9 +67,7 @@ fun InventoryContent(
                     isDesktop = isDesktop,
                     isWideLayout = isWideLayout,
                     baseCurrency = state.baseCurrency,
-                    exchangeRate = state.exchangeRate,
-                    searchQuery = searchQuery,
-                    selectedCategory = selectedCategory
+                    exchangeRate = state.exchangeRate
                 )
             }
         }

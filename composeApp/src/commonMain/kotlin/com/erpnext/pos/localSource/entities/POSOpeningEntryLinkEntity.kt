@@ -41,6 +41,8 @@ data class POSOpeningEntryLinkEntity(
     val localOpeningEntryName: String,
     @ColumnInfo(name = "remote_opening_entry_name")
     val remoteOpeningEntryName: String? = null,
+    @ColumnInfo(name = "remote_closing_entry_name")
+    val remoteClosingEntryName: String? = null,
     @ColumnInfo(name = "pending_sync")
     @Serializable(with = IntAsBooleanSerializer::class)
     val pendingSync: Boolean = true

@@ -5,7 +5,6 @@ package com.erpnext.pos.views.billing
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
-import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
@@ -15,95 +14,142 @@ import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
-import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
-import androidx.paging.PagingData
-import androidx.paging.LoadState
-import androidx.paging.compose.collectAsLazyPagingItems
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.setValue
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.hoverable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsHoveredAsState
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
-import com.erpnext.pos.domain.models.CustomerBO
-import com.erpnext.pos.domain.models.ItemBO
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.ConfirmationNumber
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Money
 import androidx.compose.material.icons.filled.Percent
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.ShoppingCartCheckout
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ElevatedCard
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuAnchorType
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextField
+import androidx.compose.material3.TextFieldDefaults
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.OffsetMapping
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.input.TransformedText
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.PopupProperties
 import androidx.compose.ui.window.DialogProperties
-import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.window.PopupProperties
+import androidx.paging.LoadState
+import androidx.paging.PagingData
+import androidx.paging.compose.collectAsLazyPagingItems
+import androidx.paging.filter
 import coil3.compose.LocalPlatformContext
 import coil3.compose.SubcomposeAsyncImage
 import coil3.request.ImageRequest
 import coil3.request.crossfade
 import com.erpnext.pos.base.getPlatformName
-import com.erpnext.pos.utils.formatAmount
-import com.erpnext.pos.utils.toCurrencySymbol
-import com.erpnext.pos.utils.resolveRateBetweenFromBaseRates
+import com.erpnext.pos.domain.models.CustomerBO
+import com.erpnext.pos.domain.models.ItemBO
 import com.erpnext.pos.domain.models.POSPaymentModeOption
 import com.erpnext.pos.domain.models.PaymentTermBO
+import com.erpnext.pos.navigation.GlobalTopBarState
+import com.erpnext.pos.navigation.LocalTopBarController
+import com.erpnext.pos.utils.formatAmount
+import com.erpnext.pos.utils.loading.LoadingIndicator
+import com.erpnext.pos.utils.loading.LoadingUiState
 import com.erpnext.pos.utils.oauth.bd
 import com.erpnext.pos.utils.oauth.moneyScale
 import com.erpnext.pos.utils.oauth.toDouble
+import com.erpnext.pos.utils.resolveRateBetweenFromBaseRates
+import com.erpnext.pos.utils.toCurrencySymbol
 import com.erpnext.pos.utils.view.SnackbarController
 import com.erpnext.pos.utils.view.SnackbarHost
 import com.erpnext.pos.utils.view.SnackbarPosition
 import com.erpnext.pos.utils.view.SnackbarType
-import com.erpnext.pos.navigation.GlobalTopBarState
-import com.erpnext.pos.navigation.LocalTopBarController
-import com.erpnext.pos.utils.loading.LoadingIndicator
-import com.erpnext.pos.utils.loading.LoadingUiState
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.launch
 import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
 
@@ -475,6 +521,7 @@ private fun BillingLabContent(
     modifier: Modifier = Modifier
 ) {
     val colors = MaterialTheme.colorScheme
+    val scope = rememberCoroutineScope()
     val accent = colors.primary
     val background = colors.background
     val leftPanelBg = colors.surfaceVariant
@@ -493,12 +540,20 @@ private fun BillingLabContent(
         )
     }
 
-    val products = productsPagingFlow.collectAsLazyPagingItems()
-    val categories = remember(products.itemSnapshotList.items) {
+    val filteredProductsFlow = remember(productsPagingFlow) {
+        productsPagingFlow.map { paging ->
+            paging.filter { item -> item.actualQty > 0.0 }
+        }
+    }
+    val products = filteredProductsFlow.collectAsLazyPagingItems()
+    val categoriesFromSnapshot = remember(products.itemSnapshotList.items) {
         products.itemSnapshotList.items
             .mapNotNull { it.itemGroup.takeIf { g -> g.isNotBlank() } }
             .distinct()
             .sorted()
+    }
+    val categories = remember(state.productCategories, categoriesFromSnapshot) {
+        if (state.productCategories.isNotEmpty()) state.productCategories else categoriesFromSnapshot
     }
     var selectedCategory by rememberSaveable { mutableStateOf(state.selectedProductCategory) }
 
@@ -560,35 +615,53 @@ private fun BillingLabContent(
 
                 Spacer(Modifier.height(12.dp))
 
-                LazyVerticalGrid(
-                    columns = GridCells.Adaptive(minSize = 220.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    modifier = Modifier.fillMaxSize()
-                ) {
-                    items(
-                        count = products.itemCount,
-                        key = { index -> products[index]?.itemCode ?: "billing_item_$index" }
-                    ) { index ->
-                        val item = products[index] ?: return@items
-                        LabProductCard(
-                            item = item,
-                            baseCurrency = invoiceCurrency,
-                            exchangeRateByCurrency = state.exchangeRateByCurrency,
-                            accent = accent,
-                            onClick = { action.onProductAdded(item) }
-                        )
-                    }
-                    if (products.loadState.append is LoadState.Loading) {
-                        item(span = { androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan) }) {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(12.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                CircularProgressIndicator()
+                val gridState = rememberLazyGridState()
+                val showBackToTop by remember {
+                    derivedStateOf { gridState.firstVisibleItemIndex > 0 }
+                }
+                Box(modifier = Modifier.fillMaxSize()) {
+                    LazyVerticalGrid(
+                        state = gridState,
+                        columns = GridCells.Adaptive(minSize = 220.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        modifier = Modifier.fillMaxSize()
+                    ) {
+                        items(
+                            count = products.itemCount,
+                            key = { index -> products[index]?.itemCode ?: "billing_item_$index" }
+                        ) { index ->
+                            val item = products[index] ?: return@items
+                            LabProductCard(
+                                item = item,
+                                baseCurrency = invoiceCurrency,
+                                exchangeRateByCurrency = state.exchangeRateByCurrency,
+                                accent = accent,
+                                onClick = { action.onProductAdded(item) }
+                            )
+                        }
+                        if (products.loadState.append is LoadState.Loading) {
+                            item(span = { androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan) }) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(12.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    CircularProgressIndicator()
+                                }
                             }
+                        }
+                    }
+                    if (showBackToTop) {
+                        Button(
+                            onClick = { scope.launch { gridState.animateScrollToItem(0) } },
+                            modifier = Modifier.align(Alignment.BottomEnd).padding(8.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.KeyboardArrowUp,
+                                contentDescription = "Back to top"
+                            )
                         }
                     }
                 }
@@ -907,6 +980,7 @@ private fun BillingLabCheckoutStep(
                             isCreditSale = state.isCreditSale,
                             paymentTerms = state.paymentTerms,
                             selectedPaymentTerm = state.selectedPaymentTerm,
+                            creditSaleTooltipMessage = state.creditSaleTooltipMessage,
                             onCreditSaleChanged = action.onCreditSaleChanged,
                             onPaymentTermSelected = action.onPaymentTermSelected
                         )
@@ -1950,16 +2024,27 @@ private fun CreditTermsSection(
     isCreditSale: Boolean,
     paymentTerms: List<PaymentTermBO>,
     selectedPaymentTerm: PaymentTermBO?,
+    creditSaleTooltipMessage: String?,
     onCreditSaleChanged: (Boolean) -> Unit,
     onPaymentTermSelected: (PaymentTermBO?) -> Unit
 ) {
+    val hasCreditWarning = !creditSaleTooltipMessage.isNullOrBlank()
     Column(
         modifier = Modifier.padding(end = 12.dp, start = 12.dp, bottom = 8.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         val canEnableCredit = paymentTerms.isNotEmpty()
-        Row(
+        Surface(
             modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(10.dp),
+            color = MaterialTheme.colorScheme.surface,
+            border = BorderStroke(
+                width = if (hasCreditWarning) 1.5.dp else 1.dp,
+                color = if (hasCreditWarning) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.outlineVariant
+            )
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 6.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -1968,6 +2053,15 @@ private fun CreditTermsSection(
                 checked = isCreditSale,
                 onCheckedChange = onCreditSaleChanged,
                 enabled = canEnableCredit
+            )
+        }
+        }
+
+        if (hasCreditWarning) {
+            Text(
+                text = creditSaleTooltipMessage ?: "",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error
             )
         }
 

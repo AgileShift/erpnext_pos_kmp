@@ -20,6 +20,12 @@ data class CustomerEntity(
     var totalPendingAmount: Double? = 0.0,  // Sum outstanding_amount
     var pendingInvoicesCount: Int? = 0,
     var availableCredit: Double? = 0.0,
+    @ColumnInfo(name = "party_account_currency")
+    var partyAccountCurrency: String? = null,
+    @ColumnInfo(name = "receivable_account")
+    var receivableAccount: String? = null,
+    @ColumnInfo(name = "receivable_account_currency")
+    var receivableAccountCurrency: String? = null,
     var image: String? = null,
     var address: String? = null,
     var state: String? = null,

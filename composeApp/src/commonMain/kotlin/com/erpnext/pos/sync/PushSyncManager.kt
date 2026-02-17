@@ -22,7 +22,7 @@ import com.erpnext.pos.views.billing.PaymentLine
 import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
 
-class LegacyPushSyncManager(
+class PushSyncManager(
     private val invoiceRepository: SalesInvoiceRepository,
     private val invoiceLocalSource: InvoiceLocalSource,
     private val modeOfPaymentDao: ModeOfPaymentDao,
@@ -56,8 +56,8 @@ class LegacyPushSyncManager(
             val closingsSynced = closingEntrySyncRepository.pushPending()
             hasChanges || closingsSynced
         } catch (e: Throwable) {
-            AppSentry.capture(e, "LegacyPushSyncManager: invoices push failed")
-            AppLogger.warn("LegacyPushSyncManager: invoices push failed", e)
+            AppSentry.capture(e, "PushSyncManager: invoices push failed")
+            AppLogger.warn("PushSyncManager: invoices push failed", e)
             throw e
         }
     }
@@ -111,7 +111,19 @@ class LegacyPushSyncManager(
                 return@forEach
             }
 
-            val paidFrom = invoice.debitTo?.takeIf { it.isNotBlank() } ?: return@forEach
+            val paidFrom = invoice.debitTo?.takeIf { it.isNotBlank() }
+                ?: runCatching {
+                    invoiceLocalSource.findRecentDebitTo(
+                        company = context.company,
+                        customer = invoice.customer,
+                        partyAccountCurrency = invoice.partyAccountCurrency ?: invoice.currency
+                    )
+                }.getOrNull()
+                    ?.takeIf { it.isNotBlank() }
+                ?: run {
+                    failedIds += payment.id
+                    return@forEach
+                }
             val receivableCurrency = normalizeCurrency(invoice.partyAccountCurrency)
                 ?: normalizeCurrency(invoice.currency)
                 ?: "USD"
@@ -178,8 +190,8 @@ class LegacyPushSyncManager(
                 paymentEntryUseCase(CreatePaymentEntryInput(paymentEntry))
             }
             createdResult.onFailure { err ->
-                AppSentry.capture(err, "LegacyPushSyncManager: payment ${payment.id} failed")
-                AppLogger.warn("LegacyPushSyncManager: payment ${payment.id} failed", err)
+                AppSentry.capture(err, "PushSyncManager: payment ${payment.id} failed")
+                AppLogger.warn("PushSyncManager: payment ${payment.id} failed", err)
                 failedIds += payment.id
             }.onSuccess {
                 val allocated = paymentEntry.references.firstOrNull()?.allocatedAmount ?: 0.0

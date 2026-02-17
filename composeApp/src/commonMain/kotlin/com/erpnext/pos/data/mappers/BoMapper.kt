@@ -85,6 +85,7 @@ fun List<CustomerDto>.toBO(): List<CustomerBO> {
 }
 
 fun CustomerDto.toBO(): CustomerBO {
+    val firstReceivable = this.receivableAccounts.firstOrNull()
     return CustomerBO(
         name = this.name,
         customerName = this.customerName,
@@ -99,6 +100,9 @@ fun CustomerDto.toBO(): CustomerBO {
         currentBalance = this.totalPendingAmount,
         pendingInvoices = this.pendingInvoicesCount,
         availableCredit = this.availableCredit,
+        partyAccountCurrency = this.partyAccountCurrency,
+        receivableAccount = firstReceivable?.account,
+        receivableAccountCurrency = firstReceivable?.accountCurrency,
     )
 }
 

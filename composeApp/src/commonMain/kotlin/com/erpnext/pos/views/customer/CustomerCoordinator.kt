@@ -54,7 +54,8 @@ class CustomerCoordinator(
     )
 
     fun clearPaymentMessages() = viewModel.clearPaymentMessages()
-    fun downloadInvoicePdf(invoiceId: String) = viewModel.downloadInvoicePdf(invoiceId)
+    fun downloadInvoicePdf(invoiceId: String, action: InvoicePdfActionOption) =
+        viewModel.downloadInvoicePdf(invoiceId, action)
     fun loadInvoiceHistory(customerId: String) = viewModel.loadInvoiceHistory(customerId)
     fun clearInvoiceHistory() = viewModel.clearInvoiceHistory()
     fun clearInvoiceHistoryMessages() = viewModel.clearHistoryMessage()

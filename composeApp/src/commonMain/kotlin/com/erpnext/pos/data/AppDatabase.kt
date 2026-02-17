@@ -1,5 +1,6 @@
 package com.erpnext.pos.data
 
+import androidx.room.AutoMigration
 import androidx.room.ConstructedBy
 import androidx.room.Database
 import androidx.room.RoomDatabase
@@ -88,7 +89,11 @@ import com.erpnext.pos.localSource.entities.UserEntity
         TerritoryEntity::class,
         CustomerOutboxEntity::class,
     ],
-    version = 8,
+    version = 11,
+    autoMigrations = [
+        AutoMigration(from = 8, to = 9),
+        AutoMigration(from = 9, to = 10)
+    ],
     exportSchema = true
 )
 @ConstructedBy(AppDatabaseConstructor::class)

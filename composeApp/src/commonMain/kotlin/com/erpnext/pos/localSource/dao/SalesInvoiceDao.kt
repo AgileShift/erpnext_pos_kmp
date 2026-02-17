@@ -75,6 +75,29 @@ interface SalesInvoiceDao {
 
     @Query(
         """
+        SELECT debit_to
+        FROM tabSalesInvoice
+        WHERE is_deleted = 0
+          AND company = :company
+          AND debit_to IS NOT NULL
+          AND TRIM(debit_to) != ''
+          AND (:customer IS NULL OR customer = :customer)
+          AND (
+                :partyAccountCurrency IS NULL OR
+                UPPER(COALESCE(party_account_currency, '')) = UPPER(:partyAccountCurrency)
+          )
+        ORDER BY modified_at DESC, created_at DESC
+        LIMIT 1
+        """
+    )
+    suspend fun findLatestDebitTo(
+        company: String,
+        customer: String?,
+        partyAccountCurrency: String?
+    ): String?
+
+    @Query(
+        """
         SELECT i.invoice_name
         FROM tabSalesInvoice i
         LEFT JOIN tabSalesInvoiceItem it
@@ -737,6 +760,23 @@ interface SalesInvoiceDao {
           AND invoice_name NOT IN (:invoiceNames)
     """)
     suspend fun hardDeleteDeletedNotInForProfile(profileId: String, invoiceNames: List<String>)
+
+    @Query("""
+        UPDATE tabSalesInvoice
+        SET is_deleted = 1
+        WHERE is_deleted = 0
+          AND invoice_name NOT IN (:invoiceNames)
+          AND invoice_name NOT LIKE 'LOCAL-%'
+    """)
+    suspend fun softDeleteNotInRemote(invoiceNames: List<String>)
+
+    @Query("""
+        DELETE FROM tabSalesInvoice
+        WHERE is_deleted = 1
+          AND invoice_name NOT IN (:invoiceNames)
+          AND invoice_name NOT LIKE 'LOCAL-%'
+    """)
+    suspend fun hardDeleteDeletedNotInRemote(invoiceNames: List<String>)
 
     @Transaction
     suspend fun deleteInvoiceWithChildren(invoiceId: String) {

@@ -44,6 +44,9 @@ import com.erpnext.pos.utils.formatDoubleToString
 import com.erpnext.pos.utils.normalizeCurrency
 import com.erpnext.pos.utils.resolvePaymentToReceivableRate
 import com.erpnext.pos.utils.roundToCurrency
+import com.erpnext.pos.utils.openPdfFile
+import com.erpnext.pos.utils.savePdfFileAs
+import com.erpnext.pos.utils.sharePdfFile
 import com.erpnext.pos.utils.toCurrencySymbol
 import com.erpnext.pos.utils.toErpDateTime
 import com.erpnext.pos.utils.parseErpDateTimeToEpochMillis
@@ -542,7 +545,10 @@ class CustomerViewModel(
         return fetchSalesInvoiceWithItemsUseCase(invoiceId)
     }
 
-    fun downloadInvoicePdf(invoiceId: String) {
+    fun downloadInvoicePdf(
+        invoiceId: String,
+        action: InvoicePdfActionOption = InvoicePdfActionOption.OPEN_NOW
+    ) {
         val normalized = invoiceId.trim()
         if (normalized.isBlank()) {
             _customerMessage.value = "Factura inválida para descargar PDF."
@@ -552,13 +558,38 @@ class CustomerViewModel(
         executeUseCase(
             action = {
                 val path = downloadSalesInvoicePdfUseCase(normalized)
-                _customerMessage.value = "PDF descargado: $path"
+                val fileName = path.substringAfterLast('/').substringAfterLast('\\')
+                when (action) {
+                    InvoicePdfActionOption.OPEN_NOW -> {
+                        val opened = openPdfFile(path)
+                        _customerMessage.value = if (opened) {
+                            "PDF listo y abierto: $fileName"
+                        } else {
+                            "PDF descargado: $path"
+                        }
+                    }
+
+                    InvoicePdfActionOption.SHARE -> {
+                        val shared = sharePdfFile(path)
+                        _customerMessage.value = if (shared) {
+                            "PDF listo para compartir: $fileName"
+                        } else {
+                            "PDF descargado: $path"
+                        }
+                    }
+
+                    InvoicePdfActionOption.SAVE_AS -> {
+                        val target = savePdfFileAs(path, fileName)
+                        _customerMessage.value = target?.let { "PDF guardado en: $it" }
+                            ?: "PDF descargado: $path"
+                    }
+                }
             },
             exceptionHandler = {
                 _customerMessage.value =
                     "No se pudo descargar el PDF de la factura $normalized: ${it.message ?: "error desconocido."}"
             },
-            loadingMessage = "Descargando factura..."
+            loadingMessage = "Generando y descargando PDF..."
         )
     }
 

@@ -22,6 +22,8 @@ private fun CompanyDto.toEntity(): CompanyEntity {
         defaultCurrency = defaultCurrency,
         country = country,
         taxId = taxId,
+        defaultReceivableAccount = defaultReceivableAccount,
+        defaultReceivableAccountCurrency = defaultReceivableAccountCurrency,
         isDeleted = false,
     )
 }
@@ -44,7 +46,9 @@ class CompanyRepository(
                     company = local.companyName,
                     defaultCurrency = local.defaultCurrency,
                     country = local.country,
-                    taxId = local.taxId
+                    taxId = local.taxId,
+                    defaultReceivableAccount = local.defaultReceivableAccount,
+                    defaultReceivableAccountCurrency = local.defaultReceivableAccountCurrency
                 )
             }
             ?: throw IllegalStateException("Company info not available")

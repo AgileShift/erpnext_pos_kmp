@@ -5,6 +5,7 @@ package com.erpnext.pos.views.billing
 import androidx.lifecycle.viewModelScope
 import androidx.paging.PagingData
 import com.erpnext.pos.base.BaseViewModel
+import com.erpnext.pos.base.Resource
 import com.erpnext.pos.domain.models.BillingTotals
 import com.erpnext.pos.domain.models.CustomerBO
 import com.erpnext.pos.domain.models.DeliveryChargeBO
@@ -20,6 +21,7 @@ import com.erpnext.pos.domain.usecases.CreateSalesInvoiceLocalUseCase
 import com.erpnext.pos.domain.usecases.CreateSalesInvoiceRemoteOnlyInput
 import com.erpnext.pos.domain.usecases.CreateSalesInvoiceRemoteOnlyUseCase
 import com.erpnext.pos.domain.usecases.FetchBillingProductsLocalUseCase
+import com.erpnext.pos.domain.usecases.FetchCategoriesUseCase
 import com.erpnext.pos.domain.usecases.FetchCustomersLocalUseCase
 import com.erpnext.pos.domain.usecases.FetchDeliveryChargesLocalUseCase
 import com.erpnext.pos.domain.usecases.FetchPaymentTermsLocalUseCase
@@ -75,6 +77,7 @@ import kotlin.time.ExperimentalTime
 class BillingViewModel(
     private val customersUseCase: FetchCustomersLocalUseCase,
     private val itemsUseCase: FetchBillingProductsLocalUseCase,
+    private val categoriesUseCase: FetchCategoriesUseCase,
     private val adjustLocalInventoryUseCase: AdjustLocalInventoryUseCase,
     private val contextProvider: CashBoxManager,
     private val modeOfPaymentDao: ModeOfPaymentDao,
@@ -98,6 +101,7 @@ class BillingViewModel(
     val productsPagingFlow = _productsPagingFlow.asStateFlow()
 
     private var customers: List<CustomerBO> = emptyList()
+    private var productCategories: List<String> = emptyList()
     private val productStockByCode: MutableMap<String, Double> = mutableMapOf()
     private var productSearchFilter: String = ""
     private var productCategoryFilter: String = "Todos"
@@ -118,7 +122,24 @@ class BillingViewModel(
                 resetSale()
             }
         }
+        observeProductCategories()
         loadInitialData()
+    }
+
+    private fun observeProductCategories() {
+        viewModelScope.launch {
+            categoriesUseCase.invoke(Unit).collectLatest { resource ->
+                if (resource !is Resource.Success) return@collectLatest
+                val categories = resource.data.orEmpty()
+                    .mapNotNull { it.name?.trim()?.takeIf { name -> name.isNotBlank() } }
+                    .distinct()
+                    .sorted()
+                productCategories = categories
+                _state.update { current ->
+                    (current as? BillingState.Success)?.copy(productCategories = categories) ?: current
+                }
+            }
+        }
     }
 
     private fun observeSalesFlowContext() {
@@ -193,6 +214,7 @@ class BillingViewModel(
                         customerSearchQuery = selectedCustomer?.customerName.orEmpty(),
                         productSearchQuery = productSearchFilter,
                         selectedProductCategory = productCategoryFilter,
+                        productCategories = productCategories,
                         currency = invoiceCurrency,
                         baseCurrency = baseCurrency,
                         paymentModes = paymentModes,
@@ -378,6 +400,7 @@ class BillingViewModel(
                 paidAmountBase = 0.0,
                 balanceDueBase = 0.0,
                 changeDueBase = 0.0,
+                creditSaleTooltipMessage = null,
                 paymentErrorMessage = null,
                 cartErrorMessage = null,
                 sourceDocument = convertedDoc,
@@ -661,6 +684,7 @@ class BillingViewModel(
                 selectedPaymentTerm = if (isCreditSale) current.selectedPaymentTerm else null,
                 //paymentLines = if (isCreditSale) emptyList() else current.paymentLines,
                 paymentLines = current.paymentLines,
+                creditSaleTooltipMessage = null,
                 paymentErrorMessage = null
             ).recalculatePaymentTotals()
         }
@@ -740,21 +764,32 @@ class BillingViewModel(
     fun onFinalizeSale() {
         viewModelScope.launch {
             val current = requireSuccessState() ?: return@launch
-            val validationError = validateFinalizeSale(current)
+            val creditSaleWarning = resolveCreditSaleWarning(current)
+            val currentWithHints = current.copy(
+                creditSaleTooltipMessage = creditSaleWarning,
+                paymentErrorMessage = creditSaleWarning
+            )
+            if (creditSaleWarning != current.creditSaleTooltipMessage ||
+                creditSaleWarning != current.paymentErrorMessage
+            ) {
+                _state.update { currentWithHints }
+            }
+
+            val validationError = validateFinalizeSale(currentWithHints)
             if (validationError != null) {
-                _state.update { BillingState.Error(validationError, current) }
+                _state.update { BillingState.Error(validationError, currentWithHints) }
                 return@launch
             }
             setFinalizingSale(true)
 
-            val customer = current.selectedCustomer ?: error("Debes seleccionar un cliente.")
+            val customer = currentWithHints.selectedCustomer ?: error("Debes seleccionar un cliente.")
             val context =
                 contextProvider.getContext() ?: error("El contexto POS no está inicializado.")
 
             executeUseCase(action = {
-                val invoiceCurrency = context.currency.ifBlank { current.currency ?: "USD" }
+                val invoiceCurrency = context.currency.ifBlank { currentWithHints.currency ?: "USD" }
                 val companyCurrency = context.companyCurrency.ifBlank { invoiceCurrency }
-                val rawTotals = calculateTotals(current)
+                val rawTotals = calculateTotals(currentWithHints)
                 val totals = rawTotals.copy(
                     subtotal = roundForCurrency(rawTotals.subtotal, invoiceCurrency),
                     taxes = roundForCurrency(rawTotals.taxes, invoiceCurrency),
@@ -762,24 +797,24 @@ class BillingViewModel(
                     shipping = roundForCurrency(rawTotals.shipping, invoiceCurrency),
                     total = roundForCurrency(rawTotals.total, invoiceCurrency)
                 )
-                val discountInfo = resolveDiscountInfo(current, totals.subtotal)
+                val discountInfo = resolveDiscountInfo(currentWithHints, totals.subtotal)
                 val discountPercent = discountInfo.percent?.takeIf { it > 0.0 }
 
-                val isCreditSale = current.isCreditSale
-                val resolvedPaymentLines = current.paymentLines.map { line ->
+                val isCreditSale = currentWithHints.isCreditSale
+                val resolvedPaymentLines = currentWithHints.paymentLines.map { line ->
                     paymentHandler.resolvePaymentLine(
                         line = line,
                         invoiceCurrencyInput = invoiceCurrency,
                         paymentModeDetails = paymentModeDetails,
-                        exchangeRateByCurrency = current.exchangeRateByCurrency,
+                        exchangeRateByCurrency = currentWithHints.exchangeRateByCurrency,
                         round = { value -> roundForCurrency(value, invoiceCurrency) }
                     ).line
                 }
 
                 val postingDate = DateTimeProvider.todayDate()
-                val dueDate = resolveDueDate(isCreditSale, postingDate, current.selectedPaymentTerm)
+                val dueDate = resolveDueDate(isCreditSale, postingDate, currentWithHints.selectedPaymentTerm)
                 val paymentSchedule =
-                    buildPaymentSchedule(isCreditSale, current.selectedPaymentTerm, dueDate)
+                    buildPaymentSchedule(isCreditSale, currentWithHints.selectedPaymentTerm, dueDate)
 
                 val rounding = resolveRoundedTotal(totals.total, invoiceCurrency)
                 val paymentStatus = resolvePaymentStatus(
@@ -811,7 +846,7 @@ class BillingViewModel(
                 val openingEntryId = activeCashbox?.openingEntryId
 
                 val invoiceDto = buildSalesInvoiceDto(
-                    current = current,
+                    current = currentWithHints,
                     customer = customer,
                     context = context,
                     totals = totals,
@@ -868,7 +903,7 @@ class BillingViewModel(
                     postingDate = postingDate,
                     context = context,
                     customer = customer,
-                    exchangeRateByCurrency = current.exchangeRateByCurrency,
+                    exchangeRateByCurrency = currentWithHints.exchangeRateByCurrency,
                     paymentModeDetails = paymentModeDetails,
                     posOpeningEntry = openingEntryId
                 )
@@ -884,7 +919,7 @@ class BillingViewModel(
                     adjustLocalInventoryUseCase(
                         AdjustLocalInventoryInput(
                             warehouse = context.warehouse ?: "",
-                            deltas = current.cartItems.map {
+                            deltas = currentWithHints.cartItems.map {
                                 StockDelta(
                                     itemCode = it.itemCode,
                                     qty = it.quantity
@@ -901,7 +936,7 @@ class BillingViewModel(
                     }
                 }
 
-                val soldByCode = current.cartItems
+                val soldByCode = currentWithHints.cartItems
                     .groupBy { it.itemCode }
                     .mapValues { (_, list) -> list.sumOf { it.quantity } }
 
@@ -911,7 +946,7 @@ class BillingViewModel(
                 }
 
                 _state.update {
-                    current.copy(
+                    currentWithHints.copy(
                         selectedCustomer = null,
                         cartItems = emptyList(),
                         subtotal = 0.0,
@@ -933,6 +968,7 @@ class BillingViewModel(
                         paidAmountBase = 0.0,
                         balanceDueBase = 0.0,
                         changeDueBase = 0.0,
+                        creditSaleTooltipMessage = null,
                         paymentErrorMessage = null,
                         cartErrorMessage = null,
                         successMessage = when {
@@ -957,7 +993,7 @@ class BillingViewModel(
                         successDialogMessage = when {
                             created == null -> "Venta guardada localmente."
                             resolvedPaymentLines.isNotEmpty() -> "Tu pago se ha realizado con exito"
-                            current.isCreditSale -> "Venta a credito registrada"
+                            currentWithHints.isCreditSale -> "Venta a credito registrada"
                             else -> "Venta registrada correctamente"
                         },
                         successDialogInvoice = created?.name ?: localInvoiceName,
@@ -1225,6 +1261,7 @@ class BillingViewModel(
             paidAmountBase = 0.0,
             balanceDueBase = 0.0,
             changeDueBase = 0.0,
+            creditSaleTooltipMessage = null,
             paymentErrorMessage = null,
             cartErrorMessage = null,
             sourceDocument = null,
@@ -1293,8 +1330,22 @@ class BillingViewModel(
             "Falta POS Opening Entry para crear factura POS."
         }
         // Flujo PaymentEntry-only:
-        // La factura POS se crea siempre sin tabla payments y con saldo pendiente total.
-        val payments = emptyList<SalesInvoicePaymentDto>()
+        // La factura POS se crea con una linea placeholder (monto 0) para cumplir validacion ERP.
+        // El cobro real se registra via Payment Entry.
+        val invoiceCurrencyResolved = normalizeCurrency(invoiceCurrency)
+        val placeholderMode = resolvePosInvoicePlaceholderMode(
+            current = current,
+            paymentLines = paymentLines,
+            invoiceCurrency = invoiceCurrencyResolved
+        ) ?: error("No se pudo resolver un modo de pago POS para crear la factura.")
+        val payments = listOf(
+            SalesInvoicePaymentDto(
+                modeOfPayment = placeholderMode,
+                amount = 0.0,
+                account = null,
+                paymentReference = null
+            )
+        )
         val resolvedPaid = 0.0
         val resolvedOutstanding = roundForCurrency(rounding.roundedTotal, invoiceCurrency)
         val resolvedStatus = "Unpaid"
@@ -1302,6 +1353,14 @@ class BillingViewModel(
         val hasRounding = kotlin.math.abs(rounding.roundingAdjustment) > 0.0001
         val roundedTotalField = if (hasRounding) roundForCurrency(rounding.roundedTotal, invoiceCurrency) else null
         val roundingAdjustmentField = if (hasRounding) roundForCurrency(rounding.roundingAdjustment, invoiceCurrency) else null
+        val receivableAccount = customer.receivableAccount
+            ?.takeIf { it.isNotBlank() }
+            ?: context.defaultReceivableAccount?.takeIf { it.isNotBlank() }
+        val partyAccountCurrency = customer.partyAccountCurrency
+            ?.takeIf { it.isNotBlank() }
+            ?: customer.receivableAccountCurrency?.takeIf { it.isNotBlank() }
+            ?: context.defaultReceivableAccountCurrency?.takeIf { it.isNotBlank() }
+            ?: context.partyAccountCurrency
 
         return SalesInvoiceDto(
             customer = customer.name,
@@ -1311,7 +1370,8 @@ class BillingViewModel(
             postingDate = postingDate,
             currency = invoiceCurrency,
             conversionRate = conversionRate?.takeIf { it > 0.0 },
-            partyAccountCurrency = context.partyAccountCurrency,
+            partyAccountCurrency = partyAccountCurrency,
+            debitTo = receivableAccount,
             dueDate = dueDate,
             status = resolvedStatus,
             grandTotal = total,
@@ -1367,6 +1427,29 @@ class BillingViewModel(
             amount = roundForCurrency(payments[lastIndex].amount + diff, invoiceCurrency)
         )
         return payments.toMutableList().apply { this[lastIndex] = updatedLast }
+    }
+
+    private fun resolvePosInvoicePlaceholderMode(
+        current: BillingState.Success,
+        paymentLines: List<PaymentLine>,
+        invoiceCurrency: String
+    ): String? {
+        val preferred = paymentLines
+            .mapNotNull { it.modeOfPayment.takeIf { mode -> mode.isNotBlank() } }
+            .distinct()
+        val available = current.paymentModes
+            .mapNotNull { it.modeOfPayment.takeIf { mode -> mode.isNotBlank() } }
+            .distinct()
+        val candidates = (preferred + available).distinct()
+
+        val modeMatchingInvoiceCurrency = candidates.firstOrNull { mode ->
+            val modeCurrency = paymentModeDetails[mode]?.currency?.let { normalizeCurrency(it) }
+            !modeCurrency.isNullOrBlank() &&
+                modeCurrency.equals(invoiceCurrency, ignoreCase = true)
+        }
+        if (!modeMatchingInvoiceCurrency.isNullOrBlank()) return modeMatchingInvoiceCurrency
+
+        return available.firstOrNull() ?: preferred.firstOrNull()
     }
 
     private fun buildInvoiceItems(
@@ -1583,10 +1666,6 @@ class BillingViewModel(
         if (!current.isCreditSale && paid + tolerance < total)
             return "El monto pagado debe cubrir el total antes de finalizar la venta."
 
-        // Crédito: puede pagar parcial, pero no exceder total
-        if (current.isCreditSale && paid > total + tolerance)
-            return "El pago no puede exceder el total en una venta a crédito."
-
         /*if (current.isCreditSale && current.paymentLines.isNotEmpty()) {
             return "Las ventas a crédito no pueden incluir líneas de pago."
         }*/
@@ -1606,5 +1685,22 @@ class BillingViewModel(
         }
 
         return null
+    }
+
+    private fun resolveCreditSaleWarning(current: BillingState.Success): String? {
+        if (!current.isCreditSale) return null
+        val total = roundForCurrency(current.total, current.currency)
+        val paid = roundForCurrency(current.paidAmountBase, current.currency)
+        val tolerance = resolveMinorUnitTolerance(current.currency)
+
+        return when {
+            paid > total + tolerance ->
+                "La venta está marcada como crédito, pero el pago excede el total. Desactiva \"Venta de crédito\" para registrarla como contado."
+
+            paid + tolerance >= total ->
+                "La venta está marcada como crédito, pero el pago ya cubre el total. Desactiva \"Venta de crédito\" para registrarla como contado."
+
+            else -> null
+        }
     }
 }

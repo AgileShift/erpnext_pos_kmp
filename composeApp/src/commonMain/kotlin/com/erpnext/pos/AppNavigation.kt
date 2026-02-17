@@ -107,6 +107,7 @@ import com.erpnext.pos.utils.view.SnackbarType
 import com.erpnext.pos.views.CashBoxManager
 import com.erpnext.pos.views.billing.BillingResetController
 import com.erpnext.pos.views.home.HomeRefreshController
+import com.erpnext.pos.views.inventory.InventoryRefreshController
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
@@ -198,6 +199,7 @@ fun AppNavigation() {
     val loadingState by LoadingIndicator.state.collectAsState(initial = LoadingUiState())
     val cashBoxManager = koinInject<CashBoxManager>()
     val homeRefreshController = koinInject<HomeRefreshController>()
+    val inventoryRefreshController = koinInject<InventoryRefreshController>()
     val billingResetController = koinInject<BillingResetController>()
     val logoutUseCase = koinInject<LogoutUseCase>()
     val tokenStore = koinInject<TokenStore>()
@@ -471,7 +473,13 @@ fun AppNavigation() {
                                             }
                                             StatusIconButton(
                                                 label = "Refrescar",
-                                                onClick = { homeRefreshController.refresh() },
+                                                onClick = {
+                                                    when (currentRoute) {
+                                                        NavRoute.Inventory.path -> inventoryRefreshController.refresh()
+                                                        NavRoute.Home.path -> homeRefreshController.refresh()
+                                                        else -> homeRefreshController.refresh()
+                                                    }
+                                                },
                                             ) {
                                                 Icon(
                                                     Icons.Outlined.Refresh,

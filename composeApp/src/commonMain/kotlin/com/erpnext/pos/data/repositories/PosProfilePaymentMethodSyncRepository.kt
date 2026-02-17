@@ -8,6 +8,7 @@ import com.erpnext.pos.localSource.entities.ModeOfPaymentEntity
 import com.erpnext.pos.localSource.entities.PosProfileLocalEntity
 import com.erpnext.pos.localSource.entities.PosProfilePaymentMethodEntity
 import com.erpnext.pos.remoteSource.api.APIService
+import com.erpnext.pos.remoteSource.dto.BootstrapPosSyncDto
 import com.erpnext.pos.remoteSource.dto.PaymentModesDto
 import com.erpnext.pos.remoteSource.dto.POSProfileDto
 import com.erpnext.pos.remoteSource.mapper.toEntity
@@ -40,16 +41,7 @@ class PosProfilePaymentMethodSyncRepository(
         RepoTrace.breadcrumb("PosProfilePaymentMethodSyncRepository", "syncProfilesWithPayments")
         val now = Clock.System.now().toEpochMilliseconds()
         val snapshot = apiService.getBootstrapPosSyncSnapshot()
-        val bootstrapProfiles = snapshot.posProfiles
-            ?: throw IllegalStateException("sync.bootstrap no retorno pos_profiles")
-        val local = persistProfilesWithPaymentsSnapshot(bootstrapProfiles, now)
-        syncModeOfPaymentDetails(
-            profiles = bootstrapProfiles,
-            paymentMethods = snapshot.resolvedPaymentMethods,
-            now = now,
-            pruneCompanies = true
-        )
-        return local
+        return syncProfilesWithPaymentsSnapshot(snapshot, now)
     }
 
     suspend fun syncProfilePayments(profileId: String): POSProfileDto {
@@ -67,6 +59,22 @@ class PosProfilePaymentMethodSyncRepository(
             pruneCompanies = true
         )
         return bootstrapProfile
+    }
+
+    suspend fun syncProfilesWithPaymentsSnapshot(
+        snapshot: BootstrapPosSyncDto,
+        now: Long = Clock.System.now().toEpochMilliseconds()
+    ): List<PosProfileLocalEntity> {
+        val bootstrapProfiles = snapshot.posProfiles
+            ?: throw IllegalStateException("sync.bootstrap no retorno pos_profiles")
+        val local = persistProfilesWithPaymentsSnapshot(bootstrapProfiles, now)
+        syncModeOfPaymentDetails(
+            profiles = bootstrapProfiles,
+            paymentMethods = snapshot.resolvedPaymentMethods,
+            now = now,
+            pruneCompanies = true
+        )
+        return local
     }
 
     private suspend fun persistProfilesWithPaymentsSnapshot(

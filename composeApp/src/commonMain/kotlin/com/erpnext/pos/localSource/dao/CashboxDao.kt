@@ -60,6 +60,10 @@ interface CashboxDao {
     fun getActiveEntry(user: String, posProfile: String): Flow<CashboxWithDetails?>
 
     @Transaction
+    @Query("SELECT * FROM tabCashbox WHERE openingEntryId = :openingEntryId ORDER BY localId DESC LIMIT 1")
+    suspend fun getByOpeningEntry(openingEntryId: String): CashboxWithDetails?
+
+    @Transaction
     @Query("SELECT * FROM tabCashbox WHERE user = :user AND status = 1 ORDER BY localId DESC LIMIT 1")
     suspend fun getActiveEntryForUser(user: String): CashboxWithDetails?
 

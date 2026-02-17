@@ -8,6 +8,7 @@ import com.erpnext.pos.auth.TokenHeartbeat
 import com.erpnext.pos.data.AppDatabase
 import com.erpnext.pos.data.DatabaseBuilder
 import com.erpnext.pos.data.repositories.AddressRepository
+import com.erpnext.pos.data.repositories.BootstrapSyncRepository
 import com.erpnext.pos.data.repositories.CheckoutRepository
 import com.erpnext.pos.data.repositories.ClosingEntrySyncRepository
 import com.erpnext.pos.data.repositories.CompanyRepository
@@ -98,6 +99,7 @@ import com.erpnext.pos.localSource.datasources.ModeOfPaymentLocalSource
 import com.erpnext.pos.localSource.datasources.POSProfileLocalSource
 import com.erpnext.pos.localSource.datasources.PaymentTermLocalSource
 import com.erpnext.pos.localSource.datasources.TerritoryLocalSource
+import com.erpnext.pos.localSource.preferences.BootstrapContextPreferences
 import com.erpnext.pos.localSource.preferences.CurrencySettingsPreferences
 import com.erpnext.pos.localSource.preferences.ExchangeRatePreferences
 import com.erpnext.pos.localSource.preferences.GeneralPreferences
@@ -119,9 +121,9 @@ import com.erpnext.pos.remoteSource.oauth.TokenStore
 import com.erpnext.pos.remoteSource.oauth.isRefreshTokenRejected
 import com.erpnext.pos.remoteSource.oauth.refreshAuthToken
 import com.erpnext.pos.remoteSource.oauth.toBearerToken
-import com.erpnext.pos.sync.LegacyPushSyncManager
 import com.erpnext.pos.sync.OpeningGate
 import com.erpnext.pos.sync.PosProfileGate
+import com.erpnext.pos.sync.PushSyncManager
 import com.erpnext.pos.sync.PushSyncRunner
 import com.erpnext.pos.sync.SyncContextProvider
 import com.erpnext.pos.sync.SyncManager
@@ -138,6 +140,7 @@ import com.erpnext.pos.views.deliverynote.DeliveryNoteViewModel
 import com.erpnext.pos.views.home.HomeRefreshController
 import com.erpnext.pos.views.home.HomeViewModel
 import com.erpnext.pos.views.home.POSProfileViewModel
+import com.erpnext.pos.views.inventory.InventoryRefreshController
 import com.erpnext.pos.views.inventory.InventoryViewModel
 import com.erpnext.pos.views.invoice.InvoiceViewModel
 import com.erpnext.pos.views.login.LoginViewModel
@@ -295,7 +298,8 @@ val appModule = module {
             client = get(),
             store = get(),
             authStore = get(),
-            tokenClient = get(named("tokenHttpClient"))
+            tokenClient = get(named("tokenHttpClient")),
+            bootstrapContextPreferences = get()
         )
     }
 
@@ -330,6 +334,7 @@ val appModule = module {
             createPaymentEntryUseCase = get(),
             saveInvoicePaymentsUseCase = get(),
             exchangeRateRepository = get(),
+            invoiceLocalSource = get(),
             networkMonitor = get()
         )
     }
@@ -338,6 +343,7 @@ val appModule = module {
     single { ExchangeRatePreferences(get()) }
     single { LanguagePreferences(get()) }
     single { OpeningSessionPreferences(get()) }
+    single { BootstrapContextPreferences(get()) }
     single { SyncLogPreferences(get()) }
     single { SyncPreferences(get()) }
     single { ThemePreferences(get()) }
@@ -365,11 +371,12 @@ val appModule = module {
             generalPreferences = get(),
             currencySettingsRepository = get(),
             sessionRefresher = get(),
-            networkMonitor = get()
+            networkMonitor = get(),
+            bootstrapContextPreferences = get()
         )
     }
     single<PushSyncRunner> {
-        LegacyPushSyncManager(
+        PushSyncManager(
             invoiceRepository = get(),
             invoiceLocalSource = get(),
             modeOfPaymentDao = get(),
@@ -387,31 +394,35 @@ val appModule = module {
     //endregion
 
     single { SyncContextProvider(get(), get()) }
+    single {
+        BootstrapSyncRepository(
+            api = get(),
+            configurationStore = get(),
+            posProfilePaymentMethodSyncRepository = get(),
+            companyDao = get(),
+            stockSettingsRepository = get(),
+            exchangeRateLocalSource = get(),
+            paymentTermLocalSource = get(),
+            deliveryChargeLocalSource = get(),
+            customerGroupLocalSource = get(),
+            territoryLocalSource = get(),
+            inventoryLocalSource = get(),
+            customerLocalSource = get(),
+            customerOutboxLocalSource = get(),
+            invoiceLocalSource = get()
+        )
+    }
     single<SyncManager> {
         SyncManager(
-            invoiceRepo = get(),
-            customerRepo = get(),
-            inventoryRepo = get(),
-            modeOfPaymentRepo = get(),
-            posProfilePaymentMethodSyncRepository = get(),
-            stockSettingsRepository = get(),
-            currencySettingsRepository = get(),
-            paymentTermsRepo = get(),
-            deliveryChargesRepo = get(),
-            contactRepo = get(),
-            addressRepo = get(),
-            customerGroupRepo = get(),
-            territoryRepo = get(),
-            exchangeRateRepo = get(),
+            bootstrapSyncRepository = get(),
             syncPreferences = get(),
             syncLogPreferences = get(),
-            companyInfoRepo = get(),
             cashBoxManager = get(),
-            posProfileDao = get(),
             networkMonitor = get(),
             sessionRefresher = get(),
             syncContextProvider = get(),
-            pushSyncManager = get()
+            pushSyncManager = get(),
+            bootstrapContextPreferences = get()
         )
     }
     //endregion
@@ -432,7 +443,8 @@ val appModule = module {
     single { InventoryRemoteSource(get()) }
     single { InventoryLocalSource(get(), get()) }
     single { InventoryRepository(get(), get(), get()) }
-    single { InventoryViewModel(get(), get(), get()) }
+    single { InventoryRefreshController() }
+    single { InventoryViewModel(get(), get(), get(), get()) }
     //endregion
 
     //region Mode of Payment
@@ -601,6 +613,7 @@ val appModule = module {
         BillingViewModel(
             customersUseCase = get<FetchCustomersLocalUseCase>(),
             itemsUseCase = get<FetchBillingProductsLocalUseCase>(),
+            categoriesUseCase = get<FetchCategoriesUseCase>(),
             adjustLocalInventoryUseCase = get(),
             contextProvider = get(),
             modeOfPaymentDao = get(),

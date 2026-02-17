@@ -30,9 +30,11 @@ import com.erpnext.pos.localSource.entities.POSOpeningEntryEntity
 import com.erpnext.pos.localSource.entities.POSOpeningEntryLinkEntity
 import com.erpnext.pos.localSource.entities.SalesInvoiceEntity
 import com.erpnext.pos.localSource.entities.UserEntity
+import com.erpnext.pos.localSource.preferences.BootstrapContextPreferences
 import com.erpnext.pos.localSource.preferences.ExchangeRatePreferences
 import com.erpnext.pos.localSource.preferences.GeneralPreferences
 import com.erpnext.pos.remoteSource.api.APIService
+import com.erpnext.pos.remoteSource.dto.BootstrapClosingEntryDto
 import com.erpnext.pos.remoteSource.dto.POSOpeningEntrySummaryDto
 import com.erpnext.pos.remoteSource.mapper.toEntity
 import com.erpnext.pos.utils.AppLogger
@@ -76,6 +78,8 @@ data class POSContext(
     val branch: String?,
     val currency: String,
     val partyAccountCurrency: String,
+    val defaultReceivableAccount: String?,
+    val defaultReceivableAccountCurrency: String?,
     val exchangeRate: Double,
     val allowedCurrencies: List<POSCurrencyOption>,
     val paymentModes: List<POSPaymentModeOption>
@@ -100,7 +104,8 @@ class CashBoxManager(
     private val generalPreferences: GeneralPreferences,
     private val currencySettingsRepository: CurrencySettingsRepository,
     private val sessionRefresher: SessionRefresher,
-    private val networkMonitor: NetworkMonitor
+    private val networkMonitor: NetworkMonitor,
+    private val bootstrapContextPreferences: BootstrapContextPreferences
 ) {
     private val allowRemoteReadsFromUi = false
 
@@ -115,8 +120,8 @@ class CashBoxManager(
     suspend fun initializeContext(): POSContext? = withContext(Dispatchers.IO) {
         currencySettingsRepository.loadCached()
         val isOnline = networkMonitor.isConnected.firstOrNull() == true
-        val canUseRemote = isOnline && allowRemoteReadsFromUi && sessionRefresher.ensureValidSession()
-        val user = resolveCurrentUser(canUseRemote) ?: return@withContext null
+        val canValidateRemoteShift = isOnline && sessionRefresher.ensureValidSession()
+        val user = resolveCurrentUser(canUseRemote = canValidateRemoteShift) ?: return@withContext null
         val serverUser = resolveServerUserId(user)
         openingEntrySyncRepository.repairActiveOpenings()
         val company = companyDao.getCompanyInfo()
@@ -125,10 +130,26 @@ class CashBoxManager(
             findActiveCashboxForProfile(serverUser, it.profileName)
         }
         val resolvedCashbox = activeCashbox ?: findActiveCashboxForUser(serverUser)
+        resolvedCashbox?.cashbox?.openingEntryId?.let { openingId ->
+            bootstrapContextPreferences.update(
+                profileName = resolvedCashbox.cashbox.posProfile,
+                posOpeningEntry = openingId
+            )
+        }
+        var bootstrapWithoutOpenShift = false
 
         // Si bootstrap trae open_shift, ese POE remoto manda: se adopta/restaura tal cual.
-        if (canUseRemote) {
-            val bootstrapShift = runCatching { api.getBootstrapOpenShift() }.getOrNull()
+        if (canValidateRemoteShift) {
+            val bootstrapShiftResult = runCatching {
+                api.getBootstrapShiftSnapshot()
+            }
+                .onFailure {
+                    AppLogger.warn("initializeContext: bootstrap open_shift lookup failed", it)
+                }
+            val bootstrapSnapshot = bootstrapShiftResult.getOrNull()
+            val bootstrapShift = bootstrapSnapshot?.openShift
+            val bootstrapClosing = bootstrapSnapshot?.posClosingEntry
+            bootstrapWithoutOpenShift = bootstrapShiftResult.isSuccess && bootstrapShift == null
             if (bootstrapShift != null) {
                 if (!isShiftOwnedByUser(bootstrapShift.user, user)) {
                     AppLogger.warn(
@@ -201,11 +222,32 @@ class CashBoxManager(
                                 company = company
                             )
                             _contextFlow.value = currentContext
+                            updateBootstrapContext(serverUser, currentContext)
                             return@withContext currentContext
                         }
                     }
                 }
             }
+            if (bootstrapShift == null && bootstrapClosing != null) {
+                AppLogger.warn(
+                    "initializeContext: bootstrap returned closed shift ${bootstrapClosing.name}; " +
+                            "closing local cashbox(es)"
+                )
+                applyBootstrapClosingForUser(
+                    user = user,
+                    closing = bootstrapClosing,
+                    preferred = resolvedCashbox
+                )
+                return@withContext null
+            }
+        }
+
+        if (bootstrapWithoutOpenShift && resolvedCashbox != null) {
+            AppLogger.warn(
+                "initializeContext: sync.bootstrap returned open_shift=null, closing local cashbox(es)"
+            )
+            forceCloseLocalCashboxesForUser(user, preferred = resolvedCashbox)
+            return@withContext null
         }
 
         if (resolvedCashbox != null) {
@@ -222,9 +264,10 @@ class CashBoxManager(
                 company = company
             )
             _contextFlow.value = currentContext
+            updateBootstrapContext(serverUser, currentContext)
             return@withContext currentContext
         }
-        if (!canUseRemote) {
+        if (!canValidateRemoteShift) {
             _cashboxState.update { false }
             return@withContext null
         }
@@ -234,7 +277,9 @@ class CashBoxManager(
         runCatching { closingEntrySyncRepository.reconcileRemoteClosingsForActiveCashboxes() }
             .onFailure { AppLogger.warn("initializeContext: reconcile remote closings failed", it) }
 
-        val bootstrapShift = runCatching { api.getBootstrapOpenShift() }.getOrNull()
+        val bootstrapShift = runCatching { api.getBootstrapOpenShift() }
+            .onFailure { AppLogger.warn("initializeContext: bootstrap open_shift after sync failed", it) }
+            .getOrNull()
         if (bootstrapShift != null) {
             if (!isShiftOwnedByUser(bootstrapShift.user, user)) {
                 AppLogger.warn(
@@ -263,6 +308,7 @@ class CashBoxManager(
                             company = company
                         )
                         _contextFlow.value = currentContext
+                        updateBootstrapContext(serverUser, currentContext)
                         return@withContext currentContext
                     }
                 }
@@ -286,6 +332,7 @@ class CashBoxManager(
                             company = company
                         )
                         _contextFlow.value = currentContext
+                        updateBootstrapContext(serverUser, currentContext)
                         return@withContext currentContext
                     }
                 }
@@ -352,8 +399,11 @@ class CashBoxManager(
                 paymentModes = paymentModes,
                 cashier = user.toBO(),
                 partyAccountCurrency = company?.defaultCurrency ?: profile.currency,
+                defaultReceivableAccount = company?.defaultReceivableAccount,
+                defaultReceivableAccountCurrency = company?.defaultReceivableAccountCurrency,
             )
             _contextFlow.value = currentContext
+            updateBootstrapContext(serverUser, currentContext)
             return@withContext currentContext
         }
         if (isOnline && allowRemoteReadsFromUi) {
@@ -376,6 +426,7 @@ class CashBoxManager(
                         company = companyDao.getCompanyInfo()
                     )
                     _contextFlow.value = currentContext
+                    updateBootstrapContext(serverUser, currentContext)
                     return@withContext currentContext
                 }
             }
@@ -454,9 +505,27 @@ class CashBoxManager(
             paymentModes = paymentModes,
             cashier = user.toBO(),
             partyAccountCurrency = profile.currency,
+            defaultReceivableAccount = company?.defaultReceivableAccount,
+            defaultReceivableAccountCurrency = company?.defaultReceivableAccountCurrency,
         )
         _contextFlow.value = currentContext
+        updateBootstrapContext(serverUser, currentContext)
         currentContext!!
+    }
+
+    private suspend fun updateBootstrapContext(
+        serverUserId: String,
+        context: POSContext?
+    ) {
+        val ctx = context ?: return
+        val opening = cashboxDao.getActiveEntry(serverUserId, ctx.profileName)
+            .firstOrNull()
+            ?.cashbox
+            ?.openingEntryId
+        bootstrapContextPreferences.update(
+            profileName = ctx.profileName,
+            posOpeningEntry = opening
+        )
     }
 
     private suspend fun adoptRemoteOpening(
@@ -611,6 +680,311 @@ class CashBoxManager(
         return cashboxDao.getActiveEntryForUser(userId)
     }
 
+    private suspend fun forceCloseLocalCashboxesForUser(
+        user: UserEntity,
+        preferred: CashboxWithDetails? = null
+    ) {
+        val ownedByUser = listOf(
+            resolveServerUserId(user),
+            user.name,
+            user.username,
+            user.email
+        ).mapNotNull { candidate ->
+            candidate?.trim()?.lowercase()?.takeIf { it.isNotBlank() }
+        }.toSet()
+        val active = cashboxDao.getActiveCashboxes()
+            .filter { wrapper ->
+                wrapper.cashbox.user.trim().lowercase().let { owner ->
+                    owner.isNotBlank() && owner in ownedByUser
+                }
+            }
+            .toMutableList()
+        if (preferred != null && active.none { it.cashbox.localId == preferred.cashbox.localId }) {
+            active += preferred
+        }
+        val endDate = getTimeMillis().toErpDateTime()
+        active.forEach { wrapper ->
+            val cashbox = wrapper.cashbox
+            cashboxDao.updateStatus(
+                localId = cashbox.localId,
+                status = false,
+                pceId = "",
+                endDate = endDate,
+                pendingSync = false
+            )
+            cashbox.openingEntryId
+                ?.takeIf { it.isNotBlank() }
+                ?.let { openingDao.markSynced(it) }
+            openingEntryLinkDao.clearPendingSyncByCashboxId(cashbox.localId)
+            runCatching {
+                profileDao.updateProfileState(user.username, cashbox.posProfile, false)
+            }.onFailure {
+                AppLogger.warn(
+                    "forceCloseLocalCashboxesForUser: update profile state failed for ${cashbox.posProfile}",
+                    it
+                )
+            }
+        }
+        currentContext = null
+        _contextFlow.value = null
+        _cashboxState.update { false }
+    }
+
+    private suspend fun applyBootstrapClosingForUser(
+        user: UserEntity,
+        closing: BootstrapClosingEntryDto,
+        preferred: CashboxWithDetails? = null
+    ) {
+        val closingProfile = closing.posProfile?.trim().orEmpty()
+        AppLogger.info(
+            "applyBootstrapClosingForUser: closing=${closing.name} profile=$closingProfile " +
+                    "opening=${closing.posOpeningEntry} user=${closing.user}"
+        )
+        val ownedByUser = listOf(
+            resolveServerUserId(user),
+            user.name,
+            user.username,
+            user.email
+        ).mapNotNull { candidate ->
+            candidate?.trim()?.lowercase()?.takeIf { it.isNotBlank() }
+        }.toSet()
+        val activePool = cashboxDao.getActiveCashboxes()
+        val allActive = activePool
+            .filter { wrapper ->
+                wrapper.cashbox.user.trim().lowercase().let { owner ->
+                    owner.isNotBlank() && owner in ownedByUser
+                }
+            }
+            .toMutableList()
+        val openingFromBootstrap = closing.posOpeningEntry?.trim()?.takeIf { it.isNotBlank() }
+        if (!openingFromBootstrap.isNullOrBlank()) {
+            val byOpening = cashboxDao.getByOpeningEntry(openingFromBootstrap)
+            if (byOpening != null && allActive.none { it.cashbox.localId == byOpening.cashbox.localId }) {
+                allActive += byOpening
+            }
+        }
+        if (allActive.isEmpty() && closingProfile.isNotBlank()) {
+            allActive += activePool.filter { wrapper ->
+                wrapper.cashbox.posProfile.equals(closingProfile, ignoreCase = true)
+            }
+        }
+        if (preferred != null && allActive.none { it.cashbox.localId == preferred.cashbox.localId }) {
+            allActive += preferred
+        }
+        val endDate = closing.periodEndDate
+            ?: closing.postingDate
+            ?: getTimeMillis().toErpDateTime()
+        if (allActive.isEmpty() && !openingFromBootstrap.isNullOrBlank()) {
+            val placeholderCashbox = CashboxEntity(
+                localId = 0,
+                openingEntryId = openingFromBootstrap,
+                closingEntryId = closing.name,
+                posProfile = closingProfile.ifBlank { preferred?.cashbox?.posProfile.orEmpty() },
+                company = closing.company?.takeIf { it.isNotBlank() }
+                    ?: preferred?.cashbox?.company.orEmpty(),
+                periodStartDate = closing.periodStartDate ?: endDate,
+                periodEndDate = endDate,
+                user = closing.user?.takeIf { it.isNotBlank() } ?: resolveServerUserId(user),
+                status = false,
+                pendingSync = false
+            )
+            ensureOpeningEntryForClosing(placeholderCashbox, openingFromBootstrap, closing, user)
+            openingDao.markSynced(openingFromBootstrap)
+            val closingAmount = closing.paymentReconciliation.sumOf { it.closingAmount }
+            closingDao.insert(
+                com.erpnext.pos.localSource.entities.POSClosingEntryEntity(
+                    name = closing.name,
+                    posProfile = closingProfile.ifBlank { placeholderCashbox.posProfile },
+                    posOpeningEntry = openingFromBootstrap,
+                    user = placeholderCashbox.user,
+                    periodStartDate = closing.periodStartDate ?: placeholderCashbox.periodStartDate,
+                    periodEndDate = endDate,
+                    closingAmount = closingAmount,
+                    pendingSync = false
+                )
+            )
+            AppLogger.info(
+                "applyBootstrapClosingForUser: persisted standalone closing=${closing.name} opening=$openingFromBootstrap"
+            )
+        }
+        if (allActive.isEmpty()) {
+            AppLogger.warn(
+                "applyBootstrapClosingForUser: no matching cashbox found; context cleared only"
+            )
+            currentContext = null
+            _contextFlow.value = null
+            _cashboxState.update { false }
+            return
+        }
+
+        val primary = allActive.firstOrNull { wrapper ->
+            closingProfile.isNotBlank() &&
+                    wrapper.cashbox.posProfile.equals(closingProfile, ignoreCase = true)
+        } ?: preferred ?: allActive.first()
+        val openingName = openingFromBootstrap
+            ?: primary.cashbox.openingEntryId?.trim()?.takeIf { it.isNotBlank() }
+
+        if (!openingName.isNullOrBlank()) {
+            ensureOpeningEntryForClosing(primary.cashbox, openingName, closing, user)
+            val previousOpening = primary.cashbox.openingEntryId?.trim()
+            if (!previousOpening.isNullOrBlank() && !previousOpening.equals(openingName, ignoreCase = true)) {
+                cashboxDao.updateBalanceDetailsOpeningEntry(previousOpening, openingName)
+                salesInvoiceDao.updateInvoicesOpeningEntry(previousOpening, openingName)
+                salesInvoiceDao.updatePaymentsOpeningEntry(previousOpening, openingName)
+            }
+            cashboxDao.updateOpeningEntryId(primary.cashbox.localId, openingName)
+            openingDao.markSynced(openingName)
+            upsertClosingLinkForCashbox(
+                cashbox = primary.cashbox,
+                closingEntryName = closing.name,
+                localOpeningEntryName = openingName,
+                remoteOpeningEntryName = openingName,
+                pendingSync = false
+            )
+            val closingAmount = closing.paymentReconciliation.sumOf { it.closingAmount }
+            closingDao.insert(
+                com.erpnext.pos.localSource.entities.POSClosingEntryEntity(
+                    name = closing.name,
+                    posProfile = closing.posProfile?.takeIf { it.isNotBlank() } ?: primary.cashbox.posProfile,
+                    posOpeningEntry = openingName,
+                    user = closing.user?.takeIf { it.isNotBlank() } ?: primary.cashbox.user,
+                    periodStartDate = closing.periodStartDate
+                        ?: primary.cashbox.periodStartDate,
+                    periodEndDate = endDate,
+                    closingAmount = closingAmount,
+                    pendingSync = false
+                )
+            )
+        }
+
+        allActive.forEach { wrapper ->
+            val cashbox = wrapper.cashbox
+            val updatedRows = cashboxDao.updateStatus(
+                localId = cashbox.localId,
+                status = false,
+                pceId = closing.name,
+                endDate = endDate,
+                pendingSync = false
+            )
+            upsertClosingLinkForCashbox(
+                cashbox = cashbox,
+                closingEntryName = closing.name,
+                localOpeningEntryName = cashbox.openingEntryId,
+                remoteOpeningEntryName = openingName,
+                pendingSync = false
+            )
+            val linkRows = openingEntryLinkDao.clearPendingSyncByCashboxId(cashbox.localId)
+            cashbox.openingEntryId
+                ?.takeIf { it.isNotBlank() }
+                ?.let { openingDao.markSynced(it) }
+            if (!openingName.isNullOrBlank() && cashbox.localId == primary.cashbox.localId) {
+                cashboxDao.updateBalanceDetailsClosingEntry(cashbox.localId, closing.name)
+            } else if (cashbox.closingEntryId?.isNotBlank() == true) {
+                cashboxDao.updateBalanceDetailsClosingEntry(cashbox.localId, closing.name)
+            }
+            runCatching {
+                profileDao.updateProfileState(user.username, cashbox.posProfile, false)
+            }.onFailure {
+                AppLogger.warn(
+                    "applyBootstrapClosingForUser: update profile state failed for ${cashbox.posProfile}",
+                    it
+                )
+            }
+            AppLogger.info(
+                "applyBootstrapClosingForUser: cashbox=${cashbox.localId} updatedRows=$updatedRows " +
+                        "linkRows=$linkRows " +
+                        "opening=${cashbox.openingEntryId} closing=${closing.name}"
+            )
+        }
+
+        currentContext = null
+        _contextFlow.value = null
+        _cashboxState.update { false }
+    }
+
+    private suspend fun ensureOpeningEntryForClosing(
+        cashbox: CashboxEntity,
+        openingName: String,
+        closing: BootstrapClosingEntryDto,
+        user: UserEntity
+    ) {
+        val existing = openingDao.getByName(openingName)
+        if (existing != null) return
+        openingDao.insert(
+            POSOpeningEntryEntity(
+                name = openingName,
+                posProfile = closing.posProfile?.takeIf { it.isNotBlank() } ?: cashbox.posProfile,
+                company = closing.company?.takeIf { it.isNotBlank() } ?: cashbox.company,
+                periodStartDate = closing.periodStartDate ?: cashbox.periodStartDate,
+                postingDate = closing.periodStartDate ?: cashbox.periodStartDate,
+                user = closing.user?.takeIf { it.isNotBlank() } ?: resolveServerUserId(user),
+                pendingSync = false
+            )
+        )
+    }
+
+    private suspend fun upsertClosingLinkForCashbox(
+        cashbox: CashboxEntity,
+        closingEntryName: String,
+        localOpeningEntryName: String?,
+        remoteOpeningEntryName: String?,
+        pendingSync: Boolean
+    ) {
+        val existing = openingEntryLinkDao.getByCashboxId(cashbox.localId)
+        if (existing != null) {
+            val remoteOpening = remoteOpeningEntryName?.trim()?.takeIf { it.isNotBlank() }
+            if (!remoteOpening.isNullOrBlank() &&
+                !remoteOpening.equals(existing.remoteOpeningEntryName, ignoreCase = true)
+            ) {
+                openingEntryLinkDao.updateRemoteName(existing.id, remoteOpening)
+                if (!pendingSync) {
+                    openingEntryLinkDao.markSynced(existing.id, remoteOpening)
+                }
+            } else if (!remoteOpening.isNullOrBlank() && !pendingSync && existing.pendingSync) {
+                openingEntryLinkDao.markSynced(existing.id, remoteOpening)
+            }
+            if (!closingEntryName.equals(existing.remoteClosingEntryName, ignoreCase = true)) {
+                openingEntryLinkDao.updateRemoteClosingName(existing.id, closingEntryName)
+            }
+            return
+        }
+
+        val localOpening = localOpeningEntryName?.trim()?.takeIf { it.isNotBlank() }
+            ?: remoteOpeningEntryName?.trim()?.takeIf { it.isNotBlank() }
+        if (localOpening.isNullOrBlank()) {
+            AppLogger.warn(
+                "upsertClosingLinkForCashbox: missing opening entry for cashbox ${cashbox.localId}"
+            )
+            return
+        }
+
+        if (openingDao.getByName(localOpening) == null) {
+            openingDao.insert(
+                POSOpeningEntryEntity(
+                    name = localOpening,
+                    posProfile = cashbox.posProfile,
+                    company = cashbox.company,
+                    periodStartDate = cashbox.periodStartDate,
+                    postingDate = cashbox.periodStartDate,
+                    user = cashbox.user,
+                    pendingSync = pendingSync
+                )
+            )
+        }
+
+        val remoteOpening = remoteOpeningEntryName?.trim()?.takeIf { it.isNotBlank() }
+            ?: localOpening.takeIf { !it.startsWith("LOCAL-", ignoreCase = true) }
+        openingEntryLinkDao.insert(
+            POSOpeningEntryLinkEntity(
+                cashboxId = cashbox.localId,
+                localOpeningEntryName = localOpening,
+                remoteOpeningEntryName = remoteOpening,
+                remoteClosingEntryName = closingEntryName,
+                pendingSync = pendingSync
+            )
+        )
+    }
+
     private suspend fun buildContextFrom(
         user: UserEntity,
         profile: com.erpnext.pos.localSource.entities.POSProfileEntity,
@@ -640,7 +1014,9 @@ class CashBoxManager(
             exchangeRate = exchangeRate,
             allowedCurrencies = allowedCurrencies,
             paymentModes = paymentModes,
-            partyAccountCurrency = company?.defaultCurrency ?: profile.currency
+            partyAccountCurrency = company?.defaultCurrency ?: profile.currency,
+            defaultReceivableAccount = company?.defaultReceivableAccount,
+            defaultReceivableAccountCurrency = company?.defaultReceivableAccountCurrency
         )
     }
 
@@ -753,6 +1129,7 @@ class CashBoxManager(
             rateResolver = { from, to -> exchangeRateRepository.getRate(from, to) }
         )
         val paidInvoiceNames = paymentRows.asSequence()
+            .filter { (it.enteredAmount > 0.0001) || (it.amount > 0.0001) }
             .map { it.invoiceName.trim() }
             .filter { it.isNotBlank() }
             .toSet()
@@ -791,6 +1168,13 @@ class CashBoxManager(
             closingEntryId,
             dto.periodEndDate,
             pendingSync = pendingSync
+        )
+        upsertClosingLinkForCashbox(
+            cashbox = entry.cashbox,
+            closingEntryName = closingEntryId,
+            localOpeningEntryName = localOpeningEntryId ?: entry.cashbox.openingEntryId,
+            remoteOpeningEntryName = remoteOpeningEntryId,
+            pendingSync = remoteOpeningEntryId.isNullOrBlank()
         )
         profileDao.updateProfileState(ctx.username, ctx.profileName, false)
         closingDao.insert(dto.toEntity(closingEntryId, pendingSync = pendingSync))
