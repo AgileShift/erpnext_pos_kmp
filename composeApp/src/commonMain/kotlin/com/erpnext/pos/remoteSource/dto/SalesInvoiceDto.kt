@@ -46,6 +46,12 @@ data class SalesInvoiceDto(
     val disableRoundedTotal: Boolean? = null,
     @SerialName("discount_amount")
     val discountAmount: Double? = null,
+    @SerialName("apply_discount_on")
+    val applyDiscountOn: String? = null,
+    @SerialName("additional_discount_percentage")
+    val additionalDiscountPercentage: Double? = null,
+    @SerialName("coupon_code")
+    val couponCode: String? = null,
     @EncodeDefault(EncodeDefault.Mode.NEVER)
     @SerialName("paid_amount")
     val paidAmount: Double? = null,

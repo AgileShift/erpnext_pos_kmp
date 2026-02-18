@@ -11,6 +11,7 @@ import com.erpnext.pos.remoteSource.dto.PaymentEntryCreateDto
 import com.erpnext.pos.remoteSource.dto.PaymentEntryReferenceCreateDto
 import com.erpnext.pos.remoteSource.mapper.toEntity
 import com.erpnext.pos.remoteSource.mapper.toDto
+import com.erpnext.pos.localSource.preferences.ReturnLedgerPreferences
 import com.erpnext.pos.utils.NetworkMonitor
 import com.erpnext.pos.utils.toErpDate
 import com.erpnext.pos.utils.toErpDateTime
@@ -44,7 +45,8 @@ class CancelSalesInvoiceUseCase(
     private val paymentEntryUseCase: CreatePaymentEntryUseCase,
     private val modeOfPaymentDao: ModeOfPaymentDao,
     private val posProfilePaymentMethodDao: PosProfilePaymentMethodDao,
-    private val networkMonitor: NetworkMonitor
+    private val networkMonitor: NetworkMonitor,
+    private val returnLedgerPreferences: ReturnLedgerPreferences
 ) : UseCase<CancelSalesInvoiceInput, CancelSalesInvoiceResult>() {
 
     override suspend fun useCaseFunction(input: CancelSalesInvoiceInput): CancelSalesInvoiceResult {
@@ -117,6 +119,12 @@ class CancelSalesInvoiceUseCase(
                 refundReferenceNo = refundReferenceNo
             )
         }
+        invoice.invoice.invoiceName?.let { originalName ->
+            returnLedgerPreferences.recordReturn(
+                originalName,
+                returnItems.associate { it.itemCode to abs(it.qty) }
+            )
+        }
         invoiceRepository.refreshInvoiceFromRemote(created.name ?: originalName)
         return CancelSalesInvoiceResult(creditNoteName = created.name, cancelled = true)
     }
@@ -129,19 +137,27 @@ class CancelSalesInvoiceUseCase(
         val remoteParent = invoiceRepository.fetchRemoteInvoice(originalName)
         val baseItems = remoteParent?.items?.takeIf { it.isNotEmpty() }
             ?: invoice.items.map { it.toDto(parent) }
+        val localReturnedByItem = returnLedgerPreferences.returnedByItem(originalName)
         val returnInvoices = invoiceRepository.fetchRemoteReturnInvoices(
             returnAgainst = originalName
         )
-        val returnedByItem = mutableMapOf<String, Double>()
+        val remoteReturnedByItem = mutableMapOf<String, Double>()
         returnInvoices.forEach { credit ->
             credit.items.forEach { item ->
                 val qty = abs(item.qty)
                 if (qty > 0.0) {
-                    returnedByItem[item.itemCode] =
-                        (returnedByItem[item.itemCode] ?: 0.0) + qty
+                    remoteReturnedByItem[item.itemCode] =
+                        (remoteReturnedByItem[item.itemCode] ?: 0.0) + qty
                 }
             }
         }
+        val returnedByItem = (localReturnedByItem.keys + remoteReturnedByItem.keys)
+            .associateWith { itemCode ->
+                maxOf(
+                    localReturnedByItem[itemCode] ?: 0.0,
+                    remoteReturnedByItem[itemCode] ?: 0.0
+                )
+            }
         return baseItems.mapNotNull { item ->
             val originalQty = abs(item.qty)
             val returnedQty = returnedByItem[item.itemCode] ?: 0.0
@@ -213,7 +229,7 @@ class CancelSalesInvoiceUseCase(
     ) {
         val company = invoice.invoice.company
         val profileId = invoice.invoice.profileId
-        val creditName = creditNote.name ?: return
+        val originalInvoiceName = invoice.invoice.invoiceName?.takeIf { it.isNotBlank() } ?: return
         val postingDate = Clock.System.now().toEpochMilliseconds().toErpDateTime()
         val modes = modeOfPaymentDao.getAllModes(company)
         val receivableAccount = invoice.invoice.debitTo
@@ -228,6 +244,21 @@ class CancelSalesInvoiceUseCase(
         val paidToCurrency = creditNote.partyAccountCurrency
             ?: creditNote.currency
             ?: invoice.invoice.currency
+        val originalOutstanding = invoice.invoice.outstandingAmount.coerceAtLeast(0.0)
+        val allocated = minOf(totalReturn, originalOutstanding)
+        val references = if (allocated > 0.0) {
+            listOf(
+                PaymentEntryReferenceCreateDto(
+                    referenceDoctype = "Sales Invoice",
+                    referenceName = originalInvoiceName,
+                    totalAmount = invoice.invoice.grandTotal,
+                    outstandingAmount = originalOutstanding,
+                    allocatedAmount = allocated
+                )
+            )
+        } else {
+            emptyList()
+        }
 
         val entry = PaymentEntryCreateDto(
             company = company,
@@ -242,15 +273,7 @@ class CancelSalesInvoiceUseCase(
             paidToAccountCurrency = paidToCurrency,
             referenceNo = refundReferenceNo?.takeIf { it.isNotBlank() },
             referenceDate = postingDate,
-            references = listOf(
-                PaymentEntryReferenceCreateDto(
-                    referenceDoctype = "Sales Invoice",
-                    referenceName = creditName,
-                    totalAmount = totalReturn,
-                    outstandingAmount = creditNote.outstandingAmount ?: totalReturn,
-                    allocatedAmount = totalReturn
-                )
-            ),
+            references = references,
             partyId = invoice.invoice.customer,
             sourceExchangeRate = null,
             targetExchangeRate = null,

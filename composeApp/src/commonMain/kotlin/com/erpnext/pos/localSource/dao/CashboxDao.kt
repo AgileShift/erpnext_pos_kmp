@@ -72,7 +72,15 @@ interface CashboxDao {
     suspend fun getActiveCashboxes(): List<CashboxWithDetails>
 
     @Transaction
-    @Query("SELECT * FROM tabCashbox WHERE status = 0 AND pendingSync = 1")
+    @Query(
+        """
+        SELECT c.*
+          FROM tabCashbox c
+          LEFT JOIN tab_pos_closing_entry ce ON ce.name = c.closingEntryId
+         WHERE c.status = 0
+           AND (c.pendingSync = 1 OR ce.pending_sync = 1)
+        """
+    )
     suspend fun getClosedPendingSync(): List<CashboxWithDetails>
 
     // Marcar como synced

@@ -20,7 +20,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
-import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.currentBackStackEntryAsState
 import com.erpnext.pos.views.CashBoxManager
 
@@ -137,11 +136,7 @@ private fun NavigationRailEntry(
         onClick = {
             if (isEnabled && navController.currentDestination?.route != navRoute.path) {
                 navController.navigate(navRoute.path) {
-                    popUpTo(navController.graph.findStartDestination().id) {
-                        saveState = true
-                    }
                     launchSingleTop = true
-                    restoreState = true
                 }
             }
         },

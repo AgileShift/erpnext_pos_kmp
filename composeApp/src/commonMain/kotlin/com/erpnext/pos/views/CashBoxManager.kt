@@ -76,6 +76,7 @@ data class POSContext(
     val incomeAccount: String?,
     val expenseAccount: String?,
     val branch: String?,
+    val applyDiscountOn: String?,
     val currency: String,
     val partyAccountCurrency: String,
     val defaultReceivableAccount: String?,
@@ -393,6 +394,7 @@ class CashBoxManager(
                 incomeAccount = profile.incomeAccount,
                 expenseAccount = profile.expenseAccount,
                 branch = profile.branch,
+                applyDiscountOn = profile.applyDiscountOn,
                 currency = profile.currency,
                 exchangeRate = exchangeRate,
                 allowedCurrencies = allowedCurrencies,
@@ -499,6 +501,7 @@ class CashBoxManager(
             incomeAccount = profile.incomeAccount,
             expenseAccount = profile.expenseAccount,
             branch = profile.branch,
+            applyDiscountOn = profile.applyDiscountOn,
             currency = profile.currency,
             exchangeRate = exchangeRate,
             allowedCurrencies = allowedCurrencies,
@@ -1010,6 +1013,7 @@ class CashBoxManager(
             incomeAccount = profile.incomeAccount,
             expenseAccount = profile.expenseAccount,
             branch = profile.branch,
+            applyDiscountOn = profile.applyDiscountOn,
             currency = profile.currency,
             exchangeRate = exchangeRate,
             allowedCurrencies = allowedCurrencies,
@@ -1038,13 +1042,13 @@ class CashBoxManager(
 
     suspend fun closeCashBox(): POSContext? = withContext(Dispatchers.IO) {
         val isOnline = networkMonitor.isConnected.firstOrNull() == true
-        if (isOnline && !sessionRefresher.ensureValidSession()) {
-            AppLogger.warn("closeCashBox: invalid session, aborting")
-            return@withContext null
+        val canUseRemote = isOnline && sessionRefresher.ensureValidSession()
+        if (isOnline && !canUseRemote) {
+            AppLogger.warn("closeCashBox: invalid session, falling back to local close")
         }
         val ctx = currentContext ?: initializeContext()
         if (ctx == null) return@withContext null
-        val user = resolveCurrentUser(canUseRemote = isOnline) ?: return@withContext null
+        val user = resolveCurrentUser(canUseRemote = canUseRemote) ?: return@withContext null
 
         val entry = findActiveCashboxForProfile(
             resolveServerUserId(user),
@@ -1056,7 +1060,7 @@ class CashBoxManager(
             ?: endMillis
         var remoteOpeningEntryId =
             openingEntryLinkDao.getRemoteOpeningEntryName(entry.cashbox.localId)
-        if (remoteOpeningEntryId.isNullOrBlank()) {
+        if (canUseRemote && remoteOpeningEntryId.isNullOrBlank()) {
             runCatching { openingEntrySyncRepository.pushPending() }
                 .onFailure { AppLogger.warn("closeCashBox: sync opening failed", it) }
             remoteOpeningEntryId =
@@ -1081,7 +1085,7 @@ class CashBoxManager(
                 )
             }
         }
-        val resolvedInvoices = if (isOnline && allowRemoteReadsFromUi) {
+        val resolvedInvoices = if (canUseRemote && allowRemoteReadsFromUi) {
             reconcileRemoteInvoicesForClosing(
                 openingEntryId = openingEntryId,
                 posProfile = ctx.profileName,
@@ -1151,7 +1155,7 @@ class CashBoxManager(
                 openingDao.insert(local.copy(name = remoteOpeningEntryId, pendingSync = false))
             }
         }
-        val pce = if (!remoteOpeningEntryId.isNullOrBlank()) {
+        val pce = if (canUseRemote && !remoteOpeningEntryId.isNullOrBlank()) {
             runCatching { api.closeCashbox(dto) }
                 .onFailure { AppLogger.warn("closeCashBox: remote close failed", it) }
                 .getOrNull()

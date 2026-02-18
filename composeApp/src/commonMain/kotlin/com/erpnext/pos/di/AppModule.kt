@@ -105,6 +105,7 @@ import com.erpnext.pos.localSource.preferences.ExchangeRatePreferences
 import com.erpnext.pos.localSource.preferences.GeneralPreferences
 import com.erpnext.pos.localSource.preferences.LanguagePreferences
 import com.erpnext.pos.localSource.preferences.OpeningSessionPreferences
+import com.erpnext.pos.localSource.preferences.ReturnLedgerPreferences
 import com.erpnext.pos.localSource.preferences.SyncLogPreferences
 import com.erpnext.pos.localSource.preferences.SyncPreferences
 import com.erpnext.pos.localSource.preferences.ThemePreferences
@@ -344,6 +345,7 @@ val appModule = module {
     single { LanguagePreferences(get()) }
     single { OpeningSessionPreferences(get()) }
     single { BootstrapContextPreferences(get()) }
+    single { ReturnLedgerPreferences(get()) }
     single { SyncLogPreferences(get()) }
     single { SyncPreferences(get()) }
     single { ThemePreferences(get()) }
@@ -390,7 +392,7 @@ val appModule = module {
     }
 
     //region Reconciliation
-    single { ReconciliationViewModel(get(), get(), get()) }
+    single { ReconciliationViewModel(get(), get(), get(), get(), get(), get(), get()) }
     //endregion
 
     single { SyncContextProvider(get(), get()) }
@@ -584,7 +586,7 @@ val appModule = module {
     single { InvoiceViewModel(get(), get(), get(), get(), get()) }
     single { SalesInvoiceRepository(get(), get(), get(), get(), get()) }
     single { CreateSalesInvoiceUseCase(get()) }
-    single { CancelSalesInvoiceUseCase(get(), get(), get(), get(), get()) }
+    single { CancelSalesInvoiceUseCase(get(), get(), get(), get(), get(), get()) }
     //endregion
 
     //region Payment Terms
@@ -688,7 +690,7 @@ val appModule = module {
     single { FetchUserInfoUseCase(get()) }
     single { RegisterInvoicePaymentUseCase(get()) }
     single { CreatePaymentEntryUseCase(get()) }
-    single { PartialReturnUseCase(get(), get(), get(), get(), get()) }
+    single { PartialReturnUseCase(get(), get(), get(), get(), get(), get()) }
     single { LoadHomeMetricsUseCase(get()) }
     single { InventoryAlertRepository(get(), get(), get(), get(), get()) }
     single { LoadInventoryAlertsUseCase(get()) }

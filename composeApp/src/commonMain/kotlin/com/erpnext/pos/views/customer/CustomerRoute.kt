@@ -29,6 +29,7 @@ fun CustomerRoute(
     val paymentState by coordinator.paymentState.collectAsState()
     val historyState by coordinator.historyState.collectAsState(CustomerInvoiceHistoryState.Idle)
     val historyMessage by coordinator.historyMessage.collectAsState(null)
+    val returnInfoMessage by coordinator.returnInfoMessage.collectAsState(null)
     val historyBusy by coordinator.historyActionBusy.collectAsState(false)
     val customerMessage by coordinator.customerMessage.collectAsState(null)
     val dialogDataState by coordinator.dialogDataState.collectAsState(CustomerDialogDataState())
@@ -50,6 +51,7 @@ fun CustomerRoute(
         paymentState = paymentState,
         historyState = historyState,
         historyMessage = historyMessage,
+        returnInfoMessage = returnInfoMessage,
         historyBusy = historyBusy,
         customerMessage = customerMessage,
         dialogDataState = dialogDataState,

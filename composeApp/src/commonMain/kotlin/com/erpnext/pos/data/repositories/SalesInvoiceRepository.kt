@@ -136,9 +136,13 @@ class SalesInvoiceRepository(
     ) {
         if (returnTotal <= 0.0) return
         val local = localSource.getInvoiceByName(invoiceName)?.invoice ?: return
-        val originalOutstanding = local.outstandingAmount
-        val newOutstanding = (originalOutstanding - returnTotal).coerceAtLeast(0.0)
-        if (newOutstanding >= originalOutstanding - 0.005) return
+        val originalGrand = local.grandTotal.coerceAtLeast(0.0)
+        val newGrand = (originalGrand - returnTotal).coerceAtLeast(0.0)
+        if (newGrand >= originalGrand - 0.005) return
+
+        val originalPaid = local.paidAmount.coerceAtLeast(0.0)
+        val newPaid = originalPaid.coerceAtMost(newGrand)
+        val newOutstanding = (newGrand - newPaid).coerceAtLeast(0.0)
 
         val rate = when {
             local.conversionRate != null && (local.conversionRate
@@ -147,6 +151,17 @@ class SalesInvoiceRepository(
             local.baseGrandTotal != null && local.grandTotal > 0.0 ->
                 (local.baseGrandTotal ?: 0.0) / local.grandTotal
 
+            else -> null
+        }
+        val baseGrand = when {
+            rate != null -> roundToCurrency(newGrand * rate)
+            local.baseGrandTotal != null ->
+                roundToCurrency(((local.baseGrandTotal ?: 0.0) - returnTotal).coerceAtLeast(0.0))
+            else -> null
+        }
+        val basePaid = when {
+            rate != null -> roundToCurrency(newPaid * rate)
+            local.basePaidAmount != null -> roundToCurrency((local.basePaidAmount ?: 0.0).coerceAtMost(baseGrand ?: Double.MAX_VALUE))
             else -> null
         }
         val baseOutstanding = when {
@@ -162,13 +177,17 @@ class SalesInvoiceRepository(
         }
         val newStatus = when {
             newOutstanding <= 0.0001 -> "Paid"
-            local.paidAmount > 0.0 -> "Partly Paid"
-            else -> local.status
+            newPaid > 0.0 -> "Partly Paid"
+            else -> "Unpaid"
         }
         val now = Clock.System.now().toEpochMilliseconds()
         localSource.updateInvoice(
             local.copy(
+                grandTotal = roundToCurrency(newGrand),
+                paidAmount = roundToCurrency(newPaid),
                 outstandingAmount = roundToCurrency(newOutstanding),
+                baseGrandTotal = baseGrand,
+                basePaidAmount = basePaid,
                 baseOutstandingAmount = baseOutstanding,
                 status = newStatus,
                 modifiedAt = now
@@ -282,7 +301,24 @@ class SalesInvoiceRepository(
         val totalPaid = roundToCurrency((invoice.paidAmount + paidDeltaReceivable).coerceAtLeast(0.0))
         var newOutstanding =
             roundToCurrency((invoice.outstandingAmount - paidDeltaReceivable).coerceAtLeast(0.0))
-        val roundingTolerance = 0.05
+        val currencySpecs = buildCurrencySpecs()
+        val receivableTolerance = resolveMinorUnitTolerance(receivableCurrency, currencySpecs)
+        val fxTolerance = normalizedPayments.maxOfOrNull { payment ->
+            val paymentCurrency = normalizeCurrency(payment.paymentCurrency)
+            val paymentMinor = resolveMinorUnitTolerance(paymentCurrency, currencySpecs)
+            val paymentToInvoiceRate = when {
+                payment.enteredAmount > 0.0 && payment.amount > 0.0 ->
+                    payment.amount / payment.enteredAmount
+
+                payment.exchangeRate > 0.0 -> payment.exchangeRate
+                paymentCurrency.equals(invoiceCurrency, ignoreCase = true) -> 1.0
+                else -> 1.0
+            }
+            paymentMinor *
+                paymentToInvoiceRate.coerceAtLeast(0.0) *
+                invoiceToReceivableRate.coerceAtLeast(0.0)
+        } ?: 0.0
+        val roundingTolerance = maxOf(receivableTolerance, fxTolerance)
         val epsilon = 0.0001
         if (newOutstanding <= roundingTolerance) {
             newOutstanding = 0.0
@@ -405,14 +441,18 @@ class SalesInvoiceRepository(
             remotePaid > 0.0 ||
                 (remoteOutstandingRaw != null && remoteOutstandingRaw < remoteTotal - 0.01) ||
                 (normalizedOutstanding < remoteTotal - 0.01)
+        val remoteTotalChanged = localInvoice?.let {
+            abs(it.grandTotal - remoteTotal) > 0.01
+        } == true
+        val trustRemoteFinancials = remoteHasPayments || remoteTotalChanged || remote.isReturn == 1
         // Si el servidor aún no refleja pagos, preservamos lo local.
-        val resolvedPaidAmount = if (remoteHasPayments) remotePaid else localPaid
+        val resolvedPaidAmount = if (trustRemoteFinancials) remotePaid else localPaid
         val resolvedOutstandingAmount =
-            if (remoteHasPayments) normalizedOutstanding else localOutstanding
+            if (trustRemoteFinancials) normalizedOutstanding else localOutstanding
         val localPaidAmount = roundToCurrency(resolvedPaidAmount)
         val localOutstandingAmount = roundToCurrency(resolvedOutstandingAmount)
         // El status se alinea con la fuente de verdad escogida.
-        val resolvedStatus = if (remoteHasPayments) remote.status ?: "Draft"
+        val resolvedStatus = if (trustRemoteFinancials) remote.status ?: "Draft"
         else localInvoice?.status ?: (remote.status ?: "Draft")
 
         fun resolveBaseAmount(amount: Double?, baseAmount: Double?): Double? {

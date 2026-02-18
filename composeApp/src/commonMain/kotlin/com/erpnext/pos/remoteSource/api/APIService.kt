@@ -85,9 +85,11 @@ import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.decodeFromJsonElement
 import kotlinx.serialization.json.doubleOrNull
+import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -123,12 +125,20 @@ class APIService(
         val createdAtMillis: Long
     )
 
+    private data class BootstrapPaginationMeta(
+        val offset: Int,
+        val limit: Int,
+        val total: Int,
+        val hasMore: Boolean?
+    )
+
     private companion object {
         const val DEFAULT_INVOICE_SYNC_DAYS = 90
         const val RECENT_PAID_INVOICE_DAYS = 7
         const val BOOTSTRAP_CACHE_WINDOW_MS = 15_000L
         const val INVENTORY_BOOTSTRAP_PAGE_SIZE = 200
         const val BOOTSTRAP_SNAPSHOT_LIMIT = 5_000
+        const val MAX_BOOTSTRAP_PAGE_FETCH = 200
     }
 
     private var bootstrapCache: BootstrapCacheEntry? = null
@@ -964,12 +974,213 @@ class APIService(
             payload = enrichedPayload
         )
         val fresh = decodeBootstrapDataSnapshot(freshRaw)
+        val resolved = if (shouldAutoPageBootstrap(enrichedPayload)) {
+            fetchBootstrapPaged(enrichedPayload, freshRaw, fresh)
+        } else {
+            fresh
+        }
         bootstrapCache = BootstrapCacheEntry(
             key = cacheKey,
-            data = fresh,
+            data = resolved,
             createdAtMillis = now
         )
-        return fresh
+        return resolved
+    }
+
+    private fun shouldAutoPageBootstrap(payload: BootstrapRequestDto): Boolean {
+        val offset = payload.offset ?: 0
+        val requestedLimit = payload.limit ?: BOOTSTRAP_SNAPSHOT_LIMIT
+        if (offset != 0) return false
+        if (requestedLimit < BOOTSTRAP_SNAPSHOT_LIMIT) return false
+        return true
+    }
+
+    private suspend fun fetchBootstrapPaged(
+        payload: BootstrapRequestDto,
+        firstRaw: JsonObject,
+        firstData: BootstrapDataDto
+    ): BootstrapDataDto {
+        var resolved = firstData
+        val hasInventoryMeta = parseBootstrapPagination(firstRaw, "inventory") != null
+        val hasCustomerMeta = parseBootstrapPagination(firstRaw, "customers") != null
+        val hasInvoiceMeta = parseBootstrapPagination(firstRaw, "invoices") != null
+        val hasPaymentMeta = parseBootstrapPagination(firstRaw, "payment_entries") != null
+        val hasAlertsMeta = parseBootstrapPagination(firstRaw, "inventory_alerts") != null
+        val hasActivityMeta = parseBootstrapPagination(firstRaw, "activity") != null
+
+        if (payload.includeInventory || hasInventoryMeta || firstData.inventoryItems.isNotEmpty()) {
+            val inventory = fetchPagedSection(
+                payload = payload,
+                sectionKey = "inventory",
+                firstRaw = firstRaw,
+                firstItems = firstData.inventoryItems,
+                dedupeKey = { it.itemCode }
+            ) { data ->
+                data.inventoryItems
+            }
+            resolved = resolved.copy(inventoryItems = inventory)
+        }
+        if (payload.includeCustomers || hasCustomerMeta || firstData.customers.isNotEmpty()) {
+            val customers = fetchPagedSection(
+                payload = payload,
+                sectionKey = "customers",
+                firstRaw = firstRaw,
+                firstItems = firstData.customers,
+                dedupeKey = { it.name }
+            ) { data ->
+                data.customers
+            }
+            resolved = resolved.copy(customers = customers)
+        }
+        if (payload.includeInvoices || hasInvoiceMeta || firstData.invoices.isNotEmpty()) {
+            val invoices = fetchPagedSection(
+                payload = payload,
+                sectionKey = "invoices",
+                firstRaw = firstRaw,
+                firstItems = firstData.invoices,
+                dedupeKey = { it.name ?: "${it.customer}-${it.postingDate}-${it.grandTotal}" }
+            ) { data ->
+                data.invoices
+            }
+            resolved = resolved.copy(invoices = invoices)
+        }
+        if (payload.includeInvoices || hasPaymentMeta || firstData.paymentEntries.isNotEmpty()) {
+            val paymentEntries = fetchPagedSection(
+                payload = payload,
+                sectionKey = "payment_entries",
+                firstRaw = firstRaw,
+                firstItems = firstData.paymentEntries,
+                dedupeKey = { it.name ?: "${it.party}-${it.postingDate}-${it.paidAmount}" }
+            ) { data ->
+                data.paymentEntries
+            }
+            resolved = resolved.copy(paymentEntries = paymentEntries)
+        }
+        if (payload.includeAlerts || hasAlertsMeta || firstData.inventoryAlerts.isNotEmpty()) {
+            val alerts = fetchPagedSection(
+                payload = payload,
+                sectionKey = "inventory_alerts",
+                firstRaw = firstRaw,
+                firstItems = firstData.inventoryAlerts,
+                dedupeKey = { it.toString() }
+            ) { data ->
+                data.inventoryAlerts
+            }
+            resolved = resolved.copy(inventoryAlerts = alerts)
+        }
+        if (payload.includeActivity || hasActivityMeta || firstData.activityEvents.isNotEmpty()) {
+            val activity = fetchPagedSection(
+                payload = payload,
+                sectionKey = "activity",
+                firstRaw = firstRaw,
+                firstItems = firstData.activityEvents,
+                dedupeKey = { it.toString() }
+            ) { data ->
+                data.activityEvents
+            }
+            resolved = resolved.copy(activityEvents = activity)
+        }
+        return resolved
+    }
+
+    private fun parseBootstrapPagination(
+        raw: JsonObject,
+        sectionKey: String
+    ): BootstrapPaginationMeta? {
+        val section = raw[sectionKey] as? JsonObject ?: return null
+        val pagination = section["pagination"]?.jsonObject ?: return null
+        val offset = pagination["offset"]?.jsonPrimitive?.intOrNull ?: 0
+        val limit = pagination["limit"]?.jsonPrimitive?.intOrNull ?: BOOTSTRAP_SNAPSHOT_LIMIT
+        val total = pagination["total"]?.jsonPrimitive?.intOrNull ?: 0
+        val hasMoreRaw = pagination["has_more"]?.jsonPrimitive
+        val hasMore = when {
+            hasMoreRaw == null -> null
+            hasMoreRaw.booleanOrNull != null -> hasMoreRaw.booleanOrNull
+            hasMoreRaw.intOrNull != null -> hasMoreRaw.intOrNull != 0
+            hasMoreRaw.contentOrNull != null ->
+                hasMoreRaw.contentOrNull?.lowercase() in setOf("1", "true", "yes")
+            else -> null
+        }
+        return BootstrapPaginationMeta(
+            offset = offset.coerceAtLeast(0),
+            limit = limit.coerceAtLeast(1),
+            total = total.coerceAtLeast(0),
+            hasMore = hasMore
+        )
+    }
+
+    private suspend fun <T> fetchPagedSection(
+        payload: BootstrapRequestDto,
+        sectionKey: String,
+        firstRaw: JsonObject,
+        firstItems: List<T>,
+        dedupeKey: (T) -> String,
+        sectionResolver: (BootstrapDataDto) -> List<T>
+    ): List<T> {
+        val baseSeen = LinkedHashSet<String>()
+        val baseItems = mutableListOf<T>()
+        firstItems.forEach { item ->
+            if (baseSeen.add(dedupeKey(item))) {
+                baseItems.add(item)
+            }
+        }
+        val meta = parseBootstrapPagination(firstRaw, sectionKey) ?: return baseItems
+        val targetTotal = meta.total.takeIf { it > 0 }
+        val shouldFetchMore =
+            (targetTotal != null && baseItems.size < targetTotal) || meta.hasMore == true
+        if (!shouldFetchMore) return baseItems
+
+        suspend fun runStrategy(offsetForPage: (Int) -> Int): List<T> {
+            val seen = LinkedHashSet(baseSeen)
+            val merged = baseItems.toMutableList()
+            val offsets = mutableSetOf<Int>()
+            var pageIndex = 1
+            var duplicatePages = 0
+
+            while (pageIndex <= MAX_BOOTSTRAP_PAGE_FETCH &&
+                (targetTotal == null || merged.size < targetTotal)
+            ) {
+                val offset = offsetForPage(pageIndex).coerceAtLeast(0)
+                if (!offsets.add(offset)) break
+                val pageRaw = fetchBootstrapRaw(payload.copy(offset = offset, limit = meta.limit))
+                val page = sectionResolver(decodeBootstrapDataSnapshot(pageRaw))
+                if (page.isEmpty()) break
+
+                var added = 0
+                page.forEach { item ->
+                    if (seen.add(dedupeKey(item))) {
+                        merged.add(item)
+                        added += 1
+                    }
+                }
+                if (added == 0) {
+                    duplicatePages += 1
+                } else {
+                    duplicatePages = 0
+                }
+
+                val pageMeta = parseBootstrapPagination(pageRaw, sectionKey)
+                if (targetTotal != null && merged.size >= targetTotal) break
+                if (pageMeta?.hasMore == false) break
+                if (page.size < meta.limit) break
+                if (duplicatePages >= 2) break
+                pageIndex += 1
+            }
+            return merged
+        }
+
+        val absolute = runStrategy { pageIndex ->
+            meta.offset + (meta.limit * pageIndex)
+        }
+        val shouldTryPageIndex =
+            absolute.size <= baseItems.size &&
+                ((targetTotal != null && targetTotal > baseItems.size) || meta.hasMore != false)
+        if (!shouldTryPageIndex) return absolute
+
+        val pageIndex = runStrategy { page ->
+            meta.offset + page
+        }
+        return if (pageIndex.size > absolute.size) pageIndex else absolute
     }
 
     private suspend fun fetchBootstrapRaw(payload: BootstrapRequestDto): JsonObject {

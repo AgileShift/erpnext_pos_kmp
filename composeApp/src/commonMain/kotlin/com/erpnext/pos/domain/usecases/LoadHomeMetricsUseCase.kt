@@ -21,7 +21,8 @@ import kotlin.time.ExperimentalTime
 
 data class HomeMetricInput(
     val days: Int = 7,
-    val nowMillis: Long = Clock.System.now().toEpochMilliseconds()
+    val nowMillis: Long = Clock.System.now().toEpochMilliseconds(),
+    val openingEntryId: String? = null
 )
 class LoadHomeMetricsUseCase(
     private val salesInvoiceDao: SalesInvoiceDao
@@ -30,19 +31,25 @@ class LoadHomeMetricsUseCase(
     override suspend fun useCaseFunction(input: HomeMetricInput): HomeMetrics {
         val tz = TimeZone.currentSystemDefault()
         val today = Instant.fromEpochMilliseconds(input.nowMillis).toLocalDateTime(tz).date
+        val dayOpeningEntryId = input.openingEntryId?.trim()?.takeIf { it.isNotBlank() }
         val startDate = today.minus(DatePeriod(days = input.days - 1))
         val startDate14 = today.minus(DatePeriod(days = 13))
         val dateStrings = generateDateRange(startDate, today)
 
-        val totalSalesToday = salesInvoiceDao.getTotalSalesForDate(today.toString()) ?: 0.0
-        val invoicesToday = salesInvoiceDao.getSalesCountForDate(today.toString())
-        val customersToday = salesInvoiceDao.getDistinctCustomersForDate(today.toString())
-        val outstanding = salesInvoiceDao.getTotalOutstanding() ?: 0.0
+        // KPI del día sí van por turno (opening entry), el BI de totales/rangos queda global.
+        val totalSalesToday =
+            salesInvoiceDao.getTotalSalesForDate(today.toString(), dayOpeningEntryId) ?: 0.0
+        val invoicesToday =
+            salesInvoiceDao.getSalesCountForDate(today.toString(), dayOpeningEntryId)
+        val customersToday =
+            salesInvoiceDao.getDistinctCustomersForDate(today.toString(), dayOpeningEntryId)
+        val outstanding = salesInvoiceDao.getTotalOutstanding(null) ?: 0.0
         val avgTicket = if (invoicesToday > 0) totalSalesToday / invoicesToday else 0.0
 
         val rangeTotals14 = salesInvoiceDao.getDailySalesTotals(
             startDate = startDate14.toString(),
-            endDate = today.toString()
+            endDate = today.toString(),
+            openingEntryId = null
         ).associateBy { it.date }
 
         val weekSeries = dateStrings.map { date ->
@@ -65,31 +72,39 @@ class LoadHomeMetricsUseCase(
         val compareVsYesterday = percentChange(totalSalesToday, salesYesterday)
         val compareVsLastWeek = percentChange(salesLast7, salesPrev7)
 
-        val currencySummaries = salesInvoiceDao.getSalesSummaryForDateByCurrency(today.toString())
-        val outstandingByCurrency = salesInvoiceDao.getOutstandingTotalsByCurrency()
+        val currencySummaries = salesInvoiceDao.getSalesSummaryForDateByCurrency(
+            today.toString(),
+            dayOpeningEntryId
+        )
+        val outstandingByCurrency = salesInvoiceDao.getOutstandingTotalsByCurrency(null)
             .associateBy { it.currency }
         val dailyTotalsByCurrency = salesInvoiceDao.getDailySalesTotalsByCurrency(
             startDate = startDate14.toString(),
-            endDate = today.toString()
+            endDate = today.toString(),
+            openingEntryId = null
         )
         val marginTodayByCurrency = salesInvoiceDao.getEstimatedMarginTotalByCurrency(
             startDate = today.toString(),
-            endDate = today.toString()
+            endDate = today.toString(),
+            openingEntryId = dayOpeningEntryId
         ).associateBy { it.currency }
         val marginLast7ByCurrency = salesInvoiceDao.getEstimatedMarginTotalByCurrency(
             startDate = last7Start.toString(),
-            endDate = today.toString()
+            endDate = today.toString(),
+            openingEntryId = null
         ).associateBy { it.currency }
         val costedTodayByCurrency = salesInvoiceDao.countItemsWithCostByCurrency(
             startDate = today.toString(),
-            endDate = today.toString()
+            endDate = today.toString(),
+            openingEntryId = dayOpeningEntryId
         ).associateBy { it.currency }
         val totalItemsTodayByCurrency = salesInvoiceDao.countItemsInRangeByCurrency(
             startDate = today.toString(),
-            endDate = today.toString()
+            endDate = today.toString(),
+            openingEntryId = dayOpeningEntryId
         ).associateBy { it.currency }
 
-        val availableCurrencies = salesInvoiceDao.getAvailableCurrencies()
+        val availableCurrencies = salesInvoiceDao.getAvailableCurrencies(null)
         val currencies = buildSet {
             availableCurrencies.forEach { add(it) }
             currencySummaries.forEach { add(it.currency) }
@@ -164,7 +179,8 @@ class LoadHomeMetricsUseCase(
         val topProductsByMargin = salesInvoiceDao.getTopProductsByMargin(
             startDate = startDate.toString(),
             endDate = today.toString(),
-            limit = 5
+            limit = 5,
+            openingEntryId = null
         ).map {
             val percent = if (it.total > 0.0) (it.margin / it.total) * 100.0 else null
             TopProductMarginMetric(
@@ -180,7 +196,8 @@ class LoadHomeMetricsUseCase(
         val topProducts = salesInvoiceDao.getTopProductsBySales(
             startDate = startDate.toString(),
             endDate = today.toString(),
-            limit = 5
+            limit = 5,
+            openingEntryId = null
         ).map {
             TopProductMetric(
                 itemCode = it.itemCode,
@@ -192,11 +209,13 @@ class LoadHomeMetricsUseCase(
 
         val costedItemsToday = salesInvoiceDao.countItemsWithCost(
             startDate = today.toString(),
-            endDate = today.toString()
+            endDate = today.toString(),
+            openingEntryId = dayOpeningEntryId
         )
         val totalItemsToday = salesInvoiceDao.countItemsInRange(
             startDate = today.toString(),
-            endDate = today.toString()
+            endDate = today.toString(),
+            openingEntryId = dayOpeningEntryId
         )
         val costCoveragePercent = if (totalItemsToday > 0) {
             (costedItemsToday.toDouble() / totalItemsToday.toDouble()) * 100.0
@@ -206,7 +225,8 @@ class LoadHomeMetricsUseCase(
         val marginToday = if (costedItemsToday > 0) {
             salesInvoiceDao.getEstimatedMarginTotal(
                 startDate = today.toString(),
-                endDate = today.toString()
+                endDate = today.toString(),
+                openingEntryId = dayOpeningEntryId
             ) ?: 0.0
         } else {
             null
@@ -217,12 +237,14 @@ class LoadHomeMetricsUseCase(
 
         val costedItemsLast7 = salesInvoiceDao.countItemsWithCost(
             startDate = last7Start.toString(),
-            endDate = today.toString()
+            endDate = today.toString(),
+            openingEntryId = null
         )
         val marginLast7 = if (costedItemsLast7 > 0) {
             salesInvoiceDao.getEstimatedMarginTotal(
                 startDate = last7Start.toString(),
-                endDate = today.toString()
+                endDate = today.toString(),
+                openingEntryId = null
             ) ?: 0.0
         } else {
             null

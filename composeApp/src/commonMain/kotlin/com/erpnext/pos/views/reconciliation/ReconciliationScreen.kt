@@ -225,6 +225,22 @@ fun ReconciliationScreen(
                     )
                 }
             }
+            if (!closeState.errorMessage.isNullOrBlank()) {
+                Surface(
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .padding(horizontal = 20.dp, vertical = 12.dp),
+                    color = MaterialTheme.colorScheme.errorContainer,
+                    shape = MaterialTheme.shapes.medium
+                ) {
+                    Text(
+                        text = closeState.errorMessage,
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onErrorContainer
+                    )
+                }
+            }
             if (closeState.isSyncing) {
                 AlertDialog(
                     onDismissRequest = {},

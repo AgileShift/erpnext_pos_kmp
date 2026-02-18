@@ -106,6 +106,7 @@ class HomeViewModel(
     private var userInfo: UserBO = UserBO()
     private var posProfiles: List<POSProfileSimpleBO> = emptyList()
     private var lastInventoryProfile: String? = null
+    private var lastMetricsOpeningEntryId: String? = null
 
     init {
         viewModelScope.launch {
@@ -128,6 +129,14 @@ class HomeViewModel(
                         syncManager.syncInventory(force = true)
                     }
                 }
+            }
+        }
+        viewModelScope.launch {
+            openingEntryId.collectLatest { openingId ->
+                val normalized = openingId?.trim()?.takeIf { it.isNotBlank() }
+                if (normalized == lastMetricsOpeningEntryId) return@collectLatest
+                lastMetricsOpeningEntryId = normalized
+                refreshMetrics()
             }
         }
         viewModelScope.launch {
@@ -198,8 +207,7 @@ class HomeViewModel(
                 GateResult.Ready -> Unit
             }
             posProfiles = fetchPosProfileUseCase.invoke(userInfo.email)
-            _homeMetrics.value =
-                loadHomeMetricsUseCase(HomeMetricInput(7, Clock.System.now().toEpochMilliseconds()))
+            loadMetricsForActiveShift()
             refreshInventoryAlerts()
             refreshSalesTarget()
             _stateFlow.update { HomeState.POSProfiles(posProfiles, userInfo) }
@@ -211,18 +219,34 @@ class HomeViewModel(
     fun refreshMetrics() {
         executeUseCase(
             action = {
-                _homeMetrics.value = loadHomeMetricsUseCase(
-                    HomeMetricInput(
-                        7,
-                        Clock.System.now().toEpochMilliseconds()
-                    )
-                )
+                loadMetricsForActiveShift()
                 refreshInventoryAlerts()
                 refreshSalesTarget()
             },
             exceptionHandler = { it.printStackTrace() },
             loadingMessage = "Actualizando métricas..."
         )
+    }
+
+    private suspend fun loadMetricsForActiveShift() {
+        val openingId = resolveMetricsOpeningEntryId()
+        _homeMetrics.value = loadHomeMetricsUseCase(
+            HomeMetricInput(
+                days = 7,
+                nowMillis = Clock.System.now().toEpochMilliseconds(),
+                openingEntryId = openingId
+            )
+        )
+    }
+
+    private suspend fun resolveMetricsOpeningEntryId(): String? {
+        val fromFlow = openingEntryId.value?.trim()?.takeIf { it.isNotBlank() }
+        if (!fromFlow.isNullOrBlank()) return fromFlow
+        return contextManager.getActiveCashboxWithDetails()
+            ?.cashbox
+            ?.openingEntryId
+            ?.trim()
+            ?.takeIf { it.isNotBlank() }
     }
 
     private fun refreshInventoryAlerts() {

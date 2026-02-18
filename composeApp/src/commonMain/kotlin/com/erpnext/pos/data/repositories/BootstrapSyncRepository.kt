@@ -66,7 +66,7 @@ class BootstrapSyncRepository(
         val offset: Int,
         val limit: Int,
         val total: Int,
-        val hasMore: Boolean
+        val hasMore: Boolean?
     )
 
     private data class PagedFetchResult<T>(
@@ -509,9 +509,14 @@ class BootstrapSyncRepository(
         val limit = pagination["limit"]?.jsonPrimitive?.intOrNull ?: DEFAULT_PAGE_LIMIT
         val total = pagination["total"]?.jsonPrimitive?.intOrNull ?: 0
         val hasMoreRaw = pagination["has_more"]?.jsonPrimitive
-        val hasMore = hasMoreRaw?.booleanOrNull
-            ?: (hasMoreRaw?.intOrNull?.let { it != 0 })
-            ?: (hasMoreRaw?.contentOrNull?.lowercase() in setOf("1", "true", "yes"))
+        val hasMore = when {
+            hasMoreRaw == null -> null
+            hasMoreRaw.booleanOrNull != null -> hasMoreRaw.booleanOrNull
+            hasMoreRaw.intOrNull != null -> hasMoreRaw.intOrNull != 0
+            hasMoreRaw.contentOrNull != null ->
+                hasMoreRaw.contentOrNull?.lowercase() in setOf("1", "true", "yes")
+            else -> null
+        }
         return PaginationMeta(
             offset = offset.coerceAtLeast(0),
             limit = limit.coerceAtLeast(1),
@@ -582,7 +587,10 @@ class BootstrapSyncRepository(
                 }
             )
         }
-        if (!meta.hasMore || baseItems.size >= meta.total) {
+        val targetTotal = meta.total.takeIf { it > 0 }
+        val shouldFetchMore =
+            (targetTotal != null && baseItems.size < targetTotal) || meta.hasMore == true
+        if (!shouldFetchMore) {
             return PagedFetchResult(
                 items = baseItems,
                 debug = buildJsonObject {
@@ -617,7 +625,9 @@ class BootstrapSyncRepository(
             var duplicatePages = 0
             var terminatedBy = "max_page_fetch"
 
-            while (pagesFetched < MAX_PAGE_FETCH && merged.size < meta.total) {
+            while (pagesFetched < MAX_PAGE_FETCH &&
+                (targetTotal == null || merged.size < targetTotal)
+            ) {
                 val offset = offsetForPage(pageIndex).coerceAtLeast(0)
                 if (offsets.contains(offset)) {
                     terminatedBy = "repeated_offset"
@@ -646,7 +656,7 @@ class BootstrapSyncRepository(
                     duplicatePages = 0
                 }
 
-                if (merged.size >= meta.total) {
+                if (targetTotal != null && merged.size >= targetTotal) {
                     terminatedBy = "reached_total"
                     break
                 }
@@ -688,7 +698,8 @@ class BootstrapSyncRepository(
         }
 
         val shouldTryPageIndex =
-            absolute.items.size <= baseItems.size && meta.total > baseItems.size
+            absolute.items.size <= baseItems.size &&
+                ((targetTotal != null && targetTotal > baseItems.size) || meta.hasMore != false)
         val pageIndex = if (shouldTryPageIndex) {
             runStrategy(name = "page_index_offset") { pageIndexNumber ->
                 meta.offset + pageIndexNumber

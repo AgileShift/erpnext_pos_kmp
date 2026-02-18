@@ -2,9 +2,13 @@ package com.erpnext.pos.views.reconciliation
 
 import androidx.lifecycle.viewModelScope
 import com.erpnext.pos.base.BaseViewModel
+import com.erpnext.pos.auth.SessionRefresher
 import com.erpnext.pos.data.repositories.PosProfilePaymentMethodLocalRepository
 import com.erpnext.pos.localSource.dao.SalesInvoiceDao
+import com.erpnext.pos.sync.PushSyncRunner
+import com.erpnext.pos.sync.SyncContextProvider
 import com.erpnext.pos.utils.AppLogger
+import com.erpnext.pos.utils.NetworkMonitor
 import com.erpnext.pos.localSource.dao.ShiftPaymentRow
 import com.erpnext.pos.localSource.entities.SalesInvoiceEntity
 import com.erpnext.pos.utils.CurrencyService
@@ -18,6 +22,7 @@ import kotlin.time.ExperimentalTime
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
@@ -26,6 +31,10 @@ class ReconciliationViewModel(
     private val cashBoxManager: CashBoxManager,
     private val salesInvoiceDao: SalesInvoiceDao,
     private val paymentMethodLocalRepository: PosProfilePaymentMethodLocalRepository,
+    private val pushSyncRunner: PushSyncRunner,
+    private val syncContextProvider: SyncContextProvider,
+    private val networkMonitor: NetworkMonitor,
+    private val sessionRefresher: SessionRefresher,
 ) : BaseViewModel() {
     private val _stateFlow = MutableStateFlow<ReconciliationState>(ReconciliationState.Loading)
     val stateFlow: StateFlow<ReconciliationState> = _stateFlow.asStateFlow()
@@ -72,6 +81,9 @@ class ReconciliationViewModel(
                     updateClosingAmounts(summary, countedByMode)
                 }
                 cashBoxManager.closeCashBox()
+                if (cashBoxManager.cashboxState.value) {
+                    error("No se pudo cerrar la caja. Intenta nuevamente.")
+                }
                 _closeState.update { it.copy(isClosing = false, isClosed = true) }
                 loadShiftSummary()
             },
@@ -88,10 +100,48 @@ class ReconciliationViewModel(
         )
     }
 
-    private fun prepareForClose(): Boolean {
-        // Temporal: omitimos la sincronización y validación de pendientes para pruebas de cierre.
+    private suspend fun prepareForClose(): Boolean {
         _closeState.update { it.copy(isSyncing = false, syncMessage = null, errorMessage = null) }
-        return true
+        val isOnline = networkMonitor.isConnected.firstOrNull() == true
+        if (!isOnline) {
+            return true
+        }
+        if (!sessionRefresher.ensureValidSession()) {
+            AppLogger.warn(
+                "Reconciliation: sesión no válida durante pre-cierre; se continuará en modo offline-first."
+            )
+            return true
+        }
+        val syncContext = syncContextProvider.buildContext()
+        if (syncContext == null) {
+            AppLogger.warn(
+                "Reconciliation: contexto de sync no disponible; se continuará cierre local pendiente de sync."
+            )
+            return true
+        }
+        return runCatching {
+            _closeState.update {
+                it.copy(
+                    isSyncing = true,
+                    syncMessage = "Sincronizando pendientes antes del cierre...",
+                    errorMessage = null
+                )
+            }
+            pushSyncRunner.runPushQueue(syncContext) { docType ->
+                _closeState.update {
+                    it.copy(
+                        isSyncing = true,
+                        syncMessage = "Sincronizando: $docType"
+                    )
+                }
+            }
+            _closeState.update { it.copy(isSyncing = false, syncMessage = null, errorMessage = null) }
+            true
+        }.getOrElse { error ->
+            AppLogger.warn("Reconciliation: prepareForClose sync failed", error)
+            _closeState.update { it.copy(isSyncing = false, syncMessage = null, errorMessage = null) }
+            true
+        }
     }
 
     private suspend fun buildShiftSummary(): ReconciliationSummaryUi? {

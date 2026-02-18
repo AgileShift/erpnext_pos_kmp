@@ -193,6 +193,7 @@ fun CustomerListScreen(
     paymentState: CustomerPaymentState,
     historyState: CustomerInvoiceHistoryState,
     historyMessage: String?,
+    returnInfoMessage: String?,
     historyBusy: Boolean,
     customerMessage: String?,
     dialogDataState: CustomerDialogDataState,
@@ -453,6 +454,7 @@ fun CustomerListScreen(
                                                 historyState = historyState,
                                                 historyInvoicesPagingItems = historyInvoicesPagingItems,
                                                 historyMessage = historyMessage,
+                                                returnInfoMessage = returnInfoMessage,
                                                 historyBusy = historyBusy,
                                                 supportedCurrencies = supportedCurrencies,
                                                 cashboxManager = cashboxManager,
@@ -847,15 +849,6 @@ private fun CustomerListContent(
             key = { index -> customers[index]?.name ?: "customer_list_$index" }
         ) { index ->
             val customer = customers[index] ?: return@items
-            val currentLetter = customerLetter(customer)
-            val previousLetter = if (index > 0) {
-                customers[index - 1]?.let { customerLetter(it) }
-            } else {
-                null
-            }
-            if (currentLetter != previousLetter) {
-                LetterHeader(letter = currentLetter)
-            }
             CustomerItem(
                 customer = customer,
                 posCurrency = posCurrency,
@@ -889,27 +882,6 @@ private fun CustomerListContent(
             }
         }
     }
-}
-
-@Composable
-private fun LetterHeader(letter: String) {
-    Surface(
-        shape = RoundedCornerShape(10.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant
-    ) {
-        Text(
-            text = letter,
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-            style = MaterialTheme.typography.labelLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-    }
-}
-
-private fun customerLetter(customer: CustomerBO): String {
-    val raw = customer.customerName.ifBlank { customer.name }
-    val letter = raw.trim().firstOrNull()?.uppercase() ?: "#"
-    return if (letter[0] in 'A'..'Z') letter else "#"
 }
 
 @Composable
@@ -1075,6 +1047,7 @@ private fun CustomerRightPanel(
     historyState: CustomerInvoiceHistoryState,
     historyInvoicesPagingItems: androidx.paging.compose.LazyPagingItems<SalesInvoiceBO>,
     historyMessage: String?,
+    returnInfoMessage: String?,
     historyBusy: Boolean,
     supportedCurrencies: List<String>,
     cashboxManager: CashBoxManager,
@@ -1120,6 +1093,22 @@ private fun CustomerRightPanel(
                 Tab(selected = tab == rightPanelTab, onClick = {
                     if (enabled) onTabChange(tab)
                 }, enabled = enabled, text = { Text(tab.label) })
+            }
+        }
+        if (rightPanelTab == CustomerPanelTab.Details && !returnInfoMessage.isNullOrBlank()) {
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                shape = RoundedCornerShape(10.dp),
+                color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f)
+            ) {
+                Text(
+                    text = returnInfoMessage,
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                )
             }
         }
 
@@ -1378,12 +1367,13 @@ private fun NewCustomerDialog(
                                 modifier = Modifier.fillMaxWidth()
                             )
                             ExposedDropdownMenuBox(
-                                expanded = typeExpanded, onExpandedChange = { typeExpanded = it }) {
+                                expanded = typeExpanded, onExpandedChange = { typeExpanded = !typeExpanded }) {
                                 AppTextField(
                                     value = customerType,
                                     onValueChange = {},
                                     label = "Tipo de cliente",
                                     placeholder = "Seleccionar",
+                                    readOnly = true,
                                     modifier = Modifier.menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable)
                                         .fillMaxWidth(),
                                     leadingIcon = {
@@ -1408,12 +1398,13 @@ private fun NewCustomerDialog(
                             if (customerGroups.isNotEmpty()) {
                                 ExposedDropdownMenuBox(
                                     expanded = groupExpanded,
-                                    onExpandedChange = { groupExpanded = it }) {
+                                    onExpandedChange = { groupExpanded = !groupExpanded }) {
                                     AppTextField(
                                         value = customerGroup,
                                         onValueChange = {},
                                         label = "Grupo de cliente",
                                         placeholder = "Seleccionar",
+                                        readOnly = true,
                                         modifier = Modifier.menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable)
                                             .fillMaxWidth(),
                                         leadingIcon = {
@@ -1455,12 +1446,13 @@ private fun NewCustomerDialog(
                             if (territories.isNotEmpty()) {
                                 ExposedDropdownMenuBox(
                                     expanded = territoryExpanded,
-                                    onExpandedChange = { territoryExpanded = it }) {
+                                    onExpandedChange = { territoryExpanded = !territoryExpanded }) {
                                     AppTextField(
                                         value = territory,
                                         onValueChange = {},
                                         label = "Territorio",
                                         placeholder = "Seleccionar",
+                                        readOnly = true,
                                         modifier = Modifier.menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable)
                                             .fillMaxWidth(),
                                         leadingIcon = {
@@ -1530,12 +1522,13 @@ private fun NewCustomerDialog(
                                 if (companies.isNotEmpty()) {
                                     ExposedDropdownMenuBox(
                                         expanded = companyExpanded,
-                                        onExpandedChange = { companyExpanded = it }) {
+                                        onExpandedChange = { companyExpanded = !companyExpanded }) {
                                         AppTextField(
                                             value = internalCompany,
                                             onValueChange = {},
                                             label = "Compañía",
                                             placeholder = "Seleccionar",
+                                            readOnly = true,
                                             modifier = Modifier.menuAnchor(
                                                 ExposedDropdownMenuAnchorType.PrimaryNotEditable
                                             ).fillMaxWidth(),
@@ -1712,7 +1705,7 @@ private fun NewCustomerDialog(
                                 if (paymentTermsOptions.isNotEmpty()) {
                                     ExposedDropdownMenuBox(
                                         expanded = paymentExpanded,
-                                        onExpandedChange = { paymentExpanded = it },
+                                        onExpandedChange = { paymentExpanded = !paymentExpanded },
                                         modifier = Modifier.weight(1f)
                                     ) {
                                         AppTextField(
@@ -1720,6 +1713,7 @@ private fun NewCustomerDialog(
                                             onValueChange = {},
                                             label = "Términos de pago",
                                             placeholder = "Seleccionar",
+                                            readOnly = true,
                                             modifier = Modifier.menuAnchor(
                                                 ExposedDropdownMenuAnchorType.PrimaryNotEditable
                                             ).fillMaxWidth(),
@@ -1934,9 +1928,14 @@ fun CustomerItem(
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
-                    } else {
-                        StatusPill(label = statusLabel, isCritical = emphasis)
                     }
+                    Text(
+                        text = "Codigo: ${customer.name}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
                 }
 
                 IconButton(onClick = {
@@ -1971,6 +1970,7 @@ fun CustomerItem(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                StatusPill(label = statusLabel, isCritical = emphasis)
                 Column {
                     Text(
                         text = formatCurrency(posCurr, pendingPos ?: pendingCompany),
@@ -1992,9 +1992,6 @@ fun CustomerItem(
                     )
                 }
             }
-            Text(
-                text = statusLabel, style = MaterialTheme.typography.bodySmall, color = statusColor
-            )
         }
     }
 }
@@ -2513,12 +2510,13 @@ private fun CustomerOutstandingInvoicesContent(
                 )
 
                 ExposedDropdownMenuBox(
-                    expanded = modeExpanded, onExpandedChange = { modeExpanded = it }) {
+                    expanded = modeExpanded, onExpandedChange = { modeExpanded = !modeExpanded }) {
                     AppTextField(
                         value = selectedMode,
                         onValueChange = {},
                         label = strings.customer.selectPaymentMode,
                         placeholder = strings.customer.selectPaymentMode,
+                        readOnly = true,
                         modifier = Modifier.menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable)
                             .fillMaxWidth(),
                         leadingIcon = { Icon(Icons.Default.Money, contentDescription = null) },
@@ -2902,7 +2900,7 @@ private fun CustomerInvoiceHistorySheet(
                             )
                             ExposedDropdownMenuBox(
                                 expanded = refundModeExpanded,
-                                onExpandedChange = { refundModeExpanded = it }) {
+                                onExpandedChange = { refundModeExpanded = !refundModeExpanded }) {
                                 OutlinedTextField(
                                     value = refundMode ?: "",
                                     onValueChange = { },
@@ -3291,7 +3289,7 @@ private fun CustomerInvoiceHistorySheet(
                 if (refundEnabled && refundOptions.isNotEmpty()) {
                     ExposedDropdownMenuBox(
                         expanded = refundModeExpanded,
-                        onExpandedChange = { refundModeExpanded = it }) {
+                        onExpandedChange = { refundModeExpanded = !refundModeExpanded }) {
                         OutlinedTextField(
                             value = fullRefundMode ?: "",
                             onValueChange = { },
@@ -3649,7 +3647,7 @@ private fun CustomerInvoiceHistoryContent(
                 if (refundEnabled && refundOptions.isNotEmpty()) {
                     ExposedDropdownMenuBox(
                         expanded = refundModeExpanded,
-                        onExpandedChange = { refundModeExpanded = it }) {
+                        onExpandedChange = { refundModeExpanded = !refundModeExpanded }) {
                         OutlinedTextField(
                             value = refundMode ?: "",
                             onValueChange = { },
@@ -3946,7 +3944,7 @@ private fun CustomerInvoiceHistoryContent(
                             )
                             ExposedDropdownMenuBox(
                                 expanded = fullRefundModeExpanded,
-                                onExpandedChange = { fullRefundModeExpanded = it }) {
+                                onExpandedChange = { fullRefundModeExpanded = !fullRefundModeExpanded }) {
                                 OutlinedTextField(
                                     value = fullRefundMode ?: "",
                                     onValueChange = { },
@@ -4799,6 +4797,11 @@ private fun ReturnAccountingSummary(
                 Text("Saldo estimado")
                 Text(formatCurrency(normalizedCurrency, projectedOutstanding))
             }
+            Text(
+                text = "Nota cajero: el saldo en ERPNext puede verse igual hasta la conciliación o cierre de caja.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
         Text(
             "Stock: se reintegra al almacén en el retorno.",

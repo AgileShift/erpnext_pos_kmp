@@ -1457,7 +1457,13 @@ private fun CustomerSelector(
     val hasCustomers = customers.isNotEmpty()
 
     ExposedDropdownMenuBox(
-        expanded = expanded && hasCustomers, onExpandedChange = { }) {
+        expanded = expanded && hasCustomers,
+        onExpandedChange = {
+            if (hasCustomers) {
+                expanded = !expanded
+            }
+        }
+    ) {
         AppTextField(
             value = query,
             onValueChange = {
@@ -1740,13 +1746,14 @@ private fun PaymentSection(
         Text("Método de pago", style = MaterialTheme.typography.bodyMedium)
         var modeExpanded by remember { mutableStateOf(false) }
         ExposedDropdownMenuBox(
-            expanded = modeExpanded, onExpandedChange = { modeExpanded = it }) {
+            expanded = modeExpanded, onExpandedChange = { modeExpanded = !modeExpanded }) {
             AppTextField(
                 value = selectedMode,
                 onValueChange = {},
                 modifier = Modifier.menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable),
                 label = "Método de pago",
                 placeholder = "Selecciona el metodo de pago del cliente",
+                readOnly = true,
                 leadingIcon = { Icon(Icons.Default.Money, contentDescription = null) },
                 trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = modeExpanded) })
             ExposedDropdownMenu(
@@ -1982,13 +1989,14 @@ private fun DiscountShippingInputs(
                 state.selectedDeliveryCharge?.label ?: "Selecciona cargo de envío"
             var deliveryExpanded by remember { mutableStateOf(false) }
             ExposedDropdownMenuBox(
-                expanded = deliveryExpanded, onExpandedChange = { deliveryExpanded = it }) {
+                expanded = deliveryExpanded, onExpandedChange = { deliveryExpanded = !deliveryExpanded }) {
                 AppTextField(
                     value = deliveryChargeLabel,
                     onValueChange = {},
                     label = "Cargo de envío",
                     modifier = Modifier.fillMaxWidth()
                         .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable),
+                    readOnly = true,
                     trailingIcon = {
                         ExposedDropdownMenuDefaults.TrailingIcon(expanded = deliveryExpanded)
                     })
@@ -2070,7 +2078,7 @@ private fun CreditTermsSection(
             var templateExpanded by remember { mutableStateOf(false) }
             val templateLabel = selectedPaymentTerm?.name ?: "Selecciona la condicion de pago"
             ExposedDropdownMenuBox(
-                expanded = templateExpanded, onExpandedChange = { templateExpanded = it }) {
+                expanded = templateExpanded, onExpandedChange = { templateExpanded = !templateExpanded }) {
                 AppTextField(
                     value = templateLabel,
                     onValueChange = {},
@@ -2078,6 +2086,7 @@ private fun CreditTermsSection(
                     placeholder = "Condicion de pago",
                     modifier = Modifier//.fillMaxWidth()
                         .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable),
+                    readOnly = true,
                     trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = templateExpanded) },
                     leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) })
                 ExposedDropdownMenu(
@@ -2152,6 +2161,7 @@ fun AppTextField(
     placeholder: String? = null,
     singleLine: Boolean = true,
     enabled: Boolean = true,
+    readOnly: Boolean = false,
     isError: Boolean = false,
     supportingText: (@Composable () -> Unit)? = null,
     keyboardOptions: KeyboardOptions = KeyboardOptions.Default,
@@ -2167,6 +2177,7 @@ fun AppTextField(
         placeholder = placeholder?.let { { Text(it) } },
         singleLine = singleLine,
         enabled = enabled,
+        readOnly = readOnly,
         isError = isError,
         supportingText = supportingText,
         keyboardOptions = keyboardOptions,
@@ -2377,9 +2388,17 @@ fun MoneyTextField(
     }
     val transformation = remember(spec) { MoneyVisualTransformation(spec) }
 
-    var tfv by remember(rawValue, spec.decimals) {
+    var tfv by remember(spec.decimals) {
         val sanitized = sanitizeMoneyInput(rawValue, spec.decimals)
         mutableStateOf(TextFieldValue(sanitized, selection = TextRange(sanitized.length)))
+    }
+
+    LaunchedEffect(rawValue, spec.decimals) {
+        val sanitized = sanitizeMoneyInput(rawValue, spec.decimals)
+        if (sanitized != tfv.text) {
+            val nextCursor = tfv.selection.start.coerceIn(0, sanitized.length)
+            tfv = TextFieldValue(text = sanitized, selection = TextRange(nextCursor))
+        }
     }
 
     LaunchedEffect(tfv.text) {
@@ -2390,9 +2409,15 @@ fun MoneyTextField(
         value = tfv,
         onValueChange = { typed ->
             val sanitized = sanitizeMoneyInput(typed.text, spec.decimals)
-            tfv = TextFieldValue(
+            val typedCursor = typed.selection.end.coerceIn(0, typed.text.length)
+            val sanitizedPrefix = sanitizeMoneyInput(
+                typed.text.take(typedCursor),
+                spec.decimals
+            )
+            val nextCursor = sanitizedPrefix.length.coerceIn(0, sanitized.length)
+            tfv = typed.copy(
                 text = sanitized,
-                selection = TextRange(sanitized.length)
+                selection = TextRange(nextCursor)
             )
             onRawValueChange(sanitized)
         },

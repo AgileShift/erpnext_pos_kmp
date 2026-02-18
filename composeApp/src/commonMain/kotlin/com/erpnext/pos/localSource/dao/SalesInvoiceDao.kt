@@ -119,8 +119,16 @@ interface SalesInvoiceDao {
     suspend fun updateSyncStatus(invoiceName: String, status: String)
 
     // 🔹 Métricas financieras
-    @Query("SELECT SUM(grand_total) FROM tabSalesInvoice WHERE posting_date = :date AND docstatus = 1 AND is_deleted = 0")
-    suspend fun getTotalSalesForDate(date: String): Double?
+    @Query(
+        """
+        SELECT SUM(grand_total) FROM tabSalesInvoice
+        WHERE posting_date = :date
+          AND docstatus = 1
+          AND is_deleted = 0
+          AND (:openingEntryId IS NULL OR pos_opening_entry = :openingEntryId)
+        """
+    )
+    suspend fun getTotalSalesForDate(date: String, openingEntryId: String? = null): Double?
 
     @Query(
         """
@@ -128,9 +136,10 @@ interface SalesInvoiceDao {
         FROM tabSalesInvoice
         WHERE currency IS NOT NULL AND currency != ''
           AND is_deleted = 0
+          AND (:openingEntryId IS NULL OR pos_opening_entry = :openingEntryId)
         """
     )
-    suspend fun getAvailableCurrencies(): List<String>
+    suspend fun getAvailableCurrencies(openingEntryId: String? = null): List<String>
 
     @Query(
         """
@@ -142,16 +151,38 @@ interface SalesInvoiceDao {
         WHERE posting_date = :date
           AND docstatus = 1
           AND is_deleted = 0
+          AND (:openingEntryId IS NULL OR pos_opening_entry = :openingEntryId)
         GROUP BY currency
         """
     )
-    suspend fun getSalesSummaryForDateByCurrency(date: String): List<CurrencySalesSummary>
+    suspend fun getSalesSummaryForDateByCurrency(
+        date: String,
+        openingEntryId: String? = null
+    ): List<CurrencySalesSummary>
 
-    @Query("SELECT COUNT(*) FROM tabSalesInvoice WHERE posting_date = :date AND docstatus = 1 AND is_deleted = 0")
-    suspend fun getSalesCountForDate(date: String): Int
+    @Query(
+        """
+        SELECT COUNT(*)
+        FROM tabSalesInvoice
+        WHERE posting_date = :date
+          AND docstatus = 1
+          AND is_deleted = 0
+          AND (:openingEntryId IS NULL OR pos_opening_entry = :openingEntryId)
+        """
+    )
+    suspend fun getSalesCountForDate(date: String, openingEntryId: String? = null): Int
 
-    @Query("SELECT COUNT(DISTINCT customer) FROM tabSalesInvoice WHERE posting_date = :date AND docstatus = 1 AND is_deleted = 0")
-    suspend fun getDistinctCustomersForDate(date: String): Int
+    @Query(
+        """
+        SELECT COUNT(DISTINCT customer)
+        FROM tabSalesInvoice
+        WHERE posting_date = :date
+          AND docstatus = 1
+          AND is_deleted = 0
+          AND (:openingEntryId IS NULL OR pos_opening_entry = :openingEntryId)
+        """
+    )
+    suspend fun getDistinctCustomersForDate(date: String, openingEntryId: String? = null): Int
 
     @Query(
         """
@@ -160,13 +191,15 @@ interface SalesInvoiceDao {
         WHERE posting_date BETWEEN :startDate AND :endDate
           AND docstatus = 1
           AND is_deleted = 0
+          AND (:openingEntryId IS NULL OR pos_opening_entry = :openingEntryId)
         GROUP BY posting_date
         ORDER BY posting_date ASC
         """
     )
     suspend fun getDailySalesTotals(
         startDate: String,
-        endDate: String
+        endDate: String,
+        openingEntryId: String? = null
     ): List<DailySalesTotal>
 
     @Query(
@@ -178,13 +211,15 @@ interface SalesInvoiceDao {
         WHERE posting_date BETWEEN :startDate AND :endDate
           AND docstatus = 1
           AND is_deleted = 0
+          AND (:openingEntryId IS NULL OR pos_opening_entry = :openingEntryId)
         GROUP BY posting_date, currency
         ORDER BY posting_date ASC
         """
     )
     suspend fun getDailySalesTotalsByCurrency(
         startDate: String,
-        endDate: String
+        endDate: String,
+        openingEntryId: String? = null
     ): List<CurrencyDailySalesTotal>
 
     @Query(
@@ -198,6 +233,7 @@ interface SalesInvoiceDao {
         WHERE s.posting_date BETWEEN :startDate AND :endDate
           AND s.docstatus = 1
           AND s.is_deleted = 0
+          AND (:openingEntryId IS NULL OR s.pos_opening_entry = :openingEntryId)
         GROUP BY i.item_code, i.item_name
         ORDER BY total DESC
         LIMIT :limit
@@ -206,7 +242,8 @@ interface SalesInvoiceDao {
     suspend fun getTopProductsBySales(
         startDate: String,
         endDate: String,
-        limit: Int
+        limit: Int,
+        openingEntryId: String? = null
     ): List<TopProductSales>
 
     @Query(
@@ -221,11 +258,13 @@ interface SalesInvoiceDao {
         WHERE s.posting_date BETWEEN :startDate AND :endDate
           AND s.docstatus = 1
           AND s.is_deleted = 0
+          AND (:openingEntryId IS NULL OR s.pos_opening_entry = :openingEntryId)
         """
     )
     suspend fun getEstimatedMarginTotal(
         startDate: String,
-        endDate: String
+        endDate: String,
+        openingEntryId: String? = null
     ): Double?
 
     @Query(
@@ -241,12 +280,14 @@ interface SalesInvoiceDao {
         WHERE s.posting_date BETWEEN :startDate AND :endDate
           AND s.docstatus = 1
           AND s.is_deleted = 0
+          AND (:openingEntryId IS NULL OR s.pos_opening_entry = :openingEntryId)
         GROUP BY s.currency
         """
     )
     suspend fun getEstimatedMarginTotalByCurrency(
         startDate: String,
-        endDate: String
+        endDate: String,
+        openingEntryId: String? = null
     ): List<CurrencyMarginTotal>
 
     @Query(
@@ -259,11 +300,13 @@ interface SalesInvoiceDao {
           AND s.docstatus = 1
           AND s.is_deleted = 0
           AND IFNULL(t.valuation_rate, 0) > 0
+          AND (:openingEntryId IS NULL OR s.pos_opening_entry = :openingEntryId)
         """
     )
     suspend fun countItemsWithCost(
         startDate: String,
-        endDate: String
+        endDate: String,
+        openingEntryId: String? = null
     ): Int
 
     @Query(
@@ -276,12 +319,14 @@ interface SalesInvoiceDao {
           AND s.docstatus = 1
           AND s.is_deleted = 0
           AND IFNULL(t.valuation_rate, 0) > 0
+          AND (:openingEntryId IS NULL OR s.pos_opening_entry = :openingEntryId)
         GROUP BY s.currency
         """
     )
     suspend fun countItemsWithCostByCurrency(
         startDate: String,
-        endDate: String
+        endDate: String,
+        openingEntryId: String? = null
     ): List<CurrencyItemCount>
 
     @Query(
@@ -292,11 +337,13 @@ interface SalesInvoiceDao {
         WHERE s.posting_date BETWEEN :startDate AND :endDate
           AND s.docstatus = 1
           AND s.is_deleted = 0
+          AND (:openingEntryId IS NULL OR s.pos_opening_entry = :openingEntryId)
         """
     )
     suspend fun countItemsInRange(
         startDate: String,
-        endDate: String
+        endDate: String,
+        openingEntryId: String? = null
     ): Int
 
     @Query(
@@ -307,12 +354,14 @@ interface SalesInvoiceDao {
         WHERE s.posting_date BETWEEN :startDate AND :endDate
           AND s.docstatus = 1
           AND s.is_deleted = 0
+          AND (:openingEntryId IS NULL OR s.pos_opening_entry = :openingEntryId)
         GROUP BY s.currency
         """
     )
     suspend fun countItemsInRangeByCurrency(
         startDate: String,
-        endDate: String
+        endDate: String,
+        openingEntryId: String? = null
     ): List<CurrencyItemCount>
 
     @Query(
@@ -332,6 +381,7 @@ interface SalesInvoiceDao {
           AND s.docstatus = 1
           AND s.is_deleted = 0
           AND IFNULL(t.valuation_rate, 0) > 0
+          AND (:openingEntryId IS NULL OR s.pos_opening_entry = :openingEntryId)
         GROUP BY i.item_code, i.item_name
         ORDER BY margin DESC
         LIMIT :limit
@@ -340,11 +390,20 @@ interface SalesInvoiceDao {
     suspend fun getTopProductsByMargin(
         startDate: String,
         endDate: String,
-        limit: Int
+        limit: Int,
+        openingEntryId: String? = null
     ): List<TopProductMargin>
 
-    @Query("SELECT SUM(outstanding_amount) FROM tabSalesInvoice WHERE status IN ('Draft','Submitted') AND is_deleted = 0")
-    suspend fun getTotalOutstanding(): Double?
+    @Query(
+        """
+        SELECT SUM(outstanding_amount)
+        FROM tabSalesInvoice
+        WHERE status IN ('Draft','Submitted')
+          AND is_deleted = 0
+          AND (:openingEntryId IS NULL OR pos_opening_entry = :openingEntryId)
+        """
+    )
+    suspend fun getTotalOutstanding(openingEntryId: String? = null): Double?
 
     @Query(
         """
@@ -353,10 +412,11 @@ interface SalesInvoiceDao {
         FROM tabSalesInvoice
         WHERE status IN ('Draft','Submitted')
           AND is_deleted = 0
+          AND (:openingEntryId IS NULL OR pos_opening_entry = :openingEntryId)
         GROUP BY currency
         """
     )
-    suspend fun getOutstandingTotalsByCurrency(): List<CurrencyOutstandingTotal>
+    suspend fun getOutstandingTotalsByCurrency(openingEntryId: String? = null): List<CurrencyOutstandingTotal>
 
     // 🔹 Limpieza / control
     @Query("DELETE FROM tabSalesInvoice WHERE docstatus = 2") // Cancelled

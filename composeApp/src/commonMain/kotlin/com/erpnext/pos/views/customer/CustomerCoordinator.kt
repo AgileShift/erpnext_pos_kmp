@@ -17,6 +17,7 @@ class CustomerCoordinator(
     val paymentState = viewModel.paymentState
     val historyState = viewModel.historyState
     val historyMessage = viewModel.historyMessage
+    val returnInfoMessage = viewModel.returnInfoMessage
     val historyActionBusy = viewModel.historyActionBusy
     val customerMessage = viewModel.customerMessage
     val dialogDataState = viewModel.dialogDataState

@@ -222,6 +222,9 @@ class BillingViewModel(
                         exchangeRate = contextProvider.getContext()?.exchangeRate ?: 1.0,
                         paymentTerms = paymentTerms,
                         deliveryCharges = deliveryCharges,
+                        applyDiscountOn = context.applyDiscountOn
+                            ?.takeIf { it.isNotBlank() }
+                            ?: "Grand Total",
                         exchangeRateByCurrency = exchangeRateByCurrency,
                         paymentModeCurrencyByMode = paymentModeCurrencyByMode,
                         salesFlowContext = contextSelection
@@ -797,7 +800,11 @@ class BillingViewModel(
                     shipping = roundForCurrency(rawTotals.shipping, invoiceCurrency),
                     total = roundForCurrency(rawTotals.total, invoiceCurrency)
                 )
-                val discountInfo = resolveDiscountInfo(currentWithHints, totals.subtotal)
+                val discountInfo = resolveDiscountInfo(
+                    state = currentWithHints,
+                    subtotal = totals.subtotal,
+                    taxes = totals.taxes
+                )
                 val discountPercent = discountInfo.percent?.takeIf { it > 0.0 }
 
                 val isCreditSale = currentWithHints.isCreditSale
@@ -1296,10 +1303,6 @@ class BillingViewModel(
         return if (value % 1.0 == 0.0) value.toLong().toString() else value.toString()
     }
 
-    companion object {
-        private const val DISCOUNT_ITEM_CODE = "Discount"
-    }
-
     private fun buildSalesInvoiceDto(
         current: BillingState.Success,
         customer: CustomerBO,
@@ -1318,12 +1321,17 @@ class BillingViewModel(
         posOpeningEntry: String?,
         usePosInvoice: Boolean
     ): SalesInvoiceDto {
-        val items = buildInvoiceItems(current, context, invoiceCurrency, discountPercent, discountAmount)
+        val items = buildInvoiceItems(current, context, invoiceCurrency)
         val paymentMetadata =
             buildInvoiceRemarks(current, paymentLines, totals.shipping, invoiceCurrency)
         val taxes = roundForCurrency(totals.taxes, invoiceCurrency)
         val total = roundForCurrency(totals.total, invoiceCurrency)
         val netTotal = roundForCurrency((total - taxes).coerceAtLeast(0.0), invoiceCurrency)
+        val resolvedDiscountPercent = discountPercent?.takeIf { it > 0.0 }
+        val resolvedDiscountAmount = roundForCurrency(discountAmount, invoiceCurrency)
+            .takeIf { it > 0.0 }
+        val couponCode = current.discountCode.trim().takeIf { it.isNotBlank() }
+        val applyDiscountOn = current.applyDiscountOn.takeIf { it.isNotBlank() } ?: "Grand Total"
 
         val isPosSale = true
         require(!posOpeningEntry.isNullOrBlank()) {
@@ -1383,6 +1391,10 @@ class BillingViewModel(
             netTotal = netTotal,
             paidAmount = resolvedPaid,
             changeAmount = null,
+            discountAmount = resolvedDiscountAmount,
+            applyDiscountOn = applyDiscountOn,
+            additionalDiscountPercentage = resolvedDiscountPercent,
+            couponCode = couponCode,
             items = items,
             payments = payments,
             paymentSchedule = paymentSchedule,
@@ -1455,9 +1467,7 @@ class BillingViewModel(
     private fun buildInvoiceItems(
         current: BillingState.Success,
         context: POSContext,
-        invoiceCurrency: String,
-        discountPercent: Double?,
-        discountAmount: Double
+        invoiceCurrency: String
     ): MutableList<SalesInvoiceItemDto> {
         val source = current.salesFlowContext
         val sourceId = source?.sourceId
@@ -1474,28 +1484,13 @@ class BillingViewModel(
                 qty = cart.quantity,
                 rate = rate,
                 amount = amount,
-                discountPercentage = discountPercent,
+                discountPercentage = null,
                 warehouse = context.warehouse,
                 incomeAccount = context.incomeAccount,
                 salesOrder = salesOrderId,
                 deliveryNote = deliveryNoteId
             )
         }.toMutableList()
-
-        if (discountPercent == null && discountAmount > 0.0) {
-            val discountValue = roundForCurrency(discountAmount, invoiceCurrency)
-            items.add(
-                SalesInvoiceItemDto(
-                    itemCode = DISCOUNT_ITEM_CODE,
-                    itemName = "Discount",
-                    qty = 1.0,
-                    rate = -discountValue,
-                    amount = -discountValue,
-                    warehouse = context.warehouse,
-                    incomeAccount = context.incomeAccount
-                )
-            )
-        }
 
         return items
     }
