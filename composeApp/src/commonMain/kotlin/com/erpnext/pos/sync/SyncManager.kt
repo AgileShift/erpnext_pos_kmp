@@ -8,6 +8,7 @@ import com.erpnext.pos.domain.policy.DefaultPolicy
 import com.erpnext.pos.domain.policy.PolicyInput
 import com.erpnext.pos.domain.sync.SyncContext
 import com.erpnext.pos.localSource.preferences.BootstrapContextPreferences
+import com.erpnext.pos.localSource.preferences.GeneralPreferences
 import com.erpnext.pos.localSource.preferences.SyncLogPreferences
 import com.erpnext.pos.localSource.preferences.SyncPreferences
 import com.erpnext.pos.localSource.preferences.SyncSettings
@@ -48,6 +49,7 @@ class SyncManager(
     private val bootstrapSyncRepository: BootstrapSyncRepository,
     private val syncPreferences: SyncPreferences,
     private val syncLogPreferences: SyncLogPreferences,
+    private val generalPreferences: GeneralPreferences,
     private val cashBoxManager: CashBoxManager,
     private val networkMonitor: NetworkMonitor,
     private val sessionRefresher: SessionRefresher,
@@ -71,6 +73,7 @@ class SyncManager(
         )
     private var lastSyncAttemptAt: Long? = null
     private val minSyncIntervalMillis = 2 * 60 * 1000L
+    private var offlineModeCache: Boolean = false
 
     private val _state = MutableStateFlow<SyncState>(SyncState.IDLE)
     override val state: StateFlow<SyncState> = _state.asStateFlow()
@@ -79,12 +82,18 @@ class SyncManager(
 
     init {
         observeSyncSettings()
+        observeOfflineMode()
         observeConnectivity()
         observeBootstrapRefresh()
     }
 
     @OptIn(ExperimentalTime::class)
     override fun fullSync(ttlHours: Int, force: Boolean) {
+        if (offlineModeCache) {
+            _state.value = SyncState.ERROR("Modo offline activo. Desactívalo para sincronizar.")
+            AppLogger.info("SyncManager.fullSync skipped: offline mode enabled")
+            return
+        }
         if (_state.value is SyncState.SYNCING || syncJob?.isActive == true) return
         val effectiveTtlHours = ttlHours.coerceIn(1, 168)
         val now = Clock.System.now().toEpochMilliseconds()
@@ -214,6 +223,10 @@ class SyncManager(
 
     @OptIn(ExperimentalTime::class)
     override fun syncInventory(force: Boolean) {
+        if (offlineModeCache) {
+            AppLogger.info("SyncManager.syncInventory skipped: offline mode enabled")
+            return
+        }
         if (_state.value is SyncState.SYNCING) return
         if (!cashBoxManager.cashboxState.value) {
             AppLogger.info("SyncManager.syncInventory skipped: cashbox is closed")
@@ -248,6 +261,10 @@ class SyncManager(
     }
 
     private suspend fun runPushQueue() {
+        if (offlineModeCache) {
+            AppLogger.warn("SyncManager: push queue skipped because offline mode is enabled")
+            return
+        }
         if (!cashBoxManager.cashboxState.value) {
             AppLogger.warn("SyncManager: push queue skipped because cashbox is closed")
             return
@@ -411,6 +428,17 @@ class SyncManager(
         }
     }
 
+    private fun observeOfflineMode() {
+        scope.launch {
+            generalPreferences.offlineMode.collect { enabled ->
+                offlineModeCache = enabled
+                if (enabled && _state.value is SyncState.SYNCING) {
+                    cancelSync()
+                }
+            }
+        }
+    }
+
     private fun observeConnectivity() {
         scope.launch {
             var wasConnected = false
@@ -434,6 +462,10 @@ class SyncManager(
 
     private suspend fun refreshBootstrapSnapshot(trigger: String): Boolean {
         return bootstrapMutex.withLock {
+            if (offlineModeCache) {
+                AppLogger.info("SyncManager.bootstrap skipped ($trigger): offline mode enabled")
+                return@withLock false
+            }
             val isOnline = networkMonitor.isConnected.first()
             if (!isOnline) {
                 AppLogger.info("SyncManager.bootstrap skipped ($trigger): offline")
@@ -478,6 +510,7 @@ class SyncManager(
     }
 
     private fun shouldAutoSyncOnConnection(): Boolean {
+        if (offlineModeCache) return false
         if (!syncSettingsCache.autoSync) return false
         if (syncSettingsCache.wifiOnly) return false
         return _state.value !is SyncState.SYNCING

@@ -74,6 +74,8 @@ fun DesktopNavigationRail(
 
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 ActivityNavigationRailEntry(
+                    navController = navController,
+                    isSelected = currentRoutePath == NavRoute.Activity.path,
                     activityBadgeCount = activityBadgeCount
                 )
                 secondaryItems.forEach { navRoute ->
@@ -91,13 +93,22 @@ fun DesktopNavigationRail(
 
 @Composable
 private fun ActivityNavigationRailEntry(
+    navController: NavController,
+    isSelected: Boolean,
     activityBadgeCount: Int
 ) {
     val hasBadge = activityBadgeCount > 0
     val badgeText = if (activityBadgeCount > 99) "99+" else activityBadgeCount.toString()
+    val title = NavRoute.Activity.localizedTitle()
     NavigationRailItem(
-        selected = false,
-        onClick = {},
+        selected = isSelected,
+        onClick = {
+            if (navController.currentDestination?.route != NavRoute.Activity.path) {
+                navController.navigate(NavRoute.Activity.path) {
+                    launchSingleTop = true
+                }
+            }
+        },
         icon = {
             BadgedBox(
                 badge = {
@@ -110,17 +121,25 @@ private fun ActivityNavigationRailEntry(
             ) {
                 Icon(
                     imageVector = Icons.Filled.Notifications,
-                    contentDescription = "",
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    contentDescription = title,
+                    tint = if (isSelected) {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    }
                 )
             }
         },
-        label = {
+        /*label = {
             Text(
-                text = "",
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                text = NavRoute.Activity.title,
+                color = if (isSelected) {
+                    MaterialTheme.colorScheme.primary
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant
+                }
             )
-        }
+        }*/
     )
 }
 
@@ -131,6 +150,7 @@ private fun NavigationRailEntry(
     isEnabled: Boolean,
     isSelected: Boolean
 ) {
+    val title = navRoute.localizedTitle()
     NavigationRailItem(
         selected = isSelected,
         onClick = {
@@ -143,7 +163,7 @@ private fun NavigationRailEntry(
         icon = {
             Icon(
                 imageVector = navRoute.icon,
-                contentDescription = navRoute.title,
+                contentDescription = title,
                 tint = if (isSelected && isEnabled) {
                     MaterialTheme.colorScheme.primary
                 } else {
@@ -154,7 +174,7 @@ private fun NavigationRailEntry(
         },
         label = {
             Text(
-                text = navRoute.title,
+                text = title,
                 color = if (isSelected && isEnabled) {
                     MaterialTheme.colorScheme.primary
                 } else {

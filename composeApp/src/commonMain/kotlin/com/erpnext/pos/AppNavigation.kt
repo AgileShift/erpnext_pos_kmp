@@ -31,6 +31,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.Logout
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Business
+import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.Print
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Settings
@@ -83,6 +84,7 @@ import com.erpnext.pos.localSource.preferences.GeneralPreferences
 import com.erpnext.pos.localSource.preferences.SyncPreferences
 import com.erpnext.pos.localSource.preferences.SyncSettings
 import com.erpnext.pos.localSource.preferences.ThemePreferences
+import com.erpnext.pos.localization.AppStrings
 import com.erpnext.pos.localization.LocalAppStrings
 import com.erpnext.pos.localization.ProvideAppStrings
 import com.erpnext.pos.navigation.BottomBarWithCenterFab
@@ -106,6 +108,7 @@ import com.erpnext.pos.utils.view.SnackbarHost
 import com.erpnext.pos.utils.view.SnackbarPosition
 import com.erpnext.pos.utils.view.SnackbarType
 import com.erpnext.pos.views.CashBoxManager
+import com.erpnext.pos.views.activity.ActivityCenter
 import com.erpnext.pos.views.billing.BillingResetController
 import com.erpnext.pos.views.home.HomeRefreshController
 import com.erpnext.pos.views.inventory.InventoryRefreshController
@@ -123,21 +126,20 @@ fun shouldShowTopBar(currentRoute: String): Boolean {
     return shouldShowBottomBar(currentRoute)
 }
 
-//TOOD: Localizar
-private fun defaultTitleForRoute(route: String): String {
+private fun defaultTitleForRoute(route: String, strings: AppStrings): String {
     return when {
-        route == NavRoute.Home.path -> "Inicio"
-        route == NavRoute.Inventory.path -> "Inventario"
-        route == NavRoute.Billing.path -> "Ventas"
-        route == NavRoute.Billing.path -> "POS Lab"
-        route == NavRoute.Customer.path -> "Clientes"
-        route == NavRoute.Credits.path -> "Créditos"
-        route == NavRoute.Quotation.path -> "Cotizaciones"
-        route == NavRoute.SalesOrder.path -> "Orden de venta"
-        route == NavRoute.DeliveryNote.path -> "Nota de entrega"
-        route.startsWith("reconciliation") -> "Reconciliación"
-        route.startsWith("payment-entry") -> "Entrada de pago"
-        route == NavRoute.Settings.path -> "Configuración"
+        route == NavRoute.Home.path -> strings.navigation.home
+        route == NavRoute.Inventory.path -> strings.navigation.inventory
+        route == NavRoute.Billing.path -> strings.navigation.billing
+        route == NavRoute.Customer.path -> strings.navigation.customer
+        route == NavRoute.Credits.path -> strings.navigation.credits
+        route == NavRoute.Quotation.path -> strings.navigation.quotations
+        route == NavRoute.SalesOrder.path -> strings.navigation.salesOrder
+        route == NavRoute.DeliveryNote.path -> strings.navigation.deliveryNote
+        route.startsWith("reconciliation") -> strings.navigation.reconciliation
+        route.startsWith("payment-entry") -> strings.navigation.paymentEntry
+        route == NavRoute.Activity.path -> strings.navigation.activity
+        route == NavRoute.Settings.path -> strings.navigation.settings
         else -> ""
     }
 }
@@ -163,6 +165,7 @@ fun ImageFromUrl(
     url: String,
     modifier: Modifier = Modifier,
 ) {
+    val strings = LocalAppStrings.current
     SubcomposeAsyncImage(
         model = ImageRequest.Builder(LocalPlatformContext.current)
             .data(url)
@@ -178,7 +181,7 @@ fun ImageFromUrl(
         },
         error = {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text("No se pudo cargar la imagen")
+                Text(strings.common.errorLabel)
             }
         }
     )
@@ -191,6 +194,7 @@ fun AppNavigation() {
     val snackbarController = koinInject<SnackbarController>()
     val themePreferences = koinInject<ThemePreferences>()
     val generalPreferences = koinInject<GeneralPreferences>()
+    val activityCenter = koinInject<ActivityCenter>()
     val syncManager = koinInject<SyncManager>()
     val syncPreferences = koinInject<SyncPreferences>()
     val networkMonitor = koinInject<NetworkMonitor>()
@@ -220,6 +224,7 @@ fun AppNavigation() {
         )
     )
     val isOnline by networkMonitor.isConnected.collectAsState(false)
+    val activityBadgeCount by activityCenter.unreadCount.collectAsState(0)
     val printerEnabled by generalPreferences.printerEnabled.collectAsState(true)
     val posContext by cashBoxManager.contextFlow.collectAsState(null)
     val isCashboxOpen by cashBoxManager.cashboxState.collectAsState()
@@ -227,7 +232,6 @@ fun AppNavigation() {
     var profileMenuExpanded by remember { mutableStateOf(false) }
     var tick by remember { mutableStateOf(0L) }
     var settingsFromMenu by remember { mutableStateOf(false) }
-    var activityBadgeCount by remember { mutableStateOf(0) }
 
     LaunchedEffect(Unit) {
         while (true) {
@@ -238,13 +242,7 @@ fun AppNavigation() {
     val visibleEntries by navController.visibleEntries.collectAsState()
     val currentRoute = visibleEntries.lastOrNull()?.destination?.route ?: ""
 
-
-    LaunchedEffect(isOnline, posContext?.profileName, posContext?.territory, posContext?.route) {
-        activityBadgeCount = 0
-    }
-
     val isDesktop = getPlatformName() == "Desktop"
-    val titleFallback = defaultTitleForRoute(currentRoute)
     val previousRoute = navController.previousBackStackEntry?.destination?.route
     val noBackRoutes = setOf(
         NavRoute.Home.path,
@@ -275,11 +273,6 @@ fun AppNavigation() {
         navController.popBackStack()
     }
     val subtitle = topBarState.subtitle
-    val titleText = if (currentRoute == NavRoute.Home.path) {
-        "ERPNext POS"
-    } else {
-        titleFallback.ifBlank { "ERPNext POS" }
-    }
     val cashier = posContext?.cashier
     val cashierDisplayName = listOfNotNull(
         cashier?.firstName?.takeIf { it.isNotBlank() },
@@ -306,6 +299,12 @@ fun AppNavigation() {
 
     AppTheme(theme = appTheme, themeMode = appThemeMode) {
         ProvideAppStrings {
+            val strings = LocalAppStrings.current
+            val titleText = if (currentRoute == NavRoute.Home.path) {
+                "ERPNext POS"
+            } else {
+                defaultTitleForRoute(currentRoute, strings).ifBlank { "ERPNext POS" }
+            }
             CompositionLocalProvider(LocalTopBarController provides topBarController) {
                 Scaffold(
                     containerColor = MaterialTheme.colorScheme.background,
@@ -316,7 +315,7 @@ fun AppNavigation() {
                                 navController = navController,
                                 contextProvider = cashBoxManager,
                                 leftItems = listOf(NavRoute.Home, NavRoute.Inventory),
-                                rightItems = listOf(NavRoute.Customer, NavRoute.Settings),
+                                rightItems = listOf(NavRoute.Customer, NavRoute.Activity, NavRoute.Settings),
                                 fabItem = NavRoute.Billing
                             )
                         }
@@ -389,8 +388,7 @@ fun AppNavigation() {
                                             }
                                             ShiftOpenChip(
                                                 isOpen = isCashboxOpen,
-                                                duration = formatShiftDuration(shiftStart, tick),
-                                                closeAction = { }
+                                                duration = formatShiftDuration(shiftStart, tick)
                                             )
                                         }
                                     },
@@ -476,7 +474,27 @@ fun AppNavigation() {
                                                 }
                                             }
                                             StatusIconButton(
-                                                label = "Refrescar",
+                                                label = if (activityBadgeCount > 0) {
+                                                    "${strings.navigation.activity}: $activityBadgeCount"
+                                                } else {
+                                                    strings.navigation.activity
+                                                },
+                                                onClick = {
+                                                    navController.navigateSingle(NavRoute.Activity.path)
+                                                },
+                                                tint = if (activityBadgeCount > 0) {
+                                                    MaterialTheme.colorScheme.primary
+                                                } else {
+                                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                                }
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Outlined.Notifications,
+                                                    contentDescription = null
+                                                )
+                                            }
+                                            StatusIconButton(
+                                                label = strings.common.retry,
                                                 onClick = {
                                                     when (currentRoute) {
                                                         NavRoute.Inventory.path -> inventoryRefreshController.refresh()
@@ -649,7 +667,7 @@ fun AppNavigation() {
                                                     }*/
                                                     //HorizontalDivider()
                                                     DropdownMenuItem(
-                                                        text = { Text("Configuración") },
+                                                        text = { Text(strings.navigation.settings) },
                                                         leadingIcon = {
                                                             Icon(
                                                                 imageVector = Icons.Outlined.Settings,
@@ -662,7 +680,7 @@ fun AppNavigation() {
                                                         }
                                                     )
                                                     DropdownMenuItem(
-                                                        text = { Text("Reconciliación") },
+                                                        text = { Text(strings.navigation.reconciliation) },
                                                         leadingIcon = {
                                                             Icon(
                                                                 imageVector = Icons.Outlined.Tune,
@@ -862,6 +880,10 @@ fun AppNavigation() {
 
                                             is NavRoute.Settings -> navController.navigateTopLevel(
                                                 NavRoute.Settings.path
+                                            )
+
+                                            is NavRoute.Activity -> navController.navigateSingle(
+                                                NavRoute.Activity.path
                                             )
 
                                             is NavRoute.PaymentEntry -> navController.navigateSingle(

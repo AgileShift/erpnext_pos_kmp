@@ -100,6 +100,7 @@ import com.erpnext.pos.localSource.datasources.POSProfileLocalSource
 import com.erpnext.pos.localSource.datasources.PaymentTermLocalSource
 import com.erpnext.pos.localSource.datasources.TerritoryLocalSource
 import com.erpnext.pos.localSource.preferences.BootstrapContextPreferences
+import com.erpnext.pos.localSource.preferences.ActivityPreferences
 import com.erpnext.pos.localSource.preferences.CurrencySettingsPreferences
 import com.erpnext.pos.localSource.preferences.ExchangeRatePreferences
 import com.erpnext.pos.localSource.preferences.GeneralPreferences
@@ -134,6 +135,8 @@ import com.erpnext.pos.utils.AppSentry
 import com.erpnext.pos.utils.TokenUtils
 import com.erpnext.pos.utils.view.SnackbarController
 import com.erpnext.pos.views.CashBoxManager
+import com.erpnext.pos.views.activity.ActivityCenter
+import com.erpnext.pos.views.activity.ActivityViewModel
 import com.erpnext.pos.views.billing.BillingResetController
 import com.erpnext.pos.views.billing.BillingViewModel
 import com.erpnext.pos.views.customer.CustomerViewModel
@@ -326,6 +329,7 @@ val appModule = module {
             scope = get(),
             sessionRefresher = get(),
             networkMonitor = get(),
+            generalPreferences = get(),
             lifecycleObserver = get()
         ).apply { start(intervalMinutes = 1) }
     }
@@ -419,6 +423,7 @@ val appModule = module {
             bootstrapSyncRepository = get(),
             syncPreferences = get(),
             syncLogPreferences = get(),
+            generalPreferences = get(),
             cashBoxManager = get(),
             networkMonitor = get(),
             sessionRefresher = get(),
@@ -639,6 +644,9 @@ val appModule = module {
 
     //region Settings
     single { GeneralPreferences(get()) }
+    single { ActivityPreferences(get()) }
+    single { ActivityCenter(get(), get(), get(), get(), get()) }
+    single { ActivityViewModel(get(), get()) }
     single { com.erpnext.pos.localSource.preferences.ReturnPolicyPreferences(get()) }
     single {
         SettingsViewModel(

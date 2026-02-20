@@ -11,6 +11,7 @@ import androidx.savedstate.read
 import com.erpnext.pos.navigation.NavRoute
 import com.erpnext.pos.views.billing.BillingRoute
 import com.erpnext.pos.views.billing.BillingLabRoute
+import com.erpnext.pos.views.activity.ActivityRoute
 import com.erpnext.pos.views.customer.CustomerRoute
 import com.erpnext.pos.views.deliverynote.DeliveryNoteRoute
 import com.erpnext.pos.views.home.HomeRoute
@@ -67,6 +68,9 @@ object NavGraph {
             }
             composable(NavRoute.DeliveryNote.path) {
                 DeliveryNoteRoute()
+            }
+            composable(NavRoute.Activity.path) {
+                ActivityRoute()
             }
             composable(
                 route = NavRoute.Reconciliation.ROUTE,

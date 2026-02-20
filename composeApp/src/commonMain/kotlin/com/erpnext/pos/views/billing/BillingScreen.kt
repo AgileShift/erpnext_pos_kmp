@@ -22,6 +22,7 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -70,6 +71,7 @@ import androidx.compose.material3.ExposedDropdownMenuAnchorType
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -78,6 +80,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
@@ -114,6 +117,7 @@ import androidx.compose.ui.text.input.TransformedText
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
@@ -132,6 +136,7 @@ import com.erpnext.pos.domain.models.CustomerBO
 import com.erpnext.pos.domain.models.ItemBO
 import com.erpnext.pos.domain.models.POSPaymentModeOption
 import com.erpnext.pos.domain.models.PaymentTermBO
+import com.erpnext.pos.localization.LocalAppStrings
 import com.erpnext.pos.navigation.GlobalTopBarState
 import com.erpnext.pos.navigation.LocalTopBarController
 import com.erpnext.pos.utils.formatAmount
@@ -170,6 +175,7 @@ fun BillingScreen(
     action: BillingAction,
     snackbar: SnackbarController
 ) {
+    val strings = LocalAppStrings.current
     val uiSnackbar = snackbar.snackbar.collectAsState().value
     val colors = MaterialTheme.colorScheme
     val loadingState by LoadingIndicator.state.collectAsState(initial = LoadingUiState())
@@ -229,7 +235,7 @@ fun BillingScreen(
             step = LabCheckoutStep.Cart
             action.onResetSale()
             snackbar.show(
-                "Venta reiniciada por inactividad",
+                strings.billing.noDataAvailable,
                 SnackbarType.Info,
                 SnackbarPosition.Top
             )
@@ -241,7 +247,7 @@ fun BillingScreen(
             step = LabCheckoutStep.Cart
             action.onResetSale()
             snackbar.show(
-                "Venta reiniciada por inactividad",
+                strings.billing.noDataAvailable,
                 SnackbarType.Info,
                 SnackbarPosition.Top
             )
@@ -320,11 +326,11 @@ fun BillingScreen(
                                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Text("Pagar", fontWeight = FontWeight.Bold)
+                                Text(strings.billing.finalizeSale, fontWeight = FontWeight.Bold)
                                 Icon(
                                     modifier = Modifier.size(14.dp),
                                     imageVector = Icons.Default.ShoppingCartCheckout,
-                                    contentDescription = "Pagar",
+                                    contentDescription = strings.billing.finalizeSale,
                                     tint = Color.White
                                 )
                             }
@@ -348,27 +354,86 @@ fun BillingScreen(
                 }
 
                 is BillingState.Error -> {
-                    Box(
-                        modifier = Modifier.fillMaxSize().padding(paddingValues),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Card(
-                            shape = RoundedCornerShape(16.dp),
-                            colors = CardDefaults.cardColors(containerColor = colors.surfaceVariant)
-                        ) {
-                            Column(
-                                modifier = Modifier.padding(16.dp),
-                                verticalArrangement = Arrangement.spacedBy(10.dp),
-                                horizontalAlignment = Alignment.CenterHorizontally
-                            ) {
-                                Text(
-                                    text = state.message,
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = colors.onSurface
+                    LaunchedEffect(state.message) {
+                        snackbar.show(
+                            state.message,
+                            SnackbarType.Error,
+                            SnackbarPosition.Top
+                        )
+                    }
+                    val previous = state.previous
+                    if (previous != null) {
+                        AnimatedContent(
+                            targetState = step,
+                            transitionSpec = {
+                                fadeIn(tween(180)) + slideInVertically(
+                                    animationSpec = tween(180),
+                                    initialOffsetY = { it / 6 }
+                                ) togetherWith fadeOut(tween(160)) + slideOutVertically(
+                                    animationSpec = tween(160),
+                                    targetOffsetY = { -it / 8 }
                                 )
-                                if (state.showSyncRates) {
-                                    Button(onClick = action.onSyncExchangeRates) {
-                                        Text("Sincronizar tasas de cambio")
+                            },
+                            label = "billing_step_transition_error_previous"
+                        ) { targetStep ->
+                            when (targetStep) {
+                                LabCheckoutStep.Cart -> BillingLabContent(
+                                    state = previous,
+                                    productsPagingFlow = productsPagingFlow,
+                                    action = action,
+                                    onCheckout = {
+                                        if (previous.selectedCustomer == null)
+                                            snackbar.show(
+                                                strings.billing.selectCustomerForDocuments,
+                                                SnackbarType.Error,
+                                                SnackbarPosition.Top
+                                            )
+                                        else if (previous.cartItems.isEmpty()) {
+                                            snackbar.show(
+                                                strings.billing.emptyCartSnackbar,
+                                                SnackbarType.Error,
+                                                SnackbarPosition.Top
+                                            )
+                                        } else
+                                            step = LabCheckoutStep.Checkout
+                                    },
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .padding(top = paddingValues.calculateTopPadding())
+                                )
+
+                                LabCheckoutStep.Checkout -> BillingLabCheckoutStep(
+                                    state = previous,
+                                    action = action,
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .padding(top = paddingValues.calculateTopPadding())
+                                )
+                            }
+                        }
+                    } else {
+                        Box(
+                            modifier = Modifier.fillMaxSize().padding(paddingValues),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Card(
+                                shape = RoundedCornerShape(16.dp),
+                                colors = CardDefaults.cardColors(containerColor = colors.surfaceVariant)
+                            ) {
+                                Column(
+                                    modifier = Modifier.padding(16.dp),
+                                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally
+                                ) {
+                                    Text(
+                                        text = strings.billing.noDataAvailable,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = colors.onSurface
+                                    )
+                                    if (state.showSyncRates) {
+                                        Button(onClick = action.onSyncExchangeRates) {
+                                            Text(strings.billing.syncRatesButton)
+                                        }
                                     }
                                 }
                             }
@@ -382,7 +447,7 @@ fun BillingScreen(
                         contentAlignment = Alignment.Center
                     ) {
                         snackbar.show(
-                            "Sin datos disponibles.",
+                            strings.billing.noDataAvailable,
                             SnackbarType.Info,
                             SnackbarPosition.Top
                         )
@@ -411,13 +476,13 @@ fun BillingScreen(
                                 onCheckout = {
                                     if (state.selectedCustomer == null)
                                         snackbar.show(
-                                            "Seleccione primero al cliente.",
+                                            strings.billing.selectCustomerForDocuments,
                                             SnackbarType.Error,
                                             SnackbarPosition.Top
                                         )
                                     else if (state.cartItems.isEmpty()) {
                                         snackbar.show(
-                                            "Seleccione el(los) productos del cliente.",
+                                            strings.billing.emptyCartSnackbar,
                                             SnackbarType.Error,
                                             SnackbarPosition.Top
                                         )
@@ -473,7 +538,7 @@ fun BillingScreen(
                             modifier = Modifier.size(56.dp)
                         )
                         Text(
-                            text = popupMessage ?: "Exito",
+                            text = popupMessage ?: strings.billing.finalizeSale,
                             color = colors.onSurface,
                             fontWeight = FontWeight.SemiBold,
                             fontSize = 20.sp,
@@ -494,7 +559,7 @@ fun BillingScreen(
                                 action.onClearSuccessMessage()
                             }
                         ) {
-                            Text("Cerrar")
+                            Text(strings.billing.closeButton)
                         }
                     }
                 }
@@ -848,6 +913,8 @@ private fun BillingLabCheckoutStep(
     modifier: Modifier = Modifier
 ) {
     val colors = MaterialTheme.colorScheme
+    val panelBg = colors.surfaceVariant.copy(alpha = 0.48f)
+    val panelBorder = colors.outlineVariant.copy(alpha = 0.42f)
     val invoiceCurrency = state.currency?.trim()?.uppercase().orEmpty().ifBlank { "USD" }
     val baseCurrency = state.baseCurrency?.trim()?.uppercase().orEmpty().ifBlank { invoiceCurrency }
     val secondaryCurrency = resolveSecondaryCurrency(
@@ -862,7 +929,12 @@ private fun BillingLabCheckoutStep(
             exchangeRateByCurrency = state.exchangeRateByCurrency
         )
     }
-    Column(modifier = modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 16.dp, vertical = 12.dp)
+    ) {
         // Encabezado principal del checkout.
         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text(
@@ -877,168 +949,195 @@ private fun BillingLabCheckoutStep(
             )
         }
         Spacer(Modifier.height(12.dp))
-        // Tarjetas de total y crédito alineadas.
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        BoxWithConstraints(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 72.dp)
         ) {
-            ElevatedCard(
-                modifier = Modifier.weight(1f),
-                shape = RoundedCornerShape(14.dp),
-                elevation = CardDefaults.cardElevation(4.dp),
-                colors = CardDefaults.elevatedCardColors(containerColor = colors.surfaceVariant)
-            ) {
-                Column(
-                    modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
+            val isWide = maxWidth >= 980.dp
+
+            @Composable
+            fun TotalCard(modifier: Modifier = Modifier) {
+                Card(
+                    modifier = modifier,
+                    shape = RoundedCornerShape(14.dp),
+                    colors = CardDefaults.cardColors(containerColor = panelBg),
+                    border = BorderStroke(1.dp, panelBorder),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
                 ) {
-                    Text(
-                        text = "Total",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = colors.onSurfaceVariant
-                    )
-                    Text(
-                        text = formatAmount(invoiceCurrency.toCurrencySymbol(), state.total),
-                        style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.ExtraBold),
-                        color = colors.onSurface
-                    )
-                    HorizontalDivider(color = colors.outlineVariant, thickness = (1.2).dp)
-                    PaymentTotalsRow(
-                        "Pagado",
-                        invoiceCurrency,
-                        state.paidAmountBase,
-                        secondaryCurrencyCode = secondaryCurrency,
-                        secondaryAmount = toSecondary(state.paidAmountBase)
-                    )
-                    PaymentTotalsRow(
-                        "Pendiente",
-                        invoiceCurrency,
-                        state.balanceDueBase,
-                        secondaryCurrencyCode = secondaryCurrency,
-                        secondaryAmount = toSecondary(state.balanceDueBase)
-                    )
-                    PaymentTotalsRow(
-                        "Cambio",
-                        invoiceCurrency,
-                        state.changeDueBase,
-                        secondaryCurrencyCode = secondaryCurrency,
-                        secondaryAmount = toSecondary(state.changeDueBase)
-                    )
-                    HorizontalDivider(color = colors.outlineVariant, thickness = (1.2).dp)
-                    PaymentTotalsRow(
-                        "Subtotal",
-                        invoiceCurrency,
-                        state.subtotal,
-                        secondaryCurrencyCode = secondaryCurrency,
-                        secondaryAmount = toSecondary(state.subtotal)
-                    )
-                    if (state.taxes > 0.0) {
-                        PaymentTotalsRow(
-                            "Impuestos",
-                            invoiceCurrency,
-                            state.taxes,
-                            secondaryCurrencyCode = secondaryCurrency,
-                            secondaryAmount = toSecondary(state.taxes)
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        SectionHeader(title = "Total", accent = colors.primary)
+                        Text(
+                            text = formatAmount(invoiceCurrency.toCurrencySymbol(), state.total),
+                            style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.ExtraBold),
+                            color = colors.onSurface
                         )
-                    }
-                    if (state.discount > 0.0) {
+                        HorizontalDivider(color = colors.outlineVariant, thickness = (1.2).dp)
                         PaymentTotalsRow(
-                            "Descuento",
+                            "Pagado",
                             invoiceCurrency,
-                            -state.discount,
+                            state.paidAmountBase,
                             secondaryCurrencyCode = secondaryCurrency,
-                            secondaryAmount = toSecondary(-state.discount)
+                            secondaryAmount = toSecondary(state.paidAmountBase)
                         )
-                    }
-                    if (state.shippingAmount > 0.0) {
                         PaymentTotalsRow(
-                            "Envío",
+                            "Pendiente",
                             invoiceCurrency,
-                            state.shippingAmount,
+                            state.balanceDueBase,
                             secondaryCurrencyCode = secondaryCurrency,
-                            secondaryAmount = toSecondary(state.shippingAmount)
+                            secondaryAmount = toSecondary(state.balanceDueBase)
                         )
+                        PaymentTotalsRow(
+                            "Cambio",
+                            invoiceCurrency,
+                            state.changeDueBase,
+                            secondaryCurrencyCode = secondaryCurrency,
+                            secondaryAmount = toSecondary(state.changeDueBase)
+                        )
+                        HorizontalDivider(color = colors.outlineVariant, thickness = (1.2).dp)
+                        PaymentTotalsRow(
+                            "Subtotal",
+                            invoiceCurrency,
+                            state.subtotal,
+                            secondaryCurrencyCode = secondaryCurrency,
+                            secondaryAmount = toSecondary(state.subtotal)
+                        )
+                        if (state.taxes > 0.0) {
+                            PaymentTotalsRow(
+                                "Impuestos",
+                                invoiceCurrency,
+                                state.taxes,
+                                secondaryCurrencyCode = secondaryCurrency,
+                                secondaryAmount = toSecondary(state.taxes)
+                            )
+                        }
+                        if (state.discount > 0.0) {
+                            PaymentTotalsRow(
+                                "Descuento",
+                                invoiceCurrency,
+                                -state.discount,
+                                secondaryCurrencyCode = secondaryCurrency,
+                                secondaryAmount = toSecondary(-state.discount)
+                            )
+                        }
+                        if (state.shippingAmount > 0.0) {
+                            PaymentTotalsRow(
+                                "Envío",
+                                invoiceCurrency,
+                                state.shippingAmount,
+                                secondaryCurrencyCode = secondaryCurrency,
+                                secondaryAmount = toSecondary(state.shippingAmount)
+                            )
+                        }
                     }
                 }
             }
-            if (state.paymentTerms.isNotEmpty()) {
-                ElevatedCard(
-                    modifier = Modifier.weight(1f),
-                    colors = CardDefaults.elevatedCardColors(containerColor = colors.surfaceVariant)
+
+            @Composable
+            fun CreditCard(modifier: Modifier = Modifier) {
+                if (state.paymentTerms.isNotEmpty()) {
+                    Card(
+                        modifier = modifier,
+                        colors = CardDefaults.cardColors(containerColor = panelBg),
+                        border = BorderStroke(1.dp, panelBorder),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .padding(12.dp)
+                                .animateContentSize(animationSpec = tween(260)),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            SectionHeader(title = "Venta de crédito", accent = colors.tertiary)
+                            CreditTermsSection(
+                                isCreditSale = state.isCreditSale,
+                                paymentTerms = state.paymentTerms,
+                                selectedPaymentTerm = state.selectedPaymentTerm,
+                                creditSaleTooltipMessage = state.creditSaleTooltipMessage,
+                                onCreditSaleChanged = action.onCreditSaleChanged,
+                                onPaymentTermSelected = action.onPaymentTermSelected
+                            )
+                        }
+                    }
+                }
+            }
+
+            @Composable
+            fun DiscountCard(modifier: Modifier = Modifier) {
+                Card(
+                    modifier = modifier,
+                    colors = CardDefaults.cardColors(containerColor = panelBg),
+                    border = BorderStroke(1.dp, panelBorder),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
                 ) {
                     Column(
                         modifier = Modifier.padding(12.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Text(
-                            text = "Crédito",
-                            style = MaterialTheme.typography.titleSmall,
-                            color = colors.onSurface
-                        )
+                        SectionHeader(title = "Descuento y envío", accent = colors.secondary)
+                        DiscountShippingInputs(state, action)
+                    }
+                }
+            }
 
-                        CreditTermsSection(
+            @Composable
+            fun PaymentsCard(modifier: Modifier = Modifier, listMaxHeight: Dp) {
+                Card(
+                    modifier = modifier,
+                    colors = CardDefaults.cardColors(containerColor = panelBg),
+                    border = BorderStroke(1.dp, panelBorder),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        SectionHeader(title = "Pagos", accent = colors.primary)
+                        PaymentSection(
+                            state = state,
+                            baseCurrency = invoiceCurrency,
+                            exchangeRateByCurrency = state.exchangeRateByCurrency,
+                            paymentLines = state.paymentLines,
+                            paymentModes = state.paymentModes,
+                            paidAmountBase = state.paidAmountBase,
+                            totalAmount = state.total,
+                            paymentErrorMessage = state.paymentErrorMessage,
                             isCreditSale = state.isCreditSale,
-                            paymentTerms = state.paymentTerms,
-                            selectedPaymentTerm = state.selectedPaymentTerm,
-                            creditSaleTooltipMessage = state.creditSaleTooltipMessage,
-                            onCreditSaleChanged = action.onCreditSaleChanged,
-                            onPaymentTermSelected = action.onPaymentTermSelected
+                            onAddPaymentLine = action.onAddPaymentLine,
+                            onRemovePaymentLine = action.onRemovePaymentLine,
+                            onPaymentCurrencySelected = action.onPaymentCurrencySelected,
+                            paymentListMaxHeight = listMaxHeight
                         )
                     }
                 }
             }
-        }
-        Spacer(Modifier.height(12.dp))
-        // Contenido scrolleable.
-        Column(
-            modifier = Modifier
-                .verticalScroll(rememberScrollState())
-                .padding(bottom = 72.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            ElevatedCard(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.elevatedCardColors(containerColor = colors.surfaceVariant)
-            ) {
-                Column(
-                    modifier = Modifier.padding(12.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+
+            if (isWide) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    Text(
-                        text = "Descuento y envío",
-                        style = MaterialTheme.typography.titleSmall,
-                        color = colors.onSurface
-                    )
-                    DiscountShippingInputs(state, action)
+                    Column(
+                        modifier = Modifier.weight(0.38f),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        TotalCard(modifier = Modifier.fillMaxWidth())
+                        CreditCard(modifier = Modifier.fillMaxWidth())
+                        DiscountCard(modifier = Modifier.fillMaxWidth())
+                    }
+                    PaymentsCard(modifier = Modifier.weight(0.62f), listMaxHeight = 360.dp)
                 }
-            }
-            ElevatedCard(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.elevatedCardColors(containerColor = colors.surfaceVariant)
-            ) {
+            } else {
                 Column(
-                    modifier = Modifier.padding(12.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    Text(
-                        text = "Pagos",
-                        style = MaterialTheme.typography.titleSmall,
-                        color = colors.onSurface
-                    )
-                    PaymentSection(
-                        state = state,
-                        baseCurrency = invoiceCurrency,
-                        exchangeRateByCurrency = state.exchangeRateByCurrency,
-                        paymentLines = state.paymentLines,
-                        paymentModes = state.paymentModes,
-                        paidAmountBase = state.paidAmountBase,
-                        totalAmount = state.total,
-                        paymentErrorMessage = state.paymentErrorMessage,
-                        isCreditSale = state.isCreditSale,
-                        onAddPaymentLine = action.onAddPaymentLine,
-                        onRemovePaymentLine = action.onRemovePaymentLine,
-                        onPaymentCurrencySelected = action.onPaymentCurrencySelected
-                    )
+                    TotalCard(modifier = Modifier.fillMaxWidth())
+                    CreditCard(modifier = Modifier.fillMaxWidth())
+                    DiscountCard(modifier = Modifier.fillMaxWidth())
+                    PaymentsCard(modifier = Modifier.fillMaxWidth(), listMaxHeight = 180.dp)
                 }
             }
         }
@@ -1555,6 +1654,29 @@ private fun PaymentTotalsRow(
     }
 }
 
+@Composable
+private fun SectionHeader(
+    title: String,
+    accent: Color
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .size(width = 4.dp, height = 16.dp)
+                .clip(RoundedCornerShape(999.dp))
+                .background(accent)
+        )
+        Text(
+            text = title,
+            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
+            color = MaterialTheme.colorScheme.onSurface
+        )
+    }
+}
+
 private fun resolveSecondaryCurrency(
     invoiceCurrency: String,
     baseCurrency: String?,
@@ -1605,7 +1727,8 @@ private fun PaymentSection(
     isCreditSale: Boolean,
     onAddPaymentLine: (PaymentLine) -> Unit,
     onRemovePaymentLine: (Int) -> Unit,
-    onPaymentCurrencySelected: (String) -> Unit
+    onPaymentCurrencySelected: (String) -> Unit,
+    paymentListMaxHeight: Dp = 240.dp
 ) {
     val modeOptions = remember(paymentModes) { paymentModes.map { it.modeOfPayment }.distinct() }
     var selectedMode by remember(modeOptions) { mutableStateOf("") }
@@ -1645,102 +1768,25 @@ private fun PaymentSection(
     LaunchedEffect(selectedMode) {
         referenceInput = ""
     }
-    Column(modifier = Modifier.padding(end = 12.dp, start = 12.dp, bottom = 8.dp)) {
-        if (paymentLines.isEmpty()) {
-            // Estado vacío con tarjeta para mayor claridad visual.
-            ElevatedCard(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
-            ) {
-                Column(modifier = Modifier.padding(12.dp)) {
-                    Text(
-                        "Sin pagos registrados",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-        } else {
-            Column(
-                modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                paymentLines.forEachIndexed { index, line ->
-                    // Animamos la aparición/desaparición de cada pago.
-                    AnimatedVisibility(
-                        visible = true,
-                        enter = fadeIn(animationSpec = tween(360)) + expandVertically(),
-                        exit = fadeOut(animationSpec = tween(320)) + shrinkVertically()
-                    ) {
-                        ElevatedCard(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .animateContentSize(),
-                            colors = CardDefaults.cardColors(
-                                containerColor = MaterialTheme.colorScheme.surfaceVariant
-                            )
-                        ) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth().padding(12.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        text = line.modeOfPayment,
-                                        fontWeight = FontWeight.SemiBold
-                                    )
-                                    Text(
-                                        text = formatAmount(
-                                            line.currency.toCurrencySymbol(), line.enteredAmount
-                                        ),
-                                        style = MaterialTheme.typography.titleSmall
-                                    )
-                                    Text(
-                                        text = "Base: ${
-                                            formatAmount(
-                                                baseCurrency.toCurrencySymbol(), line.baseAmount
-                                            )
-                                        }",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                    /*Text(
-                                        text = "Tasa: ${line.exchangeRate}",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )*/
-                                    /*if (!line.referenceNumber.isNullOrBlank()) {
-                                        Text(
-                                            text = "Referencia: ${line.referenceNumber}",
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                    }*/
-                                }
-                                IconButton(onClick = { onRemovePaymentLine(index) }) {
-                                    Icon(
-                                        Icons.Default.Delete,
-                                        contentDescription = "Eliminar línea de pago",
-                                        tint = MaterialTheme.colorScheme.error
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
+    Column(
+        modifier = Modifier
+            .padding(end = 12.dp, start = 12.dp, bottom = 8.dp)
+    ) {
+        val pendingAmount = (totalAmount - paidAmountBase).coerceAtLeast(0.0)
 
-        Spacer(Modifier.height(12.dp))
-
-        if (isCreditSale) {
-            Text(
-                "Pago parcial (opcional). El restante quedará como saldo a crédito.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Spacer(Modifier.height(8.dp))
+        AnimatedVisibility(
+            visible = isCreditSale,
+            enter = fadeIn(animationSpec = tween(260)) + expandVertically(animationSpec = tween(260)),
+            exit = fadeOut(animationSpec = tween(180)) + shrinkVertically(animationSpec = tween(180))
+        ) {
+            Column {
+                Text(
+                    "Pago parcial (opcional). El restante quedará como saldo a crédito.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(Modifier.height(8.dp))
+            }
         }
 
         Text("Método de pago", style = MaterialTheme.typography.bodyMedium)
@@ -1848,6 +1894,131 @@ private fun PaymentSection(
             Spacer(Modifier.height(12.dp))
         }
 
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Card(
+                modifier = Modifier.weight(1f),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+            ) {
+                Column(modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) {
+                    Text(
+                        text = "Pagado",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        text = formatAmount(baseCurrency.toCurrencySymbol(), paidAmountBase),
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+            }
+            Card(
+                modifier = Modifier.weight(1f),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+            ) {
+                Column(modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) {
+                    Text(
+                        text = "Pendiente",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        text = formatAmount(baseCurrency.toCurrencySymbol(), pendingAmount),
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+            }
+        }
+
+        Spacer(Modifier.height(10.dp))
+
+        Text(
+            text = "Pagos registrados",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Spacer(Modifier.height(6.dp))
+
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 84.dp, max = paymentListMaxHeight)
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                if (paymentLines.isEmpty()) {
+                    Text(
+                        "Sin pagos registrados",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                } else {
+                    paymentLines.forEachIndexed { index, line ->
+                        AnimatedVisibility(
+                            visible = true,
+                            enter = fadeIn(animationSpec = tween(360)) + expandVertically(),
+                            exit = fadeOut(animationSpec = tween(320)) + shrinkVertically()
+                        ) {
+                            Card(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .animateContentSize(),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)
+                                )
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth().padding(12.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = line.modeOfPayment,
+                                            fontWeight = FontWeight.SemiBold
+                                        )
+                                        Text(
+                                            text = formatAmount(
+                                                line.currency.toCurrencySymbol(), line.enteredAmount
+                                            ),
+                                            style = MaterialTheme.typography.titleSmall
+                                        )
+                                        Text(
+                                            text = "Base: ${
+                                                formatAmount(
+                                                    baseCurrency.toCurrencySymbol(), line.baseAmount
+                                                )
+                                            }",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                    IconButton(onClick = { onRemovePaymentLine(index) }) {
+                                        Icon(
+                                            Icons.Default.Delete,
+                                            contentDescription = "Eliminar línea de pago",
+                                            tint = MaterialTheme.colorScheme.error
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        Spacer(Modifier.height(8.dp))
+
         if (!paymentErrorMessage.isNullOrBlank()) {
             Text(
                 text = paymentErrorMessage,
@@ -1906,20 +2077,40 @@ private fun DiscountShippingInputs(
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         Text("Descuento", style = MaterialTheme.typography.bodyMedium)
+        val chipElevation = FilterChipDefaults.filterChipElevation(
+            elevation = 0.dp,
+            pressedElevation = 0.dp,
+            focusedElevation = 0.dp,
+            hoveredElevation = 0.dp,
+            draggedElevation = 0.dp,
+            disabledElevation = 0.dp
+        )
+        val chipColors = FilterChipDefaults.filterChipColors(
+            selectedContainerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f),
+            containerColor = MaterialTheme.colorScheme.surface,
+            selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
+            labelColor = MaterialTheme.colorScheme.onSurface
+        )
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             FilterChip(
                 selected = discountType == DiscountInputType.Amount,
                 onClick = { selectDiscountType(DiscountInputType.Amount) },
+                elevation = chipElevation,
+                colors = chipColors,
                 label = { Text("Monto") }
             )
             FilterChip(
                 selected = discountType == DiscountInputType.Code,
                 onClick = { selectDiscountType(DiscountInputType.Code) },
+                elevation = chipElevation,
+                colors = chipColors,
                 label = { Text("Codigo") }
             )
             FilterChip(
                 selected = discountType == DiscountInputType.Percent,
                 onClick = { selectDiscountType(DiscountInputType.Percent) },
+                elevation = chipElevation,
+                colors = chipColors,
                 label = { Text("Porcentaje") }
             )
         }
@@ -2038,14 +2229,16 @@ private fun CreditTermsSection(
 ) {
     val hasCreditWarning = !creditSaleTooltipMessage.isNullOrBlank()
     Column(
-        modifier = Modifier.padding(end = 12.dp, start = 12.dp, bottom = 8.dp),
+        modifier = Modifier
+            .padding(end = 12.dp, start = 12.dp, bottom = 8.dp)
+            .animateContentSize(animationSpec = tween(260)),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         val canEnableCredit = paymentTerms.isNotEmpty()
         Surface(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(10.dp),
-            color = MaterialTheme.colorScheme.surface,
+            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
             border = BorderStroke(
                 width = if (hasCreditWarning) 1.5.dp else 1.dp,
                 color = if (hasCreditWarning) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.outlineVariant
@@ -2053,19 +2246,35 @@ private fun CreditTermsSection(
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 6.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text("Venta de credito", style = MaterialTheme.typography.bodyMedium)
-            Switch(
-                checked = isCreditSale,
-                onCheckedChange = onCreditSaleChanged,
-                enabled = canEnableCredit
-            )
-        }
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("Venta de credito", style = MaterialTheme.typography.bodyMedium)
+                Switch(
+                    checked = isCreditSale,
+                    onCheckedChange = onCreditSaleChanged,
+                    enabled = canEnableCredit,
+                    colors = SwitchDefaults.colors(
+                        checkedThumbColor = MaterialTheme.colorScheme.primary,
+                        checkedTrackColor = MaterialTheme.colorScheme.primaryContainer,
+                        checkedBorderColor = MaterialTheme.colorScheme.primaryContainer,
+                        uncheckedThumbColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                        uncheckedTrackColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.8f),
+                        uncheckedBorderColor = MaterialTheme.colorScheme.outlineVariant,
+                        disabledCheckedThumbColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f),
+                        disabledCheckedTrackColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f),
+                        disabledUncheckedThumbColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f),
+                        disabledUncheckedTrackColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+                    )
+                )
+            }
         }
 
-        if (hasCreditWarning) {
+        AnimatedVisibility(
+            visible = hasCreditWarning,
+            enter = fadeIn(animationSpec = tween(220)) + expandVertically(animationSpec = tween(220)),
+            exit = fadeOut(animationSpec = tween(180)) + shrinkVertically(animationSpec = tween(180))
+        ) {
             Text(
                 text = creditSaleTooltipMessage ?: "",
                 style = MaterialTheme.typography.bodySmall,
@@ -2073,58 +2282,70 @@ private fun CreditTermsSection(
             )
         }
 
-        if (isCreditSale) {
-            Text("Condiciones de pago", style = MaterialTheme.typography.bodyMedium)
-            var templateExpanded by remember { mutableStateOf(false) }
-            val templateLabel = selectedPaymentTerm?.name ?: "Selecciona la condicion de pago"
-            ExposedDropdownMenuBox(
-                expanded = templateExpanded, onExpandedChange = { templateExpanded = !templateExpanded }) {
-                AppTextField(
-                    value = templateLabel,
-                    onValueChange = {},
-                    label = "Selecciona la condicion de pago",
-                    placeholder = "Condicion de pago",
-                    modifier = Modifier//.fillMaxWidth()
-                        .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable),
-                    readOnly = true,
-                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = templateExpanded) },
-                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) })
-                ExposedDropdownMenu(
-                    expanded = templateExpanded, onDismissRequest = { templateExpanded = false }) {
-                    paymentTerms.forEach { term ->
-                        DropdownMenuItem(text = { Text(term.name) }, onClick = {
-                            onPaymentTermSelected(term)
-                            templateExpanded = false
-                        })
+        AnimatedVisibility(
+            visible = isCreditSale,
+            enter = fadeIn(animationSpec = tween(260)) + expandVertically(animationSpec = tween(260)),
+            exit = fadeOut(animationSpec = tween(180)) + shrinkVertically(animationSpec = tween(180))
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Condiciones de pago", style = MaterialTheme.typography.bodyMedium)
+                var templateExpanded by remember { mutableStateOf(false) }
+                val templateLabel = selectedPaymentTerm?.name ?: "Selecciona la condicion de pago"
+                ExposedDropdownMenuBox(
+                    expanded = templateExpanded, onExpandedChange = { templateExpanded = !templateExpanded }) {
+                    AppTextField(
+                        value = templateLabel,
+                        onValueChange = {},
+                        label = "Selecciona la condicion de pago",
+                        placeholder = "Condicion de pago",
+                        modifier = Modifier//.fillMaxWidth()
+                            .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable),
+                        readOnly = true,
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = templateExpanded) },
+                        leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) })
+                    ExposedDropdownMenu(
+                        expanded = templateExpanded, onDismissRequest = { templateExpanded = false }) {
+                        paymentTerms.forEach { term ->
+                            DropdownMenuItem(text = { Text(term.name) }, onClick = {
+                                onPaymentTermSelected(term)
+                                templateExpanded = false
+                            })
+                        }
                     }
                 }
-            }
-            selectedPaymentTerm?.let { term ->
-                val creditDays = term.creditDays ?: 0
-                val creditMonths = term.creditMonths ?: 0
-                val termsLabel = buildString {
-                    if (creditMonths > 0) {
-                        append("$creditMonths mes(es)")
-                    }
-                    if (creditDays > 0) {
-                        if (isNotEmpty()) append(" + ")
-                        append("$creditDays dia(s)")
-                    }
-                }.ifBlank { "Mismo dia" }
-                Text(
-                    text = "Terminos: $termsLabel",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                term.description?.takeIf { it.isNotBlank() }?.let { description ->
+                selectedPaymentTerm?.let { term ->
+                    val creditDays = term.creditDays ?: 0
+                    val creditMonths = term.creditMonths ?: 0
+                    val termsLabel = buildString {
+                        if (creditMonths > 0) {
+                            append("$creditMonths mes(es)")
+                        }
+                        if (creditDays > 0) {
+                            if (isNotEmpty()) append(" + ")
+                            append("$creditDays dia(s)")
+                        }
+                    }.ifBlank { "Mismo dia" }
                     Text(
-                        text = description,
+                        text = "Terminos: $termsLabel",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
+                    term.description?.takeIf { it.isNotBlank() }?.let { description ->
+                        Text(
+                            text = description,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
             }
-        } else if (!canEnableCredit) {
+        }
+
+        AnimatedVisibility(
+            visible = !isCreditSale && !canEnableCredit,
+            enter = fadeIn(animationSpec = tween(220)),
+            exit = fadeOut(animationSpec = tween(180))
+        ) {
             Text(
                 text = "No hay terminos de pago disponibles, Ventas de credito deshabilitadas.",
                 style = MaterialTheme.typography.bodySmall,

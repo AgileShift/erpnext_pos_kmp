@@ -28,13 +28,19 @@ class SyncPreferences(
         store.observeRaw(key).map { it?.toIntOrNull() ?: default }
 
     val settings: Flow<SyncSettings> = combine(
-        observeBoolean(autoSyncKey, true),
-        observeBoolean(syncOnStartupKey, true),
-        observeBoolean(wifiOnlyKey, false),
-        observeLong(lastSyncAtKey),
-        observeBoolean(useTtlKey, false),
-        observeInt(ttlHoursKey, defaultTtlHours)
-    ) { autoSync, syncOnStartup, wifiOnly, lastSyncAt, useTtl, ttlHours ->
+        observeBoolean(autoSyncKey, true).map { it as Any? },
+        observeBoolean(syncOnStartupKey, true).map { it as Any? },
+        observeBoolean(wifiOnlyKey, false).map { it as Any? },
+        observeLong(lastSyncAtKey).map { it as Any? },
+        observeBoolean(useTtlKey, false).map { it as Any? },
+        observeInt(ttlHoursKey, defaultTtlHours).map { it as Any? }
+    ) { values: Array<Any?> ->
+        val autoSync = values[0] as Boolean
+        val syncOnStartup = values[1] as Boolean
+        val wifiOnly = values[2] as Boolean
+        val lastSyncAt = values[3] as Long?
+        val useTtl = values[4] as Boolean
+        val ttlHours = values[5] as Int
         SyncSettings(
             autoSync = autoSync,
             syncOnStartup = syncOnStartup,
@@ -48,7 +54,6 @@ class SyncPreferences(
     suspend fun setAutoSync(enabled: Boolean) {
         store.saveRaw(autoSyncKey, enabled.toString())
     }
-
     suspend fun setSyncOnStartup(enabled: Boolean) {
         store.saveRaw(syncOnStartupKey, enabled.toString())
     }

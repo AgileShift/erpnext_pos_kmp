@@ -161,7 +161,7 @@ fun BottomBarWithCenterFab(
             ),
             contentColor = MaterialTheme.colorScheme.onPrimary
         ) {
-            Icon(fabItem.icon, fabItem.title)
+            Icon(fabItem.icon, fabItem.localizedTitle())
         }
     }
 }
@@ -174,6 +174,7 @@ fun NavItem(
     enabled: Boolean = true
 ) {
     val selected = currentPath == item.path
+    val title = item.localizedTitle()
     val colors = MaterialTheme.colorScheme
 
     val iconTint = when {
@@ -211,13 +212,13 @@ fun NavItem(
         ) {
             Icon(
                 imageVector = item.icon,
-                contentDescription = item.title,
+                contentDescription = title,
                 tint = iconTint
             )
         }
 
         Text(
-            text = item.title,
+            text = title,
             color = iconTint,
             style = MaterialTheme.typography.labelSmall,
             maxLines = 1
@@ -238,6 +239,7 @@ fun AnimatedBottomNavItem(
 
     val interactionSource = remember { MutableInteractionSource() }
     val selected = current == item.path
+    val title = item.localizedTitle()
 
     // 🎨 Animaciones
     val iconColor by animateColorAsState(
@@ -296,13 +298,13 @@ fun AnimatedBottomNavItem(
         ) {
             Icon(
                 imageVector = item.icon,
-                contentDescription = item.title,
+                contentDescription = title,
                 tint = iconColor
             )
         }
 
         Text(
-            text = item.title,
+            text = title,
             style = MaterialTheme.typography.labelSmall,
             color = textColor,
             maxLines = 1

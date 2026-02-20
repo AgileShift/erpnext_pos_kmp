@@ -1661,6 +1661,9 @@ class BillingViewModel(
         if (!current.isCreditSale && paid + tolerance < total)
             return "El monto pagado debe cubrir el total antes de finalizar la venta."
 
+        if (current.isCreditSale && paid + tolerance >= total)
+            return "Una venta de crédito no puede tener pago completo. Desactiva \"Venta de crédito\" para registrarla como contado."
+
         /*if (current.isCreditSale && current.paymentLines.isNotEmpty()) {
             return "Las ventas a crédito no pueden incluir líneas de pago."
         }*/

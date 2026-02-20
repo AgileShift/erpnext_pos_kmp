@@ -21,7 +21,7 @@ class GeneralPreferences(
     }
 
     val taxesIncluded: Flow<Boolean> = store.observeRaw(taxesKey).map { it?.toBooleanStrictOrNull() ?: false }
-    val offlineMode: Flow<Boolean> = store.observeRaw(offlineKey).map { it?.toBooleanStrictOrNull() ?: true }
+    val offlineMode: Flow<Boolean> = store.observeRaw(offlineKey).map { it?.toBooleanStrictOrNull() ?: false }
     val printerEnabled: Flow<Boolean> = store.observeRaw(printerKey).map { it?.toBooleanStrictOrNull() ?: true }
     val cashDrawerEnabled: Flow<Boolean> = store.observeRaw(cashDrawerKey).map { it?.toBooleanStrictOrNull() ?: true }
     val allowNegativeStock: Flow<Boolean> =
@@ -43,6 +43,9 @@ class GeneralPreferences(
     suspend fun setOfflineMode(enabled: Boolean) {
         store.saveRaw(offlineKey, enabled.toString())
     }
+
+    suspend fun getOfflineMode(): Boolean =
+        store.loadRaw(offlineKey)?.toBooleanStrictOrNull() ?: false
 
     suspend fun setPrinterEnabled(enabled: Boolean) {
         store.saveRaw(printerKey, enabled.toString())

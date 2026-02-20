@@ -28,6 +28,7 @@ data class AppStrings(
     val billing: BillingStrings,
     val customer: CustomerStrings,
     val inventory: InventoryStrings,
+    val activity: ActivityStrings,
     val settings: SettingsStrings,
     val salesFlow: SalesFlowStrings,
     val navigation: NavigationStrings,
@@ -130,7 +131,35 @@ data class BillingStrings(
     val paymentTermLabel: String,
     val sameDayLabel: String,
     val termsLabel: String,
-    val noPaymentTermsAvailable: String
+    val noPaymentTermsAvailable: String,
+    val checkoutButton: String,
+    val checkoutDataTitle: String,
+    val checkoutReviewSubtitle: String,
+    val cartSummaryTitle: String,
+    val continueToPaymentsHint: String,
+    val currentOrderTitle: String,
+    val paymentsRegisteredTitle: String,
+    val syncRatesButton: String,
+    val closeButton: String,
+    val noDataAvailable: String
+)
+
+data class ActivityStrings(
+    val title: String,
+    val pendingLabel: String,
+    val syncButton: String,
+    val markReadButton: String,
+    val unreadFilter: String,
+    val allFilter: String,
+    val highPriorityFilter: String,
+    val statusIdle: String,
+    val statusSynced: String,
+    val statusSyncing: String,
+    val statusError: String,
+    val priorityPrefix: String,
+    val priorityHigh: String,
+    val priorityMedium: String,
+    val priorityLow: String
 )
 
 data class CustomerStrings(
@@ -267,6 +296,7 @@ data class NavigationStrings(
     val reconciliation: String,
     val paymentEntry: String,
     val settings: String,
+    val activity: String,
     val openCashbox: String,
     val invoice: String,
     val billing: String,
@@ -434,7 +464,17 @@ object AppStringsFactory {
             paymentTermLabel = "Condición de pago",
             sameDayLabel = "Mismo día",
             termsLabel = "Términos",
-            noPaymentTermsAvailable = "No hay términos de pago disponibles. Las ventas a crédito están deshabilitadas."
+            noPaymentTermsAvailable = "No hay términos de pago disponibles. Las ventas a crédito están deshabilitadas.",
+            checkoutButton = "Checkout",
+            checkoutDataTitle = "Datos de pago",
+            checkoutReviewSubtitle = "Revisa y confirma la venta",
+            cartSummaryTitle = "Resumen",
+            continueToPaymentsHint = "Continua al paso de pagos.",
+            currentOrderTitle = "Orden actual",
+            paymentsRegisteredTitle = "Pagos registrados",
+            syncRatesButton = "Sincronizar tasas de cambio",
+            closeButton = "Cerrar",
+            noDataAvailable = "Sin datos disponibles."
         ),
         customer = CustomerStrings(
             title = "Clientes",
@@ -489,6 +529,23 @@ object AppStringsFactory {
             productOutOfStock = "Agotado",
             errorPrefix = "Error",
             emptySearchMessage = "No se encontró el artículo"
+        ),
+        activity = ActivityStrings(
+            title = "Notificaciones y actividad",
+            pendingLabel = "Pendientes",
+            syncButton = "Sincronizar",
+            markReadButton = "Marcar leídas",
+            unreadFilter = "No leídas",
+            allFilter = "Todas",
+            highPriorityFilter = "Alta prioridad",
+            statusIdle = "En espera",
+            statusSynced = "Sincronizado",
+            statusSyncing = "Sincronizando",
+            statusError = "Con errores",
+            priorityPrefix = "Prioridad",
+            priorityHigh = "Alta",
+            priorityMedium = "Media",
+            priorityLow = "Baja"
         ),
         settings = SettingsStrings(
             title = "Configuración POS",
@@ -569,6 +626,7 @@ object AppStringsFactory {
             deliveryNote = "Nota de envio",
             paymentEntry = "Entrada de pago",
             settings = "Configuracion",
+            activity = "Actividad",
             openCashbox = "Abrir caja",
         ),
         reconciliation = ReconciliationStrings(
@@ -747,7 +805,17 @@ object AppStringsFactory {
             paymentTermLabel = "Payment term",
             sameDayLabel = "Same day",
             termsLabel = "Terms",
-            noPaymentTermsAvailable = "No payment terms available. Credit sales are disabled."
+            noPaymentTermsAvailable = "No payment terms available. Credit sales are disabled.",
+            checkoutButton = "Checkout",
+            checkoutDataTitle = "Payment data",
+            checkoutReviewSubtitle = "Review and confirm the sale",
+            cartSummaryTitle = "Summary",
+            continueToPaymentsHint = "Continue to the payment step.",
+            currentOrderTitle = "Current order",
+            paymentsRegisteredTitle = "Registered payments",
+            syncRatesButton = "Sync exchange rates",
+            closeButton = "Close",
+            noDataAvailable = "No data available."
         ),
         customer = CustomerStrings(
             title = "Customers",
@@ -802,6 +870,23 @@ object AppStringsFactory {
             productOutOfStock = "Out of stock",
             errorPrefix = "Error",
             emptySearchMessage = "No items found"
+        ),
+        activity = ActivityStrings(
+            title = "Notifications and activity",
+            pendingLabel = "Pending",
+            syncButton = "Sync",
+            markReadButton = "Mark read",
+            unreadFilter = "Unread",
+            allFilter = "All",
+            highPriorityFilter = "High priority",
+            statusIdle = "Idle",
+            statusSynced = "Synced",
+            statusSyncing = "Syncing",
+            statusError = "With errors",
+            priorityPrefix = "Priority",
+            priorityHigh = "High",
+            priorityMedium = "Medium",
+            priorityLow = "Low"
         ),
         settings = SettingsStrings(
             title = "POS settings",
@@ -882,6 +967,7 @@ object AppStringsFactory {
             deliveryNote = "Delivery Note",
             paymentEntry = "Payment Entry",
             settings = "Settings",
+            activity = "Activity",
             openCashbox = "Open Shift",
         ),
         reconciliation = ReconciliationStrings(
