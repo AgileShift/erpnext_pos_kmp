@@ -88,7 +88,8 @@ class HomeViewModel(
             syncOnStartup = true,
             wifiOnly = false,
             lastSyncAt = null,
-            useTtl = false
+            useTtl = false,
+            ttlHours = 6
         )
     )
     val syncSettings: StateFlow<SyncSettings> = _syncSettings.asStateFlow()
@@ -173,7 +174,10 @@ class HomeViewModel(
         executeUseCase(
             action = {
                 if (sessionRefresher.ensureValidSession()) {
-                    syncManager.fullSync(force = false)
+                    syncManager.fullSync(
+                        ttlHours = _syncSettings.value.ttlHours,
+                        force = false
+                    )
                 }
             },
             exceptionHandler = { it.printStackTrace() },

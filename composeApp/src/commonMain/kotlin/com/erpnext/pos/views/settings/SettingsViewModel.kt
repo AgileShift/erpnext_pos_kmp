@@ -181,6 +181,10 @@ class SettingsViewModel(
         viewModelScope.launch { syncPreferences.setUseTtl(enabled) }
     }
 
+    fun setTtlHours(hours: Int) {
+        viewModelScope.launch { syncPreferences.setTtlHours(hours) }
+    }
+
     fun setTaxesIncluded(enabled: Boolean) {
         viewModelScope.launch { generalPreferences.setTaxesIncluded(enabled) }
     }

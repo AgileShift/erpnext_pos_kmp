@@ -1327,7 +1327,8 @@ fun HomePreview() {
                         syncOnStartup = true,
                         wifiOnly = false,
                         lastSyncAt = Clock.System.now().toEpochMilliseconds(),
-                        useTtl = false
+                        useTtl = false,
+                        ttlHours = 6
                     )
                 ),
                 homeMetrics = MutableStateFlow(HomeMetrics())

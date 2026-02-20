@@ -67,6 +67,7 @@ data class POSSettingAction(
     val onSyncOnStartupChanged: (Boolean) -> Unit = {},
     val onWifiOnlyChanged: (Boolean) -> Unit = {},
     val onUseTtlChanged: (Boolean) -> Unit = {},
+    val onTtlHoursChanged: (Int) -> Unit = {},
     val onLanguageSelected: (AppLanguage) -> Unit = {},
     val onThemeSelected: (AppColorTheme) -> Unit = {},
     val onThemeModeSelected: (AppThemeMode) -> Unit = {}

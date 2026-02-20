@@ -36,6 +36,7 @@ fun rememberSettingsActions(coordinator: SettingsCoordinator): POSSettingAction 
             onSyncOnStartupChanged = coordinator::onSyncOnStartupChanged,
             onWifiOnlyChanged = coordinator::onWifiOnlyChanged,
             onUseTtlChanged = coordinator::onUseTtlChanged,
+            onTtlHoursChanged = coordinator::onTtlHoursChanged,
             onLanguageSelected = coordinator::onLanguageSelected,
             onThemeSelected = coordinator::onThemeSelected,
             onThemeModeSelected = coordinator::onThemeModeSelected

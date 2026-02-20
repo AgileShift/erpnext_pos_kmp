@@ -79,6 +79,7 @@ import com.erpnext.pos.NavGraph.Setup
 import com.erpnext.pos.base.getPlatformName
 import com.erpnext.pos.domain.usecases.LogoutUseCase
 import com.erpnext.pos.localSource.dao.UserDao
+import com.erpnext.pos.localSource.preferences.GeneralPreferences
 import com.erpnext.pos.localSource.preferences.SyncPreferences
 import com.erpnext.pos.localSource.preferences.SyncSettings
 import com.erpnext.pos.localSource.preferences.ThemePreferences
@@ -189,6 +190,7 @@ fun AppNavigation() {
     val navController = rememberNavController()
     val snackbarController = koinInject<SnackbarController>()
     val themePreferences = koinInject<ThemePreferences>()
+    val generalPreferences = koinInject<GeneralPreferences>()
     val syncManager = koinInject<SyncManager>()
     val syncPreferences = koinInject<SyncPreferences>()
     val networkMonitor = koinInject<NetworkMonitor>()
@@ -213,10 +215,12 @@ fun AppNavigation() {
             syncOnStartup = true,
             wifiOnly = false,
             lastSyncAt = null,
-            useTtl = false
+            useTtl = false,
+            ttlHours = 6
         )
     )
     val isOnline by networkMonitor.isConnected.collectAsState(false)
+    val printerEnabled by generalPreferences.printerEnabled.collectAsState(true)
     val posContext by cashBoxManager.contextFlow.collectAsState(null)
     val isCashboxOpen by cashBoxManager.cashboxState.collectAsState()
     val shiftStart by cashBoxManager.activeCashboxStart().collectAsState(null)
@@ -486,19 +490,21 @@ fun AppNavigation() {
                                                     contentDescription = null
                                                 )
                                             }
-                                            val printerConnected = false
-                                            StatusIconButton(
-                                                label = if (printerConnected) "Impresora: Conectada"
-                                                else "Impresora: Sin conexión",
-                                                onClick = {},
-                                                enabled = false,
-                                                tint = if (printerConnected) MaterialTheme.colorScheme.primary
-                                                else MaterialTheme.colorScheme.onSurfaceVariant
-                                            ) {
-                                                Icon(
-                                                    Icons.Outlined.Print,
-                                                    contentDescription = null
-                                                )
+                                            if (printerEnabled) {
+                                                val printerConnected = false
+                                                StatusIconButton(
+                                                    label = if (printerConnected) "Impresora: Conectada"
+                                                    else "Impresora: Sin conexión",
+                                                    onClick = {},
+                                                    enabled = false,
+                                                    tint = if (printerConnected) MaterialTheme.colorScheme.primary
+                                                    else MaterialTheme.colorScheme.onSurfaceVariant
+                                                ) {
+                                                    Icon(
+                                                        Icons.Outlined.Print,
+                                                        contentDescription = null
+                                                    )
+                                                }
                                             }
                                         }
                                         //Spacer(modifier = Modifier.width(8.dp))

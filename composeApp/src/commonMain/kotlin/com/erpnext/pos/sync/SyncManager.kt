@@ -66,7 +66,8 @@ class SyncManager(
             syncOnStartup = true,
             wifiOnly = false,
             lastSyncAt = null,
-            useTtl = false
+            useTtl = false,
+            ttlHours = SyncTTL.DEFAULT_TTL_HOURS
         )
     private var lastSyncAttemptAt: Long? = null
     private val minSyncIntervalMillis = 2 * 60 * 1000L
@@ -85,6 +86,7 @@ class SyncManager(
     @OptIn(ExperimentalTime::class)
     override fun fullSync(ttlHours: Int, force: Boolean) {
         if (_state.value is SyncState.SYNCING || syncJob?.isActive == true) return
+        val effectiveTtlHours = ttlHours.coerceIn(1, 168)
         val now = Clock.System.now().toEpochMilliseconds()
         if (!force) {
             val lastAttempt = lastSyncAttemptAt
@@ -93,7 +95,7 @@ class SyncManager(
                 return
             }
             if (syncSettingsCache.useTtl &&
-                !SyncTTL.isExpired(syncSettingsCache.lastSyncAt, ttlHours)
+                !SyncTTL.isExpired(syncSettingsCache.lastSyncAt, effectiveTtlHours)
             ) {
                 AppLogger.info("SyncManager.fullSync skipped: TTL not expired")
                 return
@@ -102,8 +104,8 @@ class SyncManager(
         lastSyncAttemptAt = now
 
         syncJob = scope.launch {
-            AppSentry.breadcrumb("SyncManager.fullSync start (ttl=$ttlHours)")
-            AppLogger.info("SyncManager.fullSync start (ttl=$ttlHours)")
+            AppSentry.breadcrumb("SyncManager.fullSync start (ttl=$effectiveTtlHours)")
+            AppLogger.info("SyncManager.fullSync start (ttl=$effectiveTtlHours)")
             val startedAt = Clock.System.now().toEpochMilliseconds()
             val isOnline = networkMonitor.isConnected.first()
             if (!isOnline) {
@@ -121,7 +123,7 @@ class SyncManager(
             }
 
             val failures = mutableListOf<String>()
-            val steps = buildFullSyncSteps(ttlHours)
+            val steps = buildFullSyncSteps(effectiveTtlHours)
             LoadingIndicator.start(
                 message = "Sincronizando datos...",
                 progress = 0f,
@@ -414,7 +416,7 @@ class SyncManager(
             var wasConnected = false
             networkMonitor.isConnected.collect { connected ->
                 if (connected && !wasConnected && shouldAutoSyncOnConnection()) {
-                    fullSync()
+                    fullSync(ttlHours = syncSettingsCache.ttlHours, force = false)
                 }
                 wasConnected = connected
             }
