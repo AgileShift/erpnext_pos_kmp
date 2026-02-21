@@ -79,12 +79,17 @@ class ReconciliationViewModel(
                 val summary = runCatching { buildShiftSummary() }.getOrNull()
                 if (summary != null) {
                     updateClosingAmounts(summary, countedByMode)
+                    AppLogger.info(
+                        "cashbox-close-log: profile=${summary.posProfile} opening=${summary.openingEntryId} " +
+                                "openingByMode=${summary.openingByMode} expectedByMode=${summary.expectedByMode} countedByMode=$countedByMode"
+                    )
                 }
                 cashBoxManager.closeCashBox()
                 if (cashBoxManager.cashboxState.value) {
                     error("No se pudo cerrar la caja. Intenta nuevamente.")
                 }
                 _closeState.update { it.copy(isClosing = false, isClosed = true) }
+                AppLogger.info("cashbox-close-log: cierre completado")
                 loadShiftSummary()
             },
             exceptionHandler = { error ->

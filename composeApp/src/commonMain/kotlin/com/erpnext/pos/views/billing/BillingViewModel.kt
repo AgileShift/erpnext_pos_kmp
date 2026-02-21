@@ -34,6 +34,8 @@ import com.erpnext.pos.domain.usecases.UpdateLocalInvoiceFromRemoteUseCase
 import com.erpnext.pos.domain.utils.UUIDGenerator
 import com.erpnext.pos.localSource.dao.ModeOfPaymentDao
 import com.erpnext.pos.localSource.entities.ModeOfPaymentEntity
+import com.erpnext.pos.localSource.preferences.LanguagePreferences
+import com.erpnext.pos.localization.AppLanguage
 import com.erpnext.pos.navigation.NavRoute
 import com.erpnext.pos.navigation.NavigationManager
 import com.erpnext.pos.remoteSource.dto.SalesInvoiceDto
@@ -92,6 +94,7 @@ class BillingViewModel(
     private val markSalesInvoiceSyncedUseCase: MarkSalesInvoiceSyncedUseCase,
     private val paymentHandler: PaymentHandler,
     private val billingResetController: BillingResetController,
+    private val languagePreferences: LanguagePreferences,
 ) : BaseViewModel() {
 
     private val _state: MutableStateFlow<BillingState> = MutableStateFlow(BillingState.Loading)
@@ -106,6 +109,7 @@ class BillingViewModel(
     private var productSearchFilter: String = ""
     private var productCategoryFilter: String = "Todos"
     private var pendingSalesFlowContext: SalesFlowContext? = null
+    private var currentLanguage: AppLanguage = AppLanguage.Spanish
 
     /**
      * Mapa de definiciones de modo de pago.
@@ -117,6 +121,7 @@ class BillingViewModel(
 
     init {
         observeSalesFlowContext()
+        observeLanguage()
         viewModelScope.launch {
             billingResetController.events.collectLatest {
                 resetSale()
@@ -125,6 +130,17 @@ class BillingViewModel(
         observeProductCategories()
         loadInitialData()
     }
+
+    private fun observeLanguage() {
+        viewModelScope.launch {
+            languagePreferences.language.collectLatest { lang ->
+                currentLanguage = lang
+            }
+        }
+    }
+
+    private fun tr(spanish: String, english: String): String =
+        if (currentLanguage == AppLanguage.English) english else spanish
 
     private fun observeProductCategories() {
         viewModelScope.launch {
@@ -785,9 +801,19 @@ class BillingViewModel(
             }
             setFinalizingSale(true)
 
-            val customer = currentWithHints.selectedCustomer ?: error("Debes seleccionar un cliente.")
+            val customer = currentWithHints.selectedCustomer ?: error(
+                tr(
+                    spanish = "Debes seleccionar un cliente.",
+                    english = "You must select a customer."
+                )
+            )
             val context =
-                contextProvider.getContext() ?: error("El contexto POS no está inicializado.")
+                contextProvider.getContext() ?: error(
+                    tr(
+                        spanish = "El contexto POS no está inicializado.",
+                        english = "POS context is not initialized."
+                    )
+                )
 
             executeUseCase(action = {
                 val invoiceCurrency = context.currency.ifBlank { currentWithHints.currency ?: "USD" }
@@ -938,7 +964,10 @@ class BillingViewModel(
                     _state.update { st ->
                         val s = st as? BillingState.Success ?: return@update st
                         s.copy(
-                            successMessage = "Factura ${(created?.name ?: localInvoiceName)} creada, pero fallo la actualizacion de inventario local. Reintenta sincronizacion/recarga."
+                            successMessage = tr(
+                                spanish = "Factura ${(created?.name ?: localInvoiceName)} creada, pero falló la actualización de inventario local. Reintenta sincronización/recarga.",
+                                english = "Invoice ${(created?.name ?: localInvoiceName)} was created, but local inventory update failed. Retry sync/reload."
+                            )
                         )
                     }
                 }
@@ -981,27 +1010,51 @@ class BillingViewModel(
                         successMessage = when {
                             created == null -> {
                                 if (remoteErrorMessage.isNullOrBlank()) {
-                                    "Factura $localInvoiceName guardada localmente (pendiente de sincronizacion)."
+                                    tr(
+                                        spanish = "Factura $localInvoiceName guardada localmente (pendiente de sincronización).",
+                                        english = "Invoice $localInvoiceName saved locally (pending sync)."
+                                    )
                                 } else {
-                                    "Factura $localInvoiceName guardada localmente (pendiente de sincronizacion). $remoteErrorMessage"
+                                    tr(
+                                        spanish = "Factura $localInvoiceName guardada localmente (pendiente de sincronización). $remoteErrorMessage",
+                                        english = "Invoice $localInvoiceName saved locally (pending sync). $remoteErrorMessage"
+                                    )
                                 }
                             }
 
                             resolvedPaymentLines.isNotEmpty() -> {
                                 val label = created.name ?: localInvoiceName
-                                "Factura $label creada. Pagos guardados localmente."
+                                tr(
+                                    spanish = "Factura $label creada. Pagos guardados localmente.",
+                                    english = "Invoice $label created. Payments saved locally."
+                                )
                             }
 
                             else -> {
                                 val label = created.name ?: localInvoiceName
-                                "Factura $label creada correctamente."
+                                tr(
+                                    spanish = "Factura $label creada correctamente.",
+                                    english = "Invoice $label created successfully."
+                                )
                             }
                         },
                         successDialogMessage = when {
-                            created == null -> "Venta guardada localmente."
-                            resolvedPaymentLines.isNotEmpty() -> "Tu pago se ha realizado con exito"
-                            currentWithHints.isCreditSale -> "Venta a credito registrada"
-                            else -> "Venta registrada correctamente"
+                            created == null -> tr(
+                                spanish = "Venta guardada localmente.",
+                                english = "Sale saved locally."
+                            )
+                            currentWithHints.isCreditSale && resolvedPaymentLines.isNotEmpty() -> tr(
+                                spanish = "Venta a crédito parcial registrada",
+                                english = "Partial credit sale registered"
+                            )
+                            currentWithHints.isCreditSale -> tr(
+                                spanish = "Venta a crédito registrada",
+                                english = "Credit sale registered"
+                            )
+                            else -> tr(
+                                spanish = "Venta de contado registrada",
+                                english = "Cash sale registered"
+                            )
                         },
                         successDialogInvoice = created?.name ?: localInvoiceName,
                         successDialogId = Clock.System.now().toEpochMilliseconds(),
@@ -1296,7 +1349,10 @@ class BillingViewModel(
     }
 
     private fun buildQtyErrorMessage(itemName: String, maxQty: Double): String {
-        return "Solo hay ${formatQty(maxQty)} disponibles para $itemName."
+        return tr(
+            spanish = "Solo hay ${formatQty(maxQty)} disponibles para $itemName.",
+            english = "Only ${formatQty(maxQty)} units are available for $itemName."
+        )
     }
 
     private fun formatQty(value: Double): String {
@@ -1637,21 +1693,39 @@ class BillingViewModel(
 
     private suspend fun validateFinalizeSale(current: BillingState.Success): String? {
         val posContext = runCatching { contextProvider.requireContext() }.getOrNull()
-            ?: return "No hay contexto POS activo."
+            ?: return tr(
+                spanish = "No hay contexto POS activo.",
+                english = "There is no active POS context."
+            )
         if (posContext.profileName.isBlank()) {
-            return "No hay POS Profile activo."
+            return tr(
+                spanish = "No hay POS Profile activo.",
+                english = "There is no active POS Profile."
+            )
         }
         val openingEntryId = contextProvider.getActiveCashboxWithDetails()?.cashbox?.openingEntryId
         if (openingEntryId.isNullOrBlank()) {
-            return "No hay apertura de caja activa."
+            return tr(
+                spanish = "No hay apertura de caja activa.",
+                english = "There is no active cashbox opening."
+            )
         }
-        if (current.selectedCustomer == null) return "Selecciona un cliente antes de finalizar la venta."
-        if (current.cartItems.isEmpty()) return "Agrega al menos un artículo al carrito."
+        if (current.selectedCustomer == null) return tr(
+            spanish = "Selecciona un cliente antes de finalizar la venta.",
+            english = "Select a customer before finalizing the sale."
+        )
+        if (current.cartItems.isEmpty()) return tr(
+            spanish = "Agrega al menos un artículo al carrito.",
+            english = "Add at least one item to the cart."
+        )
         /*if (!current.isCreditSale && current.paidAmountBase < current.total) {
             return "El monto pagado debe cubrir el total antes de finalizar la venta."
         }*/
         if (current.isCreditSale && current.selectedPaymentTerm == null)
-            return "Selecciona un término de pago para finalizar una venta a crédito."
+            return tr(
+                spanish = "Selecciona un término de pago para finalizar una venta a crédito.",
+                english = "Select a payment term to finalize a credit sale."
+            )
 
         // No crédito: debe pagar todo
         val total = roundForCurrency(current.total, current.currency)
@@ -1659,23 +1733,35 @@ class BillingViewModel(
         val tolerance = resolveMinorUnitTolerance(current.currency)
 
         if (!current.isCreditSale && paid + tolerance < total)
-            return "El monto pagado debe cubrir el total antes de finalizar la venta."
+            return tr(
+                spanish = "El monto pagado debe cubrir el total antes de finalizar la venta.",
+                english = "Paid amount must cover the total before finalizing the sale."
+            )
 
         if (current.isCreditSale && paid + tolerance >= total)
-            return "Una venta de crédito no puede tener pago completo. Desactiva \"Venta de crédito\" para registrarla como contado."
+            return tr(
+                spanish = "Una venta de crédito no puede tener pago completo. Desactiva \"Venta de crédito\" para registrarla como contado.",
+                english = "A credit sale cannot have full payment. Disable \"Credit sale\" to register it as cash."
+            )
 
         /*if (current.isCreditSale && current.paymentLines.isNotEmpty()) {
             return "Las ventas a crédito no pueden incluir líneas de pago."
         }*/
 
         if (!current.isCreditSale && current.paymentLines.isEmpty())
-            return "Agrega al menos un pago o marca la venta como crédito."
+            return tr(
+                spanish = "Agrega al menos un pago o marca la venta como crédito.",
+                english = "Add at least one payment line or mark the sale as credit."
+            )
 
         current.cartItems.forEach { item ->
             val available = item.availableQty ?: productStockByCode[item.itemCode] ?: 0.0
             val allowNegativeStock = contextProvider.getContext()?.allowNegativeStock == true
             if (!allowNegativeStock && available <= 0.0) {
-                return "El artículo ${item.name} no tiene stock disponible."
+                return tr(
+                    spanish = "El artículo ${item.name} no tiene stock disponible.",
+                    english = "Item ${item.name} has no available stock."
+                )
             }
             if (!allowNegativeStock && item.quantity > available) {
                 return buildQtyErrorMessage(item.name, available)
@@ -1693,10 +1779,16 @@ class BillingViewModel(
 
         return when {
             paid > total + tolerance ->
-                "La venta está marcada como crédito, pero el pago excede el total. Desactiva \"Venta de crédito\" para registrarla como contado."
+                tr(
+                    spanish = "La venta está marcada como crédito, pero el pago excede el total. Desactiva \"Venta de crédito\" para registrarla como contado.",
+                    english = "Sale is marked as credit, but payment exceeds total. Disable \"Credit sale\" to register it as cash."
+                )
 
             paid + tolerance >= total ->
-                "La venta está marcada como crédito, pero el pago ya cubre el total. Desactiva \"Venta de crédito\" para registrarla como contado."
+                tr(
+                    spanish = "La venta está marcada como crédito, pero el pago ya cubre el total. Desactiva \"Venta de crédito\" para registrarla como contado.",
+                    english = "Sale is marked as credit, but payment already covers the total. Disable \"Credit sale\" to register it as cash."
+                )
 
             else -> null
         }

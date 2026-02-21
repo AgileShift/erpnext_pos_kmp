@@ -79,7 +79,7 @@ fun ActivityScreen(
         )
         Spacer(modifier = Modifier.height(12.dp))
         if (state.entries.isEmpty()) {
-            EmptyActivityState()
+            EmptyActivityState(strings)
         } else {
             LazyColumn(
                 verticalArrangement = Arrangement.spacedBy(10.dp),
@@ -311,7 +311,7 @@ private fun ActivityItemCard(
 }
 
 @Composable
-private fun EmptyActivityState() {
+private fun EmptyActivityState(strings: com.erpnext.pos.localization.AppStrings) {
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -329,11 +329,11 @@ private fun EmptyActivityState() {
                 modifier = Modifier.size(40.dp)
             )
             Text(
-                text = "No hay actividad para mostrar",
+                text = strings.activity.emptyTitle,
                 style = MaterialTheme.typography.titleSmall
             )
             Text(
-                text = "Cuando ocurra algo importante en ventas, clientes o sincronización, aparecerá aquí.",
+                text = strings.activity.emptyMessage,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )

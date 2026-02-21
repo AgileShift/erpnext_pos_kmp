@@ -31,7 +31,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.Logout
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Business
-import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.Print
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Settings
@@ -137,7 +136,8 @@ private fun defaultTitleForRoute(route: String, strings: AppStrings): String {
         route == NavRoute.SalesOrder.path -> strings.navigation.salesOrder
         route == NavRoute.DeliveryNote.path -> strings.navigation.deliveryNote
         route.startsWith("reconciliation") -> strings.navigation.reconciliation
-        route.startsWith("payment-entry") -> strings.navigation.paymentEntry
+        route == NavRoute.InternalTransfer.path -> "Transferencia interna"
+        route.startsWith("payment-entry") -> strings.navigation.expenses
         route == NavRoute.Activity.path -> strings.navigation.activity
         route == NavRoute.Settings.path -> strings.navigation.settings
         else -> ""
@@ -315,7 +315,12 @@ fun AppNavigation() {
                                 navController = navController,
                                 contextProvider = cashBoxManager,
                                 leftItems = listOf(NavRoute.Home, NavRoute.Inventory),
-                                rightItems = listOf(NavRoute.Customer, NavRoute.Activity, NavRoute.Settings),
+                                rightItems = listOf(
+                                    NavRoute.Customer,
+                                    NavRoute.Expenses,
+                                    NavRoute.Activity,
+                                    NavRoute.Settings
+                                ),
                                 fabItem = NavRoute.Billing
                             )
                         }
@@ -405,20 +410,20 @@ fun AppNavigation() {
                                             else -> MaterialTheme.colorScheme.onSurfaceVariant
                                         }
                                         val dbLabel = when (syncState) {
-                                            is SyncState.SYNCING -> "Base de datos: ${(syncState as SyncState.SYNCING).message}"
-                                            is SyncState.ERROR -> "Base de datos: ${(syncState as SyncState.ERROR).message}"
-                                            is SyncState.SUCCESS -> "Base de datos: Sincronizada"
+                                            is SyncState.SYNCING -> "${strings.common.databaseSyncing}: ${(syncState as SyncState.SYNCING).message}"
+                                            is SyncState.ERROR -> "${strings.common.databaseError}: ${(syncState as SyncState.ERROR).message}"
+                                            is SyncState.SUCCESS -> strings.common.databaseSynced
                                             else -> if (dbHealthy) {
-                                                "Base de datos: Saludable"
+                                                strings.common.databaseHealthy
                                             } else {
-                                                "Base de datos: Pendiente"
+                                                strings.common.databasePending
                                             }
                                         }
                                         val showNewSale = (currentRoute == NavRoute.Billing.path ||
                                                 currentRoute == NavRoute.Billing.path) &&
                                                 !subtitle.isNullOrBlank()
                                         Row(
-                                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                            horizontalArrangement = Arrangement.spacedBy(12.dp),
                                             verticalAlignment = Alignment.CenterVertically
                                         ) {
                                             AnimatedVisibility(
@@ -427,7 +432,7 @@ fun AppNavigation() {
                                                 exit = fadeOut(tween(160))
                                             ) {
                                                 StatusIconButton(
-                                                    label = "Nueva venta",
+                                                    label = strings.common.newSale,
                                                     onClick = { billingResetController.reset() },
                                                     tint = MaterialTheme.colorScheme.primary
                                                 ) {
@@ -438,7 +443,7 @@ fun AppNavigation() {
                                                 }
                                             }
                                             StatusIconButton(
-                                                label = if (isOnline) "Internet: Conectado" else "Internet: Sin conexión",
+                                                label = if (isOnline) strings.common.internetConnected else strings.common.internetDisconnected,
                                                 onClick = {},
                                                 enabled = false,
                                                 tint = if (isOnline) Color(0xFF2E7D32)
@@ -454,7 +459,7 @@ fun AppNavigation() {
                                                 onClick = {
                                                     if (!isCashboxOpen) {
                                                         snackbarController.show(
-                                                            "No podemos sincronizar sin anter aperturar caja",
+                                                            strings.common.openCashboxToSyncError,
                                                             SnackbarType.Error,
                                                             SnackbarPosition.Bottom
                                                         )
@@ -473,7 +478,7 @@ fun AppNavigation() {
                                                     )
                                                 }
                                             }
-                                            StatusIconButton(
+                                           /* StatusIconButton(
                                                 label = if (activityBadgeCount > 0) {
                                                     "${strings.navigation.activity}: $activityBadgeCount"
                                                 } else {
@@ -492,7 +497,7 @@ fun AppNavigation() {
                                                     imageVector = Icons.Outlined.Notifications,
                                                     contentDescription = null
                                                 )
-                                            }
+                                            }*/
                                             StatusIconButton(
                                                 label = strings.common.retry,
                                                 onClick = {
@@ -511,8 +516,8 @@ fun AppNavigation() {
                                             if (printerEnabled) {
                                                 val printerConnected = false
                                                 StatusIconButton(
-                                                    label = if (printerConnected) "Impresora: Conectada"
-                                                    else "Impresora: Sin conexión",
+                                                    label = if (printerConnected) strings.common.printerConnected
+                                                    else strings.common.printerDisconnected,
                                                     onClick = {},
                                                     enabled = false,
                                                     tint = if (printerConnected) MaterialTheme.colorScheme.primary
@@ -565,7 +570,7 @@ fun AppNavigation() {
                                                                 color = MaterialTheme.colorScheme.onSurface
                                                             )
                                                             Text(
-                                                                text = "Cambiar instancia",
+                                                                text = strings.common.switchInstance,
                                                                 style = MaterialTheme.typography.labelSmall,
                                                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                                                             )
@@ -593,7 +598,7 @@ fun AppNavigation() {
                                                             shape = MaterialTheme.shapes.small
                                                         ) {
                                                             Text(
-                                                                if (isOnline) "Online" else "Offline",
+                                                                if (isOnline) strings.common.online else strings.common.offline,
                                                                 modifier = Modifier.padding(
                                                                     horizontal = 10.dp,
                                                                     vertical = 4.dp
@@ -657,6 +662,7 @@ fun AppNavigation() {
                                                         )
                                                         Text(
                                                             text = if (isOnline) "Online" else "Offline",
+                                                            text = if (isOnline) strings.common.online else strings.common.offline,
                                                             style = MaterialTheme.typography.labelSmall,
                                                             color = if (isOnline) {
                                                                 MaterialTheme.colorScheme.primary
@@ -665,6 +671,33 @@ fun AppNavigation() {
                                                             }
                                                         )
                                                     }*/
+                                                    //HorizontalDivider()
+                                                    /*DropdownMenuItem(
+                                                        text = { Text("Pago de factura") },
+                                                        leadingIcon = {
+                                                            Icon(
+                                                                imageVector = NavRoute.PaymentEntry().icon,
+                                                                contentDescription = null
+                                                            )
+                                                        },
+                                                        onClick = {
+                                                            profileMenuExpanded = false
+                                                            navController.navigateSingle(NavRoute.PaymentEntry().path)
+                                                        }
+                                                    )
+                                                    DropdownMenuItem(
+                                                        text = { Text("Transferencia interna") },
+                                                        leadingIcon = {
+                                                            Icon(
+                                                                imageVector = NavRoute.InternalTransfer.icon,
+                                                                contentDescription = null
+                                                            )
+                                                        },
+                                                        onClick = {
+                                                            profileMenuExpanded = false
+                                                            navController.navigateSingle(NavRoute.InternalTransfer.path)
+                                                        }
+                                                    )*/
                                                     //HorizontalDivider()
                                                     DropdownMenuItem(
                                                         text = { Text(strings.navigation.settings) },
@@ -693,7 +726,7 @@ fun AppNavigation() {
                                                         }
                                                     )
                                                     DropdownMenuItem(
-                                                        text = { Text("Cambiar instancia") },
+                                                        text = { Text(strings.common.switchInstance) },
                                                         leadingIcon = {
                                                             Icon(
                                                                 imageVector = Icons.Outlined.SwapHoriz,
@@ -711,7 +744,7 @@ fun AppNavigation() {
                                                     )
                                                     HorizontalDivider()
                                                     DropdownMenuItem(
-                                                        text = { Text("Cerrar sesión") },
+                                                        text = { Text(strings.common.logout) },
                                                         leadingIcon = {
                                                             Icon(
                                                                 imageVector = Icons.AutoMirrored.Outlined.Logout,
@@ -887,6 +920,10 @@ fun AppNavigation() {
                                             )
 
                                             is NavRoute.PaymentEntry -> navController.navigateSingle(
+                                                event.path
+                                            )
+                                            NavRoute.Expenses -> {}
+                                            is NavRoute.InternalTransfer -> navController.navigateSingle(
                                                 event.path
                                             )
 

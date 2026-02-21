@@ -1,19 +1,20 @@
 package com.erpnext.pos.navigation
 
-import androidx.compose.runtime.Composable
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AccountBalance
+import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material.icons.filled.LocalShipping
-import androidx.compose.material.icons.filled.AccountBalance
 import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.Payments
 import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.PointOfSale
-import androidx.compose.material.icons.filled.Payments
-import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material.icons.filled.Receipt
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.ShoppingCart
+import androidx.compose.material.icons.filled.SwapHoriz
+import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.vector.ImageVector
 import com.erpnext.pos.localization.AppLanguage
 import com.erpnext.pos.localization.AppStringsFactory
@@ -22,14 +23,15 @@ import com.erpnext.pos.views.reconciliation.ReconciliationMode
 
 val strings = AppStringsFactory.forLanguage(AppLanguage.Spanish)
 val menuStrings = strings.navigation
+
 sealed class NavRoute(
     val path: String,
     val title: String,
     val icon: ImageVector
 ) {
 
-    object Splash : NavRoute("splash", "Splash", Icons.Filled.Home)
-    object Login : NavRoute("login", "Inicio de sesion", Icons.Filled.Home)
+    object Splash : NavRoute("splash", "", Icons.Filled.Home)
+    object Login : NavRoute("login", "", Icons.Filled.Home)
 
     object Home : NavRoute("home", menuStrings.home, Icons.Filled.Home)
     object Inventory : NavRoute("inventory", menuStrings.inventory, Icons.Filled.Inventory2)
@@ -37,14 +39,16 @@ sealed class NavRoute(
     object Customer : NavRoute("customer", menuStrings.customer, Icons.Filled.People)
     object Credits : NavRoute("credits", menuStrings.credits, Icons.Filled.Receipt)
     object Quotation : NavRoute("quotation", menuStrings.quotations, Icons.Filled.Description)
-    object SalesOrder : NavRoute("sales-order", "Orden de venta", Icons.Filled.ShoppingCart)
-    object DeliveryNote : NavRoute("delivery-note", "Nota de entrega", Icons.Filled.LocalShipping)
-    object Activity : NavRoute("activity", "Actividad", Icons.Filled.Notifications)
+    object SalesOrder : NavRoute("sales-order", menuStrings.salesOrder, Icons.Filled.ShoppingCart)
+    object DeliveryNote :
+        NavRoute("delivery-note", menuStrings.deliveryNote, Icons.Filled.LocalShipping)
+
+    object Activity : NavRoute("activity", "", Icons.Filled.Notifications)
     data class Reconciliation(
         val mode: ReconciliationMode = ReconciliationMode.Close
     ) : NavRoute(
         path = "reconciliation?mode=${mode.value}",
-        title = "Reconciliation",
+        title = strings.navigation.reconciliation,
         icon = Icons.Filled.AccountBalance
     ) {
         companion object {
@@ -53,17 +57,29 @@ sealed class NavRoute(
     }
 
     object Settings : NavRoute("settings", "", Icons.Filled.Settings)
-    data class PaymentEntry(val invoiceId: String? = null) : NavRoute(
-        path = if (invoiceId.isNullOrBlank()) {
-            "payment-entry"
-        } else {
-            "payment-entry?invoiceId=$invoiceId"
-        },
-        title = "Payment Entry",
+    object Expenses : NavRoute(
+        path = "expenses",
+        title = strings.navigation.expenses,
         icon = Icons.Filled.Payments
     )
 
-object NavigateUp : NavRoute("navigate-up", "Navigate Up", Icons.Filled.Home)
+    data class PaymentEntry(val invoiceId: String? = null) : NavRoute(
+        path = if (invoiceId.isNullOrBlank()) {
+            "payment-entry?invoiceId=&entryType=pay"
+        } else {
+            "payment-entry?invoiceId=$invoiceId&entryType=receive"
+        },
+        title = strings.navigation.paymentEntry,
+        icon = Icons.Filled.Payments
+    )
+
+    object InternalTransfer : NavRoute(
+        path = "payment-entry?invoiceId=&entryType=internal-transfer",
+        title = "Transferencia interna",
+        icon = Icons.Filled.SwapHoriz
+    )
+
+    object NavigateUp : NavRoute("navigate-up", "", Icons.Filled.Home)
 }
 
 @Composable
@@ -78,12 +94,14 @@ fun NavRoute.localizedTitle(): String {
         NavRoute.Quotation -> strings.quotations
         NavRoute.SalesOrder -> strings.salesOrder
         NavRoute.DeliveryNote -> strings.deliveryNote
-        NavRoute.Activity -> strings.activity
-        NavRoute.Settings -> strings.settings
+        NavRoute.Activity -> "" // strings.activity
+        NavRoute.Settings -> "" //strings.settings
+        NavRoute.Expenses -> strings.expenses
         is NavRoute.Reconciliation -> strings.reconciliation
-        is NavRoute.PaymentEntry -> strings.paymentEntry
-        NavRoute.Splash -> "Splash"
-        NavRoute.Login -> "Login"
-        NavRoute.NavigateUp -> "Back"
+        is NavRoute.PaymentEntry -> strings.expenses
+        NavRoute.InternalTransfer -> "Transferencia interna"
+        NavRoute.Splash -> ""
+        NavRoute.Login -> ""
+        NavRoute.NavigateUp -> ""
     }
 }

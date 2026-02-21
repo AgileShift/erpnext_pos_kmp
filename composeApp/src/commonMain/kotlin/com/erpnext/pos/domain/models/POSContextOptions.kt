@@ -10,6 +10,7 @@ data class POSCurrencyOption(
 data class POSPaymentModeOption(
     val name: String,
     val modeOfPayment: String,
+    val account: String? = null,
     val type: String? = null,
     val allowInReturns: Boolean = true,
 )

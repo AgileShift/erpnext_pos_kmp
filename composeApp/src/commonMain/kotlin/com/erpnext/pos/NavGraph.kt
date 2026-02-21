@@ -90,15 +90,22 @@ object NavGraph {
                 SettingsRoute()
             }
             composable(
-                route = "payment-entry?invoiceId={invoiceId}",
+                route = "payment-entry?invoiceId={invoiceId}&entryType={entryType}",
                 arguments = listOf(
                     navArgument("invoiceId") {
                         defaultValue = ""
                         nullable = true
+                    },
+                    navArgument("entryType") {
+                        type = NavType.StringType
+                        defaultValue = "pay"
                     }
                 )
             ) { entry ->
-                PaymentEntryRoute(entry.arguments?.read { getString("invoiceId") })
+                PaymentEntryRoute(
+                    invoiceId = entry.arguments?.read { getString("invoiceId") },
+                    entryType = entry.arguments?.read { getString("entryType") }
+                )
             }
         }
     }

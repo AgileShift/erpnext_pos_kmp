@@ -1066,6 +1066,22 @@ class CashBoxManager(
             remoteOpeningEntryId =
                 openingEntryLinkDao.getRemoteOpeningEntryName(entry.cashbox.localId)
         }
+        if (canUseRemote && remoteOpeningEntryId.isNullOrBlank()) {
+            val remoteFromBootstrap = runCatching { api.getBootstrapOpenShift()?.name }
+                .onFailure { AppLogger.warn("closeCashBox: bootstrap POE lookup failed", it) }
+                .getOrNull()
+            if (!remoteFromBootstrap.isNullOrBlank()) {
+                remoteOpeningEntryId = remoteFromBootstrap
+                cashboxDao.updateOpeningEntryId(entry.cashbox.localId, remoteFromBootstrap)
+                val localOpening = entry.cashbox.openingEntryId?.takeIf { it.isNotBlank() }
+                if (!localOpening.isNullOrBlank() && localOpening != remoteFromBootstrap) {
+                    cashboxDao.updateBalanceDetailsOpeningEntry(localOpening, remoteFromBootstrap)
+                    salesInvoiceDao.updateInvoicesOpeningEntry(localOpening, remoteFromBootstrap)
+                    salesInvoiceDao.updatePaymentsOpeningEntry(localOpening, remoteFromBootstrap)
+                }
+                AppLogger.info("closeCashBox: resolved remote POE from bootstrap -> $remoteFromBootstrap")
+            }
+        }
         val localOpeningEntryId = entry.cashbox.openingEntryId?.takeIf { it.isNotBlank() }
         val openingEntryId = remoteOpeningEntryId ?: localOpeningEntryId ?: return@withContext null
         val shiftInvoices = buildList {
@@ -1353,6 +1369,7 @@ class CashBoxManager(
                 POSPaymentModeOption(
                     name = method.mopName,
                     modeOfPayment = method.mopName,
+                    account = method.account,
                     type = method.type,
                     allowInReturns = method.allowInReturns,
                 )
@@ -1365,6 +1382,80 @@ class CashBoxManager(
     ) = withContext(Dispatchers.IO) {
         closingByMode.forEach { (mode, amount) ->
             cashboxDao.updateClosingAmount(cashboxId, mode, amount)
+        }
+    }
+
+    suspend fun registerInternalTransfer(
+        sourceModeOfPayment: String,
+        targetModeOfPayment: String,
+        amount: Double,
+        note: String?
+    ) = withContext(Dispatchers.IO) {
+        require(amount > 0.0) { "El monto debe ser mayor que cero." }
+        val ctx = currentContext ?: initializeContext()
+            ?: error("No hay una caja abierta para registrar transferencia interna.")
+        val cashboxId = ctx.cashboxId ?: error("Caja activa no disponible.")
+        val sourceMode = sourceModeOfPayment.trim()
+        val targetMode = targetModeOfPayment.trim()
+        require(sourceMode.isNotBlank()) { "Modo de pago origen requerido." }
+        require(targetMode.isNotBlank()) { "Modo de pago destino requerido." }
+        require(!sourceMode.equals(targetMode, ignoreCase = true)) {
+            "Origen y destino deben ser distintos."
+        }
+
+        val updated = cashboxDao.decreaseOpeningAmount(
+            cashboxId = cashboxId,
+            modeOfPayment = sourceMode,
+            amount = amount
+        )
+        if (updated <= 0) {
+            val available = cashboxDao.getOpeningAmountForMode(cashboxId, sourceMode) ?: 0.0
+            error("Fondos insuficientes en apertura para $sourceMode. Disponible: $available")
+        }
+        val targetOpening = cashboxDao.getOpeningAmountForMode(cashboxId, targetMode)
+            ?: error("Modo destino no existe en apertura: $targetMode")
+        cashboxDao.increaseOpeningAmount(
+            cashboxId = cashboxId,
+            modeOfPayment = targetMode,
+            amount = amount
+        )
+        val remaining = cashboxDao.getOpeningAmountForMode(cashboxId, sourceMode) ?: 0.0
+        val targetNow = targetOpening + amount
+        AppLogger.info(
+            "internal-transfer: profile=${ctx.profileName} cashbox=$cashboxId from=$sourceMode to=$targetMode amount=$amount fromRemaining=$remaining toNow=$targetNow note=${note?.trim().orEmpty()}"
+        )
+    }
+
+    suspend fun registerCashMovement(
+        modeOfPayment: String,
+        amount: Double,
+        isIncoming: Boolean,
+        note: String?
+    ) = withContext(Dispatchers.IO) {
+        require(amount > 0.0) { "El monto debe ser mayor que cero." }
+        val ctx = currentContext ?: initializeContext()
+            ?: error("No hay una caja abierta para registrar movimiento.")
+        val cashboxId = ctx.cashboxId ?: error("Caja activa no disponible.")
+        val mode = modeOfPayment.trim()
+        require(mode.isNotBlank()) { "Modo de pago requerido." }
+
+        if (isIncoming) {
+            val opening = cashboxDao.getOpeningAmountForMode(cashboxId, mode)
+                ?: error("Modo no existe en apertura: $mode")
+            cashboxDao.increaseOpeningAmount(cashboxId, mode, amount)
+            AppLogger.info(
+                "cash-movement: type=receive profile=${ctx.profileName} cashbox=$cashboxId mode=$mode amount=$amount openingBefore=$opening openingNow=${opening + amount} note=${note?.trim().orEmpty()}"
+            )
+        } else {
+            val updated = cashboxDao.decreaseOpeningAmount(cashboxId, mode, amount)
+            if (updated <= 0) {
+                val available = cashboxDao.getOpeningAmountForMode(cashboxId, mode) ?: 0.0
+                error("Fondos insuficientes en apertura para $mode. Disponible: $available")
+            }
+            val remaining = cashboxDao.getOpeningAmountForMode(cashboxId, mode) ?: 0.0
+            AppLogger.info(
+                "cash-movement: type=pay profile=${ctx.profileName} cashbox=$cashboxId mode=$mode amount=$amount openingNow=$remaining note=${note?.trim().orEmpty()}"
+            )
         }
     }
 

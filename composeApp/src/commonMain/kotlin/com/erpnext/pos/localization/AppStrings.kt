@@ -44,6 +44,23 @@ data class CommonStrings(
     val link: String,
     val apply: String,
     val processing: String,
+    val showMore: String,
+    val switchInstance: String,
+    val logout: String,
+    val online: String,
+    val offline: String,
+    val newSale: String,
+    val internetConnected: String,
+    val internetDisconnected: String,
+    val databaseSyncing: String,
+    val databaseError: String,
+    val databaseSynced: String,
+    val databaseHealthy: String,
+    val databasePending: String,
+    val printerConnected: String,
+    val printerDisconnected: String,
+    val openCashboxToSyncError: String,
+    val cashierFallback: String,
     val collapseSection: String,
     val expandSection: String,
     val imagePlaceholderDescription: String,
@@ -141,7 +158,8 @@ data class BillingStrings(
     val paymentsRegisteredTitle: String,
     val syncRatesButton: String,
     val closeButton: String,
-    val noDataAvailable: String
+    val noDataAvailable: String,
+    val inactivityResetMessage: String
 )
 
 data class ActivityStrings(
@@ -159,7 +177,9 @@ data class ActivityStrings(
     val priorityPrefix: String,
     val priorityHigh: String,
     val priorityMedium: String,
-    val priorityLow: String
+    val priorityLow: String,
+    val emptyTitle: String,
+    val emptyMessage: String
 )
 
 data class CustomerStrings(
@@ -296,6 +316,7 @@ data class NavigationStrings(
     val reconciliation: String,
     val paymentEntry: String,
     val settings: String,
+    val expenses: String,
     val activity: String,
     val openCashbox: String,
     val invoice: String,
@@ -474,7 +495,8 @@ object AppStringsFactory {
             paymentsRegisteredTitle = "Pagos registrados",
             syncRatesButton = "Sincronizar tasas de cambio",
             closeButton = "Cerrar",
-            noDataAvailable = "Sin datos disponibles."
+            noDataAvailable = "Sin datos disponibles.",
+            inactivityResetMessage = "Venta reiniciada por inactividad."
         ),
         customer = CustomerStrings(
             title = "Clientes",
@@ -545,7 +567,9 @@ object AppStringsFactory {
             priorityPrefix = "Prioridad",
             priorityHigh = "Alta",
             priorityMedium = "Media",
-            priorityLow = "Baja"
+            priorityLow = "Baja",
+            emptyTitle = "No hay actividad para mostrar",
+            emptyMessage = "Cuando ocurra algo importante en ventas, clientes o sincronización, aparecerá aquí."
         ),
         settings = SettingsStrings(
             title = "Configuración POS",
@@ -626,6 +650,7 @@ object AppStringsFactory {
             deliveryNote = "Nota de envio",
             paymentEntry = "Entrada de pago",
             settings = "Configuracion",
+            expenses = "Gastos",
             activity = "Actividad",
             openCashbox = "Abrir caja",
         ),
@@ -716,6 +741,23 @@ object AppStringsFactory {
             link = "Vincular",
             apply = "Aplicar",
             processing = "Procesando...",
+            showMore = "Mostrar más...",
+            switchInstance = "Cambiar instancia",
+            logout = "Cerrar sesión",
+            online = "En línea",
+            offline = "Sin conexión",
+            newSale = "Nueva venta",
+            internetConnected = "Internet: Conectado",
+            internetDisconnected = "Internet: Sin conexión",
+            databaseSyncing = "Base de datos: Sincronizando",
+            databaseError = "Base de datos: Con errores",
+            databaseSynced = "Base de datos: Sincronizada",
+            databaseHealthy = "Base de datos: Saludable",
+            databasePending = "Base de datos: Pendiente",
+            printerConnected = "Impresora: Conectada",
+            printerDisconnected = "Impresora: Sin conexión",
+            openCashboxToSyncError = "No podemos sincronizar sin aperturar caja.",
+            cashierFallback = "Cajero",
             collapseSection = "Colapsar sección",
             expandSection = "Expandir sección",
             imagePlaceholderDescription = "Imagen de marcador",
@@ -815,7 +857,8 @@ object AppStringsFactory {
             paymentsRegisteredTitle = "Registered payments",
             syncRatesButton = "Sync exchange rates",
             closeButton = "Close",
-            noDataAvailable = "No data available."
+            noDataAvailable = "No data available.",
+            inactivityResetMessage = "Sale reset due to inactivity."
         ),
         customer = CustomerStrings(
             title = "Customers",
@@ -886,7 +929,9 @@ object AppStringsFactory {
             priorityPrefix = "Priority",
             priorityHigh = "High",
             priorityMedium = "Medium",
-            priorityLow = "Low"
+            priorityLow = "Low",
+            emptyTitle = "No activity to display",
+            emptyMessage = "Important updates for sales, customers, or sync will appear here."
         ),
         settings = SettingsStrings(
             title = "POS settings",
@@ -968,6 +1013,7 @@ object AppStringsFactory {
             paymentEntry = "Payment Entry",
             settings = "Settings",
             activity = "Activity",
+            expenses = "Expenses",
             openCashbox = "Open Shift",
         ),
         reconciliation = ReconciliationStrings(
@@ -1057,6 +1103,23 @@ object AppStringsFactory {
             link = "Link",
             apply = "Apply",
             processing = "Processing...",
+            showMore = "Show more...",
+            switchInstance = "Switch instance",
+            logout = "Log out",
+            online = "Online",
+            offline = "Offline",
+            newSale = "New sale",
+            internetConnected = "Internet: Connected",
+            internetDisconnected = "Internet: Disconnected",
+            databaseSyncing = "Database: Syncing",
+            databaseError = "Database: With errors",
+            databaseSynced = "Database: Synced",
+            databaseHealthy = "Database: Healthy",
+            databasePending = "Database: Pending",
+            printerConnected = "Printer: Connected",
+            printerDisconnected = "Printer: Disconnected",
+            openCashboxToSyncError = "Cannot sync before opening the cashbox.",
+            cashierFallback = "Cashier",
             collapseSection = "Collapse section",
             expandSection = "Expand section",
             imagePlaceholderDescription = "Placeholder image",

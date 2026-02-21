@@ -1,27 +1,67 @@
 package com.erpnext.pos.views.paymententry
 
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.automirrored.filled.CompareArrows
+import androidx.compose.material.icons.filled.AccountBalanceWallet
+import androidx.compose.material.icons.filled.Payments
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuAnchorType
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.erpnext.pos.utils.loading.LoadingIndicator
 import com.erpnext.pos.utils.loading.LoadingUiState
 import com.erpnext.pos.utils.view.SnackbarController
 import com.erpnext.pos.utils.view.SnackbarPosition
 import com.erpnext.pos.utils.view.SnackbarType
+import com.erpnext.pos.views.billing.MoneyTextField
 import org.jetbrains.compose.ui.tooling.preview.Preview
 import org.koin.compose.koinInject
 
@@ -34,6 +74,9 @@ fun PaymentEntryScreen(
     val snackbar = koinInject<SnackbarController>()
     val loadingState by LoadingIndicator.state.collectAsState(initial = LoadingUiState())
     val globalBusy = loadingState.isLoading
+    val colorScheme = MaterialTheme.colorScheme
+    val fieldShape = RoundedCornerShape(12.dp)
+    val fieldColors = paymentEntryFieldColors()
 
     state.errorMessage?.let {
         snackbar.show(it, SnackbarType.Error, SnackbarPosition.Top)
@@ -43,65 +86,584 @@ fun PaymentEntryScreen(
         snackbar.show(it, SnackbarType.Success, SnackbarPosition.Top)
     }
 
-    Scaffold { padding ->
+    Scaffold(containerColor = colorScheme.surfaceVariant.copy(alpha = 0.20f)) { padding ->
         Column(
             modifier = Modifier
                 .padding(padding)
-                .padding(16.dp)
-                .fillMaxSize(),
+                .padding(horizontal = 16.dp, vertical = 12.dp)
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            OutlinedTextField(
-                value = state.invoiceId,
-                onValueChange = action.onInvoiceIdChanged,
-                modifier = Modifier.fillMaxWidth(),
-                label = { Text("ID de factura") },
-                singleLine = true
-            )
+            HeaderCard(entryType = state.entryType)
 
-            OutlinedTextField(
-                value = state.modeOfPayment,
-                onValueChange = action.onModeOfPaymentChanged,
-                modifier = Modifier.fillMaxWidth(),
-                label = { Text("Modo de pago") },
-                singleLine = true
-            )
-
-            OutlinedTextField(
-                value = state.amount,
-                onValueChange = action.onAmountChanged,
-                modifier = Modifier.fillMaxWidth(),
-                label = { Text("Monto") },
-                singleLine = true
-            )
-
-            Button(
-                onClick = action.onSubmit,
-                modifier = Modifier.fillMaxWidth(),
-                enabled = !state.isSubmitting && !globalBusy
-            ) {
-                if (state.isSubmitting) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.padding(end = 8.dp),
-                        strokeWidth = 2.dp
+            if (state.offlineModeEnabled || !state.isOnline) {
+                val offlineMessage = when {
+                    state.offlineModeEnabled && !state.isOnline ->
+                        "Modo offline activo y sin Internet. Este módulo solo funciona en línea."
+                    state.offlineModeEnabled ->
+                        "Modo offline activo. Desactívalo en Configuraciones para continuar."
+                    else ->
+                        "No hay conexión a Internet. Este módulo solo funciona en línea."
+                }
+                ElevatedCard(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp)) {
+                    Text(
+                        text = offlineMessage,
+                        color = colorScheme.error,
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.padding(12.dp)
                     )
                 }
-                Text("Registrar pago")
+            }
+
+            if (state.entryType == PaymentEntryType.Receive) {
+                ElevatedCard(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp)) {
+                    Column(
+                        modifier = Modifier.padding(14.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text("Documento", style = MaterialTheme.typography.labelLarge)
+                        OutlinedTextField(
+                            value = state.invoiceId,
+                            onValueChange = action.onInvoiceIdChanged,
+                            modifier = Modifier.fillMaxWidth(),
+                            label = { Text("Factura") },
+                            shape = fieldShape,
+                            colors = fieldColors,
+                            readOnly = true,
+                            singleLine = true
+                        )
+                    }
+                }
+            }
+
+            when (state.entryType) {
+                PaymentEntryType.InternalTransfer -> {
+                    TransferFlowSection(
+                        sourceValue = state.sourceAccount,
+                        destinationValue = state.targetAccount,
+                        options = state.accountOptions,
+                        onSourceSelected = action.onSourceAccountChanged,
+                        onDestinationSelected = action.onTargetAccountChanged,
+                        fieldShape = fieldShape,
+                        fieldColors = fieldColors
+                    )
+                }
+
+                PaymentEntryType.Pay, PaymentEntryType.Receive -> {
+                    ElevatedCard(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(18.dp)
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(14.dp),
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            val title = if (state.entryType == PaymentEntryType.Pay) {
+                                "Información de la parte"
+                            } else {
+                                "Cuenta y cobro"
+                            }
+                            Text(
+                                title,
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.SemiBold
+                            )
+
+                            ModeSelectorField(
+                                label = "Modo de pago",
+                                value = state.modeOfPayment,
+                                options = state.availableModes,
+                                shape = fieldShape,
+                                colors = fieldColors,
+                                onSelected = action.onModeOfPaymentChanged
+                            )
+
+                            if (state.entryType == PaymentEntryType.Pay) {
+                                if (state.partyOptions.isNotEmpty()) {
+                                    ModeSelectorField(
+                                        label = "Proveedor / Tercero",
+                                        value = state.party,
+                                        options = state.partyOptions,
+                                        shape = fieldShape,
+                                        colors = fieldColors,
+                                        onSelected = action.onPartyChanged
+                                    )
+                                } else {
+                                    OutlinedTextField(
+                                        value = state.party,
+                                        onValueChange = action.onPartyChanged,
+                                        modifier = Modifier.fillMaxWidth(),
+                                        label = { Text("Proveedor / Tercero") },
+                                        shape = fieldShape,
+                                        colors = fieldColors,
+                                        singleLine = true
+                                    )
+                                }
+
+                                OutlinedTextField(
+                                    value = state.concept,
+                                    onValueChange = action.onConceptChanged,
+                                    modifier = Modifier.fillMaxWidth(),
+                                    label = { Text("Concepto del gasto") },
+                                    placeholder = { Text("Describe motivo y naturaleza del gasto") },
+                                    shape = fieldShape,
+                                    colors = fieldColors,
+                                    minLines = 3,
+                                    maxLines = 5
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            ElevatedCard(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(18.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(
+                            brush = Brush.verticalGradient(
+                                colors = listOf(
+                                    colorScheme.primary.copy(alpha = 0.08f),
+                                    colorScheme.surface
+                                )
+                            )
+                        )
+                        .padding(16.dp)
+                ) {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Text(
+                            text = "Monto",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        MoneyTextField(
+                            currencyCode = state.currencyCode,
+                            rawValue = state.amount,
+                            onRawValueChange = action.onAmountChanged,
+                            label = "Monto a registrar",
+                            imeAction = androidx.compose.ui.text.input.ImeAction.Next
+                        )
+                    }
+                }
+            }
+
+            ElevatedCard(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(18.dp)
+            ) {
+                Column(
+                    modifier = Modifier.padding(14.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Text("Referencias", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+
+                    OutlinedTextField(
+                        value = state.referenceNo,
+                        onValueChange = action.onReferenceNoChanged,
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text("Número de referencia") },
+                        placeholder = { Text("REF-001") },
+                        shape = fieldShape,
+                        colors = fieldColors,
+                        singleLine = true
+                    )
+
+                    OutlinedTextField(
+                        value = state.notes,
+                        onValueChange = action.onNotesChanged,
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text("Notas / observaciones") },
+                        shape = fieldShape,
+                        colors = fieldColors,
+                        minLines = 2,
+                        maxLines = 4
+                    )
+                }
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End
+            ) {
+                Button(
+                    onClick = action.onSubmit,
+                    enabled = !state.isSubmitting && !globalBusy && state.isOnline && !state.offlineModeEnabled,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = colorScheme.primary,
+                        contentColor = colorScheme.onPrimary
+                    )
+                ) {
+                    if (state.isSubmitting) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.padding(end = 8.dp).size(16.dp),
+                            strokeWidth = 2.dp
+                        )
+                    }
+                    Text(
+                        when (state.entryType) {
+                            PaymentEntryType.Pay -> "Registrar"
+                            PaymentEntryType.InternalTransfer -> "Transferir"
+                            PaymentEntryType.Receive -> "Registrar"
+                        }
+                    )
+                }
             }
 
             Text(
-                text = "Los pagos se guardan localmente y se sincronizan en el próximo ciclo.",
-                style = MaterialTheme.typography.bodySmall
+                text = if (state.entryType == PaymentEntryType.InternalTransfer) {
+                    "No altera el total del turno; reclasifica saldo entre cuentas contables."
+                } else if (state.entryType == PaymentEntryType.Receive) {
+                    "Entrada permitida únicamente para cobro de factura del cliente."
+                } else {
+                    "El gasto disminuye caja/banco y se registra contra la cuenta de gasto."
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 8.dp)
             )
         }
     }
 }
 
+@Composable
+private fun HeaderCard(entryType: PaymentEntryType) {
+    val scheme = MaterialTheme.colorScheme
+    val style = when (entryType) {
+        PaymentEntryType.Pay -> {
+            HeaderStyle(
+                title = "Gastos",
+                subtitle = "Gasto",
+                icon = Icons.Filled.Payments,
+                gradient = listOf(scheme.primary, scheme.tertiary)
+            )
+        }
+
+        PaymentEntryType.InternalTransfer -> {
+            HeaderStyle(
+                title = "Gastos",
+                subtitle = "Transferencia Interna",
+                icon = Icons.AutoMirrored.Filled.CompareArrows,
+                gradient = listOf(scheme.primary, scheme.secondary)
+            )
+        }
+
+        PaymentEntryType.Receive -> {
+            HeaderStyle(
+                title = "Gastos",
+                subtitle = "Cobro de Factura",
+                icon = Icons.Filled.AccountBalanceWallet,
+                gradient = listOf(scheme.secondary, scheme.primary)
+            )
+        }
+    }
+
+    ElevatedCard(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(20.dp)) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(Brush.horizontalGradient(style.gradient))
+                .padding(16.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(text = style.title, style = MaterialTheme.typography.titleMedium, color = Color.White)
+                    Text(
+                        text = style.subtitle,
+                        style = MaterialTheme.typography.labelLarge,
+                        color = Color.White.copy(alpha = 0.92f),
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Text(
+                        text = "Registro contable operativo del turno POS",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color.White.copy(alpha = 0.85f)
+                    )
+                }
+                Box(
+                    modifier = Modifier
+                        .size(42.dp)
+                        .clip(CircleShape)
+                        .background(Color.White.copy(alpha = 0.18f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(style.icon, contentDescription = null, tint = Color.White)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun TransferFlowSection(
+    sourceValue: String,
+    destinationValue: String,
+    options: List<String>,
+    onSourceSelected: (String) -> Unit,
+    onDestinationSelected: (String) -> Unit,
+    fieldShape: RoundedCornerShape,
+    fieldColors: androidx.compose.material3.TextFieldColors
+) {
+    val scheme = MaterialTheme.colorScheme
+    val pulse = rememberInfiniteTransition(label = "transferPulse").animateFloat(
+        initialValue = 0.96f,
+        targetValue = 1.06f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 1300, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "pulse"
+    ).value
+
+    ElevatedCard(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(18.dp)
+    ) {
+        BoxWithConstraints(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(14.dp)
+        ) {
+            val horizontal = maxWidth > 700.dp
+            if (horizontal) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    TransferModeCard(
+                        modifier = Modifier.weight(1f),
+                        title = "Cuenta origen",
+                        label = "Desde (cuenta)",
+                        value = sourceValue,
+                        options = options,
+                        accent = scheme.primary,
+                        shape = fieldShape,
+                        colors = fieldColors,
+                        onSelected = onSourceSelected
+                    )
+
+                    Box(
+                        modifier = Modifier
+                            .size(40.dp)
+                            .clip(CircleShape)
+                            .background(Brush.horizontalGradient(listOf(scheme.primary, scheme.secondary))),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.scale(pulse)
+                        )
+                    }
+
+                    TransferModeCard(
+                        modifier = Modifier.weight(1f),
+                        title = "Cuenta destino",
+                        label = "Hacia (cuenta)",
+                        value = destinationValue,
+                        options = options,
+                        accent = scheme.secondary,
+                        shape = fieldShape,
+                        colors = fieldColors,
+                        onSelected = onDestinationSelected
+                    )
+                }
+            } else {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    TransferModeCard(
+                        modifier = Modifier.fillMaxWidth(),
+                        title = "Cuenta origen",
+                        label = "Desde (cuenta)",
+                        value = sourceValue,
+                        options = options,
+                        accent = scheme.primary,
+                        shape = fieldShape,
+                        colors = fieldColors,
+                        onSelected = onSourceSelected
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(36.dp)
+                                .clip(CircleShape)
+                                .background(Brush.horizontalGradient(listOf(scheme.primary, scheme.secondary))),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.ArrowForward,
+                                contentDescription = null,
+                                tint = Color.White,
+                                modifier = Modifier.scale(pulse)
+                            )
+                        }
+                    }
+                    TransferModeCard(
+                        modifier = Modifier.fillMaxWidth(),
+                        title = "Cuenta destino",
+                        label = "Hacia (cuenta)",
+                        value = destinationValue,
+                        options = options,
+                        accent = scheme.secondary,
+                        shape = fieldShape,
+                        colors = fieldColors,
+                        onSelected = onDestinationSelected
+                    )
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun TransferModeCard(
+    modifier: Modifier,
+    title: String,
+    label: String,
+    value: String,
+    options: List<String>,
+    accent: Color,
+    shape: RoundedCornerShape,
+    colors: androidx.compose.material3.TextFieldColors,
+    onSelected: (String) -> Unit
+) {
+    Column(
+        modifier = modifier
+            .clip(RoundedCornerShape(14.dp))
+            .background(accent.copy(alpha = 0.08f))
+            .border(1.dp, accent.copy(alpha = 0.28f), RoundedCornerShape(14.dp))
+            .padding(10.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            Box(
+                modifier = Modifier
+                    .size(22.dp)
+                    .clip(RoundedCornerShape(6.dp))
+                    .background(accent),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.AccountBalanceWallet,
+                    contentDescription = null,
+                    tint = Color.White,
+                    modifier = Modifier.size(14.dp)
+                )
+            }
+            Text(title, style = MaterialTheme.typography.labelLarge, color = accent)
+        }
+
+        ModeSelectorField(
+            label = label,
+            value = value,
+            options = options,
+            shape = shape,
+            colors = colors,
+            onSelected = onSelected
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ModeSelectorField(
+    label: String,
+    value: String,
+    options: List<String>,
+    shape: RoundedCornerShape,
+    colors: androidx.compose.material3.TextFieldColors,
+    onSelected: (String) -> Unit
+) {
+    var expanded by remember { mutableStateOf(false) }
+    ExposedDropdownMenuBox(
+        expanded = expanded,
+        onExpandedChange = { expanded = !expanded }
+    ) {
+        OutlinedTextField(
+            value = value,
+            onValueChange = {},
+            modifier = Modifier
+                .fillMaxWidth()
+                .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable),
+            label = { Text(label) },
+            trailingIcon = {
+                ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded)
+            },
+            shape = shape,
+            colors = colors,
+            placeholder = { Text("Seleccionar...") },
+            readOnly = true,
+            singleLine = true
+        )
+        ExposedDropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false }
+        ) {
+            if (options.isEmpty()) {
+                DropdownMenuItem(
+                    text = { Text("Sin opciones disponibles") },
+                    onClick = { expanded = false },
+                    enabled = false
+                )
+            } else {
+                options.forEach { option ->
+                    DropdownMenuItem(
+                        text = { Text(option) },
+                        onClick = {
+                            onSelected(option)
+                            expanded = false
+                        }
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun paymentEntryFieldColors() = OutlinedTextFieldDefaults.colors(
+    focusedBorderColor = MaterialTheme.colorScheme.primary,
+    focusedLabelColor = MaterialTheme.colorScheme.primary,
+    unfocusedBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.55f),
+    unfocusedLabelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+    focusedContainerColor = MaterialTheme.colorScheme.surface,
+    unfocusedContainerColor = MaterialTheme.colorScheme.surface
+)
+
+private data class HeaderStyle(
+    val title: String,
+    val subtitle: String,
+    val icon: androidx.compose.ui.graphics.vector.ImageVector,
+    val gradient: List<Color>
+)
+
 @Preview(showBackground = true)
 @Composable
 private fun PaymentEntryScreenPreview() {
     PaymentEntryScreen(
-        state = PaymentEntryState(invoiceId = "SINV-0001"),
+        state = PaymentEntryState(
+            entryType = PaymentEntryType.Pay,
+            modeOfPayment = "Efectivo",
+            amount = "1250.00"
+        ),
         action = PaymentEntryAction()
     )
 }

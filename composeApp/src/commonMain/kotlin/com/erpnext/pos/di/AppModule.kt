@@ -608,7 +608,7 @@ val appModule = module {
     single { QuotationViewModel(get()) }
     single { SalesOrderViewModel(get()) }
     single { DeliveryNoteViewModel(get()) }
-    single { PaymentEntryViewModel(get(), get()) }
+    single { PaymentEntryViewModel(get(), get(), get(), get(), get(), get()) }
     //endregion
 
     //region Checkout
@@ -634,7 +634,8 @@ val appModule = module {
             updateLocalInvoiceFromRemoteUseCase = get(),
             markSalesInvoiceSyncedUseCase = get(),
             paymentHandler = get(),
-            billingResetController = get()
+            billingResetController = get(),
+            languagePreferences = get()
         )
     }
     single { SalesInvoiceRemoteSource(get(), get()) }

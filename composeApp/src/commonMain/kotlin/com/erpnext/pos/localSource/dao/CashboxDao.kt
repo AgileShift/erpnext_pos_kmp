@@ -41,6 +41,49 @@ interface CashboxDao {
         closingAmount: Double
     )
 
+    @Query(
+        """
+        UPDATE balance_details
+        SET opening_amount = opening_amount - :amount
+        WHERE cashbox_id = :cashboxId
+          AND mode_of_payment = :modeOfPayment
+          AND opening_amount >= :amount
+        """
+    )
+    suspend fun decreaseOpeningAmount(
+        cashboxId: Long,
+        modeOfPayment: String,
+        amount: Double
+    ): Int
+
+    @Query(
+        """
+        SELECT opening_amount
+        FROM balance_details
+        WHERE cashbox_id = :cashboxId
+          AND mode_of_payment = :modeOfPayment
+        LIMIT 1
+        """
+    )
+    suspend fun getOpeningAmountForMode(
+        cashboxId: Long,
+        modeOfPayment: String
+    ): Double?
+
+    @Query(
+        """
+        UPDATE balance_details
+        SET opening_amount = opening_amount + :amount
+        WHERE cashbox_id = :cashboxId
+          AND mode_of_payment = :modeOfPayment
+        """
+    )
+    suspend fun increaseOpeningAmount(
+        cashboxId: Long,
+        modeOfPayment: String,
+        amount: Double
+    ): Int
+
     @Insert(entity = POSOpeningEntryEntity::class, onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertOpeningEntry(entry: POSOpeningEntryEntity)
 
