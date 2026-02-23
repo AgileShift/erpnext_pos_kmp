@@ -43,6 +43,7 @@ interface IInvoiceLocalSource {
         syncedAt: Long,
         remotePaymentEntry: String? = null
     )
+    suspend fun deleteRemotePaymentsByRemoteEntries(remotePaymentEntries: List<String>)
     suspend fun upsertPayments(payments: List<POSInvoicePaymentEntity>)
     suspend fun getInvoiceNamesMissingItems(profileId: String, limit: Int = 50): List<String>
     suspend fun getPaymentsForInvoice(invoiceName: String): List<POSInvoicePaymentEntity>
@@ -189,6 +190,11 @@ class InvoiceLocalSource(
         remotePaymentEntry: String?
     ) {
         salesInvoiceDao.updatePaymentSyncStatus(paymentId, status, syncedAt, remotePaymentEntry)
+    }
+
+    override suspend fun deleteRemotePaymentsByRemoteEntries(remotePaymentEntries: List<String>) {
+        if (remotePaymentEntries.isEmpty()) return
+        salesInvoiceDao.deleteByRemotePaymentEntries(remotePaymentEntries.distinct())
     }
 
     override suspend fun upsertPayments(payments: List<POSInvoicePaymentEntity>) {

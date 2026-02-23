@@ -18,10 +18,14 @@ fun PaymentEntryRoute(
     val uiState by coordinator.state.collectAsState()
     val topBarController = LocalTopBarController.current
     DisposableEffect(Unit) {
-        onDispose { topBarController.reset() }
+        onDispose {
+            coordinator.resetFormState()
+            topBarController.reset()
+        }
     }
 
     LaunchedEffect(invoiceId, entryType) {
+        coordinator.resetFormState()
         coordinator.setEntryType(PaymentEntryType.from(entryType))
         coordinator.setInvoiceId(invoiceId)
     }
@@ -56,6 +60,7 @@ fun rememberPaymentEntryActions(coordinator: PaymentEntryCoordinator): PaymentEn
             onConceptChanged = coordinator::onConceptChanged,
             onPartyChanged = coordinator::onPartyChanged,
             onReferenceNoChanged = coordinator::onReferenceNoChanged,
+            onReferenceDateChanged = coordinator::onReferenceDateChanged,
             onNotesChanged = coordinator::onNotesChanged,
             onSubmit = coordinator::onSubmit,
             onBack = coordinator::onBack

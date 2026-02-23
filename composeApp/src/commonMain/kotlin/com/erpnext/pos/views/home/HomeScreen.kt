@@ -97,7 +97,6 @@ fun HomeScreen(
     val strings = LocalAppStrings.current
     val homeMetrics by actions.homeMetrics.collectAsState()
     val openingState by actions.openingState.collectAsState()
-    val openingEntryId by actions.openingEntryId.collectAsState()
     val isCashboxOpen by actions.isCashboxOpen().collectAsState()
     val inventoryAlertMessage by actions.inventoryAlertMessage.collectAsState()
 
@@ -294,16 +293,6 @@ fun HomeScreen(
                             }
                         }
 
-                        Spacer(Modifier.height(12.dp))
-
-                        if (isCashboxOpen && !openingEntryId.isNullOrBlank()) {
-                            Text(
-                                text = "POE actual: $openingEntryId",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.padding(bottom = 8.dp)
-                            )
-                        }
                         // Botón abrir caja
                         if (!isCashboxOpen) {
                             Button(
@@ -379,7 +368,22 @@ private fun BISection(
         contentPadding = PaddingValues(bottom = 16.dp)
     ) {
         item {
-            HeroAndActionsRow(metric = selectedMetric, symbol = symbol, actions)
+            val target = metrics.salesTarget
+            val dailySalesTarget = when {
+                target == null -> null
+                target.secondaryCurrency != null &&
+                    target.secondaryCurrency.equals(selectedMetric.currency, ignoreCase = true) ->
+                    target.dailySecondary
+                target.baseCurrency.equals(selectedMetric.currency, ignoreCase = true) ->
+                    target.dailyBase
+                else -> null
+            }
+            HeroAndActionsRow(
+                metric = selectedMetric,
+                symbol = symbol,
+                actions = actions,
+                dailySalesTarget = dailySalesTarget
+            )
         }
 
         metrics.salesTarget?.let { target ->
@@ -411,7 +415,12 @@ private fun BISection(
 }
 
 @Composable
-private fun HeroAndActionsRow(metric: CurrencyHomeMetric, symbol: String, actions: HomeAction) {
+private fun HeroAndActionsRow(
+    metric: CurrencyHomeMetric,
+    symbol: String,
+    actions: HomeAction,
+    dailySalesTarget: Double?
+) {
     BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
         val isWide = maxWidth >= 840.dp
         if (isWide) {
@@ -420,7 +429,10 @@ private fun HeroAndActionsRow(metric: CurrencyHomeMetric, symbol: String, action
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 LiveSalesCard(
-                    metric = metric, symbol = symbol, modifier = Modifier.weight(1f)
+                    metric = metric,
+                    symbol = symbol,
+                    dailySalesTarget = dailySalesTarget,
+                    modifier = Modifier.weight(1f)
                 )
                 QuickActionsGrid(modifier = Modifier.weight(1f), actions)
             }
@@ -429,7 +441,12 @@ private fun HeroAndActionsRow(metric: CurrencyHomeMetric, symbol: String, action
                 modifier = Modifier.fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                LiveSalesCard(metric = metric, symbol = symbol, modifier = Modifier.fillMaxWidth())
+                LiveSalesCard(
+                    metric = metric,
+                    symbol = symbol,
+                    dailySalesTarget = dailySalesTarget,
+                    modifier = Modifier.fillMaxWidth()
+                )
                 QuickActionsGrid(modifier = Modifier.fillMaxWidth(), actions)
             }
         }
@@ -438,9 +455,13 @@ private fun HeroAndActionsRow(metric: CurrencyHomeMetric, symbol: String, action
 
 @Composable
 private fun LiveSalesCard(
-    metric: CurrencyHomeMetric, symbol: String, modifier: Modifier = Modifier
+    metric: CurrencyHomeMetric,
+    symbol: String,
+    dailySalesTarget: Double?,
+    modifier: Modifier = Modifier
 ) {
-    val target = if (metric.salesLast7 > 0.0) metric.salesLast7 / 7.0 else metric.totalSalesToday
+    val target = dailySalesTarget?.takeIf { it > 0.0 }
+        ?: if (metric.salesLast7 > 0.0) metric.salesLast7 / 7.0 else metric.totalSalesToday
     val progress = if (target > 0.0) (metric.totalSalesToday / target) else 0.0
     Card(
         modifier = modifier,

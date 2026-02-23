@@ -78,9 +78,6 @@ class SalesInvoiceRemoteSource(
     suspend fun createInvoice(invoice: SalesInvoiceDto): SalesInvoiceDto =
         apiService.createSalesInvoice(invoice)
 
-    suspend fun updateInvoice(name: String, invoice: SalesInvoiceDto): SalesInvoiceDto =
-        apiService.updateSalesInvoice(name, invoice)
-
     suspend fun cancelInvoice(name: String) =
         apiService.cancelSalesInvoice(name)
 

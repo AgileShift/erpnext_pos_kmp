@@ -1,3 +1,5 @@
+@file:OptIn(ExperimentalTime::class)
+
 package com.erpnext.pos.views.paymententry
 
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -8,6 +10,8 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -25,10 +29,13 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.automirrored.filled.CompareArrows
 import androidx.compose.material.icons.filled.AccountBalanceWallet
+import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Payments
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -41,6 +48,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -62,8 +70,14 @@ import com.erpnext.pos.utils.view.SnackbarController
 import com.erpnext.pos.utils.view.SnackbarPosition
 import com.erpnext.pos.utils.view.SnackbarType
 import com.erpnext.pos.views.billing.MoneyTextField
+import kotlinx.datetime.Instant
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.atStartOfDayIn
+import kotlinx.datetime.toLocalDateTime
 import org.jetbrains.compose.ui.tooling.preview.Preview
 import org.koin.compose.koinInject
+import kotlin.time.ExperimentalTime
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -90,13 +104,11 @@ fun PaymentEntryScreen(
         Column(
             modifier = Modifier
                 .padding(padding)
-                .padding(horizontal = 16.dp, vertical = 12.dp)
+                .padding(horizontal = 14.dp, vertical = 10.dp)
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            HeaderCard(entryType = state.entryType)
-
             if (state.offlineModeEnabled || !state.isOnline) {
                 val offlineMessage = when {
                     state.offlineModeEnabled && !state.isOnline ->
@@ -106,21 +118,21 @@ fun PaymentEntryScreen(
                     else ->
                         "No hay conexión a Internet. Este módulo solo funciona en línea."
                 }
-                ElevatedCard(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(14.dp)) {
+                ElevatedCard(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp)) {
                     Text(
                         text = offlineMessage,
                         color = colorScheme.error,
                         style = MaterialTheme.typography.bodyMedium,
-                        modifier = Modifier.padding(12.dp)
+                        modifier = Modifier.padding(10.dp)
                     )
                 }
             }
 
             if (state.entryType == PaymentEntryType.Receive) {
-                ElevatedCard(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp)) {
+                ElevatedCard(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp)) {
                     Column(
-                        modifier = Modifier.padding(14.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                        modifier = Modifier.padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
                         Text("Documento", style = MaterialTheme.typography.labelLarge)
                         OutlinedTextField(
@@ -153,13 +165,13 @@ fun PaymentEntryScreen(
                 PaymentEntryType.Pay, PaymentEntryType.Receive -> {
                     ElevatedCard(
                         modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(18.dp)
+                        shape = RoundedCornerShape(16.dp)
                     ) {
                         Column(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(14.dp),
-                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                                .padding(12.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             val title = if (state.entryType == PaymentEntryType.Pay) {
                                 "Información de la parte"
@@ -222,97 +234,209 @@ fun PaymentEntryScreen(
 
             ElevatedCard(
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(18.dp)
+                shape = RoundedCornerShape(16.dp)
             ) {
-                Box(
+                BoxWithConstraints(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(
-                            brush = Brush.verticalGradient(
-                                colors = listOf(
-                                    colorScheme.primary.copy(alpha = 0.08f),
-                                    colorScheme.surface
-                                )
-                            )
-                        )
-                        .padding(16.dp)
+                        .padding(12.dp)
                 ) {
+                    val wide = maxWidth > 720.dp
+                    val medium = maxWidth > 460.dp
+
+                    val detailTitle = when (state.entryType) {
+                        PaymentEntryType.Pay -> "Detalle del gasto"
+                        PaymentEntryType.InternalTransfer -> "Detalle de transferencia"
+                        PaymentEntryType.Receive -> "Detalle del cobro"
+                    }
+                    val referenceNoLabelCompact = when (state.entryType) {
+                        PaymentEntryType.InternalTransfer -> "Ref. transferencia"
+                        PaymentEntryType.Pay -> "Ref. comprobante"
+                        PaymentEntryType.Receive -> "Ref. cobro"
+                    }
+                    val referenceNoLabelFull = when (state.entryType) {
+                        PaymentEntryType.InternalTransfer -> "Referencia de transferencia"
+                        PaymentEntryType.Pay -> "Referencia del comprobante"
+                        PaymentEntryType.Receive -> "Número de referencia"
+                    }
+                    val referenceNoPlaceholder = when (state.entryType) {
+                        PaymentEntryType.InternalTransfer -> "TRX-001"
+                        PaymentEntryType.Pay -> "FACT/CHK-001"
+                        PaymentEntryType.Receive -> "REF-001"
+                    }
+                    val amountLabel = when (state.entryType) {
+                        PaymentEntryType.Pay -> "Monto del gasto"
+                        PaymentEntryType.InternalTransfer -> "Monto a transferir"
+                        PaymentEntryType.Receive -> "Monto a registrar"
+                    }
+
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         Text(
-                            text = "Monto",
+                            detailTitle,
                             style = MaterialTheme.typography.titleSmall,
                             fontWeight = FontWeight.SemiBold
                         )
-                        MoneyTextField(
-                            currencyCode = state.currencyCode,
-                            rawValue = state.amount,
-                            onRawValueChange = action.onAmountChanged,
-                            label = "Monto a registrar",
-                            imeAction = androidx.compose.ui.text.input.ImeAction.Next
+                        Text(
+                            text = when (state.entryType) {
+                                PaymentEntryType.Pay -> "Completa el monto y, si aplica, los datos del comprobante bancario."
+                                PaymentEntryType.InternalTransfer -> "Usa referencia y fecha cuando la cuenta origen o destino sea bancaria."
+                                PaymentEntryType.Receive -> "Registra el importe cobrado y la referencia si el medio de pago la requiere."
+                            },
+                            style = MaterialTheme.typography.bodySmall,
+                            color = colorScheme.onSurfaceVariant
                         )
-                    }
-                }
-            }
 
-            ElevatedCard(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(18.dp)
-            ) {
-                Column(
-                    modifier = Modifier.padding(14.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    Text("Referencias", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                        if (wide) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.Top
+                            ) {
+                                MoneyTextField(
+                                    currencyCode = state.currencyCode,
+                                    rawValue = state.amount,
+                                    onRawValueChange = action.onAmountChanged,
+                                    modifier = Modifier.weight(1.15f),
+                                    label = amountLabel,
+                                    imeAction = androidx.compose.ui.text.input.ImeAction.Next
+                                )
+                                Column(
+                                    modifier = Modifier.weight(1f),
+                                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    OutlinedTextField(
+                                        value = state.referenceNo,
+                                        onValueChange = action.onReferenceNoChanged,
+                                        modifier = Modifier.fillMaxWidth(),
+                                        label = { Text(referenceNoLabelCompact) },
+                                        placeholder = { Text(referenceNoPlaceholder) },
+                                        isError = state.referenceNoError != null,
+                                        supportingText = { state.referenceNoError?.let { Text(it) } },
+                                        shape = fieldShape,
+                                        colors = fieldColors,
+                                        singleLine = true
+                                    )
+                                    ReferenceDatePickerField(
+                                        value = state.referenceDate,
+                                        onDateSelected = action.onReferenceDateChanged,
+                                        modifier = Modifier.fillMaxWidth(),
+                                        label = "Fecha referencia",
+                                        isError = state.referenceDateError != null,
+                                        errorText = state.referenceDateError,
+                                        shape = fieldShape,
+                                        colors = fieldColors
+                                    )
+                                }
+                            }
+                        } else {
+                            MoneyTextField(
+                                currencyCode = state.currencyCode,
+                                rawValue = state.amount,
+                                onRawValueChange = action.onAmountChanged,
+                                label = amountLabel,
+                                imeAction = androidx.compose.ui.text.input.ImeAction.Next
+                            )
 
-                    OutlinedTextField(
-                        value = state.referenceNo,
-                        onValueChange = action.onReferenceNoChanged,
-                        modifier = Modifier.fillMaxWidth(),
-                        label = { Text("Número de referencia") },
-                        placeholder = { Text("REF-001") },
-                        shape = fieldShape,
-                        colors = fieldColors,
-                        singleLine = true
-                    )
-
-                    OutlinedTextField(
-                        value = state.notes,
-                        onValueChange = action.onNotesChanged,
-                        modifier = Modifier.fillMaxWidth(),
-                        label = { Text("Notas / observaciones") },
-                        shape = fieldShape,
-                        colors = fieldColors,
-                        minLines = 2,
-                        maxLines = 4
-                    )
-                }
-            }
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.End
-            ) {
-                Button(
-                    onClick = action.onSubmit,
-                    enabled = !state.isSubmitting && !globalBusy && state.isOnline && !state.offlineModeEnabled,
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = colorScheme.primary,
-                        contentColor = colorScheme.onPrimary
-                    )
-                ) {
-                    if (state.isSubmitting) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.padding(end = 8.dp).size(16.dp),
-                            strokeWidth = 2.dp
-                        )
-                    }
-                    Text(
-                        when (state.entryType) {
-                            PaymentEntryType.Pay -> "Registrar"
-                            PaymentEntryType.InternalTransfer -> "Transferir"
-                            PaymentEntryType.Receive -> "Registrar"
+                            if (medium) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    verticalAlignment = Alignment.Top
+                                ) {
+                                    OutlinedTextField(
+                                        value = state.referenceNo,
+                                        onValueChange = action.onReferenceNoChanged,
+                                        modifier = Modifier.weight(1f),
+                                        label = { Text(referenceNoLabelCompact) },
+                                        placeholder = { Text(referenceNoPlaceholder) },
+                                        isError = state.referenceNoError != null,
+                                        supportingText = { state.referenceNoError?.let { Text(it) } },
+                                        shape = fieldShape,
+                                        colors = fieldColors,
+                                        singleLine = true
+                                    )
+                                    ReferenceDatePickerField(
+                                        value = state.referenceDate,
+                                        onDateSelected = action.onReferenceDateChanged,
+                                        modifier = Modifier.weight(1f),
+                                        label = "Fecha referencia",
+                                        isError = state.referenceDateError != null,
+                                        errorText = state.referenceDateError,
+                                        shape = fieldShape,
+                                        colors = fieldColors
+                                    )
+                                }
+                            } else {
+                                OutlinedTextField(
+                                    value = state.referenceNo,
+                                    onValueChange = action.onReferenceNoChanged,
+                                    modifier = Modifier.fillMaxWidth(),
+                                    label = { Text(referenceNoLabelFull) },
+                                    placeholder = { Text(referenceNoPlaceholder) },
+                                    isError = state.referenceNoError != null,
+                                    supportingText = { state.referenceNoError?.let { Text(it) } },
+                                    shape = fieldShape,
+                                    colors = fieldColors,
+                                    singleLine = true
+                                )
+                                ReferenceDatePickerField(
+                                    value = state.referenceDate,
+                                    onDateSelected = action.onReferenceDateChanged,
+                                    modifier = Modifier.fillMaxWidth(),
+                                    label = "Fecha de referencia",
+                                    isError = state.referenceDateError != null,
+                                    errorText = state.referenceDateError,
+                                    shape = fieldShape,
+                                    colors = fieldColors
+                                )
+                            }
                         }
-                    )
+
+                        if (state.entryType != PaymentEntryType.Pay) {
+                            OutlinedTextField(
+                                value = state.notes,
+                                onValueChange = action.onNotesChanged,
+                                modifier = Modifier.fillMaxWidth(),
+                                label = { Text("Notas / observaciones") },
+                                shape = fieldShape,
+                                colors = fieldColors,
+                                minLines = 2,
+                                maxLines = 3
+                            )
+                        }
+                    }
+                }
+            }
+
+            BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+                val compactAction = maxWidth < 520.dp
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = if (compactAction) Arrangement.Center else Arrangement.End
+                ) {
+                    Button(
+                        onClick = action.onSubmit,
+                        modifier = if (compactAction) Modifier.fillMaxWidth() else Modifier,
+                        enabled = !state.isSubmitting && !globalBusy && state.isOnline && !state.offlineModeEnabled,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = colorScheme.primary,
+                            contentColor = colorScheme.onPrimary
+                        )
+                    ) {
+                        if (state.isSubmitting) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.padding(end = 8.dp).size(16.dp),
+                                strokeWidth = 2.dp
+                            )
+                        }
+                        Text(
+                            when (state.entryType) {
+                                PaymentEntryType.Pay -> "Registrar gasto"
+                                PaymentEntryType.InternalTransfer -> "Transferir"
+                                PaymentEntryType.Receive -> "Registrar cobro"
+                            }
+                        )
+                    }
                 }
             }
 
@@ -329,7 +453,7 @@ fun PaymentEntryScreen(
                 textAlign = TextAlign.Center,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(bottom = 8.dp)
+                    .padding(bottom = 6.dp)
             )
         }
     }
@@ -367,12 +491,12 @@ private fun HeaderCard(entryType: PaymentEntryType) {
         }
     }
 
-    ElevatedCard(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(20.dp)) {
+    ElevatedCard(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp)) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .background(Brush.horizontalGradient(style.gradient))
-                .padding(16.dp)
+                .padding(14.dp)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -430,12 +554,12 @@ private fun TransferFlowSection(
 
     ElevatedCard(
         modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(18.dp)
+        shape = RoundedCornerShape(16.dp)
     ) {
         BoxWithConstraints(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(14.dp)
+                .padding(12.dp)
         ) {
             val horizontal = maxWidth > 700.dp
             if (horizontal) {
@@ -550,8 +674,8 @@ private fun TransferModeCard(
             .clip(RoundedCornerShape(14.dp))
             .background(accent.copy(alpha = 0.08f))
             .border(1.dp, accent.copy(alpha = 0.28f), RoundedCornerShape(14.dp))
-            .padding(10.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
+            .padding(8.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp)
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             Box(
@@ -647,6 +771,90 @@ private fun paymentEntryFieldColors() = OutlinedTextFieldDefaults.colors(
     focusedContainerColor = MaterialTheme.colorScheme.surface,
     unfocusedContainerColor = MaterialTheme.colorScheme.surface
 )
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ReferenceDatePickerField(
+    value: String,
+    onDateSelected: (String) -> Unit,
+    modifier: Modifier = Modifier,
+    label: String,
+    isError: Boolean,
+    errorText: String?,
+    shape: RoundedCornerShape,
+    colors: androidx.compose.material3.TextFieldColors
+) {
+    var openPicker by remember { mutableStateOf(false) }
+    val dateFieldInteraction = remember { MutableInteractionSource() }
+    val initialSelectedDateMillis = remember(value) {
+        runCatching {
+            val date = LocalDate.parse(value)
+            val millis = date
+                .atStartOfDayIn(TimeZone.currentSystemDefault())
+                .toEpochMilliseconds()
+            millis
+        }.getOrNull()
+    }
+    val pickerState = androidx.compose.material3.rememberDatePickerState(
+        initialSelectedDateMillis = initialSelectedDateMillis
+    )
+
+    Box(modifier = modifier) {
+        OutlinedTextField(
+            value = value,
+            onValueChange = {},
+            modifier = Modifier.fillMaxWidth(),
+            label = { Text(label) },
+            placeholder = { Text("YYYY-MM-DD") },
+            isError = isError,
+            supportingText = { errorText?.let { Text(it) } },
+            shape = shape,
+            colors = colors,
+            singleLine = true,
+            readOnly = true,
+            trailingIcon = {
+                Icon(
+                    imageVector = Icons.Filled.DateRange,
+                    contentDescription = "Seleccionar fecha"
+                )
+            }
+        )
+        Box(
+            modifier = Modifier
+                .matchParentSize()
+                .clickable(
+                    interactionSource = dateFieldInteraction,
+                    indication = null
+                ) { openPicker = true }
+        )
+    }
+
+    if (openPicker) {
+        DatePickerDialog(
+            onDismissRequest = { openPicker = false },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        pickerState.selectedDateMillis?.let { millis ->
+                            val isoDate = Instant
+                                .fromEpochMilliseconds(millis)
+                                .toLocalDateTime(TimeZone.UTC)
+                                .date
+                                .toString()
+                            onDateSelected(isoDate)
+                        }
+                        openPicker = false
+                    }
+                ) { Text("Aceptar") }
+            },
+            dismissButton = {
+                TextButton(onClick = { openPicker = false }) { Text("Cancelar") }
+            }
+        ) {
+            DatePicker(state = pickerState)
+        }
+    }
+}
 
 private data class HeaderStyle(
     val title: String,

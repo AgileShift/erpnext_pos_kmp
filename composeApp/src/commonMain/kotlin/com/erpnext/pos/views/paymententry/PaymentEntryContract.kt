@@ -27,6 +27,7 @@ data class PaymentEntryState(
     val concept: String = "",
     val party: String = "",
     val referenceNo: String = "",
+    val referenceDate: String = "",
     val notes: String = "",
     val expenseAccount: String = "",
     val defaultReceivableAccount: String = "",
@@ -36,6 +37,8 @@ data class PaymentEntryState(
     val isOnline: Boolean = true,
     val offlineModeEnabled: Boolean = false,
     val isSubmitting: Boolean = false,
+    val referenceNoError: String? = null,
+    val referenceDateError: String? = null,
     val errorMessage: String? = null,
     val successMessage: String? = null
 )
@@ -50,6 +53,7 @@ data class PaymentEntryAction(
     val onConceptChanged: (String) -> Unit = {},
     val onPartyChanged: (String) -> Unit = {},
     val onReferenceNoChanged: (String) -> Unit = {},
+    val onReferenceDateChanged: (String) -> Unit = {},
     val onNotesChanged: (String) -> Unit = {},
     val onSubmit: () -> Unit = {},
     val onBack: () -> Unit = {}

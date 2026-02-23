@@ -10,6 +10,7 @@ import kotlinx.serialization.json.Json
 data class BootstrapContextSnapshot(
     val profileName: String? = null,
     val posOpeningEntry: String? = null,
+    val monthlySalesTarget: Double? = null,
     val fromDate: String? = null,
     val lastRequestAt: Long? = null,
     val lastError: String? = null
@@ -32,6 +33,8 @@ class BootstrapContextPreferences(
     suspend fun update(
         profileName: String? = null,
         posOpeningEntry: String? = null,
+        monthlySalesTarget: Double? = null,
+        replaceMonthlySalesTarget: Boolean = false,
         fromDate: String? = null,
         lastRequestAt: Long? = null,
         lastError: String? = null
@@ -40,6 +43,8 @@ class BootstrapContextPreferences(
         val merged = BootstrapContextSnapshot(
             profileName = profileName?.takeIf { it.isNotBlank() } ?: current.profileName,
             posOpeningEntry = posOpeningEntry?.takeIf { it.isNotBlank() } ?: current.posOpeningEntry,
+            monthlySalesTarget = if (replaceMonthlySalesTarget) monthlySalesTarget else (monthlySalesTarget
+                ?: current.monthlySalesTarget),
             fromDate = fromDate?.takeIf { it.isNotBlank() } ?: current.fromDate,
             lastRequestAt = lastRequestAt ?: current.lastRequestAt,
             lastError = lastError ?: current.lastError

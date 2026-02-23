@@ -21,15 +21,14 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.ErrorOutline
 import androidx.compose.material.icons.outlined.Notifications
-import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material3.Button
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.CardDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -47,7 +46,7 @@ import org.jetbrains.compose.ui.tooling.preview.Preview
 fun ActivityScreenPreview() {
     ActivityScreen(
         ActivityUiState(listOf(), 100, ActivityFilter.Unread, SyncState.IDLE),
-        onFilterChange = {}, onMarkRead = {}, onMarkAllRead = {}, onSyncNow = {})
+        onFilterChange = {}, onMarkRead = {}, onMarkAllRead = {})
 }
 
 @Composable
@@ -56,7 +55,6 @@ fun ActivityScreen(
     onFilterChange: (ActivityFilter) -> Unit,
     onMarkRead: (String) -> Unit,
     onMarkAllRead: () -> Unit,
-    onSyncNow: () -> Unit
 ) {
     val strings = LocalAppStrings.current
     Column(
@@ -64,14 +62,13 @@ fun ActivityScreen(
             .fillMaxSize()
             .padding(16.dp)
     ) {
-        ActivityHero(
-            unreadCount = state.unreadCount,
-            syncState = state.syncState,
-            strings = strings,
-            onMarkAllRead = onMarkAllRead,
-            onSyncNow = onSyncNow
-        )
-        Spacer(modifier = Modifier.height(12.dp))
+        /* ActivityHero(
+             unreadCount = state.unreadCount,
+             syncState = state.syncState,
+             strings = strings,
+             onMarkAllRead = onMarkAllRead
+         )
+         Spacer(modifier = Modifier.height(12.dp))*/
         ActivityFilters(
             current = state.filter,
             strings = strings,
@@ -101,8 +98,7 @@ private fun ActivityHero(
     unreadCount: Int,
     syncState: SyncState,
     strings: com.erpnext.pos.localization.AppStrings,
-    onMarkAllRead: () -> Unit,
-    onSyncNow: () -> Unit
+    onMarkAllRead: () -> Unit
 ) {
     val gradient = Brush.horizontalGradient(
         colors = listOf(
@@ -128,7 +124,7 @@ private fun ActivityHero(
             ) {
                 Column {
                     Text(
-                        text = strings.activity.title,
+                        text = "Notificaciones y Actividad",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold
                     )
@@ -160,17 +156,9 @@ private fun ActivityHero(
             Spacer(modifier = Modifier.height(12.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button(
-                    onClick = onSyncNow,
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Icon(Icons.Outlined.Refresh, contentDescription = null)
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(strings.activity.syncButton)
-                }
-                Button(
                     onClick = onMarkAllRead,
                     enabled = unreadCount > 0,
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier.fillMaxWidth()
                 ) {
                     Icon(Icons.Outlined.CheckCircle, contentDescription = null)
                     Spacer(modifier = Modifier.width(6.dp))
@@ -312,31 +300,57 @@ private fun ActivityItemCard(
 
 @Composable
 private fun EmptyActivityState(strings: com.erpnext.pos.localization.AppStrings) {
+    val scheme = MaterialTheme.colorScheme
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .padding(24.dp),
+            .padding(horizontal = 8.dp, vertical = 20.dp),
         contentAlignment = Alignment.Center
     ) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ElevatedCard(
+            shape = RoundedCornerShape(20.dp),
+            colors = CardDefaults.elevatedCardColors(
+                containerColor = scheme.surfaceContainerLow
+            ),
+            elevation = CardDefaults.elevatedCardElevation(defaultElevation = 1.dp),
+            modifier = Modifier.fillMaxWidth()
         ) {
-            Icon(
-                imageVector = Icons.Outlined.Notifications,
-                contentDescription = null,
-                tint = Color(0xFF6B7280),
-                modifier = Modifier.size(40.dp)
-            )
-            Text(
-                text = strings.activity.emptyTitle,
-                style = MaterialTheme.typography.titleSmall
-            )
-            Text(
-                text = strings.activity.emptyMessage,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 20.dp, vertical = 24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(56.dp)
+                        .background(scheme.primary.copy(alpha = 0.10f), CircleShape),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.Notifications,
+                        contentDescription = null,
+                        tint = scheme.primary,
+                        modifier = Modifier.size(26.dp)
+                    )
+                }
+                Text(
+                    text = strings.activity.emptyTitle,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold
+                )
+                Text(
+                    text = strings.activity.emptyMessage,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = scheme.onSurfaceVariant
+                )
+                Text(
+                    text = "Las nuevas alertas y eventos apareceran aqui.",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = scheme.onSurfaceVariant.copy(alpha = 0.9f)
+                )
+            }
         }
     }
 }

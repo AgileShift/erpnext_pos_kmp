@@ -2,12 +2,12 @@ package com.erpnext.pos.remoteSource.api
 
 import com.erpnext.pos.BuildKonfig
 import com.erpnext.pos.base.getPlatformName
+import com.erpnext.pos.localSource.preferences.BootstrapContextPreferences
 import com.erpnext.pos.remoteSource.dto.AccountDetailDto
 import com.erpnext.pos.remoteSource.dto.AddressListDto
 import com.erpnext.pos.remoteSource.dto.BalanceDetailsDto
-import com.erpnext.pos.remoteSource.dto.BinDto
-import com.erpnext.pos.remoteSource.dto.BootstrapDataDto
 import com.erpnext.pos.remoteSource.dto.BootstrapClosingEntryDto
+import com.erpnext.pos.remoteSource.dto.BootstrapDataDto
 import com.erpnext.pos.remoteSource.dto.BootstrapFullSnapshotDto
 import com.erpnext.pos.remoteSource.dto.BootstrapPosSyncDto
 import com.erpnext.pos.remoteSource.dto.BootstrapRequestDto
@@ -22,8 +22,9 @@ import com.erpnext.pos.remoteSource.dto.CustomerGroupDto
 import com.erpnext.pos.remoteSource.dto.DeliveryChargeDto
 import com.erpnext.pos.remoteSource.dto.DocNameResponseDto
 import com.erpnext.pos.remoteSource.dto.ExchangeRateResponse
+import com.erpnext.pos.remoteSource.dto.InternalTransferCreateDto
+import com.erpnext.pos.remoteSource.dto.InternalTransferSubmitDto
 import com.erpnext.pos.remoteSource.dto.ItemDto
-import com.erpnext.pos.remoteSource.dto.ItemReorderDto
 import com.erpnext.pos.remoteSource.dto.LinkRefDto
 import com.erpnext.pos.remoteSource.dto.LoginInfo
 import com.erpnext.pos.remoteSource.dto.ModeOfPaymentDetailDto
@@ -40,6 +41,8 @@ import com.erpnext.pos.remoteSource.dto.POSProfileDto
 import com.erpnext.pos.remoteSource.dto.POSProfileSimpleDto
 import com.erpnext.pos.remoteSource.dto.PaymentEntryCreateDto
 import com.erpnext.pos.remoteSource.dto.PaymentEntryDto
+import com.erpnext.pos.remoteSource.dto.PaymentOutCreateDto
+import com.erpnext.pos.remoteSource.dto.PaymentOutSubmitDto
 import com.erpnext.pos.remoteSource.dto.PaymentReconciliationDto
 import com.erpnext.pos.remoteSource.dto.PaymentTermDto
 import com.erpnext.pos.remoteSource.dto.SalesInvoiceDto
@@ -58,7 +61,6 @@ import com.erpnext.pos.remoteSource.oauth.toOAuthConfig
 import com.erpnext.pos.remoteSource.sdk.FrappeErrorResponse
 import com.erpnext.pos.remoteSource.sdk.FrappeException
 import com.erpnext.pos.remoteSource.sdk.withRetries
-import com.erpnext.pos.localSource.preferences.BootstrapContextPreferences
 import com.erpnext.pos.utils.AppLogger
 import com.erpnext.pos.utils.AppSentry
 import com.erpnext.pos.utils.TokenUtils
@@ -72,7 +74,6 @@ import io.ktor.client.request.get
 import io.ktor.client.request.parameter
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
-import io.ktor.client.statement.HttpResponse
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.ContentType
 import io.ktor.http.Parameters
@@ -84,8 +85,8 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.booleanOrNull
+import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.decodeFromJsonElement
 import kotlinx.serialization.json.doubleOrNull
@@ -109,15 +110,25 @@ class APIService(
     data class InvoicePdfDownloadPayload(
         val fileName: String,
         val bytes: ByteArray
-    )
+    ) {
+        override fun equals(other: Any?): Boolean {
+            if (this === other) return true
+            if (other == null || this::class != other::class) return false
 
-    data class InvoicePrintOptionsPayload(
-        val name: String,
-        val doctype: String,
-        val defaultPrintFormat: String?,
-        val selectedPrintFormat: String?,
-        val availablePrintFormats: List<String>
-    )
+            other as InvoicePdfDownloadPayload
+
+            if (fileName != other.fileName) return false
+            if (!bytes.contentEquals(other.bytes)) return false
+
+            return true
+        }
+
+        override fun hashCode(): Int {
+            var result = fileName.hashCode()
+            result = 31 * result + bytes.contentHashCode()
+            return result
+        }
+    }
 
     private data class BootstrapCacheEntry(
         val key: String,
@@ -134,7 +145,6 @@ class APIService(
 
     private companion object {
         const val DEFAULT_INVOICE_SYNC_DAYS = 90
-        const val RECENT_PAID_INVOICE_DAYS = 7
         const val BOOTSTRAP_CACHE_WINDOW_MS = 15_000L
         const val INVENTORY_BOOTSTRAP_PAGE_SIZE = 200
         const val BOOTSTRAP_SNAPSHOT_LIMIT = 5_000
@@ -142,18 +152,6 @@ class APIService(
     }
 
     private var bootstrapCache: BootstrapCacheEntry? = null
-
-    private suspend fun fetchInvoicesByStatus(
-        posProfile: String,
-        startDate: String,
-        statuses: List<String>
-    ): List<SalesInvoiceDto> {
-        return fetchAllInvoicesCombined(posProfile, recentPaidOnly = false)
-            .asSequence()
-            .filter { it.status in statuses }
-            .filter { it.postingDate.take(10) >= startDate }
-            .toList()
-    }
 
     suspend fun getCompanyInfo(): List<CompanyDto> {
         val bootstrapRaw = runCatching {
@@ -230,8 +228,7 @@ class APIService(
         )
     }
 
-    suspend fun getCompanyMonthlySalesTarget(companyId: String): Double? {
-        companyId
+    fun getCompanyMonthlySalesTarget(companyId: String): Double? {
         return null
     }
 
@@ -254,6 +251,28 @@ class APIService(
         return postMethodWithPayload(
             methodPath = "erpnext_pos.api.v1.payment_entry.create_submit",
             payload = entry
+        )
+    }
+
+    suspend fun createPaymentOut(
+        clientRequestId: String,
+        payload: PaymentOutCreateDto
+    ): PaymentOutSubmitDto {
+        return postMethodWithPayloadAndClientRequest(
+            methodPath = "erpnext_pos.api.v1.payment_out.create_submit",
+            clientRequestId = clientRequestId,
+            payload = payload
+        )
+    }
+
+    suspend fun createInternalTransfer(
+        clientRequestId: String,
+        payload: InternalTransferCreateDto
+    ): InternalTransferSubmitDto {
+        return postMethodWithPayloadAndClientRequest(
+            methodPath = "erpnext_pos.api.v1.internal_transfer.create_submit",
+            clientRequestId = clientRequestId,
+            payload = payload
         )
     }
 
@@ -958,6 +977,38 @@ class APIService(
         return decodeMethodData(bodyText)
     }
 
+    private suspend inline fun <reified T, reified R> postMethodWithPayloadAndClientRequest(
+        methodPath: String,
+        clientRequestId: String,
+        payload: T
+    ): R {
+        val url = authStore.getCurrentSite()
+        if (url.isNullOrBlank()) throw Exception("URL Invalida")
+        val endpoint = url.trimEnd('/') + "/api/method/$methodPath"
+        val response = withRetries {
+            client.post {
+                url { takeFrom(endpoint) }
+                contentType(ContentType.Application.Json)
+                setBody(
+                    buildJsonObject {
+                        put("client_request_id", JsonPrimitive(clientRequestId))
+                        put("payload", json.parseToJsonElement(json.encodeToString(payload)))
+                    }
+                )
+            }
+        }
+        val bodyText = response.bodyAsText()
+        if (!response.status.isSuccess()) {
+            try {
+                val err = json.decodeFromString<FrappeErrorResponse>(bodyText)
+                throw FrappeException(err.exception ?: "Error: ${response.status.value}", err)
+            } catch (e: Exception) {
+                throw Exception("Error en $methodPath: ${response.status} - $bodyText", e)
+            }
+        }
+        return decodeMethodData(bodyText)
+    }
+
     private suspend fun fetchBootstrap(payload: BootstrapRequestDto): BootstrapDataDto {
         requireAuthenticatedSession("sync.bootstrap")
         val site = authStore.getCurrentSite()?.trim()?.trimEnd('/').orEmpty()
@@ -1239,6 +1290,14 @@ class APIService(
             raw = raw,
             sectionKey = "activity"
         )
+        val suppliers = raw["suppliers"]
+        if (suppliers is JsonObject) {
+            normalized["suppliers"] = suppliers["items"] ?: JsonArray(emptyList())
+        }
+        val companyAccounts = raw["company_accounts"]
+        if (companyAccounts is JsonArray) {
+            normalized["company_accounts"] = companyAccounts
+        }
         val alerts = raw["inventory_alerts"]
         if (alerts is JsonObject) {
             normalized["inventory_alerts"] = alerts["items"] ?: JsonArray(emptyList())
@@ -1465,23 +1524,6 @@ class APIService(
         return json.decodeFromJsonElement(data)
     }
 
-    suspend fun getBootstrapFullRawSnapshot(profileName: String? = null): JsonObject {
-        val payload = BootstrapRequestDto(
-            includeInventory = true,
-            includeCustomers = true,
-            includeInvoices = true,
-            includeAlerts = true,
-            includeActivity = true,
-            recentPaidOnly = true,
-            profileName = profileName
-        )
-        return fetchBootstrapRaw(payload)
-    }
-
-    suspend fun getBootstrapFullSnapshot(profileName: String? = null): BootstrapFullSnapshotDto {
-        return decodeBootstrapFullSnapshot(getBootstrapFullRawSnapshot(profileName = profileName))
-    }
-
     suspend fun getLoginWithSite(site: String): LoginInfo {
         val normalizedSite = normalizeUrl(site)
         val platform = if (getPlatformName() == "Desktop") "desktop" else "mobile"
@@ -1605,57 +1647,6 @@ class APIService(
             .associate { it.itemCode to it.actualQty.coerceAtLeast(0.0) }
     }
 
-    suspend fun fetchBinsForItems(
-        warehouse: String,
-        itemCodes: List<String>
-    ): List<BinDto> {
-        if (itemCodes.isEmpty()) return emptyList()
-        val lookup = itemCodes.toSet()
-        return getInventoryForWarehouse(
-            warehouse = warehouse,
-            priceList = null,
-            limit = BOOTSTRAP_SNAPSHOT_LIMIT
-        )
-            .asSequence()
-            .filter { it.itemCode in lookup }
-            .map { item ->
-                BinDto(
-                    itemCode = item.itemCode,
-                    warehouse = warehouse,
-                    actualQty = item.actualQty,
-                    reservedQty = 0.0,
-                    projectedQty = item.projectedQty ?: item.actualQty,
-                    stockUom = item.stockUom,
-                    valuationRate = item.valuationRate
-                )
-            }
-            .toList()
-    }
-
-    suspend fun fetchItemReordersForItems(
-        warehouse: String,
-        itemCodes: List<String>
-    ): List<ItemReorderDto> {
-        if (itemCodes.isEmpty()) return emptyList()
-        val lookup = itemCodes.toSet()
-        return getInventoryForWarehouse(
-            warehouse = warehouse,
-            priceList = null,
-            limit = BOOTSTRAP_SNAPSHOT_LIMIT
-        )
-            .asSequence()
-            .filter { it.itemCode in lookup }
-            .map {
-                ItemReorderDto(
-                    itemCode = it.itemCode,
-                    warehouse = warehouse,
-                    reorderLevel = it.stockAlertReorderLevel,
-                    reorderQty = it.stockAlertReorderQty
-                )
-            }
-            .toList()
-    }
-
     suspend fun findInvoiceBySignature(
         posOpeningEntry: String?,
         postingDate: String?,
@@ -1713,25 +1704,6 @@ class APIService(
             includeAlerts = false,
             includeActivity = false,
             recentPaidOnly = recentPaidOnly,
-            profileName = profileName,
-            route = territory,
-            territory = territory,
-            limit = BOOTSTRAP_SNAPSHOT_LIMIT
-        )
-        return fetchBootstrap(payload)
-    }
-
-    suspend fun fetchActivityBootstrapSnapshot(
-        profileName: String?,
-        territory: String?
-    ): BootstrapDataDto {
-        val payload = BootstrapRequestDto(
-            includeInventory = false,
-            includeCustomers = false,
-            includeInvoices = false,
-            includeAlerts = true,
-            includeActivity = true,
-            recentPaidOnly = true,
             profileName = profileName,
             route = territory,
             territory = territory,
@@ -1924,12 +1896,6 @@ class APIService(
         throw IllegalStateException("Sales Invoice $name no encontrada en bootstrap")
     }
 
-    suspend fun updateSalesInvoice(name: String, data: SalesInvoiceDto): SalesInvoiceDto {
-        throw UnsupportedOperationException(
-            "updateSalesInvoice no soportado en API v1. Usa sales_invoice.create_submit con idempotencia."
-        )
-    }
-
     @OptIn(ExperimentalEncodingApi::class)
     suspend fun downloadSalesInvoicePdf(
         invoiceName: String,
@@ -1952,28 +1918,6 @@ class APIService(
         )
         extractPdfPayload(data, normalized)?.let { return it }
         throw IllegalStateException("Respuesta inválida al generar PDF para $normalized.")
-    }
-
-    suspend fun getSalesInvoicePrintOptions(invoiceName: String): InvoicePrintOptionsPayload {
-        val normalized = invoiceName.trim()
-        require(normalized.isNotBlank()) { "Factura inválida para consultar opciones de impresión." }
-        val payload = buildJsonObject {
-            put("invoice_name", JsonPrimitive(normalized))
-            put("name", JsonPrimitive(normalized))
-        }
-        val data: JsonObject = postMethodWithPayload(
-            methodPath = "erpnext_pos.api.v1.sales_invoice.print_options",
-            payload = payload
-        )
-        return InvoicePrintOptionsPayload(
-            name = data.stringOrNull("name") ?: normalized,
-            doctype = data.stringOrNull("doctype") ?: "Sales Invoice",
-            defaultPrintFormat = data.stringOrNull("default_print_format"),
-            selectedPrintFormat = data.stringOrNull("selected_print_format"),
-            availablePrintFormats = data["available_print_formats"]?.jsonArray
-                ?.mapNotNull { it.jsonPrimitive.contentOrNull }
-                .orEmpty()
-        )
     }
 
     @OptIn(ExperimentalEncodingApi::class)
@@ -2027,24 +1971,6 @@ class APIService(
             ),
             bytes = bytes
         )
-    }
-
-    private suspend fun parsePdfResponse(
-        response: HttpResponse,
-        invoiceName: String
-    ): InvoicePdfDownloadPayload? {
-        if (!response.status.isSuccess()) return null
-        val contentType = response.headers["Content-Type"]?.lowercase().orEmpty()
-        if (contentType.contains("application/pdf")) {
-            val bytes = response.body<ByteArray>()
-            return InvoicePdfDownloadPayload(
-                fileName = "$invoiceName.pdf",
-                bytes = bytes
-            )
-        }
-        val bodyText = runCatching { response.bodyAsText() }.getOrNull() ?: return null
-        val data = runCatching { decodeMethodData<JsonObject>(bodyText) }.getOrNull() ?: return null
-        return extractPdfPayload(data, invoiceName)
     }
 
     private fun resolvePdfFileName(raw: String?, invoiceName: String): String {

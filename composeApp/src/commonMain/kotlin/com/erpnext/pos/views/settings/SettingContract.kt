@@ -44,6 +44,7 @@ sealed class POSSettingState {
         val salesTargetConvertedWeekly: Double?,
         val salesTargetConvertedDaily: Double?,
         val salesTargetConversionStale: Boolean,
+        val salesTargetFromContext: Boolean,
         val syncLog: List<SyncLogEntry>
     ) : POSSettingState()
     data class Error(val message: String) : POSSettingState()

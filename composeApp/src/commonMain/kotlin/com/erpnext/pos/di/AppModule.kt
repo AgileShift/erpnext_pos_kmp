@@ -11,6 +11,7 @@ import com.erpnext.pos.data.repositories.AddressRepository
 import com.erpnext.pos.data.repositories.BootstrapSyncRepository
 import com.erpnext.pos.data.repositories.CheckoutRepository
 import com.erpnext.pos.data.repositories.ClosingEntrySyncRepository
+import com.erpnext.pos.data.repositories.CompanyAccountRepository
 import com.erpnext.pos.data.repositories.CompanyRepository
 import com.erpnext.pos.data.repositories.ContactRepository
 import com.erpnext.pos.data.repositories.CurrencySettingsRepository
@@ -19,12 +20,14 @@ import com.erpnext.pos.data.repositories.CustomerRepository
 import com.erpnext.pos.data.repositories.CustomerSyncRepository
 import com.erpnext.pos.data.repositories.DeliveryChargesRepository
 import com.erpnext.pos.data.repositories.ExchangeRateRepository
+import com.erpnext.pos.data.repositories.InternalTransferRepository
 import com.erpnext.pos.data.repositories.InventoryAlertRepository
 import com.erpnext.pos.data.repositories.InventoryRepository
 import com.erpnext.pos.data.repositories.ModeOfPaymentRepository
 import com.erpnext.pos.data.repositories.OpeningEntrySyncRepository
 import com.erpnext.pos.data.repositories.POSProfileRepository
 import com.erpnext.pos.data.repositories.PaymentEntryRepository
+import com.erpnext.pos.data.repositories.PaymentOutRepository
 import com.erpnext.pos.data.repositories.PaymentTermsRepository
 import com.erpnext.pos.data.repositories.PosOpeningRepository
 import com.erpnext.pos.data.repositories.PosProfilePaymentMethodLocalRepository
@@ -32,6 +35,7 @@ import com.erpnext.pos.data.repositories.PosProfilePaymentMethodSyncRepository
 import com.erpnext.pos.data.repositories.SalesInvoiceRepository
 import com.erpnext.pos.data.repositories.SalesTargetRepository
 import com.erpnext.pos.data.repositories.StockSettingsRepository
+import com.erpnext.pos.data.repositories.SupplierRepository
 import com.erpnext.pos.data.repositories.TerritoryRepository
 import com.erpnext.pos.data.repositories.UserRepository
 import com.erpnext.pos.domain.policy.DatePolicy
@@ -43,7 +47,9 @@ import com.erpnext.pos.domain.usecases.AdjustLocalInventoryUseCase
 import com.erpnext.pos.domain.usecases.CancelSalesInvoiceUseCase
 import com.erpnext.pos.domain.usecases.CheckCustomerCreditUseCase
 import com.erpnext.pos.domain.usecases.CreateCustomerUseCase
+import com.erpnext.pos.domain.usecases.CreateInternalTransferUseCase
 import com.erpnext.pos.domain.usecases.CreatePaymentEntryUseCase
+import com.erpnext.pos.domain.usecases.CreatePaymentOutUseCase
 import com.erpnext.pos.domain.usecases.CreateSalesInvoiceLocalUseCase
 import com.erpnext.pos.domain.usecases.CreateSalesInvoiceRemoteOnlyUseCase
 import com.erpnext.pos.domain.usecases.CreateSalesInvoiceUseCase
@@ -52,6 +58,7 @@ import com.erpnext.pos.domain.usecases.FetchBillingProductsLocalUseCase
 import com.erpnext.pos.domain.usecases.FetchBillingProductsWithPriceUseCase
 import com.erpnext.pos.domain.usecases.FetchCategoriesUseCase
 import com.erpnext.pos.domain.usecases.FetchClosingEntriesUseCase
+import com.erpnext.pos.domain.usecases.FetchCompanyAccountsLocalUseCase
 import com.erpnext.pos.domain.usecases.FetchCustomerDetailUseCase
 import com.erpnext.pos.domain.usecases.FetchCustomerGroupsLocalUseCase
 import com.erpnext.pos.domain.usecases.FetchCustomerInvoicesLocalForPeriodUseCase
@@ -70,6 +77,7 @@ import com.erpnext.pos.domain.usecases.FetchPosProfileUseCase
 import com.erpnext.pos.domain.usecases.FetchSalesInvoiceLocalUseCase
 import com.erpnext.pos.domain.usecases.FetchSalesInvoiceRemoteUseCase
 import com.erpnext.pos.domain.usecases.FetchSalesInvoiceWithItemsUseCase
+import com.erpnext.pos.domain.usecases.FetchSuppliersLocalUseCase
 import com.erpnext.pos.domain.usecases.FetchTerritoriesLocalUseCase
 import com.erpnext.pos.domain.usecases.FetchUserInfoUseCase
 import com.erpnext.pos.domain.usecases.GetCompanyInfoUseCase
@@ -87,6 +95,7 @@ import com.erpnext.pos.domain.usecases.SyncSalesInvoiceFromRemoteUseCase
 import com.erpnext.pos.domain.usecases.UpdateLocalInvoiceFromRemoteUseCase
 import com.erpnext.pos.localSource.configuration.ConfigurationStore
 import com.erpnext.pos.localSource.datasources.AddressLocalSource
+import com.erpnext.pos.localSource.datasources.CompanyAccountLocalSource
 import com.erpnext.pos.localSource.datasources.ContactLocalSource
 import com.erpnext.pos.localSource.datasources.CustomerGroupLocalSource
 import com.erpnext.pos.localSource.datasources.CustomerLocalSource
@@ -98,9 +107,10 @@ import com.erpnext.pos.localSource.datasources.InvoiceLocalSource
 import com.erpnext.pos.localSource.datasources.ModeOfPaymentLocalSource
 import com.erpnext.pos.localSource.datasources.POSProfileLocalSource
 import com.erpnext.pos.localSource.datasources.PaymentTermLocalSource
+import com.erpnext.pos.localSource.datasources.SupplierLocalSource
 import com.erpnext.pos.localSource.datasources.TerritoryLocalSource
-import com.erpnext.pos.localSource.preferences.BootstrapContextPreferences
 import com.erpnext.pos.localSource.preferences.ActivityPreferences
+import com.erpnext.pos.localSource.preferences.BootstrapContextPreferences
 import com.erpnext.pos.localSource.preferences.CurrencySettingsPreferences
 import com.erpnext.pos.localSource.preferences.ExchangeRatePreferences
 import com.erpnext.pos.localSource.preferences.GeneralPreferences
@@ -410,6 +420,8 @@ val appModule = module {
             exchangeRateLocalSource = get(),
             paymentTermLocalSource = get(),
             deliveryChargeLocalSource = get(),
+            supplierLocalSource = get(),
+            companyAccountLocalSource = get(),
             customerGroupLocalSource = get(),
             territoryLocalSource = get(),
             inventoryLocalSource = get(),
@@ -483,9 +495,7 @@ val appModule = module {
             openingEntryDao = get(),
             openingEntryLinkDao = get(),
             cashboxDao = get(),
-            salesInvoiceDao = get(),
-            invoiceLocalSource = get(),
-            salesInvoiceRemoteSource = get()
+            salesInvoiceDao = get()
         )
     }
     single {
@@ -573,7 +583,6 @@ val appModule = module {
             navManager = get(),
             loadHomeMetricsUseCase = get(),
             loadInventoryAlertsUseCase = get(),
-            salesTargetRepository = get(),
             posProfileGate = get(),
             openingGate = get(),
             homeRefreshController = get(),
@@ -598,6 +607,8 @@ val appModule = module {
     single { PaymentTermLocalSource(get()) }
     single { DeliveryChargeLocalSource(get()) }
     single { ExchangeRateLocalSource(get()) }
+    single { SupplierLocalSource(get()) }
+    single { CompanyAccountLocalSource(get()) }
     single { PaymentTermsRepository(get(), get()) }
     single { DeliveryChargesRepository(get(), get()) }
     single { ExchangeRateRepository(get(), get()) }
@@ -608,7 +619,20 @@ val appModule = module {
     single { QuotationViewModel(get()) }
     single { SalesOrderViewModel(get()) }
     single { DeliveryNoteViewModel(get()) }
-    single { PaymentEntryViewModel(get(), get(), get(), get(), get(), get()) }
+    single {
+        PaymentEntryViewModel(
+            get(),
+            get(),
+            get(),
+            get(),
+            get(),
+            get(),
+            get(),
+            get(),
+            get(),
+            get()
+        )
+    }
     //endregion
 
     //region Checkout
@@ -616,6 +640,10 @@ val appModule = module {
 
     single { AdjustLocalInventoryUseCase(get()) }
     single { PaymentEntryRepository(get()) }
+    single { PaymentOutRepository(get()) }
+    single { InternalTransferRepository(get()) }
+    single { SupplierRepository(get()) }
+    single { CompanyAccountRepository(get()) }
     single {
         BillingViewModel(
             customersUseCase = get<FetchCustomersLocalUseCase>(),
@@ -646,7 +674,7 @@ val appModule = module {
     //region Settings
     single { GeneralPreferences(get()) }
     single { ActivityPreferences(get()) }
-    single { ActivityCenter(get(), get(), get(), get(), get()) }
+    single { ActivityCenter(get()) }
     single { ActivityViewModel(get(), get()) }
     single { com.erpnext.pos.localSource.preferences.ReturnPolicyPreferences(get()) }
     single {
@@ -686,6 +714,8 @@ val appModule = module {
     single { FetchCustomersUseCase(get()) }
     single { FetchCustomersLocalUseCase(get()) }
     single { FetchCustomersLocalWithStateUseCase(get()) }
+    single { FetchSuppliersLocalUseCase(get()) }
+    single { FetchCompanyAccountsLocalUseCase(get()) }
     single { RebuildCustomerSummariesUseCase(get()) }
     single { FetchPaymentTermsLocalUseCase(get()) }
     single { FetchDeliveryChargesLocalUseCase(get()) }
@@ -698,6 +728,8 @@ val appModule = module {
     single { FetchPosProfileUseCase(get()) }
     single { FetchUserInfoUseCase(get()) }
     single { RegisterInvoicePaymentUseCase(get()) }
+    single { CreatePaymentOutUseCase(get()) }
+    single { CreateInternalTransferUseCase(get()) }
     single { CreatePaymentEntryUseCase(get()) }
     single { PartialReturnUseCase(get(), get(), get(), get(), get(), get()) }
     single { LoadHomeMetricsUseCase(get()) }

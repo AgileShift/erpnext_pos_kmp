@@ -579,13 +579,6 @@ class SalesInvoiceRepository(
         return remoteSource.createInvoice(draft)
     }
 
-    override suspend fun updateRemoteInvoice(
-        invoiceName: String, invoice: SalesInvoiceDto
-    ): SalesInvoiceDto {
-        val ensured = ensurePosOpeningEntry(ensurePosProfile(invoice))
-        return remoteSource.updateInvoice(invoiceName, ensured)
-    }
-
     override suspend fun deleteRemoteInvoice(invoiceId: String) {
         remoteSource.deleteInvoice(invoiceId)
         localSource.deleteByInvoiceId(invoiceId)

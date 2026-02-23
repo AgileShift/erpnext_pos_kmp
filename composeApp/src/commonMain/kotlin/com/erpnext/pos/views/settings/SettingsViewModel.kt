@@ -89,24 +89,21 @@ class SettingsViewModel(
                 val inventoryAlertsEnabled = args[14] as Boolean
                 val inventoryAlertHour = args[15] as Int
                 val inventoryAlertMinute = args[16] as Int
-                val salesTargetMonthly = args[17] as Double
+                val salesTargetMonthlyLocal = args[17] as Double
+                val salesTargetFromContext = ctx?.monthlySalesTarget != null
+                val salesTargetMonthly = ctx?.monthlySalesTarget ?: salesTargetMonthlyLocal
 
                 val baseCurrency = normalizeCurrency(ctx?.companyCurrency)
                 val secondaryCurrency = ctx?.currency?.let { normalizeCurrency(it) }
                     ?.takeIf { it != baseCurrency }
                 val now = Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault())
                 val daysInMonth = daysInMonth(now.year, now.month.number)
-                val weeksInMonth = weeksInMonth(now.year, now.month.number, daysInMonth)
-                val targetWeekly = if (weeksInMonth > 0) {
-                    salesTargetMonthly / weeksInMonth.toDouble()
-                } else {
-                    0.0
-                }
                 val targetDaily = if (daysInMonth > 0) {
                     salesTargetMonthly / daysInMonth.toDouble()
                 } else {
                     0.0
                 }
+                val targetWeekly = targetDaily * 7.0
                 val rate = if (secondaryCurrency != null) {
                     resolveLocalRate(baseCurrency, secondaryCurrency)
                 } else {
@@ -149,6 +146,7 @@ class SettingsViewModel(
                     salesTargetConvertedWeekly = convertedWeekly,
                     salesTargetConvertedDaily = convertedDaily,
                     salesTargetConversionStale = stale,
+                    salesTargetFromContext = salesTargetFromContext,
                     syncLog = syncLog.filterIsInstance<com.erpnext.pos.domain.models.SyncLogEntry>()
                 )
             }.collect { state ->
@@ -256,19 +254,6 @@ class SettingsViewModel(
             2 -> if (isLeapYear(year)) 29 else 28
             else -> 30
         }
-    }
-
-    private fun weeksInMonth(year: Int, month: Int, daysInMonth: Int): Int {
-        if (daysInMonth <= 0) return 0
-        val firstDay = kotlinx.datetime.LocalDate(year, month, 1)
-        var mondays = 0
-        for (i in 0 until daysInMonth) {
-            val day = firstDay.plus(kotlinx.datetime.DatePeriod(days = i))
-            if (day.dayOfWeek == kotlinx.datetime.DayOfWeek.MONDAY) {
-                mondays++
-            }
-        }
-        return if (firstDay.dayOfWeek == kotlinx.datetime.DayOfWeek.MONDAY) mondays else mondays + 1
     }
 
     private suspend fun resolveLocalRate(from: String, to: String): RateInfo? {

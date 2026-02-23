@@ -5,6 +5,7 @@ package com.erpnext.pos.views.settings
 import AppColorTheme
 import AppThemeMode
 import androidx.compose.foundation.background
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -138,6 +139,7 @@ fun SettingsScreenPreview() {
             salesTargetConvertedWeekly = 104000.0,
             salesTargetConvertedDaily = 15000.0,
             salesTargetConversionStale = false,
+            salesTargetFromContext = true,
             syncLog = emptyList()
         ),
         POSSettingAction()
@@ -187,7 +189,7 @@ fun PosSettingsScreen(
                             }
                         )
                     }
-                    if (showSalesTargetDialog) {
+                    if (showSalesTargetDialog && !state.salesTargetFromContext) {
                         SalesTargetDialog(
                             initialValue = state.salesTargetMonthly,
                             baseCurrency = state.salesTargetBaseCurrency,
@@ -243,6 +245,7 @@ fun PosSettingsScreen(
                         compact = isCompact,
                         isOnline = isOnline
                     )
+                    Spacer(modifier = Modifier.height(if (isCompact) 14.dp else 18.dp))
 
                     if (!state.hasContext) {
                         MissingContextBanner()
@@ -405,16 +408,27 @@ fun PosSettingsScreen(
                         compact = isCompact,
                         initiallyExpanded = false
                     ) {
-                        SettingItem(
-                            label = strings.settings.salesTargetEditLabel,
-                            value = formatCurrency(
-                                state.salesTargetBaseCurrency,
-                                state.salesTargetMonthly
-                            ),
-                            onClick = { showSalesTargetDialog = true },
-                            compact = isCompact,
-                            showDivider = false
-                        )
+                        if (state.salesTargetFromContext) {
+                            SettingItem(
+                                label = "Origen de la meta",
+                                value = "Contexto POS (sync.bootstrap)",
+                                onClick = {},
+                                enabled = false,
+                                compact = isCompact,
+                                showDivider = false
+                            )
+                        } else {
+                            SettingItem(
+                                label = strings.settings.salesTargetEditLabel,
+                                value = formatCurrency(
+                                    state.salesTargetBaseCurrency,
+                                    state.salesTargetMonthly
+                                ),
+                                onClick = { showSalesTargetDialog = true },
+                                compact = isCompact,
+                                showDivider = false
+                            )
+                        }
                         TargetRow(
                             label = strings.settings.salesTargetMonthlyLabel,
                             baseCurrency = state.salesTargetBaseCurrency,
@@ -451,14 +465,22 @@ fun PosSettingsScreen(
                                 color = MaterialTheme.colorScheme.tertiary
                             )
                         }
-                        Button(
-                            onClick = action.onSyncSalesTarget,
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = MaterialTheme.colorScheme.primary
-                            ),
-                            modifier = Modifier.padding(top = if (isCompact) 6.dp else 10.dp)
-                        ) {
-                            Text(strings.settings.salesTargetSyncLabel)
+                        if (state.salesTargetFromContext) {
+                            Text(
+                                text = "La meta mensual se obtiene del contexto sincronizado.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        } else {
+                            Button(
+                                onClick = action.onSyncSalesTarget,
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = MaterialTheme.colorScheme.primary
+                                ),
+                                modifier = Modifier.padding(top = if (isCompact) 6.dp else 10.dp)
+                            ) {
+                                Text(strings.settings.salesTargetSyncLabel)
+                            }
                         }
                     }
 
@@ -639,20 +661,20 @@ private fun SettingsHeroCard(
     }
     val statusStyle = when (syncState) {
         SyncState.IDLE -> StatusStyle(
-            container = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.15f),
-            content = MaterialTheme.colorScheme.onPrimaryContainer
+            container = tokens.heroText.copy(alpha = 0.12f),
+            content = tokens.heroText
         )
         SyncState.SUCCESS -> StatusStyle(
-            container = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.15f),
-            content = MaterialTheme.colorScheme.onPrimaryContainer
+            container = tokens.heroText.copy(alpha = 0.12f),
+            content = tokens.heroText
         )
         is SyncState.ERROR -> StatusStyle(
-            container = MaterialTheme.colorScheme.errorContainer,
+            container = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.92f),
             content = MaterialTheme.colorScheme.onErrorContainer
         )
         is SyncState.SYNCING -> StatusStyle(
-            container = MaterialTheme.colorScheme.tertiaryContainer,
-            content = MaterialTheme.colorScheme.onTertiaryContainer
+            container = tokens.heroText.copy(alpha = 0.18f),
+            content = tokens.heroText
         )
     }
 
@@ -660,6 +682,9 @@ private fun SettingsHeroCard(
         modifier = modifier,
         shape = RoundedCornerShape(26.dp),
         elevation = CardDefaults.elevatedCardElevation(defaultElevation = 4.dp),
+        colors = CardDefaults.elevatedCardColors(
+            containerColor = Color.Transparent
+        )
     ) {
         Box(
             modifier = Modifier
@@ -729,6 +754,7 @@ private fun SettingsHeroCard(
                     OutlinedButton(
                         onClick = onCancelSync,
                         modifier = Modifier.fillMaxWidth(),
+                        border = BorderStroke(1.dp, tokens.heroText.copy(alpha = 0.35f)),
                         colors = ButtonDefaults.outlinedButtonColors(
                             contentColor = tokens.heroButtonText
                         )

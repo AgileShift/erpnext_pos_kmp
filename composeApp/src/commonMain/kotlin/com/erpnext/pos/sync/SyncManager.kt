@@ -59,6 +59,7 @@ class SyncManager(
 ) : ISyncManager {
     companion object {
         private const val BOOTSTRAP_REFRESH_INTERVAL_MS = 5 * 60 * 1000L
+        private const val STEP_COOLDOWN_MS = 1_000L
     }
 
     private val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
@@ -144,20 +145,40 @@ class SyncManager(
                     val step = steps[index]
                     ensureActive()
                     val currentStep = index + 1
+                    val stepStartedAt = Clock.System.now().toEpochMilliseconds()
+                    AppLogger.info(
+                        "SyncManager.fullSync step $currentStep/${steps.size} started: ${step.label}"
+                    )
                     updateSyncProgress(
                         message = step.message,
                         currentStep = currentStep,
                         totalSteps = steps.size
                     )
                     val result = runStepWithRetry(step)
+                    val stepDurationMs =
+                        (Clock.System.now().toEpochMilliseconds() - stepStartedAt).coerceAtLeast(0)
+                    var shouldAbort = false
                     if (result != null) {
                         failures.add("${step.label}: $result")
+                        AppLogger.warn(
+                            "SyncManager.fullSync step $currentStep/${steps.size} failed after " +
+                                "${stepDurationMs}ms: ${step.label} -> $result"
+                        )
                         if (step.haltOnFailure) {
                             AppLogger.warn("SyncManager.fullSync aborted on critical step ${step.label}")
-                            break
+                            shouldAbort = true
                         }
+                    } else {
+                        AppLogger.info(
+                            "SyncManager.fullSync step $currentStep/${steps.size} finished in " +
+                                "${stepDurationMs}ms: ${step.label}"
+                        )
                     }
                     LoadingIndicator.update(progress = currentStep.toFloat() / steps.size.toFloat())
+                    if (shouldAbort) break
+                    if (index < steps.lastIndex) {
+                        delay(STEP_COOLDOWN_MS)
+                    }
                 }
                 if (failures.isEmpty()) {
                     _state.value = SyncState.SUCCESS
@@ -307,13 +328,14 @@ class SyncManager(
     }
 
     private suspend fun updateSyncProgress(message: String, currentStep: Int, totalSteps: Int) {
+        val progressPercent = ((currentStep.toFloat() / totalSteps.toFloat()) * 100f).toInt()
         _state.value = SyncState.SYNCING(
-            message = message,
+            message = "$message ($progressPercent%)",
             currentStep = currentStep,
             totalSteps = totalSteps
         )
         LoadingIndicator.update(
-            message = "$message ($currentStep/$totalSteps)",
+            message = "$message ($currentStep/$totalSteps - $progressPercent%)",
             progress = currentStep.toFloat() / totalSteps.toFloat(),
             currentStep = currentStep,
             totalSteps = totalSteps
@@ -321,14 +343,15 @@ class SyncManager(
     }
 
     private fun updateSyncProgressAsync(message: String, currentStep: Int, totalSteps: Int) {
+        val progressPercent = ((currentStep.toFloat() / totalSteps.toFloat()) * 100f).toInt()
         _state.value = SyncState.SYNCING(
-            message = message,
+            message = "$message ($progressPercent%)",
             currentStep = currentStep,
             totalSteps = totalSteps
         )
         scope.launch {
             LoadingIndicator.update(
-                message = "$message ($currentStep/$totalSteps)",
+                message = "$message ($currentStep/$totalSteps - $progressPercent%)",
                 progress = currentStep.toFloat() / totalSteps.toFloat(),
                 currentStep = currentStep,
                 totalSteps = totalSteps
@@ -380,6 +403,10 @@ class SyncManager(
             )
             try {
                 snapshot = bootstrapSyncRepository.fetchSnapshot(profileName = null)
+                bootstrapContextPreferences.update(
+                    monthlySalesTarget = snapshot?.data?.context?.monthlySalesTarget,
+                    replaceMonthlySalesTarget = true
+                )
             } catch (e: Exception) {
                 bootstrapContextPreferences.update(lastError = e.message ?: "Bootstrap Fetch failed")
                 throw e
@@ -489,6 +516,10 @@ class SyncManager(
                     lastError = ""
                 )
                 val snapshot = bootstrapSyncRepository.fetchSnapshot(profileName = null)
+                bootstrapContextPreferences.update(
+                    monthlySalesTarget = snapshot.data.context?.monthlySalesTarget,
+                    replaceMonthlySalesTarget = true
+                )
                 bootstrapSyncRepository.persistAll(snapshot)
                 cashBoxManager.initializeContext()
                 AppLogger.info("SyncManager.bootstrap refreshed ($trigger)")

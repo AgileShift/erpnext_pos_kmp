@@ -113,7 +113,9 @@ data class BootstrapContextDto(
     @SerialName("partyAccountCurrency")
     val partyAccountCurrencyCamel: String? = null,
     @SerialName("party_account_currency")
-    val partyAccountCurrencySnake: String? = null
+    val partyAccountCurrencySnake: String? = null,
+    @SerialName("monthly_sales_target")
+    val monthlySalesTarget: Double? = null
 ) {
     val profileName: String?
         get() = profileNameCamel ?: profileNameSnake
@@ -191,7 +193,11 @@ data class BootstrapFullSnapshotDto(
     @SerialName("payment_entries")
     val paymentEntries: List<PaymentEntryDto> = emptyList(),
     @SerialName("activity_events")
-    val activityEvents: List<JsonObject> = emptyList()
+    val activityEvents: List<JsonObject> = emptyList(),
+    @SerialName("suppliers")
+    val suppliers: List<SupplierDto> = emptyList(),
+    @SerialName("company_accounts")
+    val companyAccounts: List<CompanyAccountDto> = emptyList()
 ) {
     val resolvedCompanies: List<BootstrapCompanyDto>
         get() = when {

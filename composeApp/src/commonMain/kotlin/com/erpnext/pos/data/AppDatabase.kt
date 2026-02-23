@@ -9,6 +9,7 @@ import com.erpnext.pos.localSource.dao.AddressDao
 import com.erpnext.pos.localSource.dao.CashboxDao
 import com.erpnext.pos.localSource.dao.CategoryDao
 import com.erpnext.pos.localSource.dao.CompanyDao
+import com.erpnext.pos.localSource.dao.CompanyAccountDao
 import com.erpnext.pos.localSource.dao.ConfigurationDao
 import com.erpnext.pos.localSource.dao.ContactDao
 import com.erpnext.pos.localSource.dao.CustomerDao
@@ -27,6 +28,7 @@ import com.erpnext.pos.localSource.dao.PaymentTermDao
 import com.erpnext.pos.localSource.dao.PosProfileLocalDao
 import com.erpnext.pos.localSource.dao.PosProfilePaymentMethodDao
 import com.erpnext.pos.localSource.dao.SalesInvoiceDao
+import com.erpnext.pos.localSource.dao.SupplierDao
 import com.erpnext.pos.localSource.dao.TerritoryDao
 import com.erpnext.pos.localSource.dao.UserDao
 import com.erpnext.pos.localSource.entities.AddressEntity
@@ -34,6 +36,7 @@ import com.erpnext.pos.localSource.entities.BalanceDetailsEntity
 import com.erpnext.pos.localSource.entities.CashboxEntity
 import com.erpnext.pos.localSource.entities.CategoryEntity
 import com.erpnext.pos.localSource.entities.CompanyEntity
+import com.erpnext.pos.localSource.entities.CompanyAccountEntity
 import com.erpnext.pos.localSource.entities.ConfigurationEntity
 import com.erpnext.pos.localSource.entities.ContactEntity
 import com.erpnext.pos.localSource.entities.CustomerEntity
@@ -54,6 +57,7 @@ import com.erpnext.pos.localSource.entities.PosProfileLocalEntity
 import com.erpnext.pos.localSource.entities.PosProfilePaymentMethodEntity
 import com.erpnext.pos.localSource.entities.SalesInvoiceEntity
 import com.erpnext.pos.localSource.entities.SalesInvoiceItemEntity
+import com.erpnext.pos.localSource.entities.SupplierEntity
 import com.erpnext.pos.localSource.entities.TaxDetailsEntity
 import com.erpnext.pos.localSource.entities.TerritoryEntity
 import com.erpnext.pos.localSource.entities.UserEntity
@@ -88,11 +92,14 @@ import com.erpnext.pos.localSource.entities.UserEntity
         CompanyEntity::class,
         TerritoryEntity::class,
         CustomerOutboxEntity::class,
+        SupplierEntity::class,
+        CompanyAccountEntity::class,
     ],
-    version = 11,
+    version = 12,
     autoMigrations = [
         AutoMigration(from = 8, to = 9),
-        AutoMigration(from = 9, to = 10)
+        AutoMigration(from = 9, to = 10),
+        AutoMigration(from = 11, to = 12)
     ],
     exportSchema = true
 )
@@ -122,6 +129,8 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun territoryDao(): TerritoryDao
     abstract fun contactDao(): ContactDao
     abstract fun addressDao(): AddressDao
+    abstract fun supplierDao(): SupplierDao
+    abstract fun companyAccountDao(): CompanyAccountDao
 }
 
 @Suppress("KotlinNoActualForExpect")

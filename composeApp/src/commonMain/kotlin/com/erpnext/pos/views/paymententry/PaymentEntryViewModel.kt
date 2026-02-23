@@ -2,13 +2,23 @@ package com.erpnext.pos.views.paymententry
 
 import androidx.lifecycle.viewModelScope
 import com.erpnext.pos.base.BaseViewModel
+import com.erpnext.pos.domain.usecases.CreateInternalTransferInput
+import com.erpnext.pos.domain.usecases.CreateInternalTransferUseCase
+import com.erpnext.pos.domain.usecases.CreatePaymentOutInput
+import com.erpnext.pos.domain.usecases.CreatePaymentOutUseCase
 import com.erpnext.pos.domain.usecases.FetchCustomersLocalUseCase
+import com.erpnext.pos.domain.usecases.FetchSuppliersLocalUseCase
+import com.erpnext.pos.domain.usecases.FetchCompanyAccountsLocalUseCase
 import com.erpnext.pos.domain.usecases.RegisterInvoicePaymentInput
 import com.erpnext.pos.domain.usecases.RegisterInvoicePaymentUseCase
+import com.erpnext.pos.domain.utils.UUIDGenerator
 import com.erpnext.pos.localSource.preferences.GeneralPreferences
 import com.erpnext.pos.navigation.NavRoute
 import com.erpnext.pos.navigation.NavigationManager
+import com.erpnext.pos.remoteSource.dto.InternalTransferCreateDto
+import com.erpnext.pos.remoteSource.dto.PaymentOutCreateDto
 import com.erpnext.pos.utils.NetworkMonitor
+import com.erpnext.pos.utils.view.DateTimeProvider
 import com.erpnext.pos.views.CashBoxManager
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -16,28 +26,81 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import kotlin.time.Clock
+import kotlin.time.ExperimentalTime
 
+@OptIn(ExperimentalTime::class)
 class PaymentEntryViewModel(
     private val registerPaymentUseCase: RegisterInvoicePaymentUseCase,
     private val navManager: NavigationManager,
     private val cashBoxManager: CashBoxManager,
     private val fetchCustomersLocalUseCase: FetchCustomersLocalUseCase,
+    private val fetchSuppliersLocalUseCase: FetchSuppliersLocalUseCase,
+    private val fetchCompanyAccountsLocalUseCase: FetchCompanyAccountsLocalUseCase,
+    private val createPaymentOutUseCase: CreatePaymentOutUseCase,
+    private val createInternalTransferUseCase: CreateInternalTransferUseCase,
     private val networkMonitor: NetworkMonitor,
     private val generalPreferences: GeneralPreferences
 ) : BaseViewModel() {
+    private val json = Json { ignoreUnknownKeys = true }
+    private val amountDraftByType = mutableMapOf<PaymentEntryType, String>()
+    private val referenceDateDraftByType = mutableMapOf<PaymentEntryType, String>()
 
     private val _state = MutableStateFlow(PaymentEntryState())
     val state: StateFlow<PaymentEntryState> = _state
     private var accountToMode: Map<String, String> = emptyMap()
+    private var modeToAccount: Map<String, String> = emptyMap()
+    private var modeToCurrency: Map<String, String> = emptyMap()
 
     init {
+        resetTypeDrafts()
+        _state.update { state -> state.copy(referenceDate = draftReferenceDateFor(state.entryType)) }
         observeOnlinePolicy()
         loadAccountingDefaults()
     }
 
+    private fun defaultReferenceDate(): String = DateTimeProvider.todayDate()
+
+    private fun resetTypeDrafts() {
+        PaymentEntryType.entries.forEach { type ->
+            amountDraftByType[type] = ""
+            referenceDateDraftByType[type] = defaultReferenceDate()
+        }
+    }
+
+    private fun draftAmountFor(type: PaymentEntryType): String =
+        amountDraftByType[type].orEmpty()
+
+    private fun draftReferenceDateFor(type: PaymentEntryType): String =
+        referenceDateDraftByType[type]?.takeIf { it.isNotBlank() } ?: defaultReferenceDate()
+
+    fun resetFormState() {
+        val current = _state.value
+        resetTypeDrafts()
+        _state.value = PaymentEntryState(
+            entryType = PaymentEntryType.Receive,
+            currencyCode = current.currencyCode,
+            expenseAccount = current.expenseAccount,
+            defaultReceivableAccount = current.defaultReceivableAccount,
+            availableModes = current.availableModes,
+            accountOptions = current.accountOptions,
+            partyOptions = current.partyOptions,
+            isOnline = current.isOnline,
+            offlineModeEnabled = current.offlineModeEnabled,
+            referenceDate = draftReferenceDateFor(PaymentEntryType.Receive)
+        )
+    }
+
     private fun observeOnlinePolicy() {
         viewModelScope.launch {
-            combine(networkMonitor.isConnected, generalPreferences.offlineMode) { isOnline, offlineMode ->
+            combine(
+                networkMonitor.isConnected,
+                generalPreferences.offlineMode
+            ) { isOnline, offlineMode ->
                 isOnline to offlineMode
             }.collect { (isOnline, offlineMode) ->
                 _state.update {
@@ -67,10 +130,28 @@ class PaymentEntryViewModel(
                     }
                     .distinctBy { it.first.lowercase() }
                 accountToMode = accountPairs.toMap()
+                modeToAccount = accountPairs.associate { it.second to it.first }
+                modeToCurrency = context?.paymentModes.orEmpty()
+                    .mapNotNull { option ->
+                        val mode = option.modeOfPayment.trim()
+                        val currency = option.currency?.trim().orEmpty()
+                        if (mode.isBlank() || currency.isBlank()) null else mode to currency
+                    }
+                    .toMap()
 
-                val parties = fetchCustomersLocalUseCase(null).firstOrNull()
-                    .orEmpty()
-                    .map { it.customerName.ifBlank { it.name } }
+                val suppliers = fetchSuppliersLocalUseCase()
+                val parties = suppliers.ifEmpty {
+                    fetchCustomersLocalUseCase(null).firstOrNull()
+                        .orEmpty()
+                        .map { it.customerName.ifBlank { it.name } }
+                        .distinct()
+                        .sorted()
+                }
+
+                val companyAccounts = fetchCompanyAccountsLocalUseCase()
+                val accountOptions = (accountPairs.map { it.first } + companyAccounts)
+                    .map { it.trim() }
+                    .filter { it.isNotBlank() }
                     .distinct()
                     .sorted()
 
@@ -80,7 +161,7 @@ class PaymentEntryViewModel(
                         expenseAccount = context?.expenseAccount.orEmpty(),
                         defaultReceivableAccount = context?.defaultReceivableAccount.orEmpty(),
                         availableModes = modes,
-                        accountOptions = accountPairs.map { it.first }.sorted(),
+                        accountOptions = accountOptions,
                         partyOptions = parties
                     )
                 }
@@ -94,9 +175,13 @@ class PaymentEntryViewModel(
         _state.update {
             it.copy(
                 entryType = entryType,
+                amount = draftAmountFor(entryType),
+                referenceDate = draftReferenceDateFor(entryType),
                 invoiceId = if (entryType == PaymentEntryType.Receive) it.invoiceId else "",
                 sourceAccount = if (entryType == PaymentEntryType.InternalTransfer) it.sourceAccount else "",
                 targetAccount = if (entryType == PaymentEntryType.InternalTransfer) it.targetAccount else "",
+                referenceNoError = null,
+                referenceDateError = null,
                 errorMessage = null,
                 successMessage = null
             )
@@ -128,7 +213,8 @@ class PaymentEntryViewModel(
     }
 
     fun onAmountChanged(value: String) {
-        _state.update { it.copy(amount = value) }
+        amountDraftByType[_state.value.entryType] = value
+        _state.update { it.copy(amount = value, errorMessage = null) }
     }
 
     fun onConceptChanged(value: String) {
@@ -140,7 +226,12 @@ class PaymentEntryViewModel(
     }
 
     fun onReferenceNoChanged(value: String) {
-        _state.update { it.copy(referenceNo = value) }
+        _state.update { it.copy(referenceNo = value, referenceNoError = null, errorMessage = null) }
+    }
+
+    fun onReferenceDateChanged(value: String) {
+        referenceDateDraftByType[_state.value.entryType] = value
+        _state.update { it.copy(referenceDate = value, referenceDateError = null, errorMessage = null) }
     }
 
     fun onNotesChanged(value: String) {
@@ -154,8 +245,10 @@ class PaymentEntryViewModel(
             val message = when {
                 current.offlineModeEnabled && !current.isOnline ->
                     "Gastos y transferencias requieren conexión. Desactiva Modo offline y reconecta Internet."
+
                 current.offlineModeEnabled ->
                     "Gastos y transferencias requieren conexión. Desactiva Modo offline en Configuraciones."
+
                 else ->
                     "Sin conexión a Internet. Conéctate para registrar gastos o transferencias."
             }
@@ -220,7 +313,15 @@ class PaymentEntryViewModel(
             return
         }
 
-        _state.update { it.copy(isSubmitting = true, errorMessage = null, successMessage = null) }
+        _state.update {
+            it.copy(
+                isSubmitting = true,
+                referenceNoError = null,
+                referenceDateError = null,
+                errorMessage = null,
+                successMessage = null
+            )
+        }
 
         executeUseCase(
             action = {
@@ -246,6 +347,48 @@ class PaymentEntryViewModel(
                     }
 
                     PaymentEntryType.Pay -> {
+                        val paidFromAccount = modeToAccount[sourceMode].orEmpty()
+                        if (paidFromAccount.isBlank()) {
+                            error("No se encontró la cuenta contable para el modo de pago seleccionado.")
+                        }
+                        val context =
+                            cashBoxManager.getContext() ?: cashBoxManager.initializeContext()
+                            ?: error("No hay contexto POS activo.")
+                        val fromCurrency = modeToCurrency[sourceMode]
+                            ?.takeIf { it.isNotBlank() }
+                            ?: context.companyCurrency
+                        val toCurrency = context.companyCurrency
+                        val rate = if (fromCurrency.equals(toCurrency, ignoreCase = true)) {
+                            1.0
+                        } else {
+                            cashBoxManager.resolveExchangeRateBetween(
+                                fromCurrency = fromCurrency,
+                                toCurrency = toCurrency,
+                                allowNetwork = true
+                            )
+                                ?: error("No se pudo obtener tipo de cambio $fromCurrency -> $toCurrency.")
+                        }
+                        val receivedAmount = amount * rate
+                        val payload = PaymentOutCreateDto(
+                            paymentType = "Pay",
+                            partyType = "Supplier",
+                            party = current.party.trim(),
+                            company = context.company,
+                            postingDate = DateTimeProvider.todayDate(),
+                            modeOfPayment = sourceMode,
+                            paidAmount = amount,
+                            receivedAmount = receivedAmount,
+                            paidFrom = paidFromAccount,
+                            referenceNo = current.referenceNo.trim().takeIf { it.isNotBlank() },
+                            referenceDate = current.referenceDate.trim().takeIf { it.isNotBlank() }
+                        )
+                        val requestId = UUIDGenerator().newId()
+                        createPaymentOutUseCase(
+                            CreatePaymentOutInput(
+                                clientRequestId = requestId,
+                                payload = payload
+                            )
+                        )
                         cashBoxManager.registerCashMovement(
                             modeOfPayment = sourceMode,
                             amount = amount,
@@ -255,6 +398,47 @@ class PaymentEntryViewModel(
                     }
 
                     PaymentEntryType.InternalTransfer -> {
+                        val context =
+                            cashBoxManager.getContext() ?: cashBoxManager.initializeContext()
+                            ?: error("No hay contexto POS activo.")
+                        val paidFromAccount = current.sourceAccount.trim()
+                        val paidToAccount = current.targetAccount.trim()
+                        val fromCurrency = modeToCurrency[sourceMode]
+                            ?.takeIf { it.isNotBlank() }
+                            ?: context.companyCurrency
+                        val toCurrency = modeToCurrency[targetMode]
+                            ?.takeIf { it.isNotBlank() }
+                            ?: context.companyCurrency
+                        val rate = if (fromCurrency.equals(toCurrency, ignoreCase = true)) {
+                            1.0
+                        } else {
+                            cashBoxManager.resolveExchangeRateBetween(
+                                fromCurrency = fromCurrency,
+                                toCurrency = toCurrency,
+                                allowNetwork = true
+                            )
+                                ?: error("No se pudo obtener tipo de cambio $fromCurrency -> $toCurrency.")
+                        }
+                        val receivedAmount = amount * rate
+                        val referenceNo = current.referenceNo.trim().takeIf { it.isNotBlank() }
+                            ?: "TR-${Clock.System.now().toEpochMilliseconds()}"
+                        val requestId = UUIDGenerator().newId()
+                        createInternalTransferUseCase(
+                            CreateInternalTransferInput(
+                                clientRequestId = requestId,
+                                payload = InternalTransferCreateDto(
+                                    company = context.company,
+                                    postingDate = DateTimeProvider.todayDate(),
+                                    modeOfPayment = sourceMode,
+                                    paidAmount = amount,
+                                    receivedAmount = receivedAmount,
+                                    paidFrom = paidFromAccount,
+                                    paidTo = paidToAccount,
+                                    referenceNo = referenceNo,
+                                    referenceDate = current.referenceDate.trim().takeIf { it.isNotBlank() }
+                                )
+                            )
+                        )
                         cashBoxManager.registerInternalTransfer(
                             sourceModeOfPayment = sourceMode,
                             targetModeOfPayment = targetMode,
@@ -287,10 +471,15 @@ class PaymentEntryViewModel(
                         concept = "",
                         party = if (current.entryType == PaymentEntryType.Pay) "" else it.party,
                         referenceNo = "",
+                        referenceDate = DateTimeProvider.todayDate(),
+                        referenceNoError = null,
+                        referenceDateError = null,
                         notes = "",
                         successMessage = successText
                     )
                 }
+                amountDraftByType[current.entryType] = ""
+                referenceDateDraftByType[current.entryType] = DateTimeProvider.todayDate()
             },
             exceptionHandler = { throwable ->
                 _state.update {
@@ -304,9 +493,12 @@ class PaymentEntryViewModel(
                                 "No se pudo registrar la entrada."
                             }
                     }
+                    val fieldErrors = resolveFieldErrors(throwable.message)
                     it.copy(
                         isSubmitting = false,
-                        errorMessage = throwable.message ?: fallback
+                        referenceNoError = fieldErrors.referenceNoError,
+                        referenceDateError = fieldErrors.referenceDateError,
+                        errorMessage = fieldErrors.userMessage ?: throwable.message ?: fallback
                     )
                 }
             },
@@ -330,6 +522,39 @@ class PaymentEntryViewModel(
             state.notes.trim().takeIf { it.isNotBlank() }?.let { add("Nota: $it") }
         }
         return segments.joinToString(" | ")
+    }
+
+    private data class PaymentEntryFieldErrors(
+        val referenceNoError: String? = null,
+        val referenceDateError: String? = null,
+        val userMessage: String? = null
+    )
+
+    private fun resolveFieldErrors(rawMessage: String?): PaymentEntryFieldErrors {
+        val text = rawMessage?.trim().orEmpty()
+        if (text.isBlank()) return PaymentEntryFieldErrors()
+
+        val extractedMessage = runCatching {
+            val root = json.parseToJsonElement(text).jsonObject
+            root["message"]?.jsonObject
+                ?.get("error")?.jsonObject
+                ?.get("message")?.jsonPrimitive?.contentOrNull
+        }.getOrNull()?.trim().orEmpty()
+
+        val effective = extractedMessage.ifBlank { text }
+        val normalized = effective.lowercase()
+        val mentionsReferenceNo = normalized.contains("nro de referencia") || normalized.contains("numero de referencia")
+        val mentionsReferenceDate = normalized.contains("fecha de referencia")
+
+        if (!mentionsReferenceNo && !mentionsReferenceDate) {
+            return PaymentEntryFieldErrors(userMessage = extractedMessage.ifBlank { null })
+        }
+
+        return PaymentEntryFieldErrors(
+            referenceNoError = if (mentionsReferenceNo) "Número de referencia requerido para transacción bancaria." else null,
+            referenceDateError = if (mentionsReferenceDate) "Fecha de referencia requerida para transacción bancaria." else null,
+            userMessage = extractedMessage.ifBlank { effective }
+        )
     }
 
     fun onBack() {

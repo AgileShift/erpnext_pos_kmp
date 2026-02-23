@@ -1,57 +1,54 @@
 package com.erpnext.pos.views.home
 
 import androidx.lifecycle.viewModelScope
+import com.erpnext.pos.auth.SessionRefresher
 import com.erpnext.pos.base.BaseViewModel
+import com.erpnext.pos.data.repositories.PosProfilePaymentMethodLocalRepository
 import com.erpnext.pos.domain.models.POSProfileSimpleBO
 import com.erpnext.pos.domain.models.UserBO
 import com.erpnext.pos.domain.usecases.FetchPosProfileInfoLocalUseCase
 import com.erpnext.pos.domain.usecases.FetchPosProfileUseCase
 import com.erpnext.pos.domain.usecases.FetchUserInfoUseCase
 import com.erpnext.pos.domain.usecases.HomeMetricInput
+import com.erpnext.pos.domain.usecases.InventoryAlertInput
 import com.erpnext.pos.domain.usecases.LoadHomeMetricsUseCase
 import com.erpnext.pos.domain.usecases.LoadInventoryAlertsUseCase
-import com.erpnext.pos.domain.usecases.InventoryAlertInput
 import com.erpnext.pos.domain.usecases.LogoutUseCase
-import com.erpnext.pos.auth.SessionRefresher
 import com.erpnext.pos.localSource.dao.POSProfileDao
-import com.erpnext.pos.data.repositories.PosProfilePaymentMethodLocalRepository
-import com.erpnext.pos.data.repositories.SalesTargetRepository
-import com.erpnext.pos.navigation.NavRoute
-import com.erpnext.pos.navigation.NavigationManager
+import com.erpnext.pos.localSource.datasources.ExchangeRateLocalSource
+import com.erpnext.pos.localSource.preferences.GeneralPreferences
 import com.erpnext.pos.localSource.preferences.SyncPreferences
 import com.erpnext.pos.localSource.preferences.SyncSettings
+import com.erpnext.pos.navigation.NavRoute
+import com.erpnext.pos.navigation.NavigationManager
+import com.erpnext.pos.sync.GateResult
+import com.erpnext.pos.sync.OpeningGate
+import com.erpnext.pos.sync.PosProfileGate
+import com.erpnext.pos.sync.SyncContextProvider
 import com.erpnext.pos.sync.SyncManager
 import com.erpnext.pos.sync.SyncState
-import com.erpnext.pos.sync.GateResult
-import com.erpnext.pos.sync.PosProfileGate
-import com.erpnext.pos.sync.OpeningGate
-import com.erpnext.pos.sync.SyncContextProvider
+import com.erpnext.pos.utils.normalizeCurrency
+import com.erpnext.pos.utils.notifications.notifySystem
+import com.erpnext.pos.utils.notifications.scheduleDailyInventoryReminder
 import com.erpnext.pos.views.CashBoxManager
 import com.erpnext.pos.views.PaymentModeWithAmount
 import com.erpnext.pos.views.reconciliation.ReconciliationMode
-import com.erpnext.pos.utils.notifications.notifySystem
-import com.erpnext.pos.utils.notifications.scheduleDailyInventoryReminder
-import com.erpnext.pos.localSource.preferences.GeneralPreferences
-import com.erpnext.pos.localSource.datasources.ExchangeRateLocalSource
-import com.erpnext.pos.utils.normalizeCurrency
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.flow.stateIn
-import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.delay
 import kotlinx.datetime.DatePeriod
-import kotlinx.datetime.DayOfWeek
-import kotlinx.datetime.LocalDate
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.atTime
 import kotlinx.datetime.number
-import kotlinx.datetime.toLocalDateTime
 import kotlinx.datetime.plus
 import kotlinx.datetime.toInstant
+import kotlinx.datetime.toLocalDateTime
 import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
 
@@ -69,7 +66,6 @@ class HomeViewModel(
     private val navManager: NavigationManager,
     private val loadHomeMetricsUseCase: LoadHomeMetricsUseCase,
     private val loadInventoryAlertsUseCase: LoadInventoryAlertsUseCase,
-    private val salesTargetRepository: SalesTargetRepository,
     private val posProfileGate: PosProfileGate,
     private val openingGate: OpeningGate,
     private val homeRefreshController: HomeRefreshController,
@@ -323,7 +319,7 @@ class HomeViewModel(
     private fun refreshSalesTarget() {
         viewModelScope.launch {
             val ctx = contextManager.getContext() ?: return@launch
-            val monthly = generalPreferences.getSalesTargetMonthly()
+            val monthly = ctx.monthlySalesTarget ?: generalPreferences.getSalesTargetMonthly()
             if (monthly <= 0.0) {
                 _homeMetrics.update { it.copy(salesTarget = null) }
                 return@launch
@@ -335,10 +331,8 @@ class HomeViewModel(
 
             val now = Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault())
             val daysInMonth = daysInMonth(now.year, now.month.number)
-            val weeksInMonth = weeksInMonth(now.year, now.month.number, daysInMonth)
-
             val daily = if (daysInMonth > 0) monthly / daysInMonth.toDouble() else 0.0
-            val weekly = if (weeksInMonth > 0) monthly / weeksInMonth.toDouble() else 0.0
+            val weekly = daily * 7.0
 
             val rate = if (secondaryCurrency != null) {
                 resolveLocalRate(baseCurrency, secondaryCurrency)
@@ -381,19 +375,6 @@ class HomeViewModel(
 
     private fun isLeapYear(year: Int): Boolean {
         return (year % 4 == 0 && year % 100 != 0) || (year % 400 == 0)
-    }
-
-    private fun weeksInMonth(year: Int, month: Int, daysInMonth: Int): Int {
-        if (daysInMonth <= 0) return 0
-        val firstDay = LocalDate(year, month, 1)
-        var mondays = 0
-        for (i in 0 until daysInMonth) {
-            val day = firstDay.plus(DatePeriod(days = i))
-            if (day.dayOfWeek == DayOfWeek.MONDAY) {
-                mondays++
-            }
-        }
-        return if (firstDay.dayOfWeek == DayOfWeek.MONDAY) mondays else mondays + 1
     }
 
     private suspend fun resolveLocalRate(from: String, to: String): RateInfo? {

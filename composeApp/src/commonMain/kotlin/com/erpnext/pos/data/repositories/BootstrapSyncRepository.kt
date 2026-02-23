@@ -2,6 +2,7 @@ package com.erpnext.pos.data.repositories
 
 import com.erpnext.pos.localSource.configuration.ConfigurationStore
 import com.erpnext.pos.localSource.dao.CompanyDao
+import com.erpnext.pos.localSource.datasources.CompanyAccountLocalSource
 import com.erpnext.pos.localSource.datasources.CustomerGroupLocalSource
 import com.erpnext.pos.localSource.datasources.CustomerLocalSource
 import com.erpnext.pos.localSource.datasources.CustomerOutboxLocalSource
@@ -10,16 +11,20 @@ import com.erpnext.pos.localSource.datasources.ExchangeRateLocalSource
 import com.erpnext.pos.localSource.datasources.InventoryLocalSource
 import com.erpnext.pos.localSource.datasources.InvoiceLocalSource
 import com.erpnext.pos.localSource.datasources.PaymentTermLocalSource
+import com.erpnext.pos.localSource.datasources.SupplierLocalSource
 import com.erpnext.pos.localSource.datasources.TerritoryLocalSource
 import com.erpnext.pos.localSource.entities.CompanyEntity
 import com.erpnext.pos.localSource.entities.ExchangeRateEntity
+import com.erpnext.pos.localSource.entities.POSInvoicePaymentEntity
 import com.erpnext.pos.remoteSource.api.APIService
 import com.erpnext.pos.remoteSource.dto.BootstrapFullSnapshotDto
 import com.erpnext.pos.remoteSource.dto.BootstrapPosSyncDto
 import com.erpnext.pos.remoteSource.dto.BootstrapRequestDto
+import com.erpnext.pos.remoteSource.dto.PaymentEntryDto
 import com.erpnext.pos.remoteSource.mapper.resolveReceivableAccount
 import com.erpnext.pos.remoteSource.mapper.toEntities
 import com.erpnext.pos.remoteSource.mapper.toEntity
+import com.erpnext.pos.utils.AppLogger
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
@@ -44,6 +49,8 @@ class BootstrapSyncRepository(
     private val exchangeRateLocalSource: ExchangeRateLocalSource,
     private val paymentTermLocalSource: PaymentTermLocalSource,
     private val deliveryChargeLocalSource: DeliveryChargeLocalSource,
+    private val supplierLocalSource: SupplierLocalSource,
+    private val companyAccountLocalSource: CompanyAccountLocalSource,
     private val customerGroupLocalSource: CustomerGroupLocalSource,
     private val territoryLocalSource: TerritoryLocalSource,
     private val inventoryLocalSource: InventoryLocalSource,
@@ -52,13 +59,10 @@ class BootstrapSyncRepository(
     private val invoiceLocalSource: InvoiceLocalSource
 ) {
     companion object {
-        private const val KEY_BOOTSTRAP_RAW = "bootstrap.raw.payload"
-        private const val KEY_BOOTSTRAP_PAYMENT_ENTRIES = "bootstrap.raw.payment_entries"
         private const val KEY_BOOTSTRAP_INVENTORY_ALERTS = "bootstrap.raw.inventory_alerts"
-        private const val KEY_BOOTSTRAP_ACTIVITY_EVENTS = "bootstrap.raw.activity_events"
         private const val KEY_BOOTSTRAP_META = "bootstrap.debug.meta"
         private const val KEY_BOOTSTRAP_COUNTS = "bootstrap.debug.counts"
-        private const val DEFAULT_PAGE_LIMIT = 5_000
+        private const val DEFAULT_PAGE_LIMIT = 50
         private const val MAX_PAGE_FETCH = 200
     }
 
@@ -78,10 +82,6 @@ class BootstrapSyncRepository(
         val label: String,
         val message: String
     ) {
-        CACHE_RAW(
-            label = "Informacion total",
-            message = "Guardando snapshot completo..."
-        ),
         POS_PROFILES(
             label = "POS Profiles",
             message = "Guardando perfiles POS y metodos de pago..."
@@ -105,6 +105,14 @@ class BootstrapSyncRepository(
         DELIVERY_CHARGES(
             label = "Cargo por envio",
             message = "Guardando cargos de entrega..."
+        ),
+        SUPPLIERS(
+            label = "Proveedores",
+            message = "Guardando proveedores..."
+        ),
+        COMPANY_ACCOUNTS(
+            label = "Cuentas contables",
+            message = "Guardando cuentas contables..."
         ),
         CUSTOMER_GROUPS(
             label = "Grupos de clientes",
@@ -132,7 +140,7 @@ class BootstrapSyncRepository(
         ),
         PAYMENT_ENTRIES(
             label = "Entradas de pago",
-            message = "Guardando snapshot de entradas de pago..."
+            message = "Guardando entradas de pago en facturas..."
         ),
         INVENTORY_ALERTS(
             label = "Alertas de Inventario",
@@ -140,7 +148,7 @@ class BootstrapSyncRepository(
         ),
         ACTIVITY_EVENTS(
             label = "Eventos",
-            message = "Guardando snapshot de eventos..."
+            message = "Eventos via WS (omitido en bootstrap)."
         )
     }
 
@@ -149,7 +157,7 @@ class BootstrapSyncRepository(
         val data: BootstrapFullSnapshotDto
     )
 
-    fun orderedSections(): List<Section> = Section.entries
+    fun orderedSections(): List<Section> = Section.entries.filterNot { it == Section.ACTIVITY_EVENTS }
 
     suspend fun fetchSnapshot(profileName: String? = null): Snapshot {
         val baseRaw = api.getBootstrapRawSnapshot(
@@ -356,47 +364,10 @@ class BootstrapSyncRepository(
         )
         val allAlerts = api.decodeBootstrapFullSnapshot(alertsRaw).inventoryAlerts
 
-        val activityRaw = api.getBootstrapRawSnapshot(
-            BootstrapRequestDto(
-                includeInventory = false,
-                includeCustomers = false,
-                includeInvoices = false,
-                includeAlerts = false,
-                includeActivity = true,
-                recentPaidOnly = true,
-                profileName = profileName,
-                offset = 0,
-                limit = DEFAULT_PAGE_LIMIT
-            )
-        )
-        val activityFirst = api.decodeBootstrapFullSnapshot(activityRaw).activityEvents
-        val activityFetch = fetchPaged(
-            firstRaw = activityRaw,
-            firstItems = activityFirst,
-            sectionKey = "activity",
-            dedupeKey = { it.toString() }
-        ) { nextOffset, pageLimit ->
-            val pageRaw = api.getBootstrapRawSnapshot(
-                BootstrapRequestDto(
-                    includeInventory = false,
-                    includeCustomers = false,
-                    includeInvoices = false,
-                    includeAlerts = false,
-                    includeActivity = true,
-                    recentPaidOnly = true,
-                    profileName = profileName,
-                    offset = nextOffset,
-                    limit = pageLimit
-                )
-            )
-            api.decodeBootstrapFullSnapshot(pageRaw).activityEvents
-        }
-
         val allInventory = inventoryFetch.items
         val allCustomers = customersFetch.items
         val allInvoices = invoicesFetch.items
         val allPaymentEntries = paymentEntriesFetch.items
-        val allActivity = activityFetch.items
 
         val mergedData = baseData.copy(
             inventoryItems = allInventory,
@@ -404,7 +375,7 @@ class BootstrapSyncRepository(
             invoices = allInvoices,
             paymentEntries = allPaymentEntries,
             inventoryAlerts = allAlerts,
-            activityEvents = allActivity
+            activityEvents = emptyList()
         )
         val normalizedRaw = baseRaw.toMutableMap().apply {
             put(
@@ -440,14 +411,6 @@ class BootstrapSyncRepository(
                 )
             )
             put("inventory_alerts", api.json.encodeToJsonElement(mergedData.inventoryAlerts))
-            put(
-                "activity",
-                buildSectionObject(
-                    firstRaw = activityRaw,
-                    sectionKey = "activity",
-                    items = api.json.encodeToJsonElement(mergedData.activityEvents)
-                )
-            )
         }
 
         persistBootstrapMeta(
@@ -455,27 +418,26 @@ class BootstrapSyncRepository(
                 "inventory" to parsePaginationMeta(inventoryRaw, "inventory"),
                 "customers" to parsePaginationMeta(customersRaw, "customers"),
                 "invoices" to parsePaginationMeta(invoicesRaw, "invoices"),
-                "payment_entries" to parsePaginationMeta(invoicesRaw, "payment_entries"),
-                "activity" to parsePaginationMeta(activityRaw, "activity")
+                "payment_entries" to parsePaginationMeta(invoicesRaw, "payment_entries")
             ),
             fetchedCounts = mapOf(
                 "inventory" to mergedData.inventoryItems.size,
                 "customers" to mergedData.customers.size,
                 "invoices" to mergedData.invoices.size,
                 "payment_entries" to mergedData.paymentEntries.size,
-                "inventory_alerts" to mergedData.inventoryAlerts.size,
-                "activity" to mergedData.activityEvents.size
+                "inventory_alerts" to mergedData.inventoryAlerts.size
             ),
             pagingDebug = mapOf(
                 "inventory" to inventoryFetch.debug,
                 "customers" to customersFetch.debug,
                 "invoices" to invoicesFetch.debug,
-                "payment_entries" to paymentEntriesFetch.debug,
-                "activity" to activityFetch.debug
+                "payment_entries" to paymentEntriesFetch.debug
             )
         )
 
-        return Snapshot(raw = JsonObject(normalizedRaw), data = mergedData)
+        val snapshot = Snapshot(raw = JsonObject(normalizedRaw), data = mergedData)
+        logSnapshotOverview(snapshot)
+        return snapshot
     }
 
     private fun buildSectionObject(
@@ -575,18 +537,15 @@ class BootstrapSyncRepository(
             }
         }
 
-        val meta = parsePaginationMeta(firstRaw, sectionKey)
-        if (meta == null) {
-            return PagedFetchResult(
-                items = baseItems,
-                debug = buildJsonObject {
-                    put("enabled", JsonPrimitive(false))
-                    put("reason", JsonPrimitive("missing_pagination"))
-                    put("first_count", JsonPrimitive(firstItems.size))
-                    put("first_unique", JsonPrimitive(baseItems.size))
-                }
-            )
-        }
+        val meta = parsePaginationMeta(firstRaw, sectionKey) ?: return PagedFetchResult(
+            items = baseItems,
+            debug = buildJsonObject {
+                put("enabled", JsonPrimitive(false))
+                put("reason", JsonPrimitive("missing_pagination"))
+                put("first_count", JsonPrimitive(firstItems.size))
+                put("first_unique", JsonPrimitive(baseItems.size))
+            }
+        )
         val targetTotal = meta.total.takeIf { it > 0 }
         val shouldFetchMore =
             (targetTotal != null && baseItems.size < targetTotal) || meta.hasMore == true
@@ -739,14 +698,20 @@ class BootstrapSyncRepository(
     }
 
     suspend fun persistSection(snapshot: Snapshot, section: Section) {
+        val payloadCount = sectionPayloadCount(snapshot, section)
+        AppLogger.info(
+            "BootstrapSyncRepository.persistSection start ${section.name} " +
+                "(items=$payloadCount)"
+        )
         when (section) {
-            Section.CACHE_RAW -> persistRawSnapshot(snapshot)
             Section.POS_PROFILES -> persistPosProfiles(snapshot)
             Section.COMPANY -> persistCompany(snapshot)
             Section.STOCK_SETTINGS -> persistStockSettings(snapshot)
             Section.EXCHANGE_RATES -> persistExchangeRates(snapshot)
             Section.PAYMENT_TERMS -> persistPaymentTerms(snapshot)
             Section.DELIVERY_CHARGES -> persistDeliveryCharges(snapshot)
+            Section.SUPPLIERS -> persistSuppliers(snapshot)
+            Section.COMPANY_ACCOUNTS -> persistCompanyAccounts(snapshot)
             Section.CUSTOMER_GROUPS -> persistCustomerGroups(snapshot)
             Section.TERRITORIES -> persistTerritories(snapshot)
             Section.CATEGORIES -> persistCategories(snapshot)
@@ -755,12 +720,61 @@ class BootstrapSyncRepository(
             Section.INVOICES -> persistInvoices(snapshot)
             Section.PAYMENT_ENTRIES -> persistPaymentEntriesSnapshot(snapshot)
             Section.INVENTORY_ALERTS -> persistInventoryAlertsSnapshot(snapshot)
-            Section.ACTIVITY_EVENTS -> persistActivityEventsSnapshot(snapshot)
+            Section.ACTIVITY_EVENTS -> Unit
         }
+        AppLogger.info(
+            "BootstrapSyncRepository.persistSection done ${section.name} " +
+                "(items=$payloadCount)"
+        )
     }
 
-    private suspend fun persistRawSnapshot(snapshot: Snapshot) {
-        configurationStore.saveRaw(KEY_BOOTSTRAP_RAW, snapshot.raw.toString())
+    private fun logSnapshotOverview(snapshot: Snapshot) {
+        val data = snapshot.data
+        AppLogger.info(
+            "BootstrapSyncRepository.fetchSnapshot payload counts: " +
+                "context=${if (data.context != null) 1 else 0}, " +
+                "pos_profiles=${data.posProfiles.size}, " +
+                "payment_methods=${data.paymentMethods?.size ?: 0}, " +
+                "payment_modes=${data.paymentModes?.size ?: 0}, " +
+                "companies=${data.resolvedCompanies.size}, " +
+                "exchange_rates=${if (data.exchangeRates != null) 1 else 0}, " +
+                "payment_terms=${data.paymentTerms.size}, " +
+                "delivery_charges=${data.deliveryCharges.size}, " +
+                "suppliers=${data.suppliers.size}, " +
+                "company_accounts=${data.companyAccounts.size}, " +
+                "customer_groups=${data.customerGroups.size}, " +
+                "territories=${data.territories.size}, " +
+                "categories=${data.categories.size}, " +
+                "inventory_items=${data.inventoryItems.size}, " +
+                "customers=${data.customers.size}, " +
+                "invoices=${data.invoices.size}, " +
+                "payment_entries=${data.paymentEntries.size}, " +
+                "inventory_alerts=${data.inventoryAlerts.size}, " +
+                "activity_events=${data.activityEvents.size}"
+        )
+    }
+
+    private fun sectionPayloadCount(snapshot: Snapshot, section: Section): Int {
+        val data = snapshot.data
+        return when (section) {
+            Section.POS_PROFILES -> data.posProfiles.size
+            Section.COMPANY -> data.resolvedCompanies.size
+            Section.STOCK_SETTINGS -> if (data.stockSettings != null) 1 else 0
+            Section.EXCHANGE_RATES -> if (data.exchangeRates != null) 1 else 0
+            Section.PAYMENT_TERMS -> data.paymentTerms.size
+            Section.DELIVERY_CHARGES -> data.deliveryCharges.size
+            Section.SUPPLIERS -> data.suppliers.size
+            Section.COMPANY_ACCOUNTS -> data.companyAccounts.size
+            Section.CUSTOMER_GROUPS -> data.customerGroups.size
+            Section.TERRITORIES -> data.territories.size
+            Section.CATEGORIES -> data.categories.size
+            Section.INVENTORY_ITEMS -> data.inventoryItems.size
+            Section.CUSTOMERS -> data.customers.size
+            Section.INVOICES -> data.invoices.size
+            Section.PAYMENT_ENTRIES -> data.paymentEntries.size
+            Section.INVENTORY_ALERTS -> data.inventoryAlerts.size
+            Section.ACTIVITY_EVENTS -> data.activityEvents.size
+        }
     }
 
     private suspend fun persistPosProfiles(snapshot: Snapshot) {
@@ -853,6 +867,26 @@ class BootstrapSyncRepository(
         val labels = entities.map { it.label }.ifEmpty { listOf("__empty__") }
         deliveryChargeLocalSource.hardDeleteDeletedMissing(labels)
         deliveryChargeLocalSource.softDeleteMissing(labels)
+    }
+
+    private suspend fun persistSuppliers(snapshot: Snapshot) {
+        val entities = snapshot.data.suppliers.map { it.toEntity() }
+        if (entities.isNotEmpty()) {
+            supplierLocalSource.insertAll(entities)
+        }
+        val names = entities.map { it.name }.ifEmpty { listOf("__empty__") }
+        supplierLocalSource.hardDeleteDeletedMissing(names)
+        supplierLocalSource.softDeleteMissing(names)
+    }
+
+    private suspend fun persistCompanyAccounts(snapshot: Snapshot) {
+        val entities = snapshot.data.companyAccounts.map { it.toEntity() }
+        if (entities.isNotEmpty()) {
+            companyAccountLocalSource.insertAll(entities)
+        }
+        val names = entities.map { it.name }.ifEmpty { listOf("__empty__") }
+        companyAccountLocalSource.hardDeleteDeletedMissing(names)
+        companyAccountLocalSource.softDeleteMissing(names)
     }
 
     private suspend fun persistCustomerGroups(snapshot: Snapshot) {
@@ -967,13 +1001,71 @@ class BootstrapSyncRepository(
     }
 
     private suspend fun persistPaymentEntriesSnapshot(snapshot: Snapshot) {
-        val entries = api.json.encodeToString(snapshot.data.paymentEntries)
-        configurationStore.saveRaw(KEY_BOOTSTRAP_PAYMENT_ENTRIES, entries)
+        val payments = buildInvoicePaymentRowsFromPaymentEntries(snapshot.data.paymentEntries)
+        val remoteEntryNames = payments
+            .mapNotNull { it.remotePaymentEntry?.trim()?.takeIf { value -> value.isNotBlank() } }
+            .distinct()
+        if (remoteEntryNames.isNotEmpty()) {
+            invoiceLocalSource.deleteRemotePaymentsByRemoteEntries(remoteEntryNames)
+        }
+        if (payments.isNotEmpty()) {
+            invoiceLocalSource.upsertPayments(payments)
+        }
         savePersistedCount(
             section = "payment_entries",
             fetched = snapshot.data.paymentEntries.size,
-            persisted = snapshot.data.paymentEntries.size
+            persisted = payments.size
         )
+    }
+
+    private suspend fun buildInvoicePaymentRowsFromPaymentEntries(
+        entries: List<PaymentEntryDto>
+    ): List<POSInvoicePaymentEntity> {
+        if (entries.isEmpty()) return emptyList()
+
+        val existingInvoiceCache = mutableMapOf<String, Boolean>()
+
+        suspend fun invoiceExists(invoiceName: String): Boolean {
+            existingInvoiceCache[invoiceName]?.let { return it }
+            val exists = invoiceLocalSource.getInvoiceByName(invoiceName) != null
+            existingInvoiceCache[invoiceName] = exists
+            return exists
+        }
+
+        val rows = mutableListOf<POSInvoicePaymentEntity>()
+        for (entry in entries) {
+            val remotePaymentEntry = entry.name?.trim()?.takeIf { it.isNotBlank() } ?: continue
+            val modeOfPayment = entry.modeOfPayment?.trim()?.takeIf { it.isNotBlank() } ?: continue
+            val postingDate = entry.postingDate?.trim()?.takeIf { it.isNotBlank() }
+            val paymentCurrency = entry.paidToAccountCurrency
+                ?.trim()
+                ?.takeIf { it.isNotBlank() }
+                ?: entry.paidFromAccountCurrency?.trim()?.takeIf { it.isNotBlank() }
+
+            entry.references.forEach { reference ->
+                if (!reference.referenceDoctype.equals("Sales Invoice", ignoreCase = true)) return@forEach
+                val invoiceName = reference.referenceName?.trim()?.takeIf { it.isNotBlank() } ?: return@forEach
+                if (!invoiceExists(invoiceName)) return@forEach
+
+                val allocatedAmount = reference.allocatedAmount
+                if (allocatedAmount == 0.0) return@forEach
+
+                rows += POSInvoicePaymentEntity(
+                    parentInvoice = invoiceName,
+                    modeOfPayment = modeOfPayment,
+                    amount = allocatedAmount,
+                    enteredAmount = allocatedAmount,
+                    paymentCurrency = paymentCurrency,
+                    exchangeRate = 1.0,
+                    paymentReference = remotePaymentEntry,
+                    remotePaymentEntry = remotePaymentEntry,
+                    paymentDate = postingDate,
+                    posOpeningEntry = null,
+                    syncStatus = "Synced"
+                )
+            }
+        }
+        return rows
     }
 
     private suspend fun persistInventoryAlertsSnapshot(snapshot: Snapshot) {
@@ -983,16 +1075,6 @@ class BootstrapSyncRepository(
             section = "inventory_alerts",
             fetched = snapshot.data.inventoryAlerts.size,
             persisted = snapshot.data.inventoryAlerts.size
-        )
-    }
-
-    private suspend fun persistActivityEventsSnapshot(snapshot: Snapshot) {
-        val events = api.json.encodeToString(snapshot.data.activityEvents)
-        configurationStore.saveRaw(KEY_BOOTSTRAP_ACTIVITY_EVENTS, events)
-        savePersistedCount(
-            section = "activity",
-            fetched = snapshot.data.activityEvents.size,
-            persisted = snapshot.data.activityEvents.size
         )
     }
 

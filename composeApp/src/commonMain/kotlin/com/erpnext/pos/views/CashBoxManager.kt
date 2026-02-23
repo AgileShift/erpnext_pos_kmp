@@ -79,6 +79,7 @@ data class POSContext(
     val applyDiscountOn: String?,
     val currency: String,
     val partyAccountCurrency: String,
+    val monthlySalesTarget: Double?,
     val defaultReceivableAccount: String?,
     val defaultReceivableAccountCurrency: String?,
     val exchangeRate: Double,
@@ -347,6 +348,7 @@ class CashBoxManager(
         entry: POSProfileSimpleBO,
         amounts: List<PaymentModeWithAmount>
     ): POSContext? = withContext(Dispatchers.IO) {
+        val bootstrapContext = bootstrapContextPreferences.load()
         val isOnline = networkMonitor.isConnected.firstOrNull() == true
         if (isOnline && !sessionRefresher.ensureValidSession()) {
             AppLogger.warn("openCashBox: invalid session, aborting")
@@ -401,6 +403,7 @@ class CashBoxManager(
                 paymentModes = paymentModes,
                 cashier = user.toBO(),
                 partyAccountCurrency = company?.defaultCurrency ?: profile.currency,
+                monthlySalesTarget = bootstrapContext.monthlySalesTarget,
                 defaultReceivableAccount = company?.defaultReceivableAccount,
                 defaultReceivableAccountCurrency = company?.defaultReceivableAccountCurrency,
             )
@@ -508,6 +511,7 @@ class CashBoxManager(
             paymentModes = paymentModes,
             cashier = user.toBO(),
             partyAccountCurrency = profile.currency,
+            monthlySalesTarget = bootstrapContext.monthlySalesTarget,
             defaultReceivableAccount = company?.defaultReceivableAccount,
             defaultReceivableAccountCurrency = company?.defaultReceivableAccountCurrency,
         )
@@ -527,7 +531,8 @@ class CashBoxManager(
             ?.openingEntryId
         bootstrapContextPreferences.update(
             profileName = ctx.profileName,
-            posOpeningEntry = opening
+            posOpeningEntry = opening,
+            monthlySalesTarget = ctx.monthlySalesTarget
         )
     }
 
@@ -1019,6 +1024,7 @@ class CashBoxManager(
             allowedCurrencies = allowedCurrencies,
             paymentModes = paymentModes,
             partyAccountCurrency = company?.defaultCurrency ?: profile.currency,
+            monthlySalesTarget = bootstrapContextPreferences.load().monthlySalesTarget,
             defaultReceivableAccount = company?.defaultReceivableAccount,
             defaultReceivableAccountCurrency = company?.defaultReceivableAccountCurrency
         )
@@ -1370,6 +1376,7 @@ class CashBoxManager(
                     name = method.mopName,
                     modeOfPayment = method.mopName,
                     account = method.account,
+                    currency = method.currency,
                     type = method.type,
                     allowInReturns = method.allowInReturns,
                 )

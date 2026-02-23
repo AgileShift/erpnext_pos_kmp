@@ -45,6 +45,8 @@ val iosModule = module {
     single { get<AppDatabase>().territoryDao() }
     single { get<AppDatabase>().contactDao() }
     single { get<AppDatabase>().addressDao() }
+    single { get<AppDatabase>().supplierDao() }
+    single { get<AppDatabase>().companyAccountDao() }
 
     // single<AuthNavigator> { IosAuthNavigator() }
 }

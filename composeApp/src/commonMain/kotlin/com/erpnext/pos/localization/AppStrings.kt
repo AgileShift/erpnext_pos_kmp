@@ -651,7 +651,7 @@ object AppStringsFactory {
             paymentEntry = "Entrada de pago",
             settings = "Configuracion",
             expenses = "Gastos",
-            activity = "Actividad",
+            activity = "Notificaciones y Actividad",
             openCashbox = "Abrir caja",
         ),
         reconciliation = ReconciliationStrings(

@@ -20,6 +20,9 @@ interface SalesInvoiceDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertPayments(payments: List<POSInvoicePaymentEntity>)
 
+    @Query("DELETE FROM tabSalesInvoicePayment WHERE remote_payment_entry IN (:remotePaymentEntries)")
+    suspend fun deleteByRemotePaymentEntries(remotePaymentEntries: List<String>)
+
     @Query("SELECT * FROM tabSalesInvoicePayment WHERE parent_invoice = :invoiceName")
     suspend fun getPaymentsForInvoice(invoiceName: String): List<POSInvoicePaymentEntity>
 

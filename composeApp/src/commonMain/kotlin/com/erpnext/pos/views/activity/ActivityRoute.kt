@@ -19,7 +19,6 @@ fun ActivityRoute(
         onFilterChange = viewModel::setFilter,
         onMarkRead = viewModel::markRead,
         onMarkAllRead = viewModel::markAllRead,
-        onSyncNow = viewModel::syncNow
     )
 }
 

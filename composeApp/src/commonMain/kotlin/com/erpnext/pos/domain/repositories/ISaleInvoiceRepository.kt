@@ -36,7 +36,6 @@ interface ISaleInvoiceRepository {
     suspend fun fetchRemoteInvoices(): List<SalesInvoiceDto>
 
     suspend fun createRemoteInvoice(invoice: SalesInvoiceDto): SalesInvoiceDto
-    suspend fun updateRemoteInvoice(invoiceName: String, invoice: SalesInvoiceDto): SalesInvoiceDto
     suspend fun deleteRemoteInvoice(invoiceId: String)
 
     suspend fun syncPendingInvoices()
