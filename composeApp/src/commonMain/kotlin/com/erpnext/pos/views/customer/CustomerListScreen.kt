@@ -14,13 +14,26 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
-import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -30,14 +43,83 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Note
 import androidx.compose.material.icons.automirrored.filled.ReceiptLong
-import androidx.compose.material.icons.filled.*
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Badge
+import androidx.compose.material.icons.filled.Business
+import androidx.compose.material.icons.filled.Call
+import androidx.compose.material.icons.filled.Clear
+import androidx.compose.material.icons.filled.ConfirmationNumber
+import androidx.compose.material.icons.filled.Email
+import androidx.compose.material.icons.filled.Error
+import androidx.compose.material.icons.filled.Group
+import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.Money
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.People
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.PersonAdd
+import androidx.compose.material.icons.filled.Phone
+import androidx.compose.material.icons.filled.Place
+import androidx.compose.material.icons.filled.Remove
+import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Sell
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.AssistChip
+import androidx.compose.material3.AssistChipDefaults
+import androidx.compose.material3.BottomSheetDefaults
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuAnchorType
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
+import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.ListItem
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.PrimaryScrollableTabRow
+import androidx.compose.material3.PrimaryTabRow
+import androidx.compose.material3.RadioButton
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Tab
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TextFieldDefaults
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -47,11 +129,16 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import androidx.paging.LoadState
+import androidx.paging.PagingData
+import androidx.paging.compose.collectAsLazyPagingItems
 import coil3.compose.AsyncImage
 import coil3.compose.LocalPlatformContext
 import coil3.request.ImageRequest
@@ -61,33 +148,33 @@ import com.erpnext.pos.domain.models.CustomerBO
 import com.erpnext.pos.domain.models.CustomerCounts
 import com.erpnext.pos.domain.models.CustomerQuickActionType
 import com.erpnext.pos.domain.models.POSPaymentModeOption
-import com.erpnext.pos.domain.models.SalesInvoiceBO
-import com.erpnext.pos.domain.models.ReturnPolicySettings
 import com.erpnext.pos.domain.models.ReturnDestinationPolicy
+import com.erpnext.pos.domain.models.ReturnPolicySettings
+import com.erpnext.pos.domain.models.SalesInvoiceBO
 import com.erpnext.pos.domain.usecases.CreateCustomerInput
 import com.erpnext.pos.domain.usecases.InvoiceCancellationAction
 import com.erpnext.pos.localSource.entities.SalesInvoiceWithItemsAndPayments
 import com.erpnext.pos.localization.LocalAppStrings
 import com.erpnext.pos.utils.CurrencyService
 import com.erpnext.pos.utils.QuickActions.customerQuickActions
-import com.erpnext.pos.utils.formatDoubleToString
 import com.erpnext.pos.utils.formatCurrency
+import com.erpnext.pos.utils.formatDoubleToString
 import com.erpnext.pos.utils.normalizeCurrency
-import com.erpnext.pos.utils.roundForCurrency
-import com.erpnext.pos.utils.resolveInvoiceDisplayAmounts
-import com.erpnext.pos.utils.resolveCompanyToTargetAmount
-import com.erpnext.pos.utils.resolvePaymentCurrencyForMode
-import com.erpnext.pos.utils.view.SnackbarController
-import com.erpnext.pos.utils.view.SnackbarType
 import com.erpnext.pos.utils.oauth.bd
 import com.erpnext.pos.utils.oauth.moneyScale
 import com.erpnext.pos.utils.oauth.toDouble
+import com.erpnext.pos.utils.resolveCompanyToTargetAmount
+import com.erpnext.pos.utils.resolveInvoiceDisplayAmounts
+import com.erpnext.pos.utils.resolvePaymentCurrencyForMode
 import com.erpnext.pos.utils.roundToCurrency
 import com.erpnext.pos.utils.toCurrencySymbol
+import com.erpnext.pos.utils.view.SnackbarController
 import com.erpnext.pos.utils.view.SnackbarPosition
+import com.erpnext.pos.utils.view.SnackbarType
 import com.erpnext.pos.views.CashBoxManager
 import com.erpnext.pos.views.billing.AppTextField
 import com.erpnext.pos.views.billing.MoneyTextField
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.launch
 import kotlinx.datetime.DatePeriod
 import kotlinx.datetime.LocalDate
@@ -102,10 +189,14 @@ import kotlin.time.ExperimentalTime
 @Composable
 fun CustomerListScreen(
     state: CustomerState,
+    customersPagingFlow: Flow<PagingData<CustomerBO>>,
+    outstandingInvoicesPagingFlow: Flow<PagingData<SalesInvoiceBO>>,
+    historyInvoicesPagingFlow: Flow<PagingData<SalesInvoiceBO>>,
     invoicesState: CustomerInvoicesState,
     paymentState: CustomerPaymentState,
     historyState: CustomerInvoiceHistoryState,
     historyMessage: String?,
+    returnInfoMessage: String?,
     historyBusy: Boolean,
     customerMessage: String?,
     dialogDataState: CustomerDialogDataState,
@@ -137,18 +228,20 @@ fun CustomerListScreen(
         )).map { normalizeCurrency(it) }.distinct()
         merged.ifEmpty { listOf(posCurrency) }
     }
-    val customers = if (state is CustomerState.Success) {
-        state.customers.sortedWith(compareByDescending<CustomerBO> {
-            val pendingAmount = it.totalPendingAmount ?: it.currentBalance ?: 0.0
-            (it.pendingInvoices ?: 0) > 0 || pendingAmount > 0.0
-        }.thenByDescending { it.totalPendingAmount ?: it.currentBalance ?: 0.0 }
-            .thenBy { it.customerName })
-    } else emptyList()
+    val customersPagingItems = customersPagingFlow.collectAsLazyPagingItems()
+    val outstandingInvoicesPagingItems = outstandingInvoicesPagingFlow.collectAsLazyPagingItems()
+    val historyInvoicesPagingItems = historyInvoicesPagingFlow.collectAsLazyPagingItems()
     var baseCounts by remember { mutableStateOf(CustomerCounts(0, 0)) }
     val isDesktop = getPlatformName() == "Desktop"
+    val customerListState = rememberLazyListState()
+    val showBackToTop by remember {
+        derivedStateOf { customerListState.firstVisibleItemIndex > 0 }
+    }
 
+    val hasCustomersLoaded =
+        customersPagingItems.itemCount > 0 || customersPagingItems.loadState.refresh is LoadState.Loading
     val filterElevation by animateDpAsState(
-        targetValue = if (customers.isNotEmpty()) 4.dp else 0.dp, label = "filterElevation"
+        targetValue = if (hasCustomersLoaded) 4.dp else 0.dp, label = "filterElevation"
     )
 
 
@@ -159,9 +252,9 @@ fun CustomerListScreen(
     }
     LaunchedEffect(state, searchQuery, selectedState) {
         if (searchQuery.isEmpty() && selectedState == "Todos" && state is CustomerState.Success) {
-            val pending = state.customers.count { (it.pendingInvoices ?: 0) > 0 }
             baseCounts = CustomerCounts(
-                total = state.customers.size, pending = pending
+                total = state.totalCount,
+                pending = state.pendingCount
             )
         }
     }
@@ -239,9 +332,11 @@ fun CustomerListScreen(
                         pendingCount = baseCounts.pending,
                         onQueryChange = {
                             searchQuery = it
+                            actions.onSearchQueryChanged(it)
                         },
                         onStateChange = {
                             selectedState = it ?: "Todos"
+                            actions.onStateSelected(it ?: "Todos")
                         },
                         modifier = Modifier.padding(horizontal = contentPadding, vertical = 8.dp)
                     )
@@ -272,33 +367,38 @@ fun CustomerListScreen(
                         }
 
                         is CustomerState.Success -> {
-                            val filtered = customers.filter { customer ->
-                                val matchesQuery = customer.customerName.contains(
-                                    searchQuery, ignoreCase = true
-                                ) || (customer.mobileNo ?: "").contains(searchQuery)
-                                val matchesState = when (selectedState) {
-                                    "Pendientes" -> (customer.pendingInvoices
-                                        ?: 0) > 0 || (customer.totalPendingAmount ?: 0.0) > 0.0
+                            val refreshState = customersPagingItems.loadState.refresh
+                            val appendState = customersPagingItems.loadState.append
+                            val isLoading = refreshState is LoadState.Loading
+                            val isEmpty = customersPagingItems.itemCount == 0 && !isLoading
+                            val hasError = refreshState is LoadState.Error || appendState is LoadState.Error
 
-                                    "Sin Pendientes" -> (customer.pendingInvoices
-                                        ?: 0) == 0 && (customer.totalPendingAmount ?: 0.0) <= 0.0
-
-                                    "Todos" -> true
-                                    else -> customer.state.equals(selectedState, ignoreCase = true)
-                                }
-                                matchesQuery && matchesState
-                            }
-
-                            if (filtered.isEmpty()) {
+                            if (hasError) {
+                                val errorMessage = (refreshState as? LoadState.Error)?.error?.message
+                                    ?: (appendState as? LoadState.Error)?.error?.message
+                                    ?: "Error al cargar clientes"
+                                FullScreenErrorMessage(
+                                    errorMessage = errorMessage,
+                                    onRetry = {
+                                        customersPagingItems.refresh()
+                                        actions.fetchAll()
+                                    }
+                                )
+                            } else if (isLoading && customersPagingItems.itemCount == 0) {
+                                CustomerShimmerList()
+                            } else if (isEmpty) {
                                 EmptyStateMessage(
                                     message = if (searchQuery.isEmpty()) strings.customer.emptyCustomers
                                     else strings.customer.emptySearchCustomers,
                                     icon = Icons.Filled.People
                                 )
                             } else {
-                                LaunchedEffect(filtered, isWideLayout) {
-                                    if (isWideLayout && selectedCustomer !in filtered) {
-                                        selectedCustomer = filtered.firstOrNull()
+                                LaunchedEffect(customersPagingItems.itemCount, isWideLayout) {
+                                    if (isWideLayout) {
+                                        val loaded = customersPagingItems.itemSnapshotList.items
+                                        if (selectedCustomer == null || loaded.none { it.name == selectedCustomer?.name }) {
+                                            selectedCustomer = loaded.firstOrNull()
+                                        }
                                     }
                                 }
                                 if (isWideLayout) {
@@ -307,11 +407,13 @@ fun CustomerListScreen(
                                         horizontalArrangement = Arrangement.spacedBy(16.dp)
                                     ) {
                                         Box(modifier = Modifier.weight(0.65f)) {
-                                            CustomerListContent(
-                                                customers = filtered,
+                                            CustomerListPane(
+                                                customers = customersPagingItems,
                                                 posCurrency = posCurrency,
                                                 companyCurrency = companyCurrency,
                                                 cashboxManager = cashboxManager,
+                                                listState = customerListState,
+                                                showBackToTop = showBackToTop,
                                                 isWideLayout = false,
                                                 isDesktop = isDesktop,
                                                 onOpenQuickActions = {
@@ -351,8 +453,11 @@ fun CustomerListScreen(
                                                 onTabChange = { rightPanelTab = it },
                                                 paymentState = paymentState,
                                                 invoicesState = invoicesState,
+                                                outstandingInvoicesPagingItems = outstandingInvoicesPagingItems,
                                                 historyState = historyState,
+                                                historyInvoicesPagingItems = historyInvoicesPagingItems,
                                                 historyMessage = historyMessage,
+                                                returnInfoMessage = returnInfoMessage,
                                                 historyBusy = historyBusy,
                                                 supportedCurrencies = supportedCurrencies,
                                                 cashboxManager = cashboxManager,
@@ -368,6 +473,7 @@ fun CustomerListScreen(
                                                         referenceNumber
                                                     )
                                                 },
+                                                onDownloadInvoicePdf = actions.onDownloadInvoicePdf,
                                                 onInvoiceHistoryAction = { invoiceId, action, reason, refundMode, refundReference, applyRefund ->
                                                     actions.onInvoiceHistoryAction(
                                                         invoiceId,
@@ -384,11 +490,13 @@ fun CustomerListScreen(
                                         }
                                     }
                                 } else {
-                                    CustomerListContent(
-                                        customers = filtered,
+                                    CustomerListPane(
+                                        customers = customersPagingItems,
                                         posCurrency = posCurrency,
                                         companyCurrency = companyCurrency,
                                         cashboxManager = cashboxManager,
+                                        listState = customerListState,
+                                        showBackToTop = showBackToTop,
                                         isWideLayout = isWideLayout,
                                         isDesktop = isDesktop,
                                         onOpenQuickActions = { quickActionsCustomer = it },
@@ -444,6 +552,7 @@ fun CustomerListScreen(
             CustomerOutstandingInvoicesSheet(
                 customer = customer,
                 invoicesState = invoicesState,
+                outstandingInvoicesPagingItems = outstandingInvoicesPagingItems,
                 paymentState = paymentState,
                 onDismiss = {
                     outstandingCustomer = null
@@ -458,13 +567,16 @@ fun CustomerListScreen(
                         enteredCurrency,
                         referenceNumber
                     )
-                })
+                },
+                onDownloadInvoicePdf = actions.onDownloadInvoicePdf
+            )
         }
 
         historyCustomer?.let { customer ->
             CustomerInvoiceHistorySheet(
                 customer = customer,
                 historyState = historyState,
+                historyInvoicesPagingItems = historyInvoicesPagingItems,
                 historyMessage = historyMessage,
                 historyBusy = historyBusy,
                 paymentState = paymentState,
@@ -476,6 +588,7 @@ fun CustomerListScreen(
                         invoiceId, action, reason, refundMode, refundReference, applyRefund
                     )
                 },
+                onDownloadInvoicePdf = actions.onDownloadInvoicePdf,
                 onDismiss = {
                     historyCustomer = null
                     actions.clearInvoiceHistory()
@@ -488,7 +601,7 @@ fun CustomerListScreen(
 
     if (showNewCustomerDialog) {
         NewCustomerDialog(
-            onDismiss = { },
+            onDismiss = { showNewCustomerDialog = false },
             onSubmit = { input -> actions.onCreateCustomer(input) },
             customerGroups = dialogDataState.customerGroups,
             territories = dialogDataState.territories,
@@ -498,12 +611,59 @@ fun CustomerListScreen(
     }
 }
 
+@Composable
+private fun CustomerListPane(
+    customers: androidx.paging.compose.LazyPagingItems<CustomerBO>,
+    posCurrency: String,
+    companyCurrency: String,
+    cashboxManager: CashBoxManager,
+    listState: LazyListState,
+    showBackToTop: Boolean,
+    isWideLayout: Boolean,
+    isDesktop: Boolean,
+    onOpenQuickActions: (CustomerBO) -> Unit,
+    onSelect: (CustomerBO) -> Unit,
+    onQuickAction: (CustomerBO, CustomerQuickActionType) -> Unit
+) {
+    val scope = rememberCoroutineScope()
+    Box(modifier = Modifier.fillMaxSize()) {
+        CustomerListContent(
+            customers = customers,
+            posCurrency = posCurrency,
+            companyCurrency = companyCurrency,
+            cashboxManager = cashboxManager,
+            isWideLayout = isWideLayout,
+            isDesktop = isDesktop,
+            listState = listState,
+            onOpenQuickActions = onOpenQuickActions,
+            onSelect = onSelect,
+            onQuickAction = onQuickAction
+        )
+        if (showBackToTop) {
+            FilledTonalButton(
+                onClick = { scope.launch { listState.animateScrollToItem(0) } },
+                modifier = Modifier.align(Alignment.BottomEnd).padding(end = 52.dp, bottom = 10.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Filled.KeyboardArrowUp,
+                    contentDescription = "Back to top"
+                )
+            }
+        }
+    }
+}
+
 private enum class CustomerPanelTab(val label: String) {
     Details("Resumen"), Pending("Pendientes"), History("Historial")
 }
 
 private enum class CustomerDialogTab(val label: String) {
     Personal("Principal"), Contact("Contacto"), Tax("Impuestos"), Accounting("Contabilidad")
+}
+
+private enum class NicaraguanTaxRegime(val label: String, val hint: String) {
+    Simplified("Régimen simplificado", "0013012120003D"),
+    General("Régimen general", "J0310000000001")
 }
 
 @Composable
@@ -674,10 +834,11 @@ fun SearchTextField(
 
 @Composable
 private fun CustomerListContent(
-    customers: List<CustomerBO>,
+    customers: androidx.paging.compose.LazyPagingItems<CustomerBO>,
     posCurrency: String,
     companyCurrency: String,
     cashboxManager: CashBoxManager,
+    listState: LazyListState,
     isWideLayout: Boolean,
     isDesktop: Boolean,
     onOpenQuickActions: (CustomerBO) -> Unit,
@@ -685,44 +846,47 @@ private fun CustomerListContent(
     onQuickAction: (CustomerBO, CustomerQuickActionType) -> Unit
 ) {
     val spacing = if (isWideLayout) 16.dp else 12.dp
-    if (isWideLayout) {
-        LazyVerticalGrid(
-            columns = GridCells.Adaptive(minSize = 360.dp),
-            modifier = Modifier.fillMaxSize(),
-            verticalArrangement = Arrangement.spacedBy(spacing),
-            horizontalArrangement = Arrangement.spacedBy(spacing),
-            contentPadding = PaddingValues(horizontal = 4.dp, vertical = 8.dp)
-        ) {
-            items(customers, key = { it.name }) { customer ->
-                CustomerItem(
-                    customer = customer,
-                    posCurrency = posCurrency,
-                    companyCurrency = companyCurrency,
-                    isDesktop = isDesktop,
-                    onSelect = onSelect,
-                    onOpenQuickActions = { onOpenQuickActions(customer) },
-                    onQuickAction = { actionType -> onQuickAction(customer, actionType) },
-                    cashboxManager = cashboxManager
-                )
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        state = listState,
+        contentPadding = PaddingValues(horizontal = 0.dp, vertical = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(spacing)
+    ) {
+        items(
+            count = customers.itemCount,
+            key = { index -> customers[index]?.name ?: "customer_list_$index" }
+        ) { index ->
+            val customer = customers[index] ?: return@items
+            CustomerItem(
+                customer = customer,
+                posCurrency = posCurrency,
+                companyCurrency = companyCurrency,
+                isDesktop = isDesktop,
+                onSelect = onSelect,
+                onOpenQuickActions = { onOpenQuickActions(customer) },
+                onQuickAction = { actionType -> onQuickAction(customer, actionType) },
+                cashboxManager = cashboxManager
+            )
+        }
+        if (customers.loadState.append is LoadState.Loading) {
+            item(key = "customers_append_loading") {
+                Box(
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator()
+                }
             }
         }
-    } else {
-        LazyColumn(
-            modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(horizontal = 0.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(spacing)
-        ) {
-            items(customers, key = { it.name }) { customer ->
-                CustomerItem(
-                    customer = customer,
-                    posCurrency = posCurrency,
-                    companyCurrency = companyCurrency,
-                    isDesktop = isDesktop,
-                    onSelect = onSelect,
-                    onOpenQuickActions = { onOpenQuickActions(customer) },
-                    onQuickAction = { actionType -> onQuickAction(customer, actionType) },
-                    cashboxManager = cashboxManager
-                )
+        val appendError = customers.loadState.append as? LoadState.Error
+        if (appendError != null) {
+            item(key = "customers_append_error") {
+                OutlinedButton(
+                    onClick = { customers.retry() },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Reintentar carga")
+                }
             }
         }
     }
@@ -869,10 +1033,10 @@ private fun CustomerDetailPanel(
             }
         }
 
-        if (invoicesState is CustomerInvoicesState.Success && invoicesState.invoices.isNotEmpty()) {
+        if ((customer.totalPendingAmount ?: customer.currentBalance ?: 0.0) > 0.0) {
             CustomerOutstandingSummary(
                 customer = customer,
-                invoices = invoicesState.invoices,
+                invoices = emptyList(),
                 posBaseCurrency = companyCurrency,
                 cashboxManager = cashboxManager
             )
@@ -887,8 +1051,11 @@ private fun CustomerRightPanel(
     onTabChange: (CustomerPanelTab) -> Unit,
     paymentState: CustomerPaymentState,
     invoicesState: CustomerInvoicesState,
+    outstandingInvoicesPagingItems: androidx.paging.compose.LazyPagingItems<SalesInvoiceBO>,
     historyState: CustomerInvoiceHistoryState,
+    historyInvoicesPagingItems: androidx.paging.compose.LazyPagingItems<SalesInvoiceBO>,
     historyMessage: String?,
+    returnInfoMessage: String?,
     historyBusy: Boolean,
     supportedCurrencies: List<String>,
     cashboxManager: CashBoxManager,
@@ -897,6 +1064,7 @@ private fun CustomerRightPanel(
     onRegisterPayment: (
         invoiceId: String, modeOfPayment: String, enteredAmount: Double, enteredCurrency: String, referenceNumber: String
     ) -> Unit,
+    onDownloadInvoicePdf: (String, InvoicePdfActionOption) -> Unit,
     onInvoiceHistoryAction: (
         invoiceId: String,
         action: InvoiceCancellationAction,
@@ -935,6 +1103,22 @@ private fun CustomerRightPanel(
                 }, enabled = enabled, text = { Text(tab.label) })
             }
         }
+        if (rightPanelTab == CustomerPanelTab.Details && !returnInfoMessage.isNullOrBlank()) {
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                shape = RoundedCornerShape(10.dp),
+                color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f)
+            ) {
+                Text(
+                    text = returnInfoMessage,
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                )
+            }
+        }
 
         Box(modifier = Modifier.fillMaxSize()) {
             when (rightPanelTab) {
@@ -962,8 +1146,10 @@ private fun CustomerRightPanel(
                         CustomerOutstandingInvoicesContent(
                             customer = customer,
                             invoicesState = invoicesState,
+                            outstandingInvoicesPagingItems = outstandingInvoicesPagingItems,
                             paymentState = paymentState,
                             onRegisterPayment = onRegisterPayment,
+                            onDownloadInvoicePdf = onDownloadInvoicePdf,
                             modifier = Modifier.fillMaxSize().padding(20.dp)
                         )
                     } else {
@@ -980,6 +1166,7 @@ private fun CustomerRightPanel(
                         CustomerInvoiceHistoryContent(
                             customer = customer,
                             historyState = historyState,
+                            historyInvoicesPagingItems = historyInvoicesPagingItems,
                             historyMessage = historyMessage,
                             historyBusy = historyBusy,
                             paymentState = paymentState,
@@ -987,6 +1174,7 @@ private fun CustomerRightPanel(
                             cashboxManager = cashboxManager,
                             returnPolicy = returnPolicy,
                             onAction = onInvoiceHistoryAction,
+                            onDownloadInvoicePdf = onDownloadInvoicePdf,
                             loadLocalInvoice = loadLocalInvoice,
                             onSubmitPartialReturn = onSubmitPartialReturn,
                             modifier = Modifier.fillMaxSize().padding(20.dp)
@@ -1013,26 +1201,9 @@ private fun CustomerPanelHeader(
     baseCurrency: String
 ) {
     val companyCurrency = normalizeCurrency(baseCurrency)
-    val pendingInvoices = remember(invoicesState) {
-        if (invoicesState is CustomerInvoicesState.Success) {
-            filterPendingInvoices(invoicesState.invoices)
-        } else {
-            emptyList()
-        }
-    }
-    val pendingCount = if (pendingInvoices.isNotEmpty()) {
-        pendingInvoices.size
-    } else {
-        customer?.pendingInvoices ?: 0
-    }
-    val invoiceCurrency = normalizeCurrency(pendingInvoices.firstOrNull()?.currency)
-    val pendingCompanyAmount = if (pendingInvoices.isNotEmpty()) {
-        pendingInvoices.sumOf {
-            resolveInvoiceDisplayAmounts(it, companyCurrency).outstandingCompany
-        }
-    } else {
-        customer?.totalPendingAmount ?: customer?.currentBalance ?: 0.0
-    }
+    val pendingCount = customer?.pendingInvoices ?: 0
+    val invoiceCurrency = companyCurrency
+    val pendingCompanyAmount = customer?.totalPendingAmount ?: customer?.currentBalance ?: 0.0
 
     val pendingCompany =
         bd(customer?.totalPendingAmount ?: customer?.currentBalance ?: 0.0).toDouble(2)
@@ -1148,396 +1319,779 @@ private fun NewCustomerDialog(
     var territoryExpanded by remember { mutableStateOf(false) }
     var paymentExpanded by remember { mutableStateOf(false) }
     var companyExpanded by remember { mutableStateOf(false) }
+    var rucRegionExpanded by remember { mutableStateOf(false) }
+    var phoneRegionExpanded by remember { mutableStateOf(false) }
+    var niTaxRegimeExpanded by remember { mutableStateOf(false) }
     var selectedTab by rememberSaveable { mutableStateOf(CustomerDialogTab.Personal) }
-    val isValid = name.isNotBlank() && (!isInternalCustomer || internalCompany.isNotBlank())
+    var niTaxRegime by rememberSaveable { mutableStateOf(NicaraguanTaxRegime.General.name) }
+    var submitAttempted by rememberSaveable { mutableStateOf(false) }
+    val regionOptions = remember { customerRegionOptions() }
+    val defaultRegionCode = remember(companies) {
+        resolveRegionCodeFromCountry(companies.firstOrNull()?.country)
+    }
+    var rucRegionCode by rememberSaveable { mutableStateOf(defaultRegionCode) }
+    var phoneRegionCode by rememberSaveable { mutableStateOf(defaultRegionCode) }
+    val selectedRucRegion = remember(rucRegionCode, regionOptions) {
+        regionOptions.firstOrNull { it.code == rucRegionCode } ?: regionOptions.first()
+    }
+    val selectedPhoneRegion = remember(phoneRegionCode, regionOptions) {
+        regionOptions.firstOrNull { it.code == phoneRegionCode } ?: regionOptions.first()
+    }
+    val selectedNicaraguanTaxRegime = remember(niTaxRegime) {
+        NicaraguanTaxRegime.entries.firstOrNull { it.name == niTaxRegime }
+            ?: NicaraguanTaxRegime.General
+    }
+    val taxIdentifierHint = remember(rucRegionCode, selectedRucRegion, selectedNicaraguanTaxRegime) {
+        if (rucRegionCode == "NI") {
+            selectedNicaraguanTaxRegime.hint
+        } else {
+            selectedRucRegion.taxIdHint
+        }
+    }
+    val creditCurrency = remember(companies, internalCompany, isInternalCustomer) {
+        val selectedCompany = if (isInternalCustomer && internalCompany.isNotBlank()) {
+            companies.firstOrNull { it.company.equals(internalCompany, ignoreCase = true) }
+        } else {
+            companies.firstOrNull()
+        }
+        normalizeCurrency(selectedCompany?.defaultCurrency)
+    }
+    val emailTrimmed = email.trim()
+    val emailInvalid = emailTrimmed.isNotBlank() && !isValidEmailAddress(emailTrimmed)
+    val creditInvalid = creditLimit.isNotBlank() && creditLimit.toDoubleOrNull() == null
+    val nameInvalid = submitAttempted && name.isBlank()
+    val internalCompanyInvalid = submitAttempted && isInternalCustomer && internalCompany.isBlank()
+    val isValid = name.isNotBlank() &&
+        (!isInternalCustomer || internalCompany.isNotBlank()) &&
+        !emailInvalid &&
+        !creditInvalid
+    val requiredCompleted = buildList {
+        add(name.isNotBlank())
+        add(!isInternalCustomer || internalCompany.isNotBlank())
+    }.count { it }
+    val tabBodyMinHeight = 380.dp
+    val tabBodyMaxHeight = 560.dp
+    val tabScrollState = rememberScrollState()
+    val personalNameFocusRequester = remember { FocusRequester() }
+    val contactMobileFocusRequester = remember { FocusRequester() }
+    val taxIdFocusRequester = remember { FocusRequester() }
+    val creditLimitFocusRequester = remember { FocusRequester() }
+
+    LaunchedEffect(selectedTab) {
+        tabScrollState.scrollTo(0)
+        kotlinx.coroutines.delay(90)
+        when (selectedTab) {
+            CustomerDialogTab.Personal -> personalNameFocusRequester.requestFocus()
+            CustomerDialogTab.Contact -> contactMobileFocusRequester.requestFocus()
+            CustomerDialogTab.Tax -> taxIdFocusRequester.requestFocus()
+            CustomerDialogTab.Accounting -> creditLimitFocusRequester.requestFocus()
+        }
+    }
+
+    @Composable
+    fun AppTextField(
+        value: String,
+        onValueChange: (String) -> Unit,
+        label: String,
+        modifier: Modifier = Modifier,
+        placeholder: String? = null,
+        singleLine: Boolean = true,
+        enabled: Boolean = true,
+        readOnly: Boolean = false,
+        isError: Boolean = false,
+        supportingText: (@Composable () -> Unit)? = null,
+        keyboardOptions: KeyboardOptions = KeyboardOptions.Default,
+        keyboardActions: KeyboardActions = KeyboardActions.Default,
+        leadingIcon: (@Composable () -> Unit)? = null,
+        trailingIcon: (@Composable () -> Unit)? = null,
+    ) {
+        CustomerDialogField(
+            value = value,
+            onValueChange = onValueChange,
+            label = label,
+            modifier = modifier,
+            placeholder = placeholder,
+            singleLine = singleLine,
+            enabled = enabled,
+            readOnly = readOnly,
+            isError = isError,
+            supportingText = supportingText,
+            keyboardOptions = keyboardOptions,
+            keyboardActions = keyboardActions,
+            leadingIcon = leadingIcon,
+            trailingIcon = trailingIcon
+        )
+    }
 
     Dialog(onDismissRequest = onDismiss) {
         Surface(
-            shape = RoundedCornerShape(20.dp),
-            tonalElevation = 2.dp,
-            color = MaterialTheme.colorScheme.surface
+            shape = RoundedCornerShape(24.dp),
+            tonalElevation = 3.dp,
+            color = MaterialTheme.colorScheme.surface,
+            modifier = Modifier
+                .fillMaxWidth(0.92f)
+                .widthIn(min = 360.dp, max = 900.dp)
+                .heightIn(min = 700.dp, max = 700.dp)
         ) {
             Column(
-                modifier = Modifier.fillMaxWidth().padding(20.dp)
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(20.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                Text(
-                    text = "Nuevo cliente",
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.SemiBold
-                )
-                Spacer(Modifier.height(8.dp))
+                Surface(
+                    shape = RoundedCornerShape(18.dp),
+                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.18f))
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.16f)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.PersonAdd,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.padding(10.dp)
+                            )
+                        }
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Nuevo cliente",
+                                style = MaterialTheme.typography.titleLarge,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Text(
+                                text = "Completa la ficha para registrar rápidamente.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Surface(
+                            shape = RoundedCornerShape(999.dp),
+                            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.8f)
+                        ) {
+                            Text(
+                                text = "Requeridos $requiredCompleted/2",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                            )
+                        }
+                    }
+                }
                 PrimaryTabRow(selectedTabIndex = selectedTab.ordinal) {
                     CustomerDialogTab.entries.forEachIndexed { index, tab ->
                         Tab(
                             selected = selectedTab.ordinal == index,
                             onClick = { selectedTab = tab },
-                            text = { Text(tab.label) })
+                            text = {
+                                Text(
+                                    text = tab.label,
+                                    fontWeight = if (selectedTab.ordinal == index) FontWeight.SemiBold else FontWeight.Normal
+                                )
+                            })
                     }
                 }
-                Spacer(Modifier.height(12.dp))
-                val scrollState = rememberScrollState()
-                Column(
-                    modifier = Modifier.fillMaxWidth().heightIn(max = 520.dp).padding(end = 4.dp)
-                        .verticalScroll(scrollState),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                Surface(
+                    shape = RoundedCornerShape(18.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.18f),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.65f)),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f)
                 ) {
-                    when (selectedTab) {
-                        CustomerDialogTab.Personal -> {
-                            AppTextField(
-                                value = name,
-                                onValueChange = { name = it },
-                                label = "Nombre del cliente",
-                                placeholder = "Cliente S.A.",
-                                leadingIcon = {
-                                    Icon(
-                                        Icons.Default.Person, contentDescription = null
-                                    )
-                                },
-                                modifier = Modifier.fillMaxWidth()
-                            )
-                            ExposedDropdownMenuBox(
-                                expanded = typeExpanded, onExpandedChange = { typeExpanded = it }) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .heightIn(min = tabBodyMinHeight, max = tabBodyMaxHeight)
+                            .padding(start = 12.dp, end = 8.dp, top = 12.dp, bottom = 12.dp)
+                            .verticalScroll(tabScrollState),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        when (selectedTab) {
+                            CustomerDialogTab.Personal -> {
                                 AppTextField(
-                                    value = customerType,
-                                    onValueChange = {},
-                                    label = "Tipo de cliente",
-                                    placeholder = "Seleccionar",
-                                    modifier = Modifier.menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable)
-                                        .fillMaxWidth(),
+                                    value = name,
+                                    onValueChange = { name = it },
+                                    label = "Nombre del cliente",
+                                    placeholder = "Cliente S.A.",
+                                    keyboardOptions = KeyboardOptions(
+                                        capitalization = KeyboardCapitalization.Words,
+                                        imeAction = ImeAction.Next
+                                    ),
+                                    isError = nameInvalid,
+                                    supportingText = if (nameInvalid) {
+                                        {
+                                            Text(
+                                                text = "El nombre es obligatorio.",
+                                                style = MaterialTheme.typography.labelSmall
+                                            )
+                                        }
+                                    } else {
+                                        null
+                                    },
                                     leadingIcon = {
                                         Icon(
-                                            Icons.Default.Badge, contentDescription = null
+                                            Icons.Default.Person, contentDescription = null
                                         )
                                     },
-                                    trailingIcon = {
-                                        ExposedDropdownMenuDefaults.TrailingIcon(expanded = typeExpanded)
-                                    })
-                                ExposedDropdownMenu(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .focusRequester(personalNameFocusRequester)
+                                )
+                                ExposedDropdownMenuBox(
                                     expanded = typeExpanded,
-                                    onDismissRequest = { typeExpanded = false }) {
-                                    listOf("Individual", "Empresa").forEach { option ->
-                                        DropdownMenuItem(text = { Text(option) }, onClick = {
-                                            customerType = option
-                                            typeExpanded = false
-                                        })
-                                    }
-                                }
-                            }
-                            if (customerGroups.isNotEmpty()) {
-                                ExposedDropdownMenuBox(
-                                    expanded = groupExpanded,
-                                    onExpandedChange = { groupExpanded = it }) {
-                                    AppTextField(
-                                        value = customerGroup,
-                                        onValueChange = {},
-                                        label = "Grupo de cliente",
-                                        placeholder = "Seleccionar",
-                                        modifier = Modifier.menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable)
-                                            .fillMaxWidth(),
-                                        leadingIcon = {
-                                            Icon(
-                                                Icons.Default.Group, contentDescription = null
-                                            )
-                                        },
-                                        trailingIcon = {
-                                            ExposedDropdownMenuDefaults.TrailingIcon(expanded = groupExpanded)
-                                        })
-                                    ExposedDropdownMenu(
-                                        expanded = groupExpanded,
-                                        onDismissRequest = { groupExpanded = false }) {
-                                        customerGroups.forEach { option ->
-                                            val label =
-                                                option.displayName?.takeIf { it.isNotBlank() }
-                                                    ?: option.name
-                                            DropdownMenuItem(text = { Text(label) }, onClick = {
-                                                customerGroup = option.name
-                                                groupExpanded = false
-                                            })
-                                        }
-                                    }
-                                }
-                            } else {
-                                AppTextField(
-                                    value = customerGroup,
-                                    onValueChange = { customerGroup = it },
-                                    label = "Grupo de cliente",
-                                    placeholder = "Retail",
-                                    leadingIcon = {
-                                        Icon(
-                                            Icons.Default.Group, contentDescription = null
-                                        )
-                                    },
-                                    modifier = Modifier.fillMaxWidth()
-                                )
-                            }
-                            if (territories.isNotEmpty()) {
-                                ExposedDropdownMenuBox(
-                                    expanded = territoryExpanded,
-                                    onExpandedChange = { territoryExpanded = it }) {
-                                    AppTextField(
-                                        value = territory,
-                                        onValueChange = {},
-                                        label = "Territorio",
-                                        placeholder = "Seleccionar",
-                                        modifier = Modifier.menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable)
-                                            .fillMaxWidth(),
-                                        leadingIcon = {
-                                            Icon(
-                                                Icons.Default.Place, contentDescription = null
-                                            )
-                                        },
-                                        trailingIcon = {
-                                            ExposedDropdownMenuDefaults.TrailingIcon(expanded = territoryExpanded)
-                                        })
-                                    ExposedDropdownMenu(
-                                        expanded = territoryExpanded,
-                                        onDismissRequest = { territoryExpanded = false }) {
-                                        territories.forEach { option ->
-                                            val label =
-                                                option.displayName?.takeIf { it.isNotBlank() }
-                                                    ?: option.name
-                                            DropdownMenuItem(text = { Text(label) }, onClick = {
-                                                territory = option.name
-                                                territoryExpanded = false
-                                            })
-                                        }
-                                    }
-                                }
-                            } else {
-                                AppTextField(
-                                    value = territory,
-                                    onValueChange = { territory = it },
-                                    label = "Territorio",
-                                    placeholder = "Managua",
-                                    leadingIcon = {
-                                        Icon(
-                                            Icons.Default.Place, contentDescription = null
-                                        )
-                                    },
-                                    modifier = Modifier.fillMaxWidth()
-                                )
-                            }
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                Checkbox(
-                                    checked = isInternalCustomer,
-                                    onCheckedChange = { isInternalCustomer = it })
-                                Text("Cliente interno (intercompany)")
-                            }
-                            if (isInternalCustomer) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                    onExpandedChange = { typeExpanded = !typeExpanded }
                                 ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Info,
-                                        contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                    Text(
-                                        text = "Selecciona la compañía a la que pertenece este cliente interno.",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
+                                    AppTextField(
+                                        value = customerType,
+                                        onValueChange = {},
+                                        label = "Tipo de cliente",
+                                        placeholder = "Seleccionar",
+                                        readOnly = true,
+                                        modifier = Modifier.menuAnchor(
+                                            ExposedDropdownMenuAnchorType.PrimaryNotEditable
+                                        ).fillMaxWidth(),
+                                        leadingIcon = {
+                                            Icon(
+                                                Icons.Default.Badge, contentDescription = null
+                                            )
+                                        },
+                                        trailingIcon = {
+                                            ExposedDropdownMenuDefaults.TrailingIcon(expanded = typeExpanded)
+                                        })
+                                    ExposedDropdownMenu(
+                                        expanded = typeExpanded,
+                                        onDismissRequest = { typeExpanded = false }
+                                    ) {
+                                        listOf("Individual", "Empresa").forEach { option ->
+                                            DropdownMenuItem(text = { Text(option) }, onClick = {
+                                                customerType = option
+                                                typeExpanded = false
+                                            })
+                                        }
+                                    }
                                 }
-                            }
-                            if (isInternalCustomer) {
-                                if (companies.isNotEmpty()) {
+                                if (customerGroups.isNotEmpty()) {
                                     ExposedDropdownMenuBox(
-                                        expanded = companyExpanded,
-                                        onExpandedChange = { companyExpanded = it }) {
+                                        expanded = groupExpanded,
+                                        onExpandedChange = { groupExpanded = !groupExpanded }
+                                    ) {
                                         AppTextField(
-                                            value = internalCompany,
+                                            value = customerGroup,
                                             onValueChange = {},
-                                            label = "Compañía",
+                                            label = "Grupo de cliente",
                                             placeholder = "Seleccionar",
+                                            readOnly = true,
                                             modifier = Modifier.menuAnchor(
                                                 ExposedDropdownMenuAnchorType.PrimaryNotEditable
                                             ).fillMaxWidth(),
                                             leadingIcon = {
                                                 Icon(
-                                                    Icons.Default.Business,
-                                                    contentDescription = null
+                                                    Icons.Default.Group, contentDescription = null
                                                 )
                                             },
                                             trailingIcon = {
-                                                ExposedDropdownMenuDefaults.TrailingIcon(expanded = companyExpanded)
+                                                ExposedDropdownMenuDefaults.TrailingIcon(expanded = groupExpanded)
                                             })
                                         ExposedDropdownMenu(
-                                            expanded = companyExpanded,
-                                            onDismissRequest = { companyExpanded = false }) {
-                                            companies.forEach { option ->
-                                                DropdownMenuItem(
-                                                    text = { Text(option.company) },
-                                                    onClick = {
-                                                        internalCompany = option.company
-                                                        companyExpanded = false
-                                                    })
+                                            expanded = groupExpanded,
+                                            onDismissRequest = { groupExpanded = false }
+                                        ) {
+                                            customerGroups.forEach { option ->
+                                                val label =
+                                                    option.displayName?.takeIf { it.isNotBlank() }
+                                                        ?: option.name
+                                                DropdownMenuItem(text = { Text(label) }, onClick = {
+                                                    customerGroup = option.name
+                                                    groupExpanded = false
+                                                })
                                             }
                                         }
                                     }
                                 } else {
                                     AppTextField(
-                                        value = internalCompany,
-                                        onValueChange = { internalCompany = it },
-                                        label = "Compañía",
-                                        placeholder = "Escribe la compañía",
+                                        value = customerGroup,
+                                        onValueChange = { customerGroup = it },
+                                        label = "Grupo de cliente",
+                                        placeholder = "Retail",
+                                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
                                         leadingIcon = {
                                             Icon(
-                                                Icons.Default.Business, contentDescription = null
+                                                Icons.Default.Group, contentDescription = null
                                             )
                                         },
                                         modifier = Modifier.fillMaxWidth()
                                     )
                                 }
-                            }
-                            AppTextField(
-                                value = notes,
-                                onValueChange = { notes = it },
-                                label = "Notas",
-                                placeholder = "Observaciones internas",
-                                leadingIcon = {
-                                    Icon(
-                                        Icons.AutoMirrored.Filled.Note, contentDescription = null
+                                if (territories.isNotEmpty()) {
+                                    ExposedDropdownMenuBox(
+                                        expanded = territoryExpanded,
+                                        onExpandedChange = { territoryExpanded = !territoryExpanded }
+                                    ) {
+                                        AppTextField(
+                                            value = territory,
+                                            onValueChange = {},
+                                            label = "Territorio",
+                                            placeholder = "Seleccionar",
+                                            readOnly = true,
+                                            modifier = Modifier.menuAnchor(
+                                                ExposedDropdownMenuAnchorType.PrimaryNotEditable
+                                            ).fillMaxWidth(),
+                                            leadingIcon = {
+                                                Icon(
+                                                    Icons.Default.Place, contentDescription = null
+                                                )
+                                            },
+                                            trailingIcon = {
+                                                ExposedDropdownMenuDefaults.TrailingIcon(expanded = territoryExpanded)
+                                            })
+                                        ExposedDropdownMenu(
+                                            expanded = territoryExpanded,
+                                            onDismissRequest = { territoryExpanded = false }
+                                        ) {
+                                            territories.forEach { option ->
+                                                val label =
+                                                    option.displayName?.takeIf { it.isNotBlank() }
+                                                        ?: option.name
+                                                DropdownMenuItem(text = { Text(label) }, onClick = {
+                                                    territory = option.name
+                                                    territoryExpanded = false
+                                                })
+                                            }
+                                        }
+                                    }
+                                } else {
+                                    AppTextField(
+                                        value = territory,
+                                        onValueChange = { territory = it },
+                                        label = "Territorio",
+                                        placeholder = "Managua",
+                                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
+                                        leadingIcon = {
+                                            Icon(
+                                                Icons.Default.Place, contentDescription = null
+                                            )
+                                        },
+                                        modifier = Modifier.fillMaxWidth()
                                     )
-                                },
-                                modifier = Modifier.fillMaxWidth()
-                            )
-                        }
+                                }
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Checkbox(
+                                        checked = isInternalCustomer,
+                                        onCheckedChange = { isInternalCustomer = it })
+                                    Text("Cliente interno (intercompany)")
+                                }
+                                if (isInternalCustomer) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Info,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                        Text(
+                                            text = "Selecciona la compañía a la que pertenece este cliente interno.",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                }
+                                if (isInternalCustomer) {
+                                    if (companies.isNotEmpty()) {
+                                        ExposedDropdownMenuBox(
+                                            expanded = companyExpanded,
+                                            onExpandedChange = { companyExpanded = !companyExpanded }
+                                        ) {
+                                            AppTextField(
+                                                value = internalCompany,
+                                                onValueChange = {},
+                                                label = "Compañía",
+                                                placeholder = "Seleccionar",
+                                                readOnly = true,
+                                                modifier = Modifier.menuAnchor(
+                                                    ExposedDropdownMenuAnchorType.PrimaryNotEditable
+                                                ).fillMaxWidth(),
+                                                leadingIcon = {
+                                                    Icon(
+                                                        Icons.Default.Business,
+                                                        contentDescription = null
+                                                    )
+                                                },
+                                                trailingIcon = {
+                                                    ExposedDropdownMenuDefaults.TrailingIcon(expanded = companyExpanded)
+                                                })
+                                            ExposedDropdownMenu(
+                                                expanded = companyExpanded,
+                                                onDismissRequest = { companyExpanded = false }
+                                            ) {
+                                                companies.forEach { option ->
+                                                    DropdownMenuItem(
+                                                        text = { Text(option.company) },
+                                                        onClick = {
+                                                            internalCompany = option.company
+                                                            companyExpanded = false
+                                                        })
+                                                }
+                                            }
+                                        }
+                                    } else {
+                                        AppTextField(
+                                            value = internalCompany,
+                                            onValueChange = { internalCompany = it },
+                                            label = "Compañía",
+                                            placeholder = "Escribe la compañía",
+                                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
+                                            isError = internalCompanyInvalid,
+                                            supportingText = if (internalCompanyInvalid) {
+                                                {
+                                                    Text(
+                                                        text = "Selecciona o escribe la compañía.",
+                                                        style = MaterialTheme.typography.labelSmall
+                                                    )
+                                                }
+                                            } else {
+                                                null
+                                            },
+                                            leadingIcon = {
+                                                Icon(
+                                                    Icons.Default.Business, contentDescription = null
+                                                )
+                                            },
+                                            modifier = Modifier.fillMaxWidth()
+                                        )
+                                    }
+                                }
+                                AppTextField(
+                                    value = notes,
+                                    onValueChange = { notes = it },
+                                    label = "Notas",
+                                    placeholder = "Observaciones internas",
+                                    singleLine = false,
+                                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Default),
+                                    leadingIcon = {
+                                        Icon(
+                                            Icons.AutoMirrored.Filled.Note, contentDescription = null
+                                        )
+                                    },
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            }
 
-                        CustomerDialogTab.Contact -> {
-                            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            CustomerDialogTab.Contact -> {
+                                ExposedDropdownMenuBox(
+                                    expanded = phoneRegionExpanded,
+                                    onExpandedChange = { phoneRegionExpanded = !phoneRegionExpanded }
+                                ) {
+                                    CustomerDialogField(
+                                        value = "${selectedPhoneRegion.code} ${selectedPhoneRegion.dialCode}",
+                                        onValueChange = {},
+                                        label = "Región de teléfono",
+                                        readOnly = true,
+                                        modifier = Modifier.menuAnchor(
+                                            ExposedDropdownMenuAnchorType.PrimaryNotEditable
+                                        ).fillMaxWidth(),
+                                        leadingIcon = {
+                                            Icon(
+                                                Icons.Default.Place,
+                                                contentDescription = null
+                                            )
+                                        },
+                                        trailingIcon = {
+                                            ExposedDropdownMenuDefaults.TrailingIcon(expanded = phoneRegionExpanded)
+                                        }
+                                    )
+                                    ExposedDropdownMenu(
+                                        expanded = phoneRegionExpanded,
+                                        onDismissRequest = { phoneRegionExpanded = false }
+                                    ) {
+                                        regionOptions.forEach { option ->
+                                            DropdownMenuItem(
+                                                text = {
+                                                    Text("${option.code} ${option.dialCode} · ${option.country}")
+                                                },
+                                                onClick = {
+                                                    phoneRegionCode = option.code
+                                                    phoneRegionExpanded = false
+                                                }
+                                            )
+                                        }
+                                    }
+                                }
                                 AppTextField(
                                     value = mobile,
                                     onValueChange = { mobile = it },
                                     label = "Móvil",
-                                    placeholder = "+505 8888 8888",
+                                    placeholder = "8888 8888",
+                                    keyboardOptions = KeyboardOptions(
+                                        keyboardType = KeyboardType.Phone,
+                                        imeAction = ImeAction.Next
+                                    ),
                                     leadingIcon = {
                                         Icon(
                                             Icons.Default.Phone, contentDescription = null
                                         )
                                     },
-                                    modifier = Modifier.weight(1f)
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .focusRequester(contactMobileFocusRequester)
                                 )
                                 AppTextField(
                                     value = phone,
                                     onValueChange = { phone = it },
                                     label = "Teléfono",
                                     placeholder = "2222 2222",
+                                    keyboardOptions = KeyboardOptions(
+                                        keyboardType = KeyboardType.Phone,
+                                        imeAction = ImeAction.Next
+                                    ),
                                     leadingIcon = {
                                         Icon(
                                             Icons.Default.Call, contentDescription = null
                                         )
                                     },
-                                    modifier = Modifier.weight(1f)
+                                    modifier = Modifier.fillMaxWidth()
                                 )
-                            }
-                            AppTextField(
-                                value = email,
-                                onValueChange = { email = it },
-                                label = "Correo",
-                                placeholder = "cliente@correo.com",
-                                leadingIcon = {
-                                    Icon(
-                                        Icons.Default.Email, contentDescription = null
-                                    )
-                                },
-                                modifier = Modifier.fillMaxWidth()
-                            )
-                            AppTextField(
-                                value = addressLine,
-                                onValueChange = { addressLine = it },
-                                label = "Dirección línea 1",
-                                placeholder = "Calle principal",
-                                leadingIcon = {
-                                    Icon(
-                                        Icons.Default.Home, contentDescription = null
-                                    )
-                                },
-                                modifier = Modifier.fillMaxWidth()
-                            )
-                            AppTextField(
-                                value = addressLine2,
-                                onValueChange = { addressLine2 = it },
-                                label = "Dirección línea 2",
-                                placeholder = "Referencias, barrio",
-                                modifier = Modifier.fillMaxWidth()
-                            )
-                            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                Text(
+                                    text = "Se guardará con prefijo regional ${selectedPhoneRegion.dialCode}.",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                AppTextField(
+                                    value = email,
+                                    onValueChange = { email = it },
+                                    label = "Correo",
+                                    placeholder = "cliente@correo.com",
+                                    isError = emailInvalid,
+                                    supportingText = if (emailInvalid) {
+                                        {
+                                            Text(
+                                                text = "Formato de correo inválido.",
+                                                style = MaterialTheme.typography.labelSmall
+                                            )
+                                        }
+                                    } else {
+                                        null
+                                    },
+                                    keyboardOptions = KeyboardOptions(
+                                        keyboardType = KeyboardType.Email,
+                                        imeAction = ImeAction.Next
+                                    ),
+                                    leadingIcon = {
+                                        Icon(
+                                            Icons.Default.Email, contentDescription = null
+                                        )
+                                    },
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                                AppTextField(
+                                    value = addressLine,
+                                    onValueChange = { addressLine = it },
+                                    label = "Dirección línea 1",
+                                    placeholder = "Calle principal",
+                                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
+                                    leadingIcon = {
+                                        Icon(
+                                            Icons.Default.Home, contentDescription = null
+                                        )
+                                    },
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                                AppTextField(
+                                    value = addressLine2,
+                                    onValueChange = { addressLine2 = it },
+                                    label = "Dirección línea 2",
+                                    placeholder = "Referencias, barrio",
+                                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
+                                    modifier = Modifier.fillMaxWidth()
+                                )
                                 AppTextField(
                                     value = city,
                                     onValueChange = { city = it },
                                     label = "Ciudad",
                                     placeholder = "Managua",
-                                    modifier = Modifier.weight(1f)
+                                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
+                                    modifier = Modifier.fillMaxWidth()
                                 )
                                 AppTextField(
                                     value = state,
                                     onValueChange = { state = it },
                                     label = "Departamento",
                                     placeholder = "Managua",
-                                    modifier = Modifier.weight(1f)
+                                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                                AppTextField(
+                                    value = country,
+                                    onValueChange = { country = it },
+                                    label = "País",
+                                    placeholder = "Nicaragua",
+                                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                                    modifier = Modifier.fillMaxWidth()
                                 )
                             }
-                            AppTextField(
-                                value = country,
-                                onValueChange = { country = it },
-                                label = "País",
-                                placeholder = "Nicaragua",
-                                modifier = Modifier.fillMaxWidth()
-                            )
-                        }
 
-                        CustomerDialogTab.Tax -> {
-                            AppTextField(
-                                value = taxId,
-                                onValueChange = { taxId = it },
-                                label = "RUC / NIT",
-                                placeholder = "J0310000000001",
-                                leadingIcon = {
-                                    Icon(
-                                        Icons.Default.Badge, contentDescription = null
+                            CustomerDialogTab.Tax -> {
+                                ExposedDropdownMenuBox(
+                                    expanded = rucRegionExpanded,
+                                    onExpandedChange = { rucRegionExpanded = !rucRegionExpanded }
+                                ) {
+                                    CustomerDialogField(
+                                        value = selectedRucRegion.code,
+                                        onValueChange = {},
+                                        label = "Región",
+                                        readOnly = true,
+                                        modifier = Modifier.menuAnchor(
+                                            ExposedDropdownMenuAnchorType.PrimaryNotEditable
+                                        ).fillMaxWidth(),
+                                        leadingIcon = {
+                                            Icon(
+                                                Icons.Default.Badge,
+                                                contentDescription = null
+                                            )
+                                        },
+                                        trailingIcon = {
+                                            ExposedDropdownMenuDefaults.TrailingIcon(expanded = rucRegionExpanded)
+                                        }
                                     )
-                                },
-                                modifier = Modifier.fillMaxWidth()
-                            )
-                            AppTextField(
-                                value = taxCategory,
-                                onValueChange = { taxCategory = it },
-                                label = "Categoría de impuesto",
-                                placeholder = "IVA General",
-                                modifier = Modifier.fillMaxWidth()
-                            )
-                        }
-
-                        CustomerDialogTab.Accounting -> {
-                            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                    ExposedDropdownMenu(
+                                        expanded = rucRegionExpanded,
+                                        onDismissRequest = { rucRegionExpanded = false }
+                                    ) {
+                                        regionOptions.forEach { option ->
+                                            DropdownMenuItem(
+                                                text = { Text("${option.code} · ${option.country}") },
+                                                onClick = {
+                                                    rucRegionCode = option.code
+                                                    rucRegionExpanded = false
+                                                }
+                                            )
+                                        }
+                                    }
+                                }
+                                if (rucRegionCode == "NI") {
+                                    ExposedDropdownMenuBox(
+                                        expanded = niTaxRegimeExpanded,
+                                        onExpandedChange = { niTaxRegimeExpanded = !niTaxRegimeExpanded }
+                                    ) {
+                                        CustomerDialogField(
+                                            value = selectedNicaraguanTaxRegime.label,
+                                            onValueChange = {},
+                                            label = "Tipo de RUC",
+                                            readOnly = true,
+                                            modifier = Modifier.menuAnchor(
+                                                ExposedDropdownMenuAnchorType.PrimaryNotEditable
+                                            ).fillMaxWidth(),
+                                            leadingIcon = {
+                                                Icon(
+                                                    Icons.Default.Badge,
+                                                    contentDescription = null
+                                                )
+                                            },
+                                            trailingIcon = {
+                                                ExposedDropdownMenuDefaults.TrailingIcon(expanded = niTaxRegimeExpanded)
+                                            }
+                                        )
+                                        ExposedDropdownMenu(
+                                            expanded = niTaxRegimeExpanded,
+                                            onDismissRequest = { niTaxRegimeExpanded = false }
+                                        ) {
+                                            NicaraguanTaxRegime.entries.forEach { regime ->
+                                                DropdownMenuItem(
+                                                    text = { Text(regime.label) },
+                                                    onClick = {
+                                                        niTaxRegime = regime.name
+                                                        niTaxRegimeExpanded = false
+                                                    }
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
                                 AppTextField(
-                                    value = creditLimit,
-                                    onValueChange = { creditLimit = it },
-                                    label = "Límite de crédito",
-                                    placeholder = "0.00",
+                                    value = taxId,
+                                    onValueChange = { taxId = it },
+                                    label = "RUC / NIT",
+                                    placeholder = taxIdentifierHint,
+                                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
                                     leadingIcon = {
                                         Icon(
-                                            Icons.Default.CreditCard, contentDescription = null
+                                            Icons.Default.Badge, contentDescription = null
                                         )
                                     },
-                                    modifier = Modifier.weight(1f)
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .focusRequester(taxIdFocusRequester)
+                                )
+                                Text(
+                                    text = if (rucRegionCode == "NI") {
+                                        "Formato sugerido (${selectedNicaraguanTaxRegime.label}): $taxIdentifierHint"
+                                    } else {
+                                        "Formato sugerido: $taxIdentifierHint"
+                                    },
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                AppTextField(
+                                    value = taxCategory,
+                                    onValueChange = { taxCategory = it },
+                                    label = "Categoría de impuesto",
+                                    placeholder = "IVA General",
+                                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            }
+
+                            CustomerDialogTab.Accounting -> {
+                                MoneyTextField(
+                                    currencyCode = creditCurrency,
+                                    rawValue = creditLimit,
+                                    onRawValueChange = { creditLimit = it },
+                                    label = "Límite de crédito",
+                                    isError = creditInvalid,
+                                    supportingText = if (creditInvalid) {
+                                        {
+                                            Text(
+                                                text = "Debe ser un número válido.",
+                                                style = MaterialTheme.typography.labelSmall
+                                            )
+                                        }
+                                    } else {
+                                        {
+                                            Text(
+                                                text = "Moneda empresa: ${creditCurrency.toCurrencySymbol()} $creditCurrency",
+                                                style = MaterialTheme.typography.labelSmall
+                                            )
+                                        }
+                                    },
+                                    imeAction = ImeAction.Next,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .focusRequester(creditLimitFocusRequester)
                                 )
                                 if (paymentTermsOptions.isNotEmpty()) {
                                     ExposedDropdownMenuBox(
                                         expanded = paymentExpanded,
-                                        onExpandedChange = { paymentExpanded = it },
-                                        modifier = Modifier.weight(1f)
+                                        onExpandedChange = { paymentExpanded = !paymentExpanded }
                                     ) {
                                         AppTextField(
                                             value = selectedPaymentTerm,
                                             onValueChange = {},
                                             label = "Términos de pago",
                                             placeholder = "Seleccionar",
+                                            readOnly = true,
                                             modifier = Modifier.menuAnchor(
                                                 ExposedDropdownMenuAnchorType.PrimaryNotEditable
                                             ).fillMaxWidth(),
@@ -1552,7 +2106,8 @@ private fun NewCustomerDialog(
                                             })
                                         ExposedDropdownMenu(
                                             expanded = paymentExpanded,
-                                            onDismissRequest = { paymentExpanded = false }) {
+                                            onDismissRequest = { paymentExpanded = false }
+                                        ) {
                                             paymentTermsOptions.forEach { option ->
                                                 DropdownMenuItem(
                                                     text = { Text(option.name) },
@@ -1569,19 +2124,19 @@ private fun NewCustomerDialog(
                                         onValueChange = { selectedPaymentTerm = it },
                                         label = "Términos de pago",
                                         placeholder = "Contado / 30 días",
+                                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                                         leadingIcon = {
                                             Icon(
                                                 Icons.Default.Schedule, contentDescription = null
                                             )
                                         },
-                                        modifier = Modifier.weight(1f)
+                                        modifier = Modifier.fillMaxWidth()
                                     )
                                 }
                             }
                         }
                     }
                 }
-                Spacer(Modifier.height(12.dp))
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
@@ -1593,6 +2148,17 @@ private fun NewCustomerDialog(
                     }
                     Button(
                         onClick = {
+                            submitAttempted = true
+                            if (!isValid) return@Button
+                            val normalizedTaxId = normalizeTaxIdentifier(taxId.trim())
+                            val normalizedMobile = buildRegionalPhone(
+                                dialCode = selectedPhoneRegion.dialCode,
+                                value = mobile.trim()
+                            )
+                            val normalizedPhone = buildRegionalPhone(
+                                dialCode = selectedPhoneRegion.dialCode,
+                                value = phone.trim()
+                            )
                             onSubmit(
                                 CreateCustomerInput(
                                     customerName = name.trim(),
@@ -1601,11 +2167,11 @@ private fun NewCustomerDialog(
                                     territory = territory.trim().ifBlank { null },
                                     isInternalCustomer = isInternalCustomer,
                                     internalCompany = internalCompany.trim().ifBlank { null },
-                                    taxId = taxId.trim().ifBlank { null },
+                                    taxId = normalizedTaxId.ifBlank { null },
                                     taxCategory = taxCategory.trim().ifBlank { null },
                                     email = email.trim().ifBlank { null },
-                                    mobileNo = mobile.trim().ifBlank { null },
-                                    phone = phone.trim().ifBlank { null },
+                                    mobileNo = normalizedMobile.ifBlank { null },
+                                    phone = normalizedPhone.ifBlank { null },
                                     addressLine1 = addressLine.trim().ifBlank { null },
                                     addressLine2 = addressLine2.trim().ifBlank { null },
                                     city = city.trim().ifBlank { null },
@@ -1616,14 +2182,136 @@ private fun NewCustomerDialog(
                                     notes = notes.trim().ifBlank { null })
                             )
                             onDismiss()
-                        }, enabled = isValid, modifier = Modifier.weight(1f)
+                        }, enabled = isValid || !submitAttempted, modifier = Modifier.weight(1f)
                     ) {
-                        Text("Guardar")
+                        Text("Crear cliente")
                     }
                 }
             }
         }
     }
+}
+
+private fun isValidEmailAddress(value: String): Boolean {
+    val normalized = value.trim()
+    if (normalized.isBlank()) return false
+    val emailRegex = "^[A-Za-z0-9+_.-]+@[A-Za-z0-9.-]+$".toRegex()
+    return emailRegex.matches(normalized)
+}
+
+private data class RegionInputOption(
+    val code: String,
+    val dialCode: String,
+    val country: String,
+    val taxIdHint: String
+)
+
+private fun customerRegionOptions(): List<RegionInputOption> = listOf(
+    RegionInputOption("NI", "+505", "Nicaragua", "J0310000000001"),
+    RegionInputOption("CR", "+506", "Costa Rica", "3-101-123456"),
+    RegionInputOption("HN", "+504", "Honduras", "08011999123456"),
+    RegionInputOption("SV", "+503", "El Salvador", "0614-290180-101-3"),
+    RegionInputOption("GT", "+502", "Guatemala", "1234567-8"),
+    RegionInputOption("PA", "+507", "Panamá", "1556789-1-123456"),
+    RegionInputOption("MX", "+52", "México", "XAXX010101000"),
+    RegionInputOption("US", "+1", "Estados Unidos", "12-3456789")
+)
+
+private fun resolveRegionCodeFromCountry(country: String?): String {
+    val normalized = country?.trim()?.lowercase().orEmpty()
+    return when {
+        normalized.contains("nicaragua") -> "NI"
+        normalized.contains("costa rica") -> "CR"
+        normalized.contains("honduras") -> "HN"
+        normalized.contains("el salvador") -> "SV"
+        normalized.contains("guatemala") -> "GT"
+        normalized.contains("panama") || normalized.contains("panamá") -> "PA"
+        normalized.contains("mexico") || normalized.contains("méxico") -> "MX"
+        normalized.contains("united states") || normalized.contains("estados unidos") -> "US"
+        else -> "NI"
+    }
+}
+
+private fun normalizeTaxIdentifier(value: String): String {
+    if (value.isBlank()) return ""
+    return value.trim().replace(Regex("^[A-Za-z]{2}\\s*-\\s*"), "")
+}
+
+private fun buildRegionalPhone(dialCode: String, value: String): String {
+    if (value.isBlank()) return ""
+    val normalized = value.trim()
+    if (normalized.startsWith("+")) return normalized
+    return "$dialCode $normalized"
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun CustomerDialogField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    label: String,
+    modifier: Modifier = Modifier,
+    placeholder: String? = null,
+    singleLine: Boolean = true,
+    enabled: Boolean = true,
+    readOnly: Boolean = false,
+    isError: Boolean = false,
+    supportingText: (@Composable () -> Unit)? = null,
+    keyboardOptions: KeyboardOptions = KeyboardOptions.Default,
+    keyboardActions: KeyboardActions = KeyboardActions.Default,
+    leadingIcon: (@Composable () -> Unit)? = null,
+    trailingIcon: (@Composable () -> Unit)? = null,
+) {
+    OutlinedTextField(
+        value = value,
+        onValueChange = onValueChange,
+        modifier = modifier.fillMaxWidth().heightIn(min = 60.dp),
+        textStyle = MaterialTheme.typography.bodyLarge.copy(
+            fontSize = 16.sp,
+            fontWeight = FontWeight.Medium
+        ),
+        label = {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelMedium.copy(
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold
+                )
+            )
+        },
+        placeholder = placeholder?.let {
+            {
+                Text(
+                    text = it,
+                    style = MaterialTheme.typography.bodyMedium.copy(
+                        fontSize = 14.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                )
+            }
+        },
+        singleLine = singleLine,
+        enabled = enabled,
+        readOnly = readOnly,
+        isError = isError,
+        supportingText = supportingText,
+        keyboardOptions = keyboardOptions,
+        keyboardActions = keyboardActions,
+        leadingIcon = leadingIcon,
+        trailingIcon = trailingIcon,
+        shape = RoundedCornerShape(16.dp),
+        colors = TextFieldDefaults.colors(
+            focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.28f),
+            unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f),
+            disabledContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.12f),
+            focusedIndicatorColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.85f),
+            unfocusedIndicatorColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.75f),
+            focusedTextColor = MaterialTheme.colorScheme.onSurface,
+            unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
+            focusedLabelColor = MaterialTheme.colorScheme.primary,
+            unfocusedLabelColor = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    )
 }
 
 @Composable
@@ -1752,9 +2440,14 @@ fun CustomerItem(
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
-                    } else {
-                        StatusPill(label = statusLabel, isCritical = emphasis)
                     }
+                    Text(
+                        text = "Codigo: ${customer.name}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
                 }
 
                 IconButton(onClick = {
@@ -1789,6 +2482,7 @@ fun CustomerItem(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                StatusPill(label = statusLabel, isCritical = emphasis)
                 Column {
                     Text(
                         text = formatCurrency(posCurr, pendingPos ?: pendingCompany),
@@ -1810,9 +2504,6 @@ fun CustomerItem(
                     )
                 }
             }
-            Text(
-                text = statusLabel, style = MaterialTheme.typography.bodySmall, color = statusColor
-            )
         }
     }
 }
@@ -1920,9 +2611,7 @@ private fun CustomerQuickActionsSheet(
             )
             CustomerOutstandingSummary(
                 customer = customer,
-                invoices = if (invoicesState is CustomerInvoicesState.Success) {
-                    invoicesState.invoices
-                } else emptyList(),
+                invoices = emptyList(),
                 posBaseCurrency = paymentState.baseCurrency,
                 cashboxManager = cashboxManager
             )
@@ -1945,19 +2634,23 @@ private fun CustomerQuickActionsSheet(
 private fun CustomerOutstandingInvoicesSheet(
     customer: CustomerBO,
     invoicesState: CustomerInvoicesState,
+    outstandingInvoicesPagingItems: androidx.paging.compose.LazyPagingItems<SalesInvoiceBO>,
     paymentState: CustomerPaymentState,
     onDismiss: () -> Unit,
     onRegisterPayment: (
         invoiceId: String, modeOfPayment: String, enteredAmount: Double, enteredCurrency: String, referenceNumber: String
-    ) -> Unit
+    ) -> Unit,
+    onDownloadInvoicePdf: (String, InvoicePdfActionOption) -> Unit
 ) {
     ModalBottomSheet(
         onDismissRequest = onDismiss, dragHandle = { BottomSheetDefaults.DragHandle() }) {
         CustomerOutstandingInvoicesContent(
             customer = customer,
             invoicesState = invoicesState,
+            outstandingInvoicesPagingItems = outstandingInvoicesPagingItems,
             paymentState = paymentState,
             onRegisterPayment = onRegisterPayment,
+            onDownloadInvoicePdf = onDownloadInvoicePdf,
             modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 12.dp)
         )
     }
@@ -1967,10 +2660,12 @@ private fun CustomerOutstandingInvoicesSheet(
 private fun CustomerOutstandingInvoicesContent(
     customer: CustomerBO,
     invoicesState: CustomerInvoicesState,
+    outstandingInvoicesPagingItems: androidx.paging.compose.LazyPagingItems<SalesInvoiceBO>,
     paymentState: CustomerPaymentState,
     onRegisterPayment: (
         invoiceId: String, modeOfPayment: String, enteredAmount: Double, enteredCurrency: String, referenceNumber: String
     ) -> Unit,
+    onDownloadInvoicePdf: (String, InvoicePdfActionOption) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val strings = LocalAppStrings.current
@@ -2034,14 +2729,13 @@ private fun CustomerOutstandingInvoicesContent(
     val receivableCurrency =
         normalizeCurrency(selectedInvoice?.partyAccountCurrency ?: companyCurrency)
     val outstandingRc = selectedInvoice?.outstandingAmount ?: 0.0
-    val rateInvToRc = invoiceConversionRate
     val baseToPosRate = rateBaseToPos
     val outstandingInSelectedCurrency = when {
         selectedCurrency.equals(receivableCurrency, ignoreCase = true) -> outstandingRc
         selectedCurrency.equals(invoiceCurrency, ignoreCase = true) -> {
-            com.erpnext.pos.utils.CurrencyService.amountReceivableToInvoice(
+            CurrencyService.amountReceivableToInvoice(
                 outstandingRc,
-                rateInvToRc
+                invoiceConversionRate
             )
         }
 
@@ -2056,9 +2750,8 @@ private fun CustomerOutstandingInvoicesContent(
     LaunchedEffect(selectedInvoice?.invoiceId, selectedCurrency, outstandingInSelectedCurrency) {
         val resolvedOutstanding = outstandingInSelectedCurrency ?: return@LaunchedEffect
         if (amountRaw.isBlank() || amountRaw == lastAutoAmount) {
-            val formatted = formatAmountRawForCurrency(resolvedOutstanding, selectedCurrency)
+            val formatted = formatAmountRawForCurrency(resolvedOutstanding)
             amountRaw = formatted
-            lastAutoAmount = formatted
         }
     }
     val changeDue =
@@ -2108,8 +2801,24 @@ private fun CustomerOutstandingInvoicesContent(
             }
 
             is CustomerInvoicesState.Success -> {
-                val visibleInvoices = filterPendingInvoices(invoicesState.invoices)
-                if (visibleInvoices.isEmpty()) {
+                val refreshState = outstandingInvoicesPagingItems.loadState.refresh
+                val appendState = outstandingInvoicesPagingItems.loadState.append
+                val isLoading = refreshState is LoadState.Loading
+                val hasError = refreshState is LoadState.Error || appendState is LoadState.Error
+                if (hasError) {
+                    Text(
+                        text = (refreshState as? LoadState.Error)?.error?.message
+                            ?: (appendState as? LoadState.Error)?.error?.message
+                            ?: "No se pudieron cargar las facturas pendientes.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                } else if (isLoading && outstandingInvoicesPagingItems.itemCount == 0) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.Center
+                    ) { CircularProgressIndicator() }
+                } else if (outstandingInvoicesPagingItems.itemCount == 0) {
                     Text(
                         text = strings.customer.emptyOsInvoices,
                         style = MaterialTheme.typography.bodyMedium
@@ -2119,7 +2828,13 @@ private fun CustomerOutstandingInvoicesContent(
                         modifier = Modifier.fillMaxWidth().heightIn(max = 320.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        items(visibleInvoices, key = { it.invoiceId }) { invoice ->
+                        items(
+                            count = outstandingInvoicesPagingItems.itemCount,
+                            key = { index ->
+                                outstandingInvoicesPagingItems[index]?.invoiceId ?: "outstanding_$index"
+                            }
+                        ) { index ->
+                            val invoice = outstandingInvoicesPagingItems[index] ?: return@items
                             val isSelected = invoice.invoiceId == selectedInvoice?.invoiceId
                             val display = resolveInvoiceDisplayAmounts(
                                 invoice = invoice,
@@ -2161,7 +2876,6 @@ private fun CustomerOutstandingInvoicesContent(
                                         }
                                         val formatted = formatAmountRawForCurrency(
                                             amountToUse,
-                                            selectedCurrency
                                         )
                                         amountRaw = formatted
                                         lastAutoAmount = formatted
@@ -2222,7 +2936,6 @@ private fun CustomerOutstandingInvoicesContent(
                                                     }
                                                     val formatted = formatAmountRawForCurrency(
                                                         amountToUse,
-                                                        selectedCurrency
                                                     )
                                                     amountRaw = formatted
                                                     lastAutoAmount = formatted
@@ -2240,7 +2953,50 @@ private fun CustomerOutstandingInvoicesContent(
                                         style = MaterialTheme.typography.bodySmall,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
+                                    var downloadMenuExpanded by remember(invoice.invoiceId) { mutableStateOf(false) }
+                                    Box {
+                                        TextButton(
+                                            onClick = { downloadMenuExpanded = true },
+                                            enabled = invoice.invoiceId.isNotBlank()
+                                        ) {
+                                            Text("Descargar PDF")
+                                        }
+                                        DropdownMenu(
+                                            expanded = downloadMenuExpanded,
+                                            onDismissRequest = { downloadMenuExpanded = false }
+                                        ) {
+                                            DropdownMenuItem(
+                                                text = { Text("Abrir ahora") },
+                                                onClick = {
+                                                    downloadMenuExpanded = false
+                                                    onDownloadInvoicePdf(invoice.invoiceId, InvoicePdfActionOption.OPEN_NOW)
+                                                }
+                                            )
+                                            DropdownMenuItem(
+                                                text = { Text("Guardar en...") },
+                                                onClick = {
+                                                    downloadMenuExpanded = false
+                                                    onDownloadInvoicePdf(invoice.invoiceId, InvoicePdfActionOption.SAVE_AS)
+                                                }
+                                            )
+                                            DropdownMenuItem(
+                                                text = { Text("Compartir") },
+                                                onClick = {
+                                                    downloadMenuExpanded = false
+                                                    onDownloadInvoicePdf(invoice.invoiceId, InvoicePdfActionOption.SHARE)
+                                                }
+                                            )
+                                        }
+                                    }
                                 }
+                            }
+                        }
+                        if (outstandingInvoicesPagingItems.loadState.append is LoadState.Loading) {
+                            item {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                                    horizontalArrangement = Arrangement.Center
+                                ) { CircularProgressIndicator() }
                             }
                         }
                     }
@@ -2266,12 +3022,13 @@ private fun CustomerOutstandingInvoicesContent(
                 )
 
                 ExposedDropdownMenuBox(
-                    expanded = modeExpanded, onExpandedChange = { modeExpanded = it }) {
+                    expanded = modeExpanded, onExpandedChange = { modeExpanded = !modeExpanded }) {
                     AppTextField(
                         value = selectedMode,
                         onValueChange = {},
                         label = strings.customer.selectPaymentMode,
                         placeholder = strings.customer.selectPaymentMode,
+                        readOnly = true,
                         modifier = Modifier.menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable)
                             .fillMaxWidth(),
                         leadingIcon = { Icon(Icons.Default.Money, contentDescription = null) },
@@ -2385,6 +3142,7 @@ private fun CustomerOutstandingInvoicesContent(
 private fun CustomerInvoiceHistorySheet(
     customer: CustomerBO,
     historyState: CustomerInvoiceHistoryState,
+    historyInvoicesPagingItems: androidx.paging.compose.LazyPagingItems<SalesInvoiceBO>,
     historyMessage: String?,
     historyBusy: Boolean,
     paymentState: CustomerPaymentState,
@@ -2392,6 +3150,7 @@ private fun CustomerInvoiceHistorySheet(
     cashboxManager: CashBoxManager,
     returnPolicy: ReturnPolicySettings,
     onAction: (String, InvoiceCancellationAction, String?, String?, String?, Boolean) -> Unit,
+    onDownloadInvoicePdf: (String, InvoicePdfActionOption) -> Unit,
     onDismiss: () -> Unit,
     loadLocalInvoice: suspend (String) -> SalesInvoiceWithItemsAndPayments? = { null },
     onSubmitPartialReturn: (
@@ -2409,7 +3168,6 @@ private fun CustomerInvoiceHistorySheet(
     var returnReason by remember { mutableStateOf("") }
     var qtyByItemCode by remember { mutableStateOf<Map<String, Double>>(emptyMap()) }
     var returnDestination by remember { mutableStateOf(defaultReturnDestination(returnPolicy)) }
-    var destinationTouched by remember { mutableStateOf(false) }
 
     var showFullReturnDialog by remember { mutableStateOf(false) }
     var fullReturnInvoiceId by remember { mutableStateOf<String?>(null) }
@@ -2418,7 +3176,6 @@ private fun CustomerInvoiceHistorySheet(
     var fullRefundReference by remember { mutableStateOf("") }
     var fullReturnReason by remember { mutableStateOf("") }
     var fullReturnDestination by remember { mutableStateOf(defaultReturnDestination(returnPolicy)) }
-    var fullDestinationTouched by remember { mutableStateOf(false) }
 
     val refundOptions = remember(paymentState.paymentModes) {
         paymentState.paymentModes
@@ -2624,7 +3381,6 @@ private fun CustomerInvoiceHistorySheet(
                                         selected = returnDestination == destination,
                                         onClick = {
                                             returnDestination = destination
-                                            destinationTouched = true
                                         },
                                         label = { Text(destination.label) })
                                 }
@@ -2656,7 +3412,7 @@ private fun CustomerInvoiceHistorySheet(
                             )
                             ExposedDropdownMenuBox(
                                 expanded = refundModeExpanded,
-                                onExpandedChange = { refundModeExpanded = it }) {
+                                onExpandedChange = { refundModeExpanded = !refundModeExpanded }) {
                                 OutlinedTextField(
                                     value = refundMode ?: "",
                                     onValueChange = { },
@@ -3027,7 +3783,6 @@ private fun CustomerInvoiceHistorySheet(
                                         selected = fullReturnDestination == destination,
                                         onClick = {
                                             fullReturnDestination = destination
-                                            fullDestinationTouched = true
                                         },
                                         label = { Text(destination.label) })
                                 }
@@ -3046,7 +3801,7 @@ private fun CustomerInvoiceHistorySheet(
                 if (refundEnabled && refundOptions.isNotEmpty()) {
                     ExposedDropdownMenuBox(
                         expanded = refundModeExpanded,
-                        onExpandedChange = { refundModeExpanded = it }) {
+                        onExpandedChange = { refundModeExpanded = !refundModeExpanded }) {
                         OutlinedTextField(
                             value = fullRefundMode ?: "",
                             onValueChange = { },
@@ -3176,6 +3931,7 @@ private fun CustomerInvoiceHistorySheet(
         CustomerInvoiceHistoryContent(
             customer = customer,
             historyState = historyState,
+            historyInvoicesPagingItems = historyInvoicesPagingItems,
             historyMessage = historyMessage,
             historyBusy = historyBusy,
             paymentState = paymentState,
@@ -3183,6 +3939,7 @@ private fun CustomerInvoiceHistorySheet(
             cashboxManager = cashboxManager,
             returnPolicy = returnPolicy,
             onAction = onAction,
+            onDownloadInvoicePdf = onDownloadInvoicePdf,
             loadLocalInvoice = loadLocalInvoice,
             onSubmitPartialReturn = onSubmitPartialReturn,
             modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 12.dp)
@@ -3194,6 +3951,7 @@ private fun CustomerInvoiceHistorySheet(
 private fun CustomerInvoiceHistoryContent(
     customer: CustomerBO,
     historyState: CustomerInvoiceHistoryState,
+    historyInvoicesPagingItems: androidx.paging.compose.LazyPagingItems<SalesInvoiceBO>,
     historyMessage: String?,
     historyBusy: Boolean,
     paymentState: CustomerPaymentState,
@@ -3201,6 +3959,7 @@ private fun CustomerInvoiceHistoryContent(
     cashboxManager: CashBoxManager,
     returnPolicy: ReturnPolicySettings,
     onAction: (String, InvoiceCancellationAction, String?, String?, String?, Boolean) -> Unit,
+    onDownloadInvoicePdf: (String, InvoicePdfActionOption) -> Unit,
     loadLocalInvoice: suspend (String) -> SalesInvoiceWithItemsAndPayments? = { null },
     onSubmitPartialReturn: (
         invoiceId: String, reason: String?, refundModeOfPayment: String?, refundReferenceNo: String?, applyRefund: Boolean, itemsToReturnByCode: Map<String, Double>
@@ -3400,7 +4159,7 @@ private fun CustomerInvoiceHistoryContent(
                 if (refundEnabled && refundOptions.isNotEmpty()) {
                     ExposedDropdownMenuBox(
                         expanded = refundModeExpanded,
-                        onExpandedChange = { refundModeExpanded = it }) {
+                        onExpandedChange = { refundModeExpanded = !refundModeExpanded }) {
                         OutlinedTextField(
                             value = refundMode ?: "",
                             onValueChange = { },
@@ -3697,7 +4456,7 @@ private fun CustomerInvoiceHistoryContent(
                             )
                             ExposedDropdownMenuBox(
                                 expanded = fullRefundModeExpanded,
-                                onExpandedChange = { fullRefundModeExpanded = it }) {
+                                onExpandedChange = { fullRefundModeExpanded = !fullRefundModeExpanded }) {
                                 OutlinedTextField(
                                     value = fullRefundMode ?: "",
                                     onValueChange = { },
@@ -3849,7 +4608,7 @@ private fun CustomerInvoiceHistoryContent(
                 )
                 val subtitle = when (historyState) {
                     is CustomerInvoiceHistoryState.Success -> {
-                        val count = historyState.invoices.count {
+                        val count = historyInvoicesPagingItems.itemSnapshotList.items.count {
                             isWithinDays(it.postingDate, selectedRangeDays)
                         }
                         "$count facturas en $selectedRangeDays días"
@@ -3890,7 +4649,7 @@ private fun CustomerInvoiceHistoryContent(
                 onClick = { selectedRangeDays = 90 })
         }
         if (historyState is CustomerInvoiceHistoryState.Success) {
-            val invoices = historyState.invoices.filter {
+            val invoices = historyInvoicesPagingItems.itemSnapshotList.items.filter {
                 isWithinDays(it.postingDate, selectedRangeDays)
             }
             val pendingCount = invoices.count {
@@ -3951,10 +4710,31 @@ private fun CustomerInvoiceHistoryContent(
             }
 
             is CustomerInvoiceHistoryState.Success -> {
-                val invoices = historyState.invoices.filter {
+                val refreshState = historyInvoicesPagingItems.loadState.refresh
+                val appendState = historyInvoicesPagingItems.loadState.append
+                val isLoading = refreshState is LoadState.Loading
+                val hasError = refreshState is LoadState.Error || appendState is LoadState.Error
+                val invoices = historyInvoicesPagingItems.itemSnapshotList.items.filter {
                     isWithinDays(it.postingDate, selectedRangeDays)
                 }
-                if (invoices.isEmpty()) {
+                if (hasError) {
+                    Text(
+                        (refreshState as? LoadState.Error)?.error?.message
+                            ?: (appendState as? LoadState.Error)?.error?.message
+                            ?: "No se pudo cargar el historial de facturas.",
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                } else if (isLoading && historyInvoicesPagingItems.itemCount == 0) {
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        CircularProgressIndicator(modifier = Modifier.size(40.dp))
+                        Spacer(Modifier.height(8.dp))
+                        Text("Cargando historial...")
+                    }
+                } else if (historyInvoicesPagingItems.itemCount == 0 || invoices.isEmpty()) {
                     Text("No se encontraron facturas en los últimos $selectedRangeDays días.")
                 } else {
                     InvoiceHistorySummary(
@@ -3967,7 +4747,14 @@ private fun CustomerInvoiceHistoryContent(
                         verticalArrangement = Arrangement.spacedBy(8.dp),
                         contentPadding = PaddingValues(bottom = 16.dp)
                     ) {
-                        items(items = invoices, key = { it.invoiceId }) { invoice ->
+                        items(
+                            count = historyInvoicesPagingItems.itemCount,
+                            key = { index ->
+                                historyInvoicesPagingItems[index]?.invoiceId ?: "history_$index"
+                            }
+                        ) { index ->
+                            val invoice = historyInvoicesPagingItems[index] ?: return@items
+                            if (!isWithinDays(invoice.postingDate, selectedRangeDays)) return@items
                             InvoiceHistoryRow(
                                 invoice = invoice,
                                 isBusy = historyBusy,
@@ -3989,7 +4776,17 @@ private fun CustomerInvoiceHistoryContent(
                                 },
                                 onPartialReturn = { invoiceId ->
                                     openPartialReturn(invoiceId)
-                                })
+                                },
+                                onDownloadPdf = onDownloadInvoicePdf
+                            )
+                        }
+                        if (historyInvoicesPagingItems.loadState.append is LoadState.Loading) {
+                            item {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                                    horizontalArrangement = Arrangement.Center
+                                ) { CircularProgressIndicator() }
+                            }
                         }
                     }
                 }
@@ -4171,7 +4968,8 @@ private fun InvoiceHistoryRow(
     returnPolicy: ReturnPolicySettings,
     onCancel: (String) -> Unit,
     onReturnTotal: (String) -> Unit,
-    onPartialReturn: (String) -> Unit = {}
+    onPartialReturn: (String) -> Unit = {},
+    onDownloadPdf: (String, InvoicePdfActionOption) -> Unit = { _, _ -> }
 ) {
     val display = resolveInvoiceDisplayAmounts(
         invoice = invoice,
@@ -4291,6 +5089,46 @@ private fun InvoiceHistoryRow(
                     )
                 }
             }
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End
+            ) {
+                var downloadMenuExpanded by remember(invoice.invoiceId) { mutableStateOf(false) }
+                Box {
+                    TextButton(
+                        onClick = { downloadMenuExpanded = true },
+                        enabled = invoice.invoiceId.isNotBlank()
+                    ) {
+                        Text("Descargar PDF")
+                    }
+                    DropdownMenu(
+                        expanded = downloadMenuExpanded,
+                        onDismissRequest = { downloadMenuExpanded = false }
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("Abrir ahora") },
+                            onClick = {
+                                downloadMenuExpanded = false
+                                onDownloadPdf(invoice.invoiceId, InvoicePdfActionOption.OPEN_NOW)
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Guardar en...") },
+                            onClick = {
+                                downloadMenuExpanded = false
+                                onDownloadPdf(invoice.invoiceId, InvoicePdfActionOption.SAVE_AS)
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Compartir") },
+                            onClick = {
+                                downloadMenuExpanded = false
+                                onDownloadPdf(invoice.invoiceId, InvoicePdfActionOption.SHARE)
+                            }
+                        )
+                    }
+                }
+            }
             Spacer(Modifier.height(10.dp))
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -4358,8 +5196,7 @@ private fun filterPendingInvoices(invoices: List<SalesInvoiceBO>): List<SalesInv
     return invoices.filter { it.outstandingAmount > 0.0 && !isPaidStatus(it.status) }
 }
 
-private fun formatAmountRawForCurrency(amount: Double, currency: String): String {
-    val normalized = normalizeCurrency(currency)
+private fun formatAmountRawForCurrency(amount: Double): String {
     val rounded = roundToCurrency(amount)
     val decimals = 2
     return formatDoubleToString(rounded, decimals)
@@ -4472,6 +5309,11 @@ private fun ReturnAccountingSummary(
                 Text("Saldo estimado")
                 Text(formatCurrency(normalizedCurrency, projectedOutstanding))
             }
+            Text(
+                text = "Nota cajero: el saldo en ERPNext puede verse igual hasta la conciliación o cierre de caja.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
         Text(
             "Stock: se reintegra al almacén en el retorno.",
@@ -4525,7 +5367,7 @@ private fun CustomerOutstandingSummary(
             modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween
         ) {
             Text(strings.customer.outstandingSummaryInvoicesLabel)
-            Text("${invoices.size}")
+            Text("${if (invoices.isNotEmpty()) invoices.size else (customer.pendingInvoices ?: 0)}")
         }
         if (totalBase <= 0.0) {
             Text(strings.customer.outstandingSummaryAmountLabel)

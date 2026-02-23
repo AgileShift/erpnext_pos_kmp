@@ -14,6 +14,7 @@ import com.erpnext.pos.remoteSource.dto.CustomerDto
 import com.erpnext.pos.remoteSource.mapper.toBO
 import com.erpnext.pos.remoteSource.mapper.toEntities
 import com.erpnext.pos.remoteSource.mapper.toEntity
+import com.erpnext.pos.remoteSource.mapper.resolveReceivableAccount
 import com.erpnext.pos.sync.SyncTTL
 import com.erpnext.pos.utils.RepoTrace
 import com.erpnext.pos.utils.roundToCurrency
@@ -25,6 +26,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
+import kotlin.time.Clock
 import kotlin.collections.map
 
 class CustomerRepository(
@@ -33,6 +35,9 @@ class CustomerRepository(
     private val outboxLocalSource: com.erpnext.pos.localSource.datasources.CustomerOutboxLocalSource,
     private val context: CashBoxManager
 ) : ICustomerRepository {
+    private companion object {
+        const val ONLINE_REFRESH_TTL_MINUTES = 5L
+    }
 
     suspend fun rebuildAllCustomerSummaries() {
         val customers = localSource.getAll().first()
@@ -45,74 +50,13 @@ class CustomerRepository(
         search: String?, state: String?
     ): Flow<List<CustomerBO>> {
         RepoTrace.breadcrumb("CustomerRepository", "getCustomers", "search=$search state=$state")
-        val territory: String? = context.requireContext().route
-        return networkBoundResource(query = {
-            when {
-                state.isNullOrEmpty() && search.isNullOrEmpty() -> localSource.getAll()
-
-                state.isNullOrEmpty() -> localSource.getAllFiltered(search!!)
-
-                search.isNullOrEmpty() -> {
-                    if (state == "Todos") localSource.getAll()
-                    else localSource.getByCustomerState(state)
-                }
-
-                else -> localSource.getAll()
-            }.map { list -> list.map { it.toBO() } }
-        }, fetch = {
-            remoteSource.fetchCustomers(territory)
-        }, saveFetchResult = { remoteData ->
-            val profileId = context.requireContext().profileName
-            val recentPaidOnly = localSource.countInvoices() > 0
-            val invoices = remoteSource.fetchInvoices(profileId, recentPaidOnly).toEntities()
-            localSource.saveInvoices(invoices.map { normalizeBaseOutstanding(mergeLocalInvoiceFields(it)) })
-            backfillMissingInvoiceItems(profileId)
-
-            // Fetch all outstanding invoices once
-            val allOutstanding = remoteSource.fetchAllOutstandingInvoices(profileId)
-            val remoteOutstandingNames = allOutstanding.mapNotNull { it.name }.toSet()
-            val localOutstanding = localSource.getOutstandingInvoiceNames()
-            val missingOutstanding = localOutstanding.filterNot { remoteOutstandingNames.contains(it) }
-            missingOutstanding.forEach { invoiceName ->
-                val local = localSource.getInvoiceByName(invoiceName)
-                val customerId = local?.invoice?.customer
-                val remote = remoteSource.fetchInvoiceByName(invoiceName)
-                if (remote != null) {
-                    localSource.saveInvoices(listOf(remote.toEntity()))
-                } else {
-                    localSource.deleteInvoiceById(invoiceName)
-                }
-                customerId?.let { refreshCustomerSummaryWithRates(it) }
-            }
-
-            coroutineScope {
-                val contextCompany = context.requireContext().company
-                val entities = remoteData.map { dto ->
-                    async {
-                        val resolvedLimit = dto.creditLimitForCompany(contextCompany)
-                        val creditLimit = resolvedLimit.creditLimit
-                        val availableCredit = creditLimit
-                        dto.toEntity(
-                            creditLimit = creditLimit,
-                            availableCredit = availableCredit,
-                            pendingInvoicesCount = 0,
-                            totalPendingAmount = 0.0,
-                            state = "Sin Pendientes",
-                        )
-                    }
-                }.awaitAll()
-                localSource.insertAll(entities)
-                val ids = entities.map { it.name }
-                localSource.deleteMissing(ids)
-                outboxLocalSource.deleteMissingCustomerIds(ids)
-                entities.map { it.name }.distinct().forEach { customerId ->
-                    refreshCustomerSummaryWithRates(customerId)
-                }
-            }
-        }, shouldFetch = { true }, onFetchFailed = { e ->
-            RepoTrace.capture("CustomerRepository", "getCustomers", e)
-            println("⚠️ Error al sincronizar clientes: ${e.message}")
-        }).map { resource -> resource.data ?: emptyList() }
+        return when {
+            state.isNullOrEmpty() && search.isNullOrEmpty() -> localSource.getAll()
+            state.isNullOrEmpty() -> localSource.getAllFiltered(search ?: "")
+            search.isNullOrEmpty() -> if (state == "Todos") localSource.getAll()
+            else localSource.getByCustomerState(state)
+            else -> localSource.getAll()
+        }.map { list -> list.map { it.toBO() } }
     }
 
     override suspend fun getCustomerByName(name: String): CustomerBO? {
@@ -123,7 +67,13 @@ class CustomerRepository(
         val territory: String? = context.requireContext().route
         RepoTrace.breadcrumb("CustomerRepository", "sync")
         return networkBoundResource(query = { flowOf(emptyList<CustomerDto>().toBO()) }, fetch = {
-            remoteSource.fetchCustomers(territory)
+            val profileId = context.requireContext().profileName
+            val recentPaidOnly = localSource.countInvoices() > 0
+            remoteSource.fetchCustomersBootstrapSnapshot(
+                profileName = profileId,
+                territory = territory,
+                recentPaidOnly = recentPaidOnly
+            )
         }, shouldFetch = { localData ->
             true
             /*localData.isEmpty() ||
@@ -131,14 +81,16 @@ class CustomerRepository(
                             .toLong())*/
         }, saveFetchResult = { remoteData ->
             val profileId = context.requireContext().profileName
-            val recentPaidOnly = localSource.countInvoices() > 0
-            val invoices = remoteSource.fetchInvoices(profileId, recentPaidOnly)
+            val invoices = remoteData.invoices
             val entities = invoices.toEntities()
             localSource.saveInvoices(entities.map { normalizeBaseOutstanding(mergeLocalInvoiceFields(it)) })
             backfillMissingInvoiceItems(profileId)
 
             // Fetch all outstanding invoices once
-            val allOutstanding = remoteSource.fetchAllOutstandingInvoices(profileId)
+            val allOutstanding = remoteData.invoices.filter { invoice ->
+                val outstanding = invoice.outstandingAmount ?: (invoice.grandTotal - (invoice.paidAmount ?: 0.0))
+                outstanding > 0.0
+            }
             val remoteOutstandingNames = allOutstanding.mapNotNull { it.name }.toSet()
             val localOutstanding = localSource.getOutstandingInvoiceNames()
             val missingOutstanding = localOutstanding.filterNot { remoteOutstandingNames.contains(it) }
@@ -155,12 +107,14 @@ class CustomerRepository(
             }
 
             coroutineScope {
-                val entities = remoteData.map { dto ->
+                val entities = remoteData.customers.map { dto ->
                     async {
                         val creditLimit = dto.creditLimits
                         val available =
                             if (creditLimit.isNotEmpty()) (creditLimit.firstOrNull()?.creditLimit
                                 ?: 0.0) else 0.0
+                        val contextCompany = context.getContext()?.company
+                        val receivable = dto.resolveReceivableAccount(contextCompany)
                         //val address = remoteSource.getCustomerAddress(dto.name)
                         //val contact = remoteSource.getCustomerContact(dto.name)
 
@@ -170,6 +124,8 @@ class CustomerRepository(
                             pendingInvoicesCount = 0,
                             totalPendingAmount = 0.0,
                             state = "Sin Pendientes",
+                            receivableAccount = receivable?.account,
+                            receivableAccountCurrency = receivable?.accountCurrency ?: dto.partyAccountCurrency,
                             //address = null, //address ?: "",
                             //contact = null
                         )

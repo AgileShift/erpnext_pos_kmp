@@ -29,7 +29,8 @@ data class HomeAction(
             syncOnStartup = true,
             wifiOnly = false,
             lastSyncAt = null,
-            useTtl = false
+            useTtl = false,
+            ttlHours = 6
         )
     ),
     val homeMetrics: StateFlow<HomeMetrics> = MutableStateFlow(HomeMetrics()),

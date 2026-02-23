@@ -6,10 +6,10 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.itemsIndexed
-import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Error
@@ -20,7 +20,8 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.runtime.*
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -55,29 +56,9 @@ fun InventoryList(
     isDesktop: Boolean,
     baseCurrency: String,
     exchangeRate: Double,
-    searchQuery: String,
-    selectedCategory: String,
     modifier: Modifier = Modifier
 ) {
     val strings = LocalAppStrings.current
-    val snapshotItems = items.itemSnapshotList.items
-    val normalizedQuery = searchQuery.trim().lowercase()
-    val isFiltering = normalizedQuery.isNotBlank() ||
-            selectedCategory != "Todos los grupos de artículos"
-    val filteredItems = remember(snapshotItems, normalizedQuery, selectedCategory) {
-        snapshotItems.filter { item ->
-            val matchesQuery = normalizedQuery.isBlank() || listOf(
-                item.name,
-                item.itemCode,
-                item.description,
-                item.barcode,
-                item.brand.orEmpty()
-            ).any { it.lowercase().contains(normalizedQuery) }
-            val matchesCategory = selectedCategory == "Todos los grupos de artículos" ||
-                    item.itemGroup.equals(selectedCategory, ignoreCase = true)
-            matchesQuery && matchesCategory
-        }
-    }
 
     AnimatedContent(
         modifier = Modifier.fillMaxWidth(),
@@ -110,59 +91,6 @@ fun InventoryList(
             }
 
             else -> {
-                if (isFiltering) {
-                    if (filteredItems.isEmpty()) {
-                        EmptyStateMessage(
-                            strings.inventory.emptySearchMessage,
-                            Icons.Default.Inventory2
-                        )
-                        return@AnimatedContent
-                    }
-                    if (isDesktop) {
-                        val spacing = if (isWideLayout) 16.dp else 12.dp
-                        LazyVerticalGrid(
-                            columns = GridCells.Adaptive(minSize = 360.dp),
-                            modifier = modifier.fillMaxSize(),
-                            contentPadding = PaddingValues(horizontal = 4.dp, vertical = 8.dp),
-                            verticalArrangement = Arrangement.spacedBy(spacing),
-                            horizontalArrangement = Arrangement.spacedBy(spacing),
-                        ) {
-                            itemsIndexed(filteredItems, key = { _, item ->
-                                val keyBase = item.itemCode.ifBlank { item.name }
-                                "$keyBase-$baseCurrency-${exchangeRate}"
-                            }) { _, item ->
-                                ProductCard(
-                                    actions,
-                                    item,
-                                    isDesktop = isDesktop,
-                                    baseCurrency = baseCurrency,
-                                    exchangeRate = exchangeRate
-                                )
-                            }
-                        }
-                    } else {
-                        LazyColumn(
-                            modifier = modifier.fillMaxSize(),
-                            state = listState,
-                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 8.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            itemsIndexed(filteredItems, key = { _, item ->
-                                val keyBase = item.itemCode.ifBlank { item.name }
-                                "$keyBase-$baseCurrency-${exchangeRate}"
-                            }) { _, item ->
-                                ProductCard(
-                                    actions,
-                                    item,
-                                    isDesktop = isDesktop,
-                                    baseCurrency = baseCurrency,
-                                    exchangeRate = exchangeRate
-                                )
-                            }
-                        }
-                    }
-                    return@AnimatedContent
-                }
                 if (isDesktop) {
                     val spacing = if (isWideLayout) 16.dp else 12.dp
 
@@ -345,8 +273,6 @@ fun InventoryListPreview() {
         modifier = Modifier,
         isWideLayout = true,
         baseCurrency = "USD",
-        exchangeRate = 0.027,
-        searchQuery = "",
-        selectedCategory = "Todos los grupos de artículos"
+        exchangeRate = 0.027
     )
 }

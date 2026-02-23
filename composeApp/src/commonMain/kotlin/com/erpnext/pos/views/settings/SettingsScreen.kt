@@ -5,6 +5,7 @@ package com.erpnext.pos.views.settings
 import AppColorTheme
 import AppThemeMode
 import androidx.compose.foundation.background
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -29,15 +30,12 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.automirrored.outlined.TrendingUp
 import androidx.compose.material.icons.automirrored.outlined.Undo
 import androidx.compose.material.icons.outlined.ExpandLess
 import androidx.compose.material.icons.outlined.ExpandMore
-import androidx.compose.material.icons.outlined.Search
-import androidx.compose.material.icons.outlined.Clear
 import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Language
@@ -66,7 +64,6 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -82,6 +79,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.sp
 import com.erpnext.pos.localSource.preferences.SyncSettings
 import com.erpnext.pos.localization.AppLanguage
@@ -121,7 +119,8 @@ fun SettingsScreenPreview() {
                 syncOnStartup = true,
                 wifiOnly = false,
                 lastSyncAt = null,
-                useTtl = false
+                useTtl = false,
+                ttlHours = 6
             ),
             syncState = SyncState.IDLE,
             language = AppLanguage.Spanish,
@@ -140,6 +139,7 @@ fun SettingsScreenPreview() {
             salesTargetConvertedWeekly = 104000.0,
             salesTargetConvertedDaily = 15000.0,
             salesTargetConversionStale = false,
+            salesTargetFromContext = true,
             syncLog = emptyList()
         ),
         POSSettingAction()
@@ -176,7 +176,7 @@ fun PosSettingsScreen(
                     var showSalesTargetDialog by remember { mutableStateOf(false) }
                     var showReturnDaysDialog by remember { mutableStateOf(false) }
                     var showReturnDestinationDialog by remember { mutableStateOf(false) }
-                    var query by remember { mutableStateOf("") }
+                    var showTtlHoursDialog by remember { mutableStateOf(false) }
 
                     if (showAlertTimeDialog) {
                         InventoryAlertTimeDialog(
@@ -189,7 +189,7 @@ fun PosSettingsScreen(
                             }
                         )
                     }
-                    if (showSalesTargetDialog) {
+                    if (showSalesTargetDialog && !state.salesTargetFromContext) {
                         SalesTargetDialog(
                             initialValue = state.salesTargetMonthly,
                             baseCurrency = state.salesTargetBaseCurrency,
@@ -225,21 +225,16 @@ fun PosSettingsScreen(
                             }
                         )
                     }
-
-                    Text(
-                        text = strings.settings.title,
-                        style = MaterialTheme.typography.headlineSmall.copy(
-                            fontWeight = FontWeight.SemiBold,
-                            letterSpacing = (-0.2).sp
-                        ),
-                        modifier = Modifier.padding(bottom = 12.dp)
-                    )
-
-                    SettingsSearchBar(
-                        query = query,
-                        onQueryChange = { query = it },
-                        compact = isCompact
-                    )
+                    if (showTtlHoursDialog) {
+                        TtlHoursDialog(
+                            initialValue = state.syncSettings.ttlHours,
+                            onDismiss = { showTtlHoursDialog = false },
+                            onConfirm = { value ->
+                                showTtlHoursDialog = false
+                                action.onTtlHoursChanged(value)
+                            }
+                        )
+                    }
 
                     SettingsOverviewRow(
                         settings = state.settings,
@@ -250,38 +245,38 @@ fun PosSettingsScreen(
                         compact = isCompact,
                         isOnline = isOnline
                     )
+                    Spacer(modifier = Modifier.height(if (isCompact) 14.dp else 18.dp))
 
                     if (!state.hasContext) {
                         MissingContextBanner()
                     }
 
-                    if (sectionVisible(query, listOf("sync", "sincron", "wifi", "ttl"))) {
-                        SyncSection(
-                            syncSettings = state.syncSettings,
-                            onAutoSyncChanged = action.onAutoSyncChanged,
-                            onSyncOnStartupChanged = action.onSyncOnStartupChanged,
-                            onWifiOnlyChanged = action.onWifiOnlyChanged,
-                            onUseTtlChanged = action.onUseTtlChanged,
-                            compact = isCompact
-                        )
-                    }
+                    SyncSection(
+                        syncSettings = state.syncSettings,
+                        onAutoSyncChanged = action.onAutoSyncChanged,
+                        onSyncOnStartupChanged = action.onSyncOnStartupChanged,
+                        onWifiOnlyChanged = action.onWifiOnlyChanged,
+                        onUseTtlChanged = action.onUseTtlChanged,
+                        onTtlHoursClick = { showTtlHoursDialog = true },
+                        compact = isCompact
+                    )
 
-                    if (sectionVisible(query, listOf("oper", "impuesto", "offline", "stock"))) {
-                        SettingSection(
-                            title = strings.settings.operationTitle,
-                            icon = Icons.Outlined.Tune,
+                    SettingSection(
+                        title = strings.settings.operationTitle,
+                        icon = Icons.Outlined.Tune,
+                        compact = isCompact
+                    ) {
+                        SettingToggle(
+                            label = strings.settings.taxesIncludedLabel,
+                            checked = state.settings.taxesIncluded,
+                            onCheckedChange = action.onTaxesIncludedChanged,
                             compact = isCompact
-                        ) {
-                            SettingToggle(
-                                label = strings.settings.taxesIncludedLabel,
-                                checked = state.settings.taxesIncluded,
-                                onCheckedChange = action.onTaxesIncludedChanged,
-                                compact = isCompact
                         )
                         SettingToggle(
                             label = strings.settings.offlineModeLabel,
                             checked = state.settings.offlineMode,
                             onCheckedChange = action.onOfflineModeChanged,
+                            supportingText = strings.settings.offlineModeHelp,
                             compact = isCompact
                         )
                         SettingToggle(
@@ -289,26 +284,24 @@ fun PosSettingsScreen(
                             checked = state.settings.allowNegativeStock,
                             onCheckedChange = {},
                             enabled = false,
-                                supportingText = "Controlado por ERPNext (Desk).",
-                                compact = isCompact,
-                                showDivider = false
-                            )
-                        }
+                            supportingText = "Controlado por ERPNext (Desk).",
+                            compact = isCompact,
+                            showDivider = false
+                        )
                     }
 
-                    if (sectionVisible(query, listOf("devol", "retorno", "reembolso", "credito"))) {
-                        ExpandableSection(
-                            title = "Política de devoluciones",
-                            description = "Se aplica localmente y alinea los retornos con ERPNext v16.",
-                            icon = Icons.AutoMirrored.Outlined.Undo,
-                            compact = isCompact,
-                            initiallyExpanded = false
-                        ) {
-                            SettingItem(
-                                label = "Destino por defecto",
-                                value = if (state.returnPolicy.defaultDestination == ReturnDestinationPolicy.REFUND) {
-                                    "Reembolso"
-                                } else {
+                    ExpandableSection(
+                        title = "Política de devoluciones",
+                        description = "Se aplica localmente y alinea los retornos con ERPNext v16.",
+                        icon = Icons.AutoMirrored.Outlined.Undo,
+                        compact = isCompact,
+                        initiallyExpanded = false
+                    ) {
+                        SettingItem(
+                            label = "Destino por defecto",
+                            value = if (state.returnPolicy.defaultDestination == ReturnDestinationPolicy.REFUND) {
+                                "Reembolso"
+                            } else {
                                 "Crédito a favor"
                             },
                             onClick = { showReturnDestinationDialog = true },
@@ -381,54 +374,61 @@ fun PosSettingsScreen(
                                     state.returnPolicy.copy(requireReason = enabled)
                                 )
                             },
-                                compact = isCompact,
-                                showDivider = false
-                            )
-                        }
+                            compact = isCompact,
+                            showDivider = false
+                        )
                     }
 
-                    if (sectionVisible(query, listOf("alerta", "invent", "stock", "notific"))) {
-                        SettingSection(
-                            title = strings.settings.inventoryAlertsTitle,
-                            description = strings.settings.inventoryAlertsTimeHint,
-                            icon = Icons.Outlined.Notifications,
+                    SettingSection(
+                        title = strings.settings.inventoryAlertsTitle,
+                        description = strings.settings.inventoryAlertsTimeHint,
+                        icon = Icons.Outlined.Notifications,
+                        compact = isCompact
+                    ) {
+                        SettingToggle(
+                            label = strings.settings.inventoryAlertsEnabledLabel,
+                            checked = state.inventoryAlertsEnabled,
+                            onCheckedChange = action.onInventoryAlertsEnabledChanged,
                             compact = isCompact
-                        ) {
-                            SettingToggle(
-                                label = strings.settings.inventoryAlertsEnabledLabel,
-                                checked = state.inventoryAlertsEnabled,
-                                onCheckedChange = action.onInventoryAlertsEnabledChanged,
-                                compact = isCompact
                         )
                         SettingItem(
                             label = strings.settings.inventoryAlertsTimeLabel,
                             value = formatTime(state.inventoryAlertHour, state.inventoryAlertMinute),
-                                onClick = { showAlertTimeDialog = true },
-                                enabled = state.inventoryAlertsEnabled,
+                            onClick = { showAlertTimeDialog = true },
+                            enabled = state.inventoryAlertsEnabled,
+                            compact = isCompact,
+                            showDivider = false
+                        )
+                    }
+
+                    ExpandableSection(
+                        title = strings.settings.salesTargetTitle,
+                        description = strings.settings.salesTargetHint,
+                        icon = Icons.AutoMirrored.Outlined.TrendingUp,
+                        compact = isCompact,
+                        initiallyExpanded = false
+                    ) {
+                        if (state.salesTargetFromContext) {
+                            SettingItem(
+                                label = "Origen de la meta",
+                                value = "Contexto POS (sync.bootstrap)",
+                                onClick = {},
+                                enabled = false,
                                 compact = isCompact,
                                 showDivider = false
                             )
-                        }
-                    }
-
-                    if (sectionVisible(query, listOf("meta", "ventas", "objetivo", "target"))) {
-                        ExpandableSection(
-                            title = strings.settings.salesTargetTitle,
-                            description = strings.settings.salesTargetHint,
-                            icon = Icons.AutoMirrored.Outlined.TrendingUp,
-                            compact = isCompact,
-                            initiallyExpanded = false
-                        ) {
+                        } else {
                             SettingItem(
                                 label = strings.settings.salesTargetEditLabel,
                                 value = formatCurrency(
                                     state.salesTargetBaseCurrency,
                                     state.salesTargetMonthly
-                            ),
-                            onClick = { showSalesTargetDialog = true },
-                            compact = isCompact,
-                            showDivider = false
-                        )
+                                ),
+                                onClick = { showSalesTargetDialog = true },
+                                compact = isCompact,
+                                showDivider = false
+                            )
+                        }
                         TargetRow(
                             label = strings.settings.salesTargetMonthlyLabel,
                             baseCurrency = state.salesTargetBaseCurrency,
@@ -465,52 +465,55 @@ fun PosSettingsScreen(
                                 color = MaterialTheme.colorScheme.tertiary
                             )
                         }
-                        Button(
-                            onClick = action.onSyncSalesTarget,
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = MaterialTheme.colorScheme.primary
+                        if (state.salesTargetFromContext) {
+                            Text(
+                                text = "La meta mensual se obtiene del contexto sincronizado.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
-                            ,
-                            modifier = Modifier.padding(top = if (isCompact) 6.dp else 10.dp)
+                        } else {
+                            Button(
+                                onClick = action.onSyncSalesTarget,
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = MaterialTheme.colorScheme.primary
+                                ),
+                                modifier = Modifier.padding(top = if (isCompact) 6.dp else 10.dp)
                             ) {
                                 Text(strings.settings.salesTargetSyncLabel)
                             }
                         }
                     }
 
-                    if (sectionVisible(query, listOf("hardware", "impres", "cajon", "printer"))) {
-                        SettingSection(
-                            title = strings.settings.hardwareTitle,
-                            icon = Icons.Outlined.Print,
+                    SettingSection(
+                        title = strings.settings.hardwareTitle,
+                        icon = Icons.Outlined.Print,
+                        compact = isCompact
+                    ) {
+                        SettingToggle(
+                            label = strings.settings.printerEnabledLabel,
+                            checked = state.settings.printerEnabled,
+                            onCheckedChange = action.onPrinterEnabledChanged,
                             compact = isCompact
-                        ) {
-                            SettingToggle(
-                                label = strings.settings.printerEnabledLabel,
-                                checked = state.settings.printerEnabled,
-                                onCheckedChange = action.onPrinterEnabledChanged,
-                                compact = isCompact
                         )
                         SettingToggle(
                             label = strings.settings.cashDrawerEnabledLabel,
                             checked = state.settings.cashDrawerEnabled,
-                                onCheckedChange = action.onCashDrawerEnabledChanged,
-                                compact = isCompact,
-                                showDivider = false
-                            )
-                        }
+                            onCheckedChange = action.onCashDrawerEnabledChanged,
+                            compact = isCompact,
+                            showDivider = false
+                        )
                     }
 
-                    if (sectionVisible(query, listOf("idioma", "lenguaje", "tema", "color", "apariencia"))) {
-                        SettingSection(
-                            title = strings.settings.languageTitle,
-                            description = strings.settings.languageInstantHint,
-                            icon = Icons.Outlined.Language,
+                    SettingSection(
+                        title = strings.settings.languageTitle,
+                        description = strings.settings.languageInstantHint,
+                        icon = Icons.Outlined.Language,
+                        compact = isCompact
+                    ) {
+                        LanguageSelector(
+                            currentLanguage = state.language,
+                            onLanguageSelected = action.onLanguageSelected,
                             compact = isCompact
-                        ) {
-                            LanguageSelector(
-                                currentLanguage = state.language,
-                                onLanguageSelected = action.onLanguageSelected,
-                                compact = isCompact
                         )
                         ThemeChipSelector(
                             currentTheme = state.theme,
@@ -520,15 +523,12 @@ fun PosSettingsScreen(
                             currentMode = state.themeMode,
                             onModeSelected = action.onThemeModeSelected
                         )
-                        }
                     }
 
-                    if (sectionVisible(query, listOf("log", "historial", "errores", "sync"))) {
-                        SyncLogSection(
-                            entries = state.syncLog,
-                            compact = isCompact
-                        )
-                    }
+                    SyncLogSection(
+                        entries = state.syncLog,
+                        compact = isCompact
+                    )
                 }
 
                 is POSSettingState.Loading -> {
@@ -661,20 +661,20 @@ private fun SettingsHeroCard(
     }
     val statusStyle = when (syncState) {
         SyncState.IDLE -> StatusStyle(
-            container = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.15f),
-            content = MaterialTheme.colorScheme.onPrimaryContainer
+            container = tokens.heroText.copy(alpha = 0.12f),
+            content = tokens.heroText
         )
         SyncState.SUCCESS -> StatusStyle(
-            container = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.15f),
-            content = MaterialTheme.colorScheme.onPrimaryContainer
+            container = tokens.heroText.copy(alpha = 0.12f),
+            content = tokens.heroText
         )
         is SyncState.ERROR -> StatusStyle(
-            container = MaterialTheme.colorScheme.errorContainer,
+            container = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.92f),
             content = MaterialTheme.colorScheme.onErrorContainer
         )
         is SyncState.SYNCING -> StatusStyle(
-            container = MaterialTheme.colorScheme.tertiaryContainer,
-            content = MaterialTheme.colorScheme.onTertiaryContainer
+            container = tokens.heroText.copy(alpha = 0.18f),
+            content = tokens.heroText
         )
     }
 
@@ -682,6 +682,9 @@ private fun SettingsHeroCard(
         modifier = modifier,
         shape = RoundedCornerShape(26.dp),
         elevation = CardDefaults.elevatedCardElevation(defaultElevation = 4.dp),
+        colors = CardDefaults.elevatedCardColors(
+            containerColor = Color.Transparent
+        )
     ) {
         Box(
             modifier = Modifier
@@ -751,6 +754,7 @@ private fun SettingsHeroCard(
                     OutlinedButton(
                         onClick = onCancelSync,
                         modifier = Modifier.fillMaxWidth(),
+                        border = BorderStroke(1.dp, tokens.heroText.copy(alpha = 0.35f)),
                         colors = ButtonDefaults.outlinedButtonColors(
                             contentColor = tokens.heroButtonText
                         )
@@ -1149,6 +1153,46 @@ private fun SalesTargetDialog(
 }
 
 @Composable
+private fun TtlHoursDialog(
+    initialValue: Int,
+    onDismiss: () -> Unit,
+    onConfirm: (Int) -> Unit
+) {
+    val strings = LocalAppStrings.current
+    var input by remember { mutableStateOf(initialValue.coerceIn(1, 168).toString()) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(strings.settings.ttlHoursLabel) },
+        text = {
+            OutlinedTextField(
+                value = input,
+                onValueChange = { input = it.filter(Char::isDigit) },
+                label = { Text(strings.settings.ttlHoursInputLabel) },
+                supportingText = { Text(strings.settings.ttlHoursRangeHint) },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(
+                    keyboardType = KeyboardType.Number,
+                    imeAction = ImeAction.Done
+                )
+            )
+        },
+        confirmButton = {
+            Button(onClick = {
+                val value = input.toIntOrNull()?.coerceIn(1, 168) ?: 6
+                onConfirm(value)
+            }) {
+                Text(strings.settings.inventoryAlertsTimeSaveLabel)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(strings.settings.inventoryAlertsTimeCancelLabel)
+            }
+        }
+    )
+}
+
+@Composable
 private fun ReturnPolicyDaysDialog(
     initialValue: Int,
     onDismiss: () -> Unit,
@@ -1239,6 +1283,7 @@ private fun SyncSection(
     onSyncOnStartupChanged: (Boolean) -> Unit,
     onWifiOnlyChanged: (Boolean) -> Unit,
     onUseTtlChanged: (Boolean) -> Unit,
+    onTtlHoursClick: () -> Unit,
     compact: Boolean
 ) {
     val strings = LocalAppStrings.current
@@ -1257,11 +1302,13 @@ private fun SyncSection(
             onSyncOnStartupChanged = onSyncOnStartupChanged,
             onWifiOnlyChanged = onWifiOnlyChanged,
             onUseTtlChanged = onUseTtlChanged,
+            ttlHours = syncSettings.ttlHours,
+            onTtlHoursClick = onTtlHoursClick,
             compact = compact
         )
         Spacer(modifier = Modifier.height(if (compact) 4.dp else 6.dp))
         Text(
-            text = "Estos ajustes se aplican en segundo plano cuando el dispositivo tiene conexión.",
+            text = strings.settings.syncBackgroundHint,
             style = MaterialTheme.typography.bodySmall,
             color = tokens.subtleText
         )
@@ -1335,10 +1382,12 @@ private fun SyncTogglesRow(
     syncOnStartup: Boolean,
     wifiOnly: Boolean,
     useTtl: Boolean,
+    ttlHours: Int,
     onAutoSyncChanged: (Boolean) -> Unit,
     onSyncOnStartupChanged: (Boolean) -> Unit,
     onWifiOnlyChanged: (Boolean) -> Unit,
     onUseTtlChanged: (Boolean) -> Unit,
+    onTtlHoursClick: () -> Unit,
     compact: Boolean
 ) {
     val strings = LocalAppStrings.current
@@ -1366,6 +1415,15 @@ private fun SyncTogglesRow(
             label = strings.settings.useTtlLabel,
             checked = useTtl,
             onCheckedChange = onUseTtlChanged,
+            supportingText = strings.settings.useTtlHelp,
+            compact = compact,
+            showDivider = true
+        )
+        SettingItem(
+            label = strings.settings.ttlHoursLabel,
+            value = "$ttlHours h",
+            onClick = onTtlHoursClick,
+            enabled = useTtl,
             compact = compact,
             showDivider = false
         )
@@ -1435,52 +1493,6 @@ private fun StatusPill(
             color = contentColor
         )
     }
-}
-
-@Composable
-private fun SettingsSearchBar(
-    query: String,
-    onQueryChange: (String) -> Unit,
-    compact: Boolean
-) {
-    val tokens = settingsTokens()
-    OutlinedTextField(
-        value = query,
-        onValueChange = onQueryChange,
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(bottom = if (compact) 10.dp else 12.dp),
-        placeholder = { Text("Buscar configuración…") },
-        singleLine = true,
-        leadingIcon = {
-            Icon(
-                imageVector = Icons.Outlined.Search,
-                contentDescription = null,
-                tint = tokens.mutedText
-            )
-        },
-        trailingIcon = {
-            if (query.isNotBlank()) {
-                Icon(
-                    imageVector = Icons.Outlined.Clear,
-                    contentDescription = "Limpiar",
-                    tint = tokens.mutedText,
-                    modifier = Modifier.clickable { onQueryChange("") }
-                )
-            }
-        },
-        colors = TextFieldDefaults.colors(
-            focusedIndicatorColor = tokens.cardBorder,
-            unfocusedIndicatorColor = tokens.cardBorder,
-            cursorColor = tokens.accent
-        )
-    )
-}
-
-private fun sectionVisible(query: String, keywords: List<String>): Boolean {
-    val normalized = query.trim().lowercase()
-    if (normalized.isBlank()) return true
-    return keywords.any { it.contains(normalized) || normalized.contains(it) }
 }
 
 private data class SettingsTokens(

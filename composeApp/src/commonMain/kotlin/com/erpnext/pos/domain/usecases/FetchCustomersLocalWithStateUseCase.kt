@@ -1,5 +1,9 @@
 package com.erpnext.pos.domain.usecases
 
+import androidx.paging.Pager
+import androidx.paging.PagingConfig
+import androidx.paging.PagingData
+import androidx.paging.map
 import com.erpnext.pos.domain.models.CustomerBO
 import com.erpnext.pos.localSource.datasources.CustomerLocalSource
 import com.erpnext.pos.remoteSource.mapper.toBO
@@ -13,20 +17,26 @@ import kotlinx.coroutines.flow.map
  */
 class FetchCustomersLocalWithStateUseCase(
     private val localSource: CustomerLocalSource
-) : UseCase<CustomerQueryInput?, Flow<List<CustomerBO>>>() {
-    override suspend fun useCaseFunction(input: CustomerQueryInput?): Flow<List<CustomerBO>> {
+) : UseCase<CustomerQueryInput?, Flow<PagingData<CustomerBO>>>() {
+    override suspend fun useCaseFunction(input: CustomerQueryInput?): Flow<PagingData<CustomerBO>> {
         val query = input?.query?.trim().orEmpty()
         val state = input?.state?.trim().orEmpty()
-        val source = when {
-            state.isEmpty() && query.isEmpty() -> localSource.getAll()
-            state.isEmpty() -> localSource.getAllFiltered(query)
-            query.isEmpty() -> if (state == "Todos") {
-                localSource.getAll()
-            } else {
-                localSource.getByCustomerState(state)
-            }
-            else -> localSource.getAll()
+        return Pager(PagingConfig(pageSize = 30, prefetchDistance = 10)) {
+            localSource.getPaged(search = query, state = state)
+        }.flow.map { paging ->
+            paging.map { it.toBO() }
         }
-        return source.map { list -> list.map { it.toBO() } }
+    }
+
+    suspend fun count(input: CustomerQueryInput?): Int {
+        val query = input?.query?.trim().orEmpty()
+        val state = input?.state?.trim().orEmpty()
+        return localSource.countFiltered(search = query, state = state)
+    }
+
+    suspend fun countPending(input: CustomerQueryInput?): Int {
+        val query = input?.query?.trim().orEmpty()
+        val state = input?.state?.trim().orEmpty()
+        return localSource.countPendingFiltered(search = query, state = state)
     }
 }

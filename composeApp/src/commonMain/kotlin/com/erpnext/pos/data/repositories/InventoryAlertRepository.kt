@@ -35,52 +35,14 @@ class InventoryAlertRepository(
             .filter { it.isStocked && !it.isDeleted }
 
         val itemCodes = items.map { it.itemCode }
-        val canFetch = networkMonitor.isConnected.first() && sessionRefresher.ensureValidSession()
-
-        val projectedQtyMap = if (canFetch) {
-            runCatching {
-                apiService.fetchBinsForItems(warehouseId, itemCodes)
-                    .associate { it.itemCode to (it.projectedQty ?: it.actualQty) }
-            }.onFailure {
-                AppLogger.warn("InventoryAlertRepository: fetchBinsForItems failed", it)
-            }.getOrDefault(emptyMap())
-        } else {
-            emptyMap()
-        }
+        val projectedQtyMap = emptyMap<String, Double>()
 
         val localReorderMap = itemReorderDao.getByItems(
             warehouseId = warehouseId,
             itemIds = itemCodes
         ).associate { it.itemId to ReorderInfo(it.reorderLevel, it.reorderQty) }
 
-        val reorderMap = if (canFetch) {
-            runCatching {
-                val fetched = apiService.fetchItemReordersForItems(warehouseId, itemCodes)
-                itemReorderDao.deleteByWarehouse(warehouseId)
-                if (fetched.isNotEmpty()) {
-                    val now = Clock.System.now().toEpochMilliseconds()
-                    itemReorderDao.upsertAll(
-                        fetched.map {
-                            ItemReorderEntity(
-                                itemId = it.itemCode,
-                                warehouseId = warehouseId,
-                                reorderLevel = it.reorderLevel,
-                                reorderQty = it.reorderQty,
-                                updatedAt = now,
-                                companyId = "",
-                                instanceId = "",
-                                lastSyncedAt = now
-                            )
-                        }
-                    )
-                }
-                fetched.associate { it.itemCode to ReorderInfo(it.reorderLevel, it.reorderQty) }
-            }.onFailure {
-                AppLogger.warn("InventoryAlertRepository: fetchItemReordersForItems failed", it)
-            }.getOrElse { localReorderMap }
-        } else {
-            localReorderMap
-        }
+        val reorderMap = localReorderMap
 
         val alerts = items.mapNotNull { item ->
             val qty = projectedQtyMap[item.itemCode] ?: item.actualQty

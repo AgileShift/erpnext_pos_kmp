@@ -7,12 +7,6 @@ import com.erpnext.pos.localSource.datasources.CustomerOutboxLocalSource
 import com.erpnext.pos.localSource.entities.CustomerEntity
 import com.erpnext.pos.localSource.entities.CustomerOutboxEntity
 import com.erpnext.pos.remoteSource.api.APIService
-import com.erpnext.pos.remoteSource.dto.AddressCreateDto
-import com.erpnext.pos.remoteSource.dto.AddressLinkDto
-import com.erpnext.pos.remoteSource.dto.AddressUpdateDto
-import com.erpnext.pos.remoteSource.dto.ContactCreateDto
-import com.erpnext.pos.remoteSource.dto.ContactLinkDto
-import com.erpnext.pos.remoteSource.dto.ContactUpdateDto
 import com.erpnext.pos.remoteSource.dto.CustomerCreateDto
 import com.erpnext.pos.remoteSource.dto.CustomerCreditLimitCreateDto
 import com.erpnext.pos.remoteSource.sdk.json
@@ -97,83 +91,6 @@ class CustomerSyncRepository(
                         customerName = payload.customerName
                     )
                     response.name
-                }
-
-                payload.contact?.let { contact ->
-                    if (!contact.email.isNullOrBlank() || !contact.mobile.isNullOrBlank() ||
-                        !contact.phone.isNullOrBlank()
-                    ) {
-                        val existing = runCatching { api.findCustomerContacts(remoteId) }
-                            .getOrElse { emptyList() }
-                        if (existing.isNotEmpty()) {
-                            api.updateContact(
-                                existing.first().name,
-                                ContactUpdateDto(
-                                    emailId = contact.email,
-                                    mobileNo = contact.mobile,
-                                    phone = contact.phone
-                                )
-                            )
-                        } else {
-                            api.createContact(
-                                ContactCreateDto(
-                                    firstName = payload.customerName,
-                                    emailId = contact.email,
-                                    mobileNo = contact.mobile,
-                                    phone = contact.phone,
-                                    links = listOf(
-                                        ContactLinkDto(
-                                            linkDoctype = "Customer",
-                                            linkName = remoteId
-                                        )
-                                    )
-                                )
-                            )
-                        }
-                    }
-                }
-
-                payload.address?.let { address ->
-                    if (!address.line1.isNullOrBlank() || !address.city.isNullOrBlank()) {
-                        val existing = runCatching { api.findCustomerAddresses(remoteId) }
-                            .getOrElse { emptyList() }
-                        if (existing.isNotEmpty()) {
-                            api.updateAddress(
-                                existing.first().name,
-                                AddressUpdateDto(
-                                    addressTitle = payload.customerName,
-                                    addressType = "Billing",
-                                    addressLine1 = address.line1,
-                                    addressLine2 = address.line2,
-                                    city = address.city,
-                                    state = address.state,
-                                    country = address.country,
-                                    emailId = payload.email,
-                                    phone = payload.mobileNo ?: payload.phone
-                                )
-                            )
-                        } else {
-                            api.createAddress(
-                                AddressCreateDto(
-                                    addressTitle = payload.customerName,
-                                    addressType = "Billing",
-                                    addressLine1 = address.line1,
-                                    addressLine2 = address.line2,
-                                    city = address.city,
-                                    state = address.state,
-                                    country = address.country,
-                                    emailId = payload.email,
-                                    phone = payload.mobileNo ?: payload.phone,
-                                    links = listOf(
-                                        AddressLinkDto(
-                                            linkDoctype = "Customer",
-                                            linkName = remoteId
-                                        )
-                                    )
-                                )
-                            )
-                        }
-                    }
                 }
 
                 outboxLocalSource.updateStatus(

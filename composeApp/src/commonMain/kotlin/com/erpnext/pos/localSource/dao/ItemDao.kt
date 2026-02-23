@@ -28,6 +28,17 @@ interface ItemDao {
     @Query("SELECT * FROM tabItem WHERE is_deleted = 0 ORDER BY name ASC")
     fun getAllItemsPaged(): PagingSource<Int, ItemEntity>
 
+    @Query(
+        """
+        SELECT * FROM tabItem
+        WHERE is_deleted = 0
+          AND (:search = '' OR name LIKE '%' || :search || '%' OR description LIKE '%' || :search || '%' OR brand LIKE '%' || :search || '%' OR itemGroup LIKE '%' || :search || '%')
+          AND (:category = '' OR itemGroup = :category)
+        ORDER BY name ASC
+        """
+    )
+    fun getPaged(search: String, category: String): PagingSource<Int, ItemEntity>
+
     @Query("SELECT * FROM tabItem WHERE is_deleted = 0 ORDER BY name ASC")
     suspend fun getAllItems(): List<ItemEntity>
 

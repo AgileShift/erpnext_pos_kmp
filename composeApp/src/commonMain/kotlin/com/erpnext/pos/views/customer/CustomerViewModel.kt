@@ -1,5 +1,6 @@
 package com.erpnext.pos.views.customer
 
+import androidx.paging.PagingData
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -7,6 +8,7 @@ import androidx.lifecycle.viewModelScope
 import com.erpnext.pos.base.BaseViewModel
 import com.erpnext.pos.domain.models.CustomerBO
 import com.erpnext.pos.domain.models.CompanyBO
+import com.erpnext.pos.domain.models.SalesInvoiceBO
 import com.erpnext.pos.domain.usecases.CheckCustomerCreditUseCase
 import com.erpnext.pos.domain.usecases.CustomerCreditInput
 import com.erpnext.pos.domain.usecases.CustomerQueryInput
@@ -22,6 +24,7 @@ import com.erpnext.pos.domain.usecases.FetchCustomersLocalWithStateUseCase
 import com.erpnext.pos.domain.usecases.FetchOutstandingInvoicesLocalForCustomerUseCase
 import com.erpnext.pos.domain.usecases.FetchPaymentTermsLocalUseCase
 import com.erpnext.pos.domain.usecases.FetchSalesInvoiceLocalUseCase
+import com.erpnext.pos.domain.usecases.DownloadSalesInvoicePdfUseCase
 import com.erpnext.pos.domain.usecases.FetchSalesInvoiceWithItemsUseCase
 import com.erpnext.pos.domain.usecases.FetchTerritoriesLocalUseCase
 import com.erpnext.pos.domain.usecases.InvoiceCancellationAction
@@ -41,6 +44,9 @@ import com.erpnext.pos.utils.formatDoubleToString
 import com.erpnext.pos.utils.normalizeCurrency
 import com.erpnext.pos.utils.resolvePaymentToReceivableRate
 import com.erpnext.pos.utils.roundToCurrency
+import com.erpnext.pos.utils.openPdfFile
+import com.erpnext.pos.utils.savePdfFileAs
+import com.erpnext.pos.utils.sharePdfFile
 import com.erpnext.pos.utils.toCurrencySymbol
 import com.erpnext.pos.utils.toErpDateTime
 import com.erpnext.pos.utils.parseErpDateTimeToEpochMillis
@@ -53,14 +59,15 @@ import kotlinx.datetime.toLocalDateTime
 import io.ktor.util.date.getTimeMillis
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
-import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.days
@@ -85,6 +92,7 @@ class CustomerViewModel(
     private val fetchOutstandingInvoicesUseCase: FetchOutstandingInvoicesLocalForCustomerUseCase,
     private val fetchCustomerInvoicesForPeriodUseCase: FetchCustomerInvoicesLocalForPeriodUseCase,
     private val fetchSalesInvoiceLocalUseCase: FetchSalesInvoiceLocalUseCase,
+    private val downloadSalesInvoicePdfUseCase: DownloadSalesInvoicePdfUseCase,
     private val fetchSalesInvoiceWithItemsUseCase: FetchSalesInvoiceWithItemsUseCase,
     private val modeOfPaymentDao: ModeOfPaymentDao,
     private val paymentHandler: PaymentHandler,
@@ -106,6 +114,9 @@ class CustomerViewModel(
 
     private val _invoicesState = MutableStateFlow<CustomerInvoicesState>(CustomerInvoicesState.Idle)
     val invoicesState = _invoicesState
+    private val _outstandingInvoicesPagingFlow =
+        MutableStateFlow<Flow<PagingData<SalesInvoiceBO>>>(flowOf(PagingData.empty<SalesInvoiceBO>()))
+    val outstandingInvoicesPagingFlow = _outstandingInvoicesPagingFlow.asStateFlow()
 
     private val _paymentState = MutableStateFlow(CustomerPaymentState())
     val paymentState = _paymentState
@@ -116,12 +127,21 @@ class CustomerViewModel(
     private val _historyState =
         MutableStateFlow<CustomerInvoiceHistoryState>(CustomerInvoiceHistoryState.Idle)
     val historyState = _historyState
+    private val _historyInvoicesPagingFlow =
+        MutableStateFlow<Flow<PagingData<SalesInvoiceBO>>>(flowOf(PagingData.empty<SalesInvoiceBO>()))
+    val historyInvoicesPagingFlow = _historyInvoicesPagingFlow.asStateFlow()
 
     private val _historyMessage = MutableStateFlow<String?>(null)
     val historyMessage = _historyMessage
+    private val _returnInfoMessage = MutableStateFlow<String?>(null)
+    val returnInfoMessage = _returnInfoMessage
 
     private val _customerMessage = MutableStateFlow<String?>(null)
     val customerMessage = _customerMessage
+
+    private val _customersPagingFlow =
+        MutableStateFlow<Flow<PagingData<CustomerBO>>>(flowOf(PagingData.empty()))
+    val customersPagingFlow = _customersPagingFlow.asStateFlow()
 
     private var didRebuildSummaries = false
 
@@ -232,17 +252,18 @@ class CustomerViewModel(
             action = {
                 // pequeña espera para evitar parpadeos al cambiar filtros
                 delay(120)
-                fetchCustomersUseCase.invoke(CustomerQueryInput(query, state))
-                    .collectLatest { customers ->
-                        _stateFlow.value = when {
-                            customers.isEmpty() -> CustomerState.Empty
-                            else -> CustomerState.Success(
-                                customers,
-                                customers.size,
-                                customers.count { (it.pendingInvoices ?: 0) > 0 },
-                            )
-                        }
-                    }
+                val input = CustomerQueryInput(query, state)
+                _customersPagingFlow.value = fetchCustomersUseCase.invoke(input)
+                val totalCount = fetchCustomersUseCase.count(input)
+                val pendingCount = fetchCustomersUseCase.countPending(input)
+                _stateFlow.value = if (totalCount == 0) {
+                    CustomerState.Empty
+                } else {
+                    CustomerState.Success(
+                        totalCount = totalCount,
+                        pendingCount = pendingCount
+                    )
+                }
             },
             exceptionHandler = {
                 _stateFlow.value =
@@ -325,19 +346,12 @@ class CustomerViewModel(
 
         executeUseCase(
             action = {
-                val invoices = fetchOutstandingInvoicesUseCase.invoke(customerId)
+                _outstandingInvoicesPagingFlow.value = fetchOutstandingInvoicesUseCase.invoke(customerId)
 
                 val baseCurrency = normalizeCurrency(cashboxManager.getContext()?.companyCurrency)
-
-                // Pre-caché para que la UI no dispare resolveExchangeRateBetween repetidamente.
                 val exchangeRates = mutableMapOf<String, Double>()
-                invoices
-                    .flatMap { invoice ->
-                        listOfNotNull(
-                            normalizeCurrency(invoice.currency),
-                            normalizeCurrency(invoice.partyAccountCurrency)
-                        )
-                    }
+                paymentState.value.allowedCurrencies
+                    .mapNotNull { normalizeCurrency(it.code) }
                     .distinct()
                     .forEach { currency ->
                         val resolved = cashboxManager
@@ -351,7 +365,7 @@ class CustomerViewModel(
                     }
 
                 _invoicesState.value = CustomerInvoicesState.Success(
-                    invoices = invoices,
+                    invoices = emptyList(),
                     exchangeRateByCurrency = exchangeRates
                 )
                 refreshPaymentModeDetails()
@@ -368,6 +382,7 @@ class CustomerViewModel(
     fun clearOutstandingInvoices() {
         outstandingCustomerId = null
         _invoicesState.value = CustomerInvoicesState.Idle
+        _outstandingInvoicesPagingFlow.value = flowOf(PagingData.empty<SalesInvoiceBO>())
         _paymentState.value = buildPaymentState()
     }
 
@@ -505,10 +520,11 @@ class CustomerViewModel(
                     "Cambio: $symbol ${formatDoubleToString(change, 2)}"
                 }
 
+                val invoiceLabel = invoice.invoiceName?.takeIf { it.isNotBlank() } ?: invoiceId
                 val baseMessage = if (paymentResult.remotePaymentsSucceeded) {
-                    "Pago registrado correctamente."
+                    "Pago registrado correctamente en factura $invoiceLabel."
                 } else {
-                    "Pago registrado localmente. Se sincronizará cuando haya conexión."
+                    "Pago guardado localmente para factura $invoiceLabel. Se sincronizará cuando haya conexión."
                 }
 
                 val finalMessage = listOfNotNull(baseMessage, changeText).joinToString(" ")
@@ -519,7 +535,8 @@ class CustomerViewModel(
             },
             exceptionHandler = {
                 _paymentState.value = buildPaymentState(
-                    errorMessage = it.message ?: "No se pudo registrar el pago."
+                    errorMessage = it.message?.takeIf { msg -> msg.isNotBlank() }
+                        ?: "No se pudo registrar el pago de la factura $invoiceId."
                 )
             },
             loadingMessage = "Registrando pago..."
@@ -528,6 +545,54 @@ class CustomerViewModel(
 
     suspend fun loadInvoiceLocal(invoiceId: String): SalesInvoiceWithItemsAndPayments? {
         return fetchSalesInvoiceWithItemsUseCase(invoiceId)
+    }
+
+    fun downloadInvoicePdf(
+        invoiceId: String,
+        action: InvoicePdfActionOption = InvoicePdfActionOption.OPEN_NOW
+    ) {
+        val normalized = invoiceId.trim()
+        if (normalized.isBlank()) {
+            _customerMessage.value = "Factura inválida para descargar PDF."
+            return
+        }
+
+        executeUseCase(
+            action = {
+                val path = downloadSalesInvoicePdfUseCase(normalized)
+                val fileName = path.substringAfterLast('/').substringAfterLast('\\')
+                when (action) {
+                    InvoicePdfActionOption.OPEN_NOW -> {
+                        val opened = openPdfFile(path)
+                        _customerMessage.value = if (opened) {
+                            "PDF listo y abierto: $fileName"
+                        } else {
+                            "PDF descargado: $path"
+                        }
+                    }
+
+                    InvoicePdfActionOption.SHARE -> {
+                        val shared = sharePdfFile(path)
+                        _customerMessage.value = if (shared) {
+                            "PDF listo para compartir: $fileName"
+                        } else {
+                            "PDF descargado: $path"
+                        }
+                    }
+
+                    InvoicePdfActionOption.SAVE_AS -> {
+                        val target = savePdfFileAs(path, fileName)
+                        _customerMessage.value = target?.let { "PDF guardado en: $it" }
+                            ?: "PDF descargado: $path"
+                    }
+                }
+            },
+            exceptionHandler = {
+                _customerMessage.value =
+                    "No se pudo descargar el PDF de la factura $normalized: ${it.message ?: "error desconocido."}"
+            },
+            loadingMessage = "Generando y descargando PDF..."
+        )
     }
 
     private suspend fun refreshPaymentModeDetails() {
@@ -560,10 +625,8 @@ class CustomerViewModel(
                         endDate = now.toEpochMilliseconds().toErpDate()
                     )
                 )
-                val filteredInvoices = invoices.filter { invoice ->
-                    invoice.docStatus != 2 && isWithinDays(invoice.postingDate, 90)
-                }
-                _historyState.value = CustomerInvoiceHistoryState.Success(filteredInvoices)
+                _historyInvoicesPagingFlow.value = invoices
+                _historyState.value = CustomerInvoiceHistoryState.Success(emptyList())
             } catch (e: Exception) {
                 _historyState.value = CustomerInvoiceHistoryState.Error(
                     e.message ?: "No se pudo obtener el historial de facturas."
@@ -590,6 +653,7 @@ class CustomerViewModel(
     fun clearInvoiceHistory() {
         historyCustomerId = null
         _historyState.value = CustomerInvoiceHistoryState.Idle
+        _historyInvoicesPagingFlow.value = flowOf(PagingData.empty<SalesInvoiceBO>())
         _historyMessage.value = null
     }
 
@@ -646,6 +710,8 @@ class CustomerViewModel(
                 if (filtered.isEmpty()) {
                     throw IllegalArgumentException("Selecciona al menos un artículo para devolver.")
                 }
+                val localInvoice = fetchSalesInvoiceWithItemsUseCase(invoiceId)
+                val preview = buildPartialReturnPreview(localInvoice, filtered)
                 val result = partialReturnUseCase(
                     PartialReturnInput(
                         invoiceName = invoiceId,
@@ -656,9 +722,14 @@ class CustomerViewModel(
                         applyRefund = applyRefund
                     )
                 )
-                _historyMessage.value = result.creditNoteName?.let {
-                    "Retorno registrado como $it."
-                } ?: "Retorno parcial registrado."
+                val message = buildReturnPostMessage(
+                    creditNoteName = result.creditNoteName,
+                    preview = preview,
+                    applyRefund = applyRefund,
+                    isPartial = true
+                )
+                _historyMessage.value = message
+                _returnInfoMessage.value = message
             } catch (e: Exception) {
                 _historyMessage.value =
                     "No se pudo registrar el retorno parcial: ${e.message ?: "error desconocido."}"
@@ -686,6 +757,11 @@ class CustomerViewModel(
             }
             _historyActionBusy.value = true
             try {
+                val fullReturnPreview = if (action == InvoiceCancellationAction.RETURN) {
+                    buildFullReturnPreview(fetchSalesInvoiceLocalUseCase(invoiceId))
+                } else {
+                    null
+                }
                 if (action == InvoiceCancellationAction.RETURN) {
                     val policyMessage = validateReturnPolicy(
                         invoiceId = invoiceId,
@@ -711,9 +787,15 @@ class CustomerViewModel(
                 )
                 _historyMessage.value = when (action) {
                     InvoiceCancellationAction.CANCEL -> "Factura $invoiceId cancelada."
-                    InvoiceCancellationAction.RETURN -> result.creditNoteName?.let {
-                        "Retorno registrado como $it."
-                    } ?: "Retorno registrado."
+                    InvoiceCancellationAction.RETURN -> buildReturnPostMessage(
+                        creditNoteName = result.creditNoteName,
+                        preview = fullReturnPreview,
+                        applyRefund = applyRefund,
+                        isPartial = false
+                    )
+                }
+                if (action == InvoiceCancellationAction.RETURN) {
+                    _returnInfoMessage.value = _historyMessage.value
                 }
             } catch (e: Exception) {
                 _historyMessage.value =
@@ -763,5 +845,79 @@ class CustomerViewModel(
             }
         }
         return null
+    }
+
+    private data class ReturnPreview(
+        val currency: String,
+        val returnTotal: Double,
+        val projectedOutstanding: Double?
+    )
+
+    private fun buildPartialReturnPreview(
+        invoice: SalesInvoiceWithItemsAndPayments?,
+        requested: Map<String, Double>
+    ): ReturnPreview? {
+        invoice ?: return null
+        var total = 0.0
+        invoice.items.forEach { item ->
+            val desired = (requested[item.itemCode] ?: 0.0).coerceAtLeast(0.0)
+            if (desired <= 0.0) return@forEach
+            val soldQty = kotlin.math.abs(item.qty)
+            val qtyToReturn = desired.coerceAtMost(soldQty)
+            if (qtyToReturn <= 0.0) return@forEach
+            val perUnit = if (item.qty != 0.0) item.amount / item.qty else item.rate
+            total += kotlin.math.abs(perUnit) * qtyToReturn
+        }
+        val outstanding = invoice.invoice.outstandingAmount.coerceAtLeast(0.0)
+        return ReturnPreview(
+            currency = normalizeCurrency(invoice.invoice.currency),
+            returnTotal = roundToCurrency(total),
+            projectedOutstanding = roundToCurrency((outstanding - total).coerceAtLeast(0.0))
+        )
+    }
+
+    private fun buildFullReturnPreview(
+        invoice: com.erpnext.pos.localSource.entities.SalesInvoiceEntity?
+    ): ReturnPreview? {
+        invoice ?: return null
+        val total = invoice.grandTotal.coerceAtLeast(0.0)
+        val outstanding = invoice.outstandingAmount.coerceAtLeast(0.0)
+        return ReturnPreview(
+            currency = normalizeCurrency(invoice.currency),
+            returnTotal = roundToCurrency(total),
+            projectedOutstanding = roundToCurrency((outstanding - total).coerceAtLeast(0.0))
+        )
+    }
+
+    private fun buildReturnPostMessage(
+        creditNoteName: String?,
+        preview: ReturnPreview?,
+        applyRefund: Boolean,
+        isPartial: Boolean
+    ): String {
+        val base = when {
+            !creditNoteName.isNullOrBlank() && isPartial -> "Retorno parcial registrado como $creditNoteName."
+            !creditNoteName.isNullOrBlank() -> "Retorno registrado como $creditNoteName."
+            isPartial -> "Retorno parcial registrado."
+            else -> "Retorno registrado."
+        }
+        val destination = if (applyRefund) "reembolso" else "crédito a favor"
+        val projection = preview?.let {
+            " Monto devuelto estimado: ${formatMoney(it.currency, it.returnTotal)}. " +
+                "Saldo estimado tras retorno: ${
+                    formatMoney(
+                        it.currency,
+                        it.projectedOutstanding ?: 0.0
+                    )
+                }."
+        }.orEmpty()
+        val notice =
+            " Nota: en ERPNext el saldo visible puede mantenerse temporalmente hasta la conciliación o cierre de caja."
+        return "$base Se aplicó como $destination.$projection$notice"
+    }
+
+    private fun formatMoney(currency: String, amount: Double): String {
+        val symbol = currency.toCurrencySymbol().ifBlank { currency }
+        return "$symbol ${formatDoubleToString(amount, 2)}"
     }
 }

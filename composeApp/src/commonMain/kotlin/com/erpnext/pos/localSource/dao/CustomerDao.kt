@@ -1,5 +1,6 @@
 package com.erpnext.pos.localSource.dao
 
+import androidx.paging.PagingSource
 import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
@@ -17,6 +18,25 @@ interface CustomerDao {
 
     @Query("SELECT * FROM customers WHERE is_deleted = 0 ORDER BY customerName ASC")
     fun getAll(): Flow<List<CustomerEntity>>
+
+    @Query(
+        """
+        SELECT * FROM customers
+        WHERE is_deleted = 0
+          AND (:search = '' OR customerName LIKE '%' || :search || '%' OR mobileNo LIKE '%' || :search || '%')
+          AND (
+            :state = '' OR :state = 'Todos'
+            OR (:state = 'Pendientes' AND (COALESCE(pendingInvoicesCount, 0) > 0 OR COALESCE(totalPendingAmount, 0) > 0))
+            OR (:state = 'Sin Pendientes' AND (COALESCE(pendingInvoicesCount, 0) = 0 AND COALESCE(totalPendingAmount, 0) <= 0))
+            OR state = :state
+          )
+        ORDER BY
+          CASE WHEN (COALESCE(pendingInvoicesCount, 0) > 0 OR COALESCE(totalPendingAmount, 0) > 0) THEN 0 ELSE 1 END,
+          totalPendingAmount DESC,
+          customerName ASC
+        """
+    )
+    fun getPaged(search: String, state: String): PagingSource<Int, CustomerEntity>
 
     @Query("SELECT * FROM customers WHERE is_deleted = 0 AND customerName LIKE '%' || :search || '%' ORDER BY customerName ASC")
     fun getAllFiltered(search: String): Flow<List<CustomerEntity>>
@@ -58,6 +78,32 @@ interface CustomerDao {
 
     @Query("SELECT COUNT(*) FROM customers WHERE is_deleted = 0")
     suspend fun count(): Int
+
+    @Query(
+        """
+        SELECT COUNT(*) FROM customers
+        WHERE is_deleted = 0
+          AND (:search = '' OR customerName LIKE '%' || :search || '%' OR mobileNo LIKE '%' || :search || '%')
+          AND (
+            :state = '' OR :state = 'Todos'
+            OR (:state = 'Pendientes' AND (COALESCE(pendingInvoicesCount, 0) > 0 OR COALESCE(totalPendingAmount, 0) > 0))
+            OR (:state = 'Sin Pendientes' AND (COALESCE(pendingInvoicesCount, 0) = 0 AND COALESCE(totalPendingAmount, 0) <= 0))
+            OR state = :state
+          )
+        """
+    )
+    suspend fun countFiltered(search: String, state: String): Int
+
+    @Query(
+        """
+        SELECT COUNT(*) FROM customers
+        WHERE is_deleted = 0
+          AND (:search = '' OR customerName LIKE '%' || :search || '%' OR mobileNo LIKE '%' || :search || '%')
+          AND (:state = '' OR :state = 'Todos' OR :state = 'Pendientes' OR state = :state)
+          AND (COALESCE(pendingInvoicesCount, 0) > 0 OR COALESCE(totalPendingAmount, 0) > 0)
+        """
+    )
+    suspend fun countPendingFiltered(search: String, state: String): Int
 
     @Query("SELECT * FROM customers WHERE is_deleted = 0 ORDER BY last_synced_at ASC LIMIT 1")
     suspend fun getOldestCustomer(): CustomerEntity?

@@ -7,9 +7,11 @@ import com.erpnext.pos.domain.models.POSCurrencyOption
 import com.erpnext.pos.domain.models.POSPaymentModeOption
 import com.erpnext.pos.domain.models.PaymentTermBO
 import com.erpnext.pos.domain.models.SourceDocumentOption
+import com.erpnext.pos.utils.resolveMinorUnitTolerance
 import com.erpnext.pos.utils.roundForCurrency
 import com.erpnext.pos.views.salesflow.SalesFlowContext
 import com.erpnext.pos.views.salesflow.SalesFlowSource
+import kotlin.math.max
 
 data class PaymentLine(
     val modeOfPayment: String,
@@ -42,7 +44,8 @@ sealed interface BillingState {
 
         // Product-related state
         val productSearchQuery: String = "",
-        val productSearchResults: List<ItemBO> = emptyList(),
+        val selectedProductCategory: String = "Todos",
+        val productCategories: List<String> = emptyList(),
 
         // Cart-related state
         val currency: String?,
@@ -55,6 +58,7 @@ sealed interface BillingState {
         val discountCode: String = "",
         val manualDiscountAmount: Double = 0.0,
         val manualDiscountPercent: Double = 0.0,
+        val applyDiscountOn: String = "Grand Total",
         val shippingAmount: Double = 0.0,
         val deliveryCharges: List<DeliveryChargeBO> = emptyList(),
         val selectedDeliveryCharge: DeliveryChargeBO? = null,
@@ -69,6 +73,7 @@ sealed interface BillingState {
         val paidAmountBase: Double = 0.0,
         val balanceDueBase: Double = 0.0,
         val changeDueBase: Double = 0.0,
+        val creditSaleTooltipMessage: String? = null,
         val paymentErrorMessage: String? = null,
         val cartErrorMessage: String? = null,
         val successMessage: String? = null,
@@ -80,10 +85,28 @@ sealed interface BillingState {
         fun recalculatePaymentTotals(): Success {
             val code = currency
             val newPaidAmountBase = roundForCurrency(paymentLines.sumOf { it.baseAmount }, code)
-            val newBalanceDueBase =
-                roundForCurrency((total - newPaidAmountBase).coerceAtLeast(0.0), code)
-            val newChangeDueBase =
-                roundForCurrency((newPaidAmountBase - total).coerceAtLeast(0.0), code)
+            val invoiceTolerance = resolveMinorUnitTolerance(code)
+            val fxTolerance = paymentLines.maxOfOrNull { line ->
+                val paymentTolerance = resolveMinorUnitTolerance(line.currency)
+                paymentTolerance * line.exchangeRate.coerceAtLeast(0.0)
+            } ?: 0.0
+            val tolerance = max(invoiceTolerance, fxTolerance)
+            val rawBalanceDue = total - newPaidAmountBase
+            val rawChangeDue = newPaidAmountBase - total
+            val newBalanceDueBase = roundForCurrency(
+                when {
+                    rawBalanceDue > 0.0 && rawBalanceDue <= tolerance -> 0.0
+                    else -> rawBalanceDue.coerceAtLeast(0.0)
+                },
+                code
+            )
+            val newChangeDueBase = roundForCurrency(
+                when {
+                    rawChangeDue > 0.0 && rawChangeDue <= tolerance -> 0.0
+                    else -> rawChangeDue.coerceAtLeast(0.0)
+                },
+                code
+            )
             return copy(
                 paidAmountBase = newPaidAmountBase,
                 balanceDueBase = newBalanceDueBase,
@@ -109,6 +132,7 @@ data class BillingAction(
     val onCustomerSearchQueryChange: (String) -> Unit = {},
     val onCustomerSelected: (CustomerBO) -> Unit = {},
     val onProductSearchQueryChange: (String) -> Unit = {},
+    val onProductCategorySelected: (String) -> Unit = {},
     val onProductAdded: (ItemBO) -> Unit = {},
     val onQuantityChanged: (itemCode: String, newQuantity: Double) -> Unit = { _, _ -> },
     val onRemoveItem: (itemCode: String) -> Unit = {},

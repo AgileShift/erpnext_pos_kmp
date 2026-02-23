@@ -133,7 +133,7 @@ fun SalesInvoiceDto.toEntity(): SalesInvoiceWithItemsAndPayments {
 
     val invoiceEntity = SalesInvoiceEntity(
         invoiceName = name,
-        profileId = posProfile,
+        profileId = posProfile?.takeIf { it.isNotBlank() },
         customer = customer,
         customerPhone = customerPhone,
         customerName = customerName,
@@ -172,7 +172,7 @@ fun SalesInvoiceDto.toEntity(): SalesInvoiceWithItemsAndPayments {
         createdAt = now,
         modifiedAt = now,
         remarks = remarks,
-        posOpeningEntry = posOpeningEntry,
+        posOpeningEntry = posOpeningEntry?.takeIf { it.isNotBlank() },
         warehouse = headerWarehouse
     )
 

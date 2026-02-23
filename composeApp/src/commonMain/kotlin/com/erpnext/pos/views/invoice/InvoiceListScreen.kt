@@ -38,7 +38,6 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
@@ -48,7 +47,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.paging.LoadState
 import androidx.paging.compose.collectAsLazyPagingItems
-import androidx.paging.compose.itemKey
 import com.erpnext.pos.domain.models.ReturnPolicySettings
 import com.erpnext.pos.domain.models.SalesInvoiceBO
 import com.erpnext.pos.domain.usecases.InvoiceCancellationAction
@@ -133,23 +131,6 @@ fun InvoiceListScreen(action: InvoiceAction) {
                 )
             }
 
-            val normalizedQuery = searchQuery.trim().lowercase()
-            val filteredInvoices by remember(lazyPagingItems, normalizedQuery) {
-                derivedStateOf {
-                    if (normalizedQuery.isBlank()) {
-                        lazyPagingItems.itemSnapshotList.items
-                    } else {
-                        lazyPagingItems.itemSnapshotList.items.filter { invoice ->
-                            listOf(
-                                invoice.invoiceId,
-                                invoice.customer.orEmpty(),
-                                invoice.customerPhone.orEmpty()
-                            ).any { it.lowercase().contains(normalizedQuery) }
-                        }
-                    }
-                }
-            }
-
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
                 horizontalAlignment = Alignment.CenterHorizontally
@@ -179,31 +160,29 @@ fun InvoiceListScreen(action: InvoiceAction) {
                 }
 
                 // Muestra la lista de items
-                if (filteredInvoices.isEmpty() && normalizedQuery.isNotBlank()) {
-                    item { EmptyState(modifier = Modifier.fillParentMaxSize()) }
-                } else {
-                    items(
-                        count = filteredInvoices.size,
-                        key = { index -> filteredInvoices[index].invoiceId }
-                    ) { index ->
-                        val item = filteredInvoices[index]
-                        InvoiceItem(
-                            invoice = item,
-                            returnPolicy = returnPolicy,
-                            onClick = { action.onItemClick(it.invoiceId) },
-                            onCancelClick = { invoiceId, actionType ->
-                                pendingDialog = InvoiceCancelDialogState(
-                                    invoiceId = invoiceId,
-                                    action = actionType
-                                )
-                                dialogReason = ""
-                            }
-                        )
+                items(
+                    count = lazyPagingItems.itemCount,
+                    key = { index ->
+                        lazyPagingItems[index]?.invoiceId ?: "invoice_$index"
                     }
+                ) { index ->
+                    val item = lazyPagingItems[index] ?: return@items
+                    InvoiceItem(
+                        invoice = item,
+                        returnPolicy = returnPolicy,
+                        onClick = { action.onItemClick(it.invoiceId) },
+                        onCancelClick = { invoiceId, actionType ->
+                            pendingDialog = InvoiceCancelDialogState(
+                                invoiceId = invoiceId,
+                                action = actionType
+                            )
+                            dialogReason = ""
+                        }
+                    )
                 }
 
                 // Muestra el indicador de carga para la paginación
-                if (normalizedQuery.isBlank() && lazyPagingItems.loadState.append is LoadState.Loading) {
+                if (lazyPagingItems.loadState.append is LoadState.Loading) {
                     item {
                         CircularProgressIndicator(modifier = Modifier.padding(16.dp))
                     }

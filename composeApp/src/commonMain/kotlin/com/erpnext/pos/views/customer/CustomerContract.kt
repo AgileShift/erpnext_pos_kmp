@@ -15,7 +15,7 @@ import com.erpnext.pos.localSource.entities.SalesInvoiceWithItemsAndPayments
 sealed class CustomerState {
     object Loading : CustomerState()
     object Empty : CustomerState()
-    data class Success(val customers: List<CustomerBO>, val totalCount: Int, val pendingCount: Int) : CustomerState()
+    data class Success(val totalCount: Int, val pendingCount: Int) : CustomerState()
 
     data class Error(val message: String) : CustomerState()
 }
@@ -58,6 +58,12 @@ data class CustomerDialogDataState(
     val companies: List<com.erpnext.pos.domain.models.CompanyBO> = emptyList()
 )
 
+enum class InvoicePdfActionOption {
+    OPEN_NOW,
+    SAVE_AS,
+    SHARE
+}
+
 data class CustomerAction(
     val onSearchQueryChanged: (String) -> Unit = {},
     val onStateSelected: (String?) -> Unit = {},
@@ -72,6 +78,7 @@ data class CustomerAction(
     val onCreateDeliveryNote: (CustomerBO) -> Unit = {},
     val onCreateInvoice: (CustomerBO) -> Unit = {},
     val onRegisterPayment: (CustomerBO) -> Unit = {},
+    val onDownloadInvoicePdf: (String, InvoicePdfActionOption) -> Unit = { _, _ -> },
     val loadOutstandingInvoices: (CustomerBO) -> Unit = {},
     val clearOutstandingInvoices: () -> Unit = {},
     val clearPaymentMessages: () -> Unit = {},

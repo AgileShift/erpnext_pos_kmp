@@ -9,6 +9,7 @@ import com.erpnext.pos.localSource.entities.POSOpeningEntryEntity
 import com.erpnext.pos.remoteSource.dto.BalanceDetailsDto
 import com.erpnext.pos.remoteSource.dto.ContactChildDto
 import com.erpnext.pos.remoteSource.dto.CustomerDto
+import com.erpnext.pos.remoteSource.dto.CustomerReceivableAccountDto
 import com.erpnext.pos.remoteSource.dto.POSClosingEntryDto
 import com.erpnext.pos.remoteSource.dto.POSOpeningEntryDto
 
@@ -65,6 +66,8 @@ fun CustomerDto.toEntity(
     pendingInvoicesCount: Int,
     totalPendingAmount: Double,
     state: String? = null,
+    receivableAccount: String? = null,
+    receivableAccountCurrency: String? = null,
 ): CustomerEntity = CustomerEntity(
     name = name,
     customerName = customerName,
@@ -78,9 +81,22 @@ fun CustomerDto.toEntity(
     totalPendingAmount = totalPendingAmount,
     pendingInvoicesCount = pendingInvoicesCount,
     availableCredit = availableCredit,
+    partyAccountCurrency = partyAccountCurrency,
+    receivableAccount = receivableAccount,
+    receivableAccountCurrency = receivableAccountCurrency,
     address = address,
     email = email
 )
+
+fun CustomerDto.resolveReceivableAccount(company: String?): CustomerReceivableAccountDto? {
+    val normalizedCompany = company?.trim()?.lowercase()
+    if (!normalizedCompany.isNullOrBlank()) {
+        receivableAccounts.firstOrNull { account ->
+            account.company?.trim()?.lowercase() == normalizedCompany
+        }?.let { return it }
+    }
+    return receivableAccounts.firstOrNull()
+}
 
 fun List<BalanceDetailsDto>.toEntity(cashboxId: Long): List<BalanceDetailsEntity> {
     return this.map { it.toEntity(cashboxId) }
@@ -108,5 +124,8 @@ fun CustomerEntity.toBO(): CustomerBO = CustomerBO(
     pendingInvoices = pendingInvoicesCount,  // Total monto pendiente
     totalPendingAmount = totalPendingAmount,
     availableCredit = availableCredit,
+    partyAccountCurrency = partyAccountCurrency,
+    receivableAccount = receivableAccount,
+    receivableAccountCurrency = receivableAccountCurrency,
     lastSyncedAt = lastSyncedAt
 )

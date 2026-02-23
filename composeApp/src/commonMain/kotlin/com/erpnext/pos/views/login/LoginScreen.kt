@@ -4,34 +4,42 @@ package com.erpnext.pos.views.login
 
 import AppTheme
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsHoveredAsState
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.itemsIndexed
-import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.collectIsPressedAsState
-import androidx.compose.foundation.interaction.collectIsHoveredAsState
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.outlined.DeleteOutline
 import androidx.compose.material.icons.outlined.StarBorder
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -43,18 +51,15 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
+import androidx.compose.material3.SwipeToDismissBox
+import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Text
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.core.tween
-import androidx.compose.foundation.layout.fillMaxHeight
-import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -65,10 +70,11 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.erpnext.pos.base.getPlatformName
+import com.erpnext.pos.utils.WindowHeightSizeClass
+import com.erpnext.pos.utils.WindowWidthSizeClass
 import com.erpnext.pos.utils.isValidUrlInput
 import com.erpnext.pos.utils.rememberWindowSizeClass
-import com.erpnext.pos.utils.WindowWidthSizeClass
-import com.erpnext.pos.utils.WindowHeightSizeClass
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.number
 import kotlinx.datetime.toLocalDateTime
@@ -90,6 +96,7 @@ fun LoginScreen(
     BoxWithConstraints(
         modifier = Modifier.fillMaxSize()
     ) {
+        val isDesktopPlatform = getPlatformName() == "Desktop"
         val sizeClass = rememberWindowSizeClass()
         val isCompact = sizeClass.widthSizeClass == WindowWidthSizeClass.Compact ||
             sizeClass.widthSizeClass == WindowWidthSizeClass.Medium
@@ -136,6 +143,7 @@ fun LoginScreen(
                         actions = actions,
                         compact = compactSites,
                         useGridForSites = useGridForSites,
+                        isDesktop = isDesktopPlatform,
                         modifier = Modifier
                             .weight(1f)
                             .fillMaxHeight()
@@ -161,6 +169,7 @@ fun LoginScreen(
                         actions = actions,
                         compact = compactSites,
                         useGridForSites = useGridForSites,
+                        isDesktop = isDesktopPlatform,
                         modifier = Modifier.fillMaxWidth()
                     )
                 }
@@ -229,6 +238,7 @@ private fun LoginCard(
     actions: LoginAction,
     compact: Boolean,
     useGridForSites: Boolean,
+    isDesktop: Boolean,
     modifier: Modifier = Modifier
 ) {
     Card(
@@ -274,8 +284,11 @@ private fun LoginCard(
                             sites = sites.orEmpty(),
                             onSelect = { actions.onSiteSelected(it) },
                             onToggleFavorite = { actions.onToggleFavorite(it) },
+                            onDelete = { actions.onDeleteSite(it) },
                             compact = compact,
-                            useGrid = useGridForSites
+                            useGrid = useGridForSites,
+                            enableSwipeDelete = !isDesktop,
+                            showDesktopDelete = isDesktop
                         )
                     }
 
@@ -332,8 +345,11 @@ private fun SitePicker(
     sites: List<Site>,
     onSelect: (Site) -> Unit,
     onToggleFavorite: (Site) -> Unit,
+    onDelete: (Site) -> Unit,
     compact: Boolean,
-    useGrid: Boolean
+    useGrid: Boolean,
+    enableSwipeDelete: Boolean,
+    showDesktopDelete: Boolean
 ) {
     var query by remember { mutableStateOf("") }
     val filtered = remember(sites, query) {
@@ -369,11 +385,22 @@ private fun SitePicker(
                 } else {
                     itemsIndexed(filtered) { index, site ->
                         StaggeredIn(index = index) {
-                            SiteRow(
-                                site = site,
-                                onClick = { onSelect(site) },
-                                onToggleFavorite = { onToggleFavorite(site) }
-                            )
+                            if (enableSwipeDelete) {
+                                SwipeToDeleteSiteRow(
+                                    site = site,
+                                    onClick = { onSelect(site) },
+                                    onToggleFavorite = { onToggleFavorite(site) },
+                                    onDelete = { onDelete(site) }
+                                )
+                            } else {
+                                SiteRow(
+                                    site = site,
+                                    onClick = { onSelect(site) },
+                                    onToggleFavorite = { onToggleFavorite(site) },
+                                    onDelete = if (showDesktopDelete) ({ onDelete(site) }) else null,
+                                    showDeleteAction = showDesktopDelete
+                                )
+                            }
                         }
                     }
                 }
@@ -402,7 +429,9 @@ private fun SitePicker(
                             SiteRow(
                                 site = site,
                                 onClick = { onSelect(site) },
-                                onToggleFavorite = { onToggleFavorite(site) }
+                                onToggleFavorite = { onToggleFavorite(site) },
+                                onDelete = if (showDesktopDelete) ({ onDelete(site) }) else null,
+                                showDeleteAction = showDesktopDelete
                             )
                         }
                     }
@@ -436,10 +465,77 @@ private fun SitePicker(
 }
 
 @Composable
+@OptIn(ExperimentalMaterial3Api::class)
+private fun SwipeToDeleteSiteRow(
+    site: Site,
+    onClick: () -> Unit,
+    onToggleFavorite: () -> Unit,
+    onDelete: () -> Unit
+) {
+    val dismissState = rememberSwipeToDismissBoxState(
+        confirmValueChange = { value ->
+            if (value == SwipeToDismissBoxValue.EndToStart) {
+                onDelete()
+                true
+            } else {
+                false
+            }
+        },
+        positionalThreshold = { distance -> distance * 0.35f }
+    )
+    val backgroundColor by animateColorAsState(
+        targetValue = if (dismissState.targetValue == SwipeToDismissBoxValue.EndToStart) {
+            MaterialTheme.colorScheme.error
+        } else {
+            MaterialTheme.colorScheme.errorContainer
+        }
+    )
+    SwipeToDismissBox(
+        state = dismissState,
+        enableDismissFromStartToEnd = false,
+        enableDismissFromEndToStart = true,
+        backgroundContent = {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(20.dp))
+                    .background(backgroundColor)
+                    .padding(horizontal = 16.dp),
+                contentAlignment = Alignment.CenterEnd
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        text = "Eliminar",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onError
+                    )
+                    Icon(
+                        imageVector = Icons.Outlined.DeleteOutline,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onError
+                    )
+                }
+            }
+        }
+    ) {
+        SiteRow(
+            site = site,
+            onClick = onClick,
+            onToggleFavorite = onToggleFavorite
+        )
+    }
+}
+
+@Composable
 fun SiteRow(
     site: Site,
     onClick: () -> Unit,
     onToggleFavorite: () -> Unit,
+    onDelete: (() -> Unit)? = null,
+    showDeleteAction: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     val interactionSource = remember { MutableInteractionSource() }
@@ -515,6 +611,31 @@ fun SiteRow(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
+                    if (showDeleteAction && onDelete != null) {
+                        Surface(
+                            color = MaterialTheme.colorScheme.errorContainer,
+                            shape = RoundedCornerShape(999.dp),
+                            modifier = Modifier.clickable { onDelete() }
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Outlined.DeleteOutline,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.onErrorContainer,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                                Text(
+                                    text = "Eliminar",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onErrorContainer
+                                )
+                            }
+                        }
+                    }
                     if (!site.isFavorite) {
                         Surface(
                             color = MaterialTheme.colorScheme.surfaceVariant,
@@ -638,10 +759,10 @@ fun UrlInputField(
             onUrlChanged(input.trim())
             val isValid = isValidUrlInput(input)
             isError = !isValid
-            errorMessage = if (isError) "URL inválida, debe ser https://ejemplo.com" else ""
+            errorMessage = if (isError) "URL inválida, usa http://ejemplo.com o https://ejemplo.com" else ""
         },
         label = { Text("URL del Sitio") },
-        placeholder = { Text("https://erp.frappe.cloud") },
+        placeholder = { Text("https://erp.frappe.cloud o http://192.168.1.10") },
         isError = isError,
         singleLine = true,
         textStyle = MaterialTheme.typography.bodyLarge.copy(
@@ -673,7 +794,7 @@ fun UrlInputField(
 fun LoginPreview() {
     AppTheme {
         LoginScreen(
-            state = LoginState.Success(emptyList()),
+            state = LoginState.Success(listOf(Site("http://localhost:8000", "La Casita del Queso", null, true), Site("httsp://staging.clothingcenterni.com", "Clothing Center", null, false), Site("httsp://staging.gamezonenic.com", "Game Zone", null, false))),
             actions = LoginAction()
         )
     }

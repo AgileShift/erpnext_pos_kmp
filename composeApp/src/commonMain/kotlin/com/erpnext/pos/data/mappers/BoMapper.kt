@@ -85,6 +85,7 @@ fun List<CustomerDto>.toBO(): List<CustomerBO> {
 }
 
 fun CustomerDto.toBO(): CustomerBO {
+    val firstReceivable = this.receivableAccounts.firstOrNull()
     return CustomerBO(
         name = this.name,
         customerName = this.customerName,
@@ -99,6 +100,9 @@ fun CustomerDto.toBO(): CustomerBO {
         currentBalance = this.totalPendingAmount,
         pendingInvoices = this.pendingInvoicesCount,
         availableCredit = this.availableCredit,
+        partyAccountCurrency = this.partyAccountCurrency,
+        receivableAccount = firstReceivable?.account,
+        receivableAccountCurrency = firstReceivable?.accountCurrency,
     )
 }
 
@@ -114,13 +118,25 @@ fun PaymentModesDto.toBO(): PaymentModesBO {
 }
 
 fun UserDto.toBO(): UserBO {
+    val normalizedName = this.name
+    val normalizedUsername = this.username?.takeIf { it.isNotBlank() } ?: normalizedName
+    val normalizedFirstName = this.firstName?.takeIf { it.isNotBlank() }
+        ?: this.fullName?.substringBefore(" ")?.takeIf { it.isNotBlank() }
+        ?: normalizedUsername
+    val normalizedEmail = this.email?.takeIf { it.isNotBlank() } ?: normalizedUsername
     return UserBO(
-        name = this.name,
-        username = this.username,
-        firstName = this.firstName,
+        name = normalizedName,
+        username = normalizedUsername,
+        firstName = normalizedFirstName,
         lastName = this.lastName,
-        email = this.email,
-        language = this.language,
+        email = normalizedEmail,
+        image = this.image,
+        language = this.language.orEmpty(),
+        timeZone = this.timeZone.orEmpty(),
+        fullName = this.fullName?.takeIf { it.isNotBlank() }
+            ?: listOfNotNull(normalizedFirstName, this.lastName)
+                .joinToString(" ")
+                .trim(),
         enabled = this.enabled,
     )
 }
@@ -132,7 +148,10 @@ fun UserEntity.toBO(): UserBO {
         firstName = this.firstName,
         lastName = this.lastName,
         email = this.email,
+        image = this.image,
         language = this.language.orEmpty(),
+        timeZone = this.timeZone.orEmpty(),
+        fullName = this.fullName.orEmpty(),
         enabled = this.enabled,
     )
 }

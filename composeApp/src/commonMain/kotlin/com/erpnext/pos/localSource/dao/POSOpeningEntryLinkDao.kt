@@ -32,6 +32,16 @@ interface POSOpeningEntryLinkDao {
 
     @Query(
         """
+        SELECT remote_closing_entry_name
+          FROM tab_pos_opening_entry_link
+         WHERE cashbox_id = :cashboxId
+         LIMIT 1
+        """
+    )
+    suspend fun getRemoteClosingEntryName(cashboxId: Long): String?
+
+    @Query(
+        """
         UPDATE tab_pos_opening_entry_link
            SET remote_opening_entry_name = :remoteName,
                pending_sync = 0
@@ -48,4 +58,31 @@ interface POSOpeningEntryLinkDao {
         """
     )
     suspend fun updateRemoteName(id: Long, remoteName: String)
+
+    @Query(
+        """
+        UPDATE tab_pos_opening_entry_link
+           SET remote_closing_entry_name = :remoteClosingName
+         WHERE id = :id
+        """
+    )
+    suspend fun updateRemoteClosingName(id: Long, remoteClosingName: String): Int
+
+    @Query(
+        """
+        UPDATE tab_pos_opening_entry_link
+           SET remote_closing_entry_name = :remoteClosingName
+         WHERE cashbox_id = :cashboxId
+        """
+    )
+    suspend fun updateRemoteClosingNameByCashboxId(cashboxId: Long, remoteClosingName: String): Int
+
+    @Query(
+        """
+        UPDATE tab_pos_opening_entry_link
+           SET pending_sync = 0
+         WHERE cashbox_id = :cashboxId
+        """
+    )
+    suspend fun clearPendingSyncByCashboxId(cashboxId: Long): Int
 }

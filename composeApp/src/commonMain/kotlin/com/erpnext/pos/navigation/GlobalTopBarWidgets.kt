@@ -1,7 +1,7 @@
+@file:OptIn(ExperimentalTime::class)
+
 package com.erpnext.pos.navigation
 
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
@@ -17,8 +17,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.PlainTooltip
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TooltipAnchorPosition
 import androidx.compose.material3.TooltipBox
-import androidx.compose.material3.TooltipDefaults
+import androidx.compose.material3.TooltipDefaults.rememberTooltipPositionProvider
 import androidx.compose.material3.rememberTooltipState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -26,13 +27,16 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import com.erpnext.pos.localization.LocalAppStrings
 import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.Month
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toInstant
+import kotlin.time.ExperimentalTime
 
 @Composable
-fun ShiftOpenChip(isOpen: Boolean, duration: String, closeAction: () -> Unit = {}) {
+fun ShiftOpenChip(isOpen: Boolean, duration: String) {
+    val strings = LocalAppStrings.current
     val openBg = Color(0xFFE8F5E9)
     val openText = Color(0xFF2E7D32)
     val closedBg = Color(0xFFFFEBEE)
@@ -54,14 +58,7 @@ fun ShiftOpenChip(isOpen: Boolean, duration: String, closeAction: () -> Unit = {
                 modifier = Modifier.size(16.dp)
             )
             Text(
-                text = "Shift Open: ${if (isOpen) duration else "--"}",
-                modifier = Modifier.clickable(
-                    enabled = isOpen,
-                    onClickLabel = "Close Shift",
-                    interactionSource = MutableInteractionSource()
-                ) {
-                    closeAction()
-                },
+                text = "${strings.reconciliation.shiftLabel}: ${if (isOpen) duration else "--"}",
                 style = MaterialTheme.typography.labelMedium,
                 color = if (isOpen) openText else closedText
             )
@@ -79,7 +76,8 @@ fun StatusIconButton(
     content: @Composable () -> Unit
 ) {
     TooltipBox(
-        positionProvider = TooltipDefaults.rememberPlainTooltipPositionProvider(),
+        modifier = Modifier.size(24.dp),
+        positionProvider = rememberTooltipPositionProvider(TooltipAnchorPosition.Below),
         tooltip = { PlainTooltip { Text(label) } },
         state = rememberTooltipState()
     ) {

@@ -5,7 +5,6 @@ package com.erpnext.pos.views.billing
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
-import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
@@ -15,91 +14,147 @@ import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
-import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.setValue
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.hoverable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsHoveredAsState
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
-import com.erpnext.pos.domain.models.CustomerBO
-import com.erpnext.pos.domain.models.ItemBO
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.ConfirmationNumber
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Money
 import androidx.compose.material.icons.filled.Percent
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.ShoppingCartCheckout
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ElevatedCard
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuAnchorType
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.FilterChipDefaults
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextField
+import androidx.compose.material3.TextFieldDefaults
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.OffsetMapping
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.input.TransformedText
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.PopupProperties
 import androidx.compose.ui.window.DialogProperties
-import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.window.PopupProperties
+import androidx.paging.LoadState
+import androidx.paging.PagingData
+import androidx.paging.compose.collectAsLazyPagingItems
+import androidx.paging.filter
 import coil3.compose.LocalPlatformContext
 import coil3.compose.SubcomposeAsyncImage
 import coil3.request.ImageRequest
 import coil3.request.crossfade
 import com.erpnext.pos.base.getPlatformName
-import com.erpnext.pos.utils.formatAmount
-import com.erpnext.pos.utils.toCurrencySymbol
-import com.erpnext.pos.utils.resolveRateBetweenFromBaseRates
+import com.erpnext.pos.domain.models.CustomerBO
+import com.erpnext.pos.domain.models.ItemBO
 import com.erpnext.pos.domain.models.POSPaymentModeOption
 import com.erpnext.pos.domain.models.PaymentTermBO
+import com.erpnext.pos.localization.LocalAppStrings
+import com.erpnext.pos.navigation.GlobalTopBarState
+import com.erpnext.pos.navigation.LocalTopBarController
+import com.erpnext.pos.utils.formatAmount
+import com.erpnext.pos.utils.loading.LoadingIndicator
+import com.erpnext.pos.utils.loading.LoadingUiState
 import com.erpnext.pos.utils.oauth.bd
 import com.erpnext.pos.utils.oauth.moneyScale
 import com.erpnext.pos.utils.oauth.toDouble
+import com.erpnext.pos.utils.resolveRateBetweenFromBaseRates
+import com.erpnext.pos.utils.toCurrencySymbol
 import com.erpnext.pos.utils.view.SnackbarController
 import com.erpnext.pos.utils.view.SnackbarHost
 import com.erpnext.pos.utils.view.SnackbarPosition
 import com.erpnext.pos.utils.view.SnackbarType
-import com.erpnext.pos.navigation.GlobalTopBarState
-import com.erpnext.pos.navigation.LocalTopBarController
-import com.erpnext.pos.utils.loading.LoadingIndicator
-import com.erpnext.pos.utils.loading.LoadingUiState
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.launch
 import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
 
@@ -108,16 +163,19 @@ data class CartItem(
     val name: String,
     val currency: String?,
     val quantity: Double,
-    val price: Double
+    val price: Double,
+    val availableQty: Double? = null
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun BillingScreen(
     state: BillingState,
+    productsPagingFlow: Flow<PagingData<ItemBO>>,
     action: BillingAction,
     snackbar: SnackbarController
 ) {
+    val strings = LocalAppStrings.current
     val uiSnackbar = snackbar.snackbar.collectAsState().value
     val colors = MaterialTheme.colorScheme
     val loadingState by LoadingIndicator.state.collectAsState(initial = LoadingUiState())
@@ -154,7 +212,7 @@ fun BillingScreen(
         }
     }
 
-    LaunchedEffect(popupMessage != null) { //successDialogId, successDialogMessage, successMessage) {
+    LaunchedEffect(successDialogId, successDialogMessage, successMessage) {
         if (successDialogId == 0L) return@LaunchedEffect
         val message = (successDialogMessage ?: successMessage)
             ?.takeIf { it.isNotBlank() } ?: return@LaunchedEffect
@@ -177,7 +235,7 @@ fun BillingScreen(
             step = LabCheckoutStep.Cart
             action.onResetSale()
             snackbar.show(
-                "Venta reiniciada por inactividad",
+                strings.billing.inactivityResetMessage,
                 SnackbarType.Info,
                 SnackbarPosition.Top
             )
@@ -189,7 +247,7 @@ fun BillingScreen(
             step = LabCheckoutStep.Cart
             action.onResetSale()
             snackbar.show(
-                "Venta reiniciada por inactividad",
+                strings.billing.inactivityResetMessage,
                 SnackbarType.Info,
                 SnackbarPosition.Top
             )
@@ -268,11 +326,11 @@ fun BillingScreen(
                                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Text("Pagar", fontWeight = FontWeight.Bold)
+                                Text(strings.billing.finalizeSale, fontWeight = FontWeight.Bold)
                                 Icon(
                                     modifier = Modifier.size(14.dp),
                                     imageVector = Icons.Default.ShoppingCartCheckout,
-                                    contentDescription = "Pagar",
+                                    contentDescription = strings.billing.finalizeSale,
                                     tint = Color.White
                                 )
                             }
@@ -296,27 +354,86 @@ fun BillingScreen(
                 }
 
                 is BillingState.Error -> {
-                    Box(
-                        modifier = Modifier.fillMaxSize().padding(paddingValues),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Card(
-                            shape = RoundedCornerShape(16.dp),
-                            colors = CardDefaults.cardColors(containerColor = colors.surfaceVariant)
-                        ) {
-                            Column(
-                                modifier = Modifier.padding(16.dp),
-                                verticalArrangement = Arrangement.spacedBy(10.dp),
-                                horizontalAlignment = Alignment.CenterHorizontally
-                            ) {
-                                Text(
-                                    text = state.message,
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = colors.onSurface
+                    LaunchedEffect(state.message) {
+                        snackbar.show(
+                            state.message,
+                            SnackbarType.Error,
+                            SnackbarPosition.Top
+                        )
+                    }
+                    val previous = state.previous
+                    if (previous != null) {
+                        AnimatedContent(
+                            targetState = step,
+                            transitionSpec = {
+                                fadeIn(tween(180)) + slideInVertically(
+                                    animationSpec = tween(180),
+                                    initialOffsetY = { it / 6 }
+                                ) togetherWith fadeOut(tween(160)) + slideOutVertically(
+                                    animationSpec = tween(160),
+                                    targetOffsetY = { -it / 8 }
                                 )
-                                if (state.showSyncRates) {
-                                    Button(onClick = action.onSyncExchangeRates) {
-                                        Text("Sincronizar tasas de cambio")
+                            },
+                            label = "billing_step_transition_error_previous"
+                        ) { targetStep ->
+                            when (targetStep) {
+                                LabCheckoutStep.Cart -> BillingLabContent(
+                                    state = previous,
+                                    productsPagingFlow = productsPagingFlow,
+                                    action = action,
+                                    onCheckout = {
+                                        if (previous.selectedCustomer == null)
+                                            snackbar.show(
+                                                strings.billing.selectCustomerForDocuments,
+                                                SnackbarType.Error,
+                                                SnackbarPosition.Top
+                                            )
+                                        else if (previous.cartItems.isEmpty()) {
+                                            snackbar.show(
+                                                strings.billing.emptyCartSnackbar,
+                                                SnackbarType.Error,
+                                                SnackbarPosition.Top
+                                            )
+                                        } else
+                                            step = LabCheckoutStep.Checkout
+                                    },
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .padding(top = paddingValues.calculateTopPadding())
+                                )
+
+                                LabCheckoutStep.Checkout -> BillingLabCheckoutStep(
+                                    state = previous,
+                                    action = action,
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .padding(top = paddingValues.calculateTopPadding())
+                                )
+                            }
+                        }
+                    } else {
+                        Box(
+                            modifier = Modifier.fillMaxSize().padding(paddingValues),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Card(
+                                shape = RoundedCornerShape(16.dp),
+                                colors = CardDefaults.cardColors(containerColor = colors.surfaceVariant)
+                            ) {
+                                Column(
+                                    modifier = Modifier.padding(16.dp),
+                                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally
+                                ) {
+                                    Text(
+                                        text = strings.billing.noDataAvailable,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = colors.onSurface
+                                    )
+                                    if (state.showSyncRates) {
+                                        Button(onClick = action.onSyncExchangeRates) {
+                                            Text(strings.billing.syncRatesButton)
+                                        }
                                     }
                                 }
                             }
@@ -330,7 +447,7 @@ fun BillingScreen(
                         contentAlignment = Alignment.Center
                     ) {
                         snackbar.show(
-                            "Sin datos disponibles.",
+                            strings.billing.noDataAvailable,
                             SnackbarType.Info,
                             SnackbarPosition.Top
                         )
@@ -354,17 +471,18 @@ fun BillingScreen(
                         when (targetStep) {
                             LabCheckoutStep.Cart -> BillingLabContent(
                                 state = state,
+                                productsPagingFlow = productsPagingFlow,
                                 action = action,
                                 onCheckout = {
                                     if (state.selectedCustomer == null)
                                         snackbar.show(
-                                            "Seleccione primero al cliente.",
+                                            strings.billing.selectCustomerForDocuments,
                                             SnackbarType.Error,
                                             SnackbarPosition.Top
                                         )
                                     else if (state.cartItems.isEmpty()) {
                                         snackbar.show(
-                                            "Seleccione el(los) productos del cliente.",
+                                            strings.billing.emptyCartSnackbar,
                                             SnackbarType.Error,
                                             SnackbarPosition.Top
                                         )
@@ -420,7 +538,7 @@ fun BillingScreen(
                             modifier = Modifier.size(56.dp)
                         )
                         Text(
-                            text = popupMessage ?: "Exito",
+                            text = popupMessage ?: strings.billing.finalizeSale,
                             color = colors.onSurface,
                             fontWeight = FontWeight.SemiBold,
                             fontSize = 20.sp,
@@ -428,7 +546,7 @@ fun BillingScreen(
                         )
                         popupInvoice?.let { invoice ->
                             Text(
-                                text = "Referencia: $invoice",
+                                text = "${strings.billing.referenceLabel}: $invoice",
                                 color = colors.onSurface.copy(alpha = 0.75f),
                                 fontSize = 14.sp
                             )
@@ -441,7 +559,7 @@ fun BillingScreen(
                                 action.onClearSuccessMessage()
                             }
                         ) {
-                            Text("Cerrar")
+                            Text(strings.billing.closeButton)
                         }
                     }
                 }
@@ -462,11 +580,14 @@ private enum class LabCheckoutStep {
 @Composable
 private fun BillingLabContent(
     state: BillingState.Success,
+    productsPagingFlow: Flow<PagingData<ItemBO>>,
     action: BillingAction,
     onCheckout: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val strings = LocalAppStrings.current
     val colors = MaterialTheme.colorScheme
+    val scope = rememberCoroutineScope()
     val accent = colors.primary
     val background = colors.background
     val leftPanelBg = colors.surfaceVariant
@@ -485,14 +606,28 @@ private fun BillingLabContent(
         )
     }
 
-    val categories =
-        state.productSearchResults.mapNotNull { it.itemGroup.takeIf { g -> g.isNotBlank() } }
+    val filteredProductsFlow = remember(productsPagingFlow) {
+        productsPagingFlow.map { paging ->
+            paging.filter { item -> item.actualQty > 0.0 }
+        }
+    }
+    val products = filteredProductsFlow.collectAsLazyPagingItems()
+    val categoriesFromSnapshot = remember(products.itemSnapshotList.items) {
+        products.itemSnapshotList.items
+            .mapNotNull { it.itemGroup.takeIf { g -> g.isNotBlank() } }
             .distinct()
             .sorted()
-    var selectedCategory by rememberSaveable { mutableStateOf("Todos") }
-    val filteredProducts =
-        if (selectedCategory == "Todos") state.productSearchResults
-        else state.productSearchResults.filter { it.itemGroup == selectedCategory }
+    }
+    val categories = remember(state.productCategories, categoriesFromSnapshot) {
+        if (state.productCategories.isNotEmpty()) state.productCategories else categoriesFromSnapshot
+    }
+    var selectedCategory by rememberSaveable { mutableStateOf(state.selectedProductCategory) }
+
+    LaunchedEffect(state.selectedProductCategory) {
+        if (selectedCategory != state.selectedProductCategory) {
+            selectedCategory = state.selectedProductCategory
+        }
+    }
 
     Column(
         modifier = modifier
@@ -519,7 +654,10 @@ private fun BillingLabContent(
                 LabCategoryTabs(
                     categories = categories,
                     selectedCategory = selectedCategory,
-                    onSelect = { selectedCategory = it }
+                    onSelect = {
+                        selectedCategory = it
+                        action.onProductCategorySelected(it)
+                    }
                 )
 
                 Spacer(Modifier.height(16.dp))
@@ -530,12 +668,12 @@ private fun BillingLabContent(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = if (selectedCategory == "Todos") "Todos los productos" else selectedCategory,
+                        text = if (selectedCategory == "Todos") strings.customer.allLabel else selectedCategory,
                         style = MaterialTheme.typography.titleSmall,
                         color = colors.onSurfaceVariant
                     )
                     Text(
-                        text = "(${filteredProducts.size})",
+                        text = "(${products.itemCount})",
                         style = MaterialTheme.typography.labelMedium,
                         color = colors.onSurfaceVariant.copy(alpha = 0.7f)
                     )
@@ -543,20 +681,54 @@ private fun BillingLabContent(
 
                 Spacer(Modifier.height(12.dp))
 
-                LazyVerticalGrid(
-                    columns = GridCells.Adaptive(minSize = 220.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    modifier = Modifier.fillMaxSize()
-                ) {
-                    items(filteredProducts, key = { it.itemCode }) { item ->
-                        LabProductCard(
-                            item = item,
-                            baseCurrency = invoiceCurrency,
-                            exchangeRateByCurrency = state.exchangeRateByCurrency,
-                            accent = accent,
-                            onClick = { action.onProductAdded(item) }
-                        )
+                val gridState = rememberLazyGridState()
+                val showBackToTop by remember {
+                    derivedStateOf { gridState.firstVisibleItemIndex > 0 }
+                }
+                Box(modifier = Modifier.fillMaxSize()) {
+                    LazyVerticalGrid(
+                        state = gridState,
+                        columns = GridCells.Adaptive(minSize = 220.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        modifier = Modifier.fillMaxSize()
+                    ) {
+                        items(
+                            count = products.itemCount,
+                            key = { index -> products[index]?.itemCode ?: "billing_item_$index" }
+                        ) { index ->
+                            val item = products[index] ?: return@items
+                            LabProductCard(
+                                item = item,
+                                baseCurrency = invoiceCurrency,
+                                exchangeRateByCurrency = state.exchangeRateByCurrency,
+                                accent = accent,
+                                onClick = { action.onProductAdded(item) }
+                            )
+                        }
+                        if (products.loadState.append is LoadState.Loading) {
+                            item(span = { androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan) }) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(12.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    CircularProgressIndicator()
+                                }
+                            }
+                        }
+                    }
+                    if (showBackToTop) {
+                        Button(
+                            onClick = { scope.launch { gridState.animateScrollToItem(0) } },
+                            modifier = Modifier.align(Alignment.BottomEnd).padding(8.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Filled.KeyboardArrowUp,
+                                contentDescription = "Back to top"
+                            )
+                        }
                     }
                 }
             }
@@ -593,7 +765,7 @@ private fun BillingLabContent(
                     }
                     Spacer(Modifier.height(12.dp))
                     Text(
-                        text = "Carrito",
+                        text = strings.billing.cartSectionTitle,
                         style = MaterialTheme.typography.titleSmall,
                         color = colors.onSurface
                     )
@@ -608,7 +780,7 @@ private fun BillingLabContent(
                             contentAlignment = Alignment.Center
                         ) {
                             Text(
-                                text = "Carrito vacío",
+                                text = strings.billing.cartEmptyTitle,
                                 style = MaterialTheme.typography.bodySmall,
                                 color = colors.onSurfaceVariant
                             )
@@ -646,17 +818,17 @@ private fun BillingLabContent(
                             verticalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
                             Text(
-                                text = "Resumen",
+                                text = strings.billing.cartSummaryTitle,
                                 style = MaterialTheme.typography.labelLarge,
                                 color = colors.onSurface
                             )
                             Text(
-                                text = "Cliente: ${state.selectedCustomer?.customerName ?: "--"}",
+                                text = "${strings.billing.customerSectionTitle}: ${state.selectedCustomer?.customerName ?: "--"}",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = colors.onSurfaceVariant
                             )
                             Text(
-                                text = "Artículos: ${state.cartItems.size}",
+                                text = "${strings.billing.cartItemsLabel}: ${state.cartItems.size}",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = colors.onSurfaceVariant
                             )
@@ -717,13 +889,13 @@ private fun BillingLabContent(
                             contentColor = colors.onPrimary
                         )
                     ) {
-                        Text("Checkout")
+                        Text(strings.billing.checkoutButton)
                     }
 
                     Spacer(Modifier.height(6.dp))
 
                     Text(
-                        text = "Continua al paso de pagos.",
+                        text = strings.billing.continueToPaymentsHint,
                         style = MaterialTheme.typography.labelSmall,
                         color = colors.onSurfaceVariant,
                         textAlign = TextAlign.Center,
@@ -741,7 +913,10 @@ private fun BillingLabCheckoutStep(
     action: BillingAction,
     modifier: Modifier = Modifier
 ) {
+    val strings = LocalAppStrings.current
     val colors = MaterialTheme.colorScheme
+    val panelBg = colors.surfaceVariant.copy(alpha = 0.48f)
+    val panelBorder = colors.outlineVariant.copy(alpha = 0.42f)
     val invoiceCurrency = state.currency?.trim()?.uppercase().orEmpty().ifBlank { "USD" }
     val baseCurrency = state.baseCurrency?.trim()?.uppercase().orEmpty().ifBlank { invoiceCurrency }
     val secondaryCurrency = resolveSecondaryCurrency(
@@ -756,182 +931,215 @@ private fun BillingLabCheckoutStep(
             exchangeRateByCurrency = state.exchangeRateByCurrency
         )
     }
-    Column(modifier = modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 16.dp, vertical = 12.dp)
+    ) {
         // Encabezado principal del checkout.
         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text(
-                text = "Datos de pago",
+                text = strings.billing.checkoutDataTitle,
                 style = MaterialTheme.typography.titleLarge,
                 color = colors.onSurface
             )
             Text(
-                text = "Revisa y confirma la venta",
+                text = strings.billing.checkoutReviewSubtitle,
                 style = MaterialTheme.typography.bodySmall,
                 color = colors.onSurfaceVariant
             )
         }
         Spacer(Modifier.height(12.dp))
-        // Tarjetas de total y crédito alineadas.
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        BoxWithConstraints(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 72.dp)
         ) {
-            ElevatedCard(
-                modifier = Modifier.weight(1f),
-                shape = RoundedCornerShape(14.dp),
-                elevation = CardDefaults.cardElevation(4.dp),
-                colors = CardDefaults.elevatedCardColors(containerColor = colors.surfaceVariant)
-            ) {
-                Column(
-                    modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
+            val isWide = maxWidth >= 980.dp
+
+            @Composable
+            fun TotalCard(modifier: Modifier = Modifier) {
+                Card(
+                    modifier = modifier,
+                    shape = RoundedCornerShape(14.dp),
+                    colors = CardDefaults.cardColors(containerColor = panelBg),
+                    border = BorderStroke(1.dp, panelBorder),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
                 ) {
-                    Text(
-                        text = "Total",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = colors.onSurfaceVariant
-                    )
-                    Text(
-                        text = formatAmount(invoiceCurrency.toCurrencySymbol(), state.total),
-                        style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.ExtraBold),
-                        color = colors.onSurface
-                    )
-                    HorizontalDivider(color = colors.outlineVariant, thickness = (1.2).dp)
-                    PaymentTotalsRow(
-                        "Pagado",
-                        invoiceCurrency,
-                        state.paidAmountBase,
-                        secondaryCurrencyCode = secondaryCurrency,
-                        secondaryAmount = toSecondary(state.paidAmountBase)
-                    )
-                    PaymentTotalsRow(
-                        "Pendiente",
-                        invoiceCurrency,
-                        state.balanceDueBase,
-                        secondaryCurrencyCode = secondaryCurrency,
-                        secondaryAmount = toSecondary(state.balanceDueBase)
-                    )
-                    PaymentTotalsRow(
-                        "Cambio",
-                        invoiceCurrency,
-                        state.changeDueBase,
-                        secondaryCurrencyCode = secondaryCurrency,
-                        secondaryAmount = toSecondary(state.changeDueBase)
-                    )
-                    HorizontalDivider(color = colors.outlineVariant, thickness = (1.2).dp)
-                    PaymentTotalsRow(
-                        "Subtotal",
-                        invoiceCurrency,
-                        state.subtotal,
-                        secondaryCurrencyCode = secondaryCurrency,
-                        secondaryAmount = toSecondary(state.subtotal)
-                    )
-                    if (state.taxes > 0.0) {
-                        PaymentTotalsRow(
-                            "Impuestos",
-                            invoiceCurrency,
-                            state.taxes,
-                            secondaryCurrencyCode = secondaryCurrency,
-                            secondaryAmount = toSecondary(state.taxes)
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        SectionHeader(title = strings.billing.totalLabel, accent = colors.primary)
+                        Text(
+                            text = formatAmount(invoiceCurrency.toCurrencySymbol(), state.total),
+                            style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.ExtraBold),
+                            color = colors.onSurface
                         )
-                    }
-                    if (state.discount > 0.0) {
+                        HorizontalDivider(color = colors.outlineVariant, thickness = (1.2).dp)
                         PaymentTotalsRow(
-                            "Descuento",
+                            "Pagado",
                             invoiceCurrency,
-                            -state.discount,
+                            state.paidAmountBase,
                             secondaryCurrencyCode = secondaryCurrency,
-                            secondaryAmount = toSecondary(-state.discount)
+                            secondaryAmount = toSecondary(state.paidAmountBase)
                         )
-                    }
-                    if (state.shippingAmount > 0.0) {
                         PaymentTotalsRow(
-                            "Envío",
+                            "Pendiente",
                             invoiceCurrency,
-                            state.shippingAmount,
+                            state.balanceDueBase,
                             secondaryCurrencyCode = secondaryCurrency,
-                            secondaryAmount = toSecondary(state.shippingAmount)
+                            secondaryAmount = toSecondary(state.balanceDueBase)
                         )
+                        PaymentTotalsRow(
+                            "Cambio",
+                            invoiceCurrency,
+                            state.changeDueBase,
+                            secondaryCurrencyCode = secondaryCurrency,
+                            secondaryAmount = toSecondary(state.changeDueBase)
+                        )
+                        HorizontalDivider(color = colors.outlineVariant, thickness = (1.2).dp)
+                        PaymentTotalsRow(
+                            "Subtotal",
+                            invoiceCurrency,
+                            state.subtotal,
+                            secondaryCurrencyCode = secondaryCurrency,
+                            secondaryAmount = toSecondary(state.subtotal)
+                        )
+                        if (state.taxes > 0.0) {
+                            PaymentTotalsRow(
+                                "Impuestos",
+                                invoiceCurrency,
+                                state.taxes,
+                                secondaryCurrencyCode = secondaryCurrency,
+                                secondaryAmount = toSecondary(state.taxes)
+                            )
+                        }
+                        if (state.discount > 0.0) {
+                            PaymentTotalsRow(
+                                "Descuento",
+                                invoiceCurrency,
+                                -state.discount,
+                                secondaryCurrencyCode = secondaryCurrency,
+                                secondaryAmount = toSecondary(-state.discount)
+                            )
+                        }
+                        if (state.shippingAmount > 0.0) {
+                            PaymentTotalsRow(
+                                "Envío",
+                                invoiceCurrency,
+                                state.shippingAmount,
+                                secondaryCurrencyCode = secondaryCurrency,
+                                secondaryAmount = toSecondary(state.shippingAmount)
+                            )
+                        }
                     }
                 }
             }
-            if (state.paymentTerms.isNotEmpty()) {
-                ElevatedCard(
-                    modifier = Modifier.weight(1f),
-                    colors = CardDefaults.elevatedCardColors(containerColor = colors.surfaceVariant)
+
+            @Composable
+            fun CreditCard(modifier: Modifier = Modifier) {
+                if (state.paymentTerms.isNotEmpty()) {
+                    Card(
+                        modifier = modifier,
+                        colors = CardDefaults.cardColors(containerColor = panelBg),
+                        border = BorderStroke(1.dp, panelBorder),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .padding(12.dp)
+                                .animateContentSize(animationSpec = tween(260)),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            SectionHeader(title = strings.billing.creditSaleLabel, accent = colors.tertiary)
+                            CreditTermsSection(
+                                isCreditSale = state.isCreditSale,
+                                paymentTerms = state.paymentTerms,
+                                selectedPaymentTerm = state.selectedPaymentTerm,
+                                creditSaleTooltipMessage = state.creditSaleTooltipMessage,
+                                onCreditSaleChanged = action.onCreditSaleChanged,
+                                onPaymentTermSelected = action.onPaymentTermSelected
+                            )
+                        }
+                    }
+                }
+            }
+
+            @Composable
+            fun DiscountCard(modifier: Modifier = Modifier) {
+                Card(
+                    modifier = modifier,
+                    colors = CardDefaults.cardColors(containerColor = panelBg),
+                    border = BorderStroke(1.dp, panelBorder),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
                 ) {
                     Column(
                         modifier = Modifier.padding(12.dp),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Text(
-                            text = "Crédito",
-                            style = MaterialTheme.typography.titleSmall,
-                            color = colors.onSurface
-                        )
+                        SectionHeader(title = strings.billing.totalsDiscountsShippingTitle, accent = colors.secondary)
+                        DiscountShippingInputs(state, action)
+                    }
+                }
+            }
 
-                        CreditTermsSection(
+            @Composable
+            fun PaymentsCard(modifier: Modifier = Modifier, listMaxHeight: Dp) {
+                Card(
+                    modifier = modifier,
+                    colors = CardDefaults.cardColors(containerColor = panelBg),
+                    border = BorderStroke(1.dp, panelBorder),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        SectionHeader(title = strings.billing.paymentsTitle, accent = colors.primary)
+                        PaymentSection(
+                            state = state,
+                            baseCurrency = invoiceCurrency,
+                            exchangeRateByCurrency = state.exchangeRateByCurrency,
+                            paymentLines = state.paymentLines,
+                            paymentModes = state.paymentModes,
+                            paidAmountBase = state.paidAmountBase,
+                            totalAmount = state.total,
+                            paymentErrorMessage = state.paymentErrorMessage,
                             isCreditSale = state.isCreditSale,
-                            paymentTerms = state.paymentTerms,
-                            selectedPaymentTerm = state.selectedPaymentTerm,
-                            onCreditSaleChanged = action.onCreditSaleChanged,
-                            onPaymentTermSelected = action.onPaymentTermSelected
+                            onAddPaymentLine = action.onAddPaymentLine,
+                            onRemovePaymentLine = action.onRemovePaymentLine,
+                            onPaymentCurrencySelected = action.onPaymentCurrencySelected,
+                            paymentListMaxHeight = listMaxHeight
                         )
                     }
                 }
             }
-        }
-        Spacer(Modifier.height(12.dp))
-        // Contenido scrolleable.
-        Column(
-            modifier = Modifier
-                .verticalScroll(rememberScrollState())
-                .padding(bottom = 72.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            ElevatedCard(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.elevatedCardColors(containerColor = colors.surfaceVariant)
-            ) {
-                Column(
-                    modifier = Modifier.padding(12.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+
+            if (isWide) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    Text(
-                        text = "Descuento y envío",
-                        style = MaterialTheme.typography.titleSmall,
-                        color = colors.onSurface
-                    )
-                    DiscountShippingInputs(state, action)
+                    Column(
+                        modifier = Modifier.weight(0.38f),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        TotalCard(modifier = Modifier.fillMaxWidth())
+                        CreditCard(modifier = Modifier.fillMaxWidth())
+                        DiscountCard(modifier = Modifier.fillMaxWidth())
+                    }
+                    PaymentsCard(modifier = Modifier.weight(0.62f), listMaxHeight = 360.dp)
                 }
-            }
-            ElevatedCard(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.elevatedCardColors(containerColor = colors.surfaceVariant)
-            ) {
+            } else {
                 Column(
-                    modifier = Modifier.padding(12.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    Text(
-                        text = "Pagos",
-                        style = MaterialTheme.typography.titleSmall,
-                        color = colors.onSurface
-                    )
-                    PaymentSection(
-                        state = state,
-                        baseCurrency = invoiceCurrency,
-                        exchangeRateByCurrency = state.exchangeRateByCurrency,
-                        paymentLines = state.paymentLines,
-                        paymentModes = state.paymentModes,
-                        paidAmountBase = state.paidAmountBase,
-                        totalAmount = state.total,
-                        paymentErrorMessage = state.paymentErrorMessage,
-                        isCreditSale = state.isCreditSale,
-                        onAddPaymentLine = action.onAddPaymentLine,
-                        onRemovePaymentLine = action.onRemovePaymentLine,
-                        onPaymentCurrencySelected = action.onPaymentCurrencySelected
-                    )
+                    TotalCard(modifier = Modifier.fillMaxWidth())
+                    CreditCard(modifier = Modifier.fillMaxWidth())
+                    DiscountCard(modifier = Modifier.fillMaxWidth())
+                    PaymentsCard(modifier = Modifier.fillMaxWidth(), listMaxHeight = 180.dp)
                 }
             }
         }
@@ -944,7 +1152,7 @@ private fun BillingLabCheckoutStep(
                     (state.isCreditSale || state.paidAmountBase + 0.01 >= state.total) &&
                     (!state.isCreditSale || state.selectedPaymentTerm != null)
         ) {
-            Text("Pagar")
+            Text(strings.billing.finalizeSale)
         }*/
     }
 }
@@ -955,6 +1163,7 @@ private fun LabSearchBar(
     onChange: (String) -> Unit,
     onClear: () -> Unit
 ) {
+    val strings = LocalAppStrings.current
     OutlinedTextField(
         value = value,
         onValueChange = onChange,
@@ -967,7 +1176,7 @@ private fun LabSearchBar(
                 }
             }
         },
-        placeholder = { Text("Buscar productos o escanear...") },
+        placeholder = { Text(strings.billing.productSearchPlaceholder) },
         singleLine = true,
         colors = TextFieldDefaults.colors(
             focusedIndicatorColor = Color.Transparent,
@@ -987,10 +1196,11 @@ private fun LabCategoryTabs(
     selectedCategory: String,
     onSelect: (String) -> Unit
 ) {
+    val strings = LocalAppStrings.current
     LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         item {
             LabCategoryChip(
-                label = "Todos",
+                label = strings.customer.allLabel,
                 selected = selectedCategory == "Todos",
                 onClick = { onSelect("Todos") }
             )
@@ -1169,6 +1379,7 @@ private fun LabCartHeader(
     itemCount: Int,
     accent: Color
 ) {
+    val strings = LocalAppStrings.current
     val colors = MaterialTheme.colorScheme
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -1190,12 +1401,12 @@ private fun LabCartHeader(
             Spacer(Modifier.width(10.dp))
             Column {
                 Text(
-                    text = "Orden actual",
+                    text = strings.billing.currentOrderTitle,
                     style = MaterialTheme.typography.titleSmall,
                     color = colors.onSurface
                 )
                 Text(
-                    text = "$itemCount items",
+                    text = "$itemCount ${strings.billing.cartItemsLabel.lowercase()}",
                     style = MaterialTheme.typography.labelSmall,
                     color = colors.onSurfaceVariant
                 )
@@ -1343,6 +1554,7 @@ private fun CustomerSelector(
     onQueryChange: (String) -> Unit,
     onCustomerSelected: (CustomerBO) -> Unit
 ) {
+    val strings = LocalAppStrings.current
     var expanded by remember { mutableStateOf(false) }
     var displayLimit by remember { mutableStateOf(50) }
     var anchorWidthPx by remember { mutableStateOf(0) }
@@ -1350,7 +1562,13 @@ private fun CustomerSelector(
     val hasCustomers = customers.isNotEmpty()
 
     ExposedDropdownMenuBox(
-        expanded = expanded && hasCustomers, onExpandedChange = { }) {
+        expanded = expanded && hasCustomers,
+        onExpandedChange = {
+            if (hasCustomers) {
+                expanded = !expanded
+            }
+        }
+    ) {
         AppTextField(
             value = query,
             onValueChange = {
@@ -1364,8 +1582,8 @@ private fun CustomerSelector(
                 .onFocusChanged { focusState ->
                     expanded = focusState.isFocused
                 },
-            label = "Buscar o Seleccionar",
-            placeholder = "Nombre, codigo, telefono...",
+            label = strings.billing.searchCustomerLabel,
+            placeholder = strings.billing.searchCustomerPlaceholder,
             leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
         )
@@ -1399,7 +1617,7 @@ private fun CustomerSelector(
                 }
                 if (customers.size > displayLimit) {
                     DropdownMenuItem(
-                        text = { Text("Mostrar más...") },
+                        text = { Text(strings.common.showMore) },
                         onClick = { displayLimit += 50 }
                     )
                 }
@@ -1439,6 +1657,29 @@ private fun PaymentTotalsRow(
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun SectionHeader(
+    title: String,
+    accent: Color
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .size(width = 4.dp, height = 16.dp)
+                .clip(RoundedCornerShape(999.dp))
+                .background(accent)
+        )
+        Text(
+            text = title,
+            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
+            color = MaterialTheme.colorScheme.onSurface
+        )
     }
 }
 
@@ -1492,8 +1733,10 @@ private fun PaymentSection(
     isCreditSale: Boolean,
     onAddPaymentLine: (PaymentLine) -> Unit,
     onRemovePaymentLine: (Int) -> Unit,
-    onPaymentCurrencySelected: (String) -> Unit
+    onPaymentCurrencySelected: (String) -> Unit,
+    paymentListMaxHeight: Dp = 240.dp
 ) {
+    val strings = LocalAppStrings.current
     val modeOptions = remember(paymentModes) { paymentModes.map { it.modeOfPayment }.distinct() }
     var selectedMode by remember(modeOptions) { mutableStateOf("") }
     val selectedModeOption = paymentModes.firstOrNull { it.modeOfPayment == selectedMode }
@@ -1532,114 +1775,38 @@ private fun PaymentSection(
     LaunchedEffect(selectedMode) {
         referenceInput = ""
     }
-    Column(modifier = Modifier.padding(end = 12.dp, start = 12.dp, bottom = 8.dp)) {
-        if (paymentLines.isEmpty()) {
-            // Estado vacío con tarjeta para mayor claridad visual.
-            ElevatedCard(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
-            ) {
-                Column(modifier = Modifier.padding(12.dp)) {
-                    Text(
-                        "Sin pagos registrados",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-        } else {
-            Column(
-                modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                paymentLines.forEachIndexed { index, line ->
-                    // Animamos la aparición/desaparición de cada pago.
-                    AnimatedVisibility(
-                        visible = true,
-                        enter = fadeIn(animationSpec = tween(360)) + expandVertically(),
-                        exit = fadeOut(animationSpec = tween(320)) + shrinkVertically()
-                    ) {
-                        ElevatedCard(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .animateContentSize(),
-                            colors = CardDefaults.cardColors(
-                                containerColor = MaterialTheme.colorScheme.surfaceVariant
-                            )
-                        ) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth().padding(12.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        text = line.modeOfPayment,
-                                        fontWeight = FontWeight.SemiBold
-                                    )
-                                    Text(
-                                        text = formatAmount(
-                                            line.currency.toCurrencySymbol(), line.enteredAmount
-                                        ),
-                                        style = MaterialTheme.typography.titleSmall
-                                    )
-                                    Text(
-                                        text = "Base: ${
-                                            formatAmount(
-                                                baseCurrency.toCurrencySymbol(), line.baseAmount
-                                            )
-                                        }",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                    /*Text(
-                                        text = "Tasa: ${line.exchangeRate}",
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )*/
-                                    /*if (!line.referenceNumber.isNullOrBlank()) {
-                                        Text(
-                                            text = "Referencia: ${line.referenceNumber}",
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                    }*/
-                                }
-                                IconButton(onClick = { onRemovePaymentLine(index) }) {
-                                    Icon(
-                                        Icons.Default.Delete,
-                                        contentDescription = "Eliminar línea de pago",
-                                        tint = MaterialTheme.colorScheme.error
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
+    Column(
+        modifier = Modifier
+            .padding(end = 12.dp, start = 12.dp, bottom = 8.dp)
+    ) {
+        val pendingAmount = (totalAmount - paidAmountBase).coerceAtLeast(0.0)
+
+        AnimatedVisibility(
+            visible = isCreditSale,
+            enter = fadeIn(animationSpec = tween(260)) + expandVertically(animationSpec = tween(260)),
+            exit = fadeOut(animationSpec = tween(180)) + shrinkVertically(animationSpec = tween(180))
+        ) {
+            Column {
+                Text(
+                    strings.billing.partialPaymentHint,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(Modifier.height(8.dp))
             }
         }
 
-        Spacer(Modifier.height(12.dp))
-
-        if (isCreditSale) {
-            Text(
-                "Pago parcial (opcional). El restante quedará como saldo a crédito.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Spacer(Modifier.height(8.dp))
-        }
-
-        Text("Método de pago", style = MaterialTheme.typography.bodyMedium)
+        Text(strings.billing.paymentModeLabel, style = MaterialTheme.typography.bodyMedium)
         var modeExpanded by remember { mutableStateOf(false) }
         ExposedDropdownMenuBox(
-            expanded = modeExpanded, onExpandedChange = { modeExpanded = it }) {
+            expanded = modeExpanded, onExpandedChange = { modeExpanded = !modeExpanded }) {
             AppTextField(
                 value = selectedMode,
                 onValueChange = {},
                 modifier = Modifier.menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable),
-                label = "Método de pago",
-                placeholder = "Selecciona el metodo de pago del cliente",
+                label = strings.billing.paymentModeLabel,
+                placeholder = strings.billing.paymentModePlaceholder,
+                readOnly = true,
                 leadingIcon = { Icon(Icons.Default.Money, contentDescription = null) },
                 trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = modeExpanded) })
             ExposedDropdownMenu(
@@ -1664,14 +1831,14 @@ private fun PaymentSection(
             currencyCode = selectedCurrency,
             rawValue = amountInput,
             onRawValueChange = { amountInput = it },
-            label = "Monto",
+            label = strings.billing.amountLabel,
             enabled = true, //!isCreditSale,
             onAmountChanged = { amountValue = it },
             supportingText = {
                 if (!selectedCurrency.equals(baseCurrency, ignoreCase = true)) {
                     val rate = rateInput.toDoubleOrNull() ?: 0.0
                     val base = amountValue * rate
-                    Text("Base: ${formatAmount(baseCurrency.toCurrencySymbol(), base)}")
+                    Text("${strings.billing.baseLabel}: ${formatAmount(baseCurrency.toCurrencySymbol(), base)}")
                 }
             },
             trailingIcon = {
@@ -1686,7 +1853,7 @@ private fun PaymentSection(
                         },
                         enabled = amountInput.isNotBlank()
                     ) {
-                        Icon(Icons.Default.Delete, contentDescription = "Limpiar")
+                        Icon(Icons.Default.Delete, contentDescription = strings.common.clear)
                     }
                     IconButton(
                         onClick = {
@@ -1709,7 +1876,7 @@ private fun PaymentSection(
                         },
                         enabled = canAdd
                     ) {
-                        Icon(Icons.Default.Add, contentDescription = "Agregar pago")
+                        Icon(Icons.Default.Add, contentDescription = strings.billing.addPayment)
                     }
                 }
             }
@@ -1719,12 +1886,12 @@ private fun PaymentSection(
             AppTextField(
                 value = referenceInput,
                 onValueChange = { referenceInput = it },
-                label = "Número de referencia",
+                label = strings.billing.referenceNumberLabel,
                 placeholder = "#11231",
                 leadingIcon = { Icon(Icons.Default.ConfirmationNumber, contentDescription = null) },
                 supportingText = {
                     if (referenceInput.isBlank()) {
-                        Text("Requerido para pagos con ${selectedMode}.")
+                        Text("${strings.billing.referenceRequiredHint} ${selectedMode}.")
                     }
                 },
                 isError = referenceInput.isBlank(),
@@ -1734,13 +1901,131 @@ private fun PaymentSection(
             Spacer(Modifier.height(12.dp))
         }
 
-        if (!paymentErrorMessage.isNullOrBlank()) {
-            Text(
-                text = paymentErrorMessage,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.error
-            )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Card(
+                modifier = Modifier.weight(1f),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+            ) {
+                Column(modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) {
+                    Text(
+                        text = strings.billing.paidBaseLabel,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        text = formatAmount(baseCurrency.toCurrencySymbol(), paidAmountBase),
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+            }
+            Card(
+                modifier = Modifier.weight(1f),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+            ) {
+                Column(modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) {
+                    Text(
+                        text = strings.billing.balanceDueLabel,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        text = formatAmount(baseCurrency.toCurrencySymbol(), pendingAmount),
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+            }
         }
+
+        Spacer(Modifier.height(10.dp))
+
+        Text(
+            text = strings.billing.paymentsRegisteredTitle,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+        Spacer(Modifier.height(6.dp))
+
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 84.dp, max = paymentListMaxHeight)
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                if (paymentLines.isEmpty()) {
+                    Text(
+                        strings.billing.paymentsEmpty,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                } else {
+                    paymentLines.forEachIndexed { index, line ->
+                        AnimatedVisibility(
+                            visible = true,
+                            enter = fadeIn(animationSpec = tween(360)) + expandVertically(),
+                            exit = fadeOut(animationSpec = tween(320)) + shrinkVertically()
+                        ) {
+                            Card(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .animateContentSize(),
+                                colors = CardDefaults.cardColors(
+                                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)
+                                )
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth().padding(12.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = line.modeOfPayment,
+                                            fontWeight = FontWeight.SemiBold
+                                        )
+                                        Text(
+                                            text = formatAmount(
+                                                line.currency.toCurrencySymbol(), line.enteredAmount
+                                            ),
+                                            style = MaterialTheme.typography.titleSmall
+                                        )
+                                        Text(
+                                            text = "Base: ${
+                                                formatAmount(
+                                                    baseCurrency.toCurrencySymbol(), line.baseAmount
+                                                )
+                                            }",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                    IconButton(onClick = { onRemovePaymentLine(index) }) {
+                                        Icon(
+                                            Icons.Default.Delete,
+                                            contentDescription = "Eliminar línea de pago",
+                                            tint = MaterialTheme.colorScheme.error
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        Spacer(Modifier.height(8.dp))
+
     }
 }
 
@@ -1750,6 +2035,7 @@ enum class DiscountInputType { Code, Percent, Amount }
 private fun DiscountShippingInputs(
     state: BillingState.Success, action: BillingAction
 ) {
+    val strings = LocalAppStrings.current
     val baseCurrency = state.currency ?: "USD"
     val initialType = remember(
         state.manualDiscountAmount,
@@ -1791,22 +2077,42 @@ private fun DiscountShippingInputs(
         modifier = Modifier.padding(end = 12.dp, start = 12.dp, bottom = 8.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        Text("Descuento", style = MaterialTheme.typography.bodyMedium)
+        Text(strings.billing.discountSectionTitle, style = MaterialTheme.typography.bodyMedium)
+        val chipElevation = FilterChipDefaults.filterChipElevation(
+            elevation = 0.dp,
+            pressedElevation = 0.dp,
+            focusedElevation = 0.dp,
+            hoveredElevation = 0.dp,
+            draggedElevation = 0.dp,
+            disabledElevation = 0.dp
+        )
+        val chipColors = FilterChipDefaults.filterChipColors(
+            selectedContainerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f),
+            containerColor = MaterialTheme.colorScheme.surface,
+            selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
+            labelColor = MaterialTheme.colorScheme.onSurface
+        )
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             FilterChip(
                 selected = discountType == DiscountInputType.Amount,
                 onClick = { selectDiscountType(DiscountInputType.Amount) },
-                label = { Text("Monto") }
+                elevation = chipElevation,
+                colors = chipColors,
+                label = { Text(strings.billing.discountTypeAmount) }
             )
             FilterChip(
                 selected = discountType == DiscountInputType.Code,
                 onClick = { selectDiscountType(DiscountInputType.Code) },
-                label = { Text("Codigo") }
+                elevation = chipElevation,
+                colors = chipColors,
+                label = { Text(strings.billing.discountTypeCode) }
             )
             FilterChip(
                 selected = discountType == DiscountInputType.Percent,
                 onClick = { selectDiscountType(DiscountInputType.Percent) },
-                label = { Text("Porcentaje") }
+                elevation = chipElevation,
+                colors = chipColors,
+                label = { Text(strings.billing.discountTypePercent) }
             )
         }
         val paymentModes = state.paymentModes
@@ -1828,7 +2134,7 @@ private fun DiscountShippingInputs(
                         amountInput = it
                         action.onManualDiscountAmountChanged(amountInput)
                     },
-                    label = "Monto (${baseCurrency.toCurrencySymbol()})",
+                    label = "${strings.billing.discountAmountLabel} (${baseCurrency.toCurrencySymbol()})",
                     enabled = true,
                     onAmountChanged = {
                         amountValue = it
@@ -1837,7 +2143,7 @@ private fun DiscountShippingInputs(
                         if (!selectedCurrency.equals(baseCurrency, ignoreCase = true)) {
                             val rate = rateInput.toDoubleOrNull() ?: 0.0
                             val base = amountValue * rate
-                            Text("Base: ${formatAmount(baseCurrency.toCurrencySymbol(), base)}")
+                            Text("${strings.billing.baseLabel}: ${formatAmount(baseCurrency.toCurrencySymbol(), base)}")
                         }
                     },
                     trailingIcon = { Icon(Icons.Default.Money, contentDescription = null) },
@@ -1849,8 +2155,8 @@ private fun DiscountShippingInputs(
                 AppTextField(
                     value = state.discountCode,
                     onValueChange = action.onDiscountCodeChanged,
-                    label = "Codigo de descuento",
-                    placeholder = "Ingresa el codigo de descuento",
+                    label = strings.billing.discountCodeLabel,
+                    placeholder = strings.billing.discountCodePlaceholder,
                     trailingIcon = { Icon(Icons.Default.Money, contentDescription = null) },
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -1860,7 +2166,7 @@ private fun DiscountShippingInputs(
                 AppTextField(
                     value = if (state.manualDiscountPercent > 0.0) state.manualDiscountPercent.toString() else "",
                     onValueChange = action.onManualDiscountPercentChanged,
-                    label = "Porcentaje (%)",
+                    label = strings.billing.discountPercentLabel,
                     trailingIcon = { Icon(Icons.Default.Percent, contentDescription = null) },
                     keyboardOptions = KeyboardOptions(
                         keyboardType = KeyboardType.Number, imeAction = ImeAction.Next
@@ -1870,24 +2176,25 @@ private fun DiscountShippingInputs(
             }
         }
         if (state.deliveryCharges.isNotEmpty()) {
-            Text("Envío", style = MaterialTheme.typography.bodyMedium)
+            Text(strings.billing.shippingSectionTitle, style = MaterialTheme.typography.bodyMedium)
             val deliveryChargeLabel =
-                state.selectedDeliveryCharge?.label ?: "Selecciona cargo de envío"
+                state.selectedDeliveryCharge?.label ?: strings.billing.deliveryChargePlaceholder
             var deliveryExpanded by remember { mutableStateOf(false) }
             ExposedDropdownMenuBox(
-                expanded = deliveryExpanded, onExpandedChange = { deliveryExpanded = it }) {
+                expanded = deliveryExpanded, onExpandedChange = { deliveryExpanded = !deliveryExpanded }) {
                 AppTextField(
                     value = deliveryChargeLabel,
                     onValueChange = {},
-                    label = "Cargo de envío",
+                    label = strings.billing.deliveryChargeLabel,
                     modifier = Modifier.fillMaxWidth()
                         .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable),
+                    readOnly = true,
                     trailingIcon = {
                         ExposedDropdownMenuDefaults.TrailingIcon(expanded = deliveryExpanded)
                     })
                 ExposedDropdownMenu(
                     expanded = deliveryExpanded, onDismissRequest = { deliveryExpanded = false }) {
-                    DropdownMenuItem(text = { Text("Sin envío") }, onClick = {
+                    DropdownMenuItem(text = { Text(strings.billing.noShippingOption) }, onClick = {
                         action.onDeliveryChargeSelected(null)
                         deliveryExpanded = false
                     })
@@ -1904,7 +2211,7 @@ private fun DiscountShippingInputs(
             }
         }
         Text(
-            "Se aplicará el descuento manual o código según corresponda.",
+            strings.billing.discountHint,
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Start
@@ -1917,80 +2224,120 @@ private fun CreditTermsSection(
     isCreditSale: Boolean,
     paymentTerms: List<PaymentTermBO>,
     selectedPaymentTerm: PaymentTermBO?,
+    creditSaleTooltipMessage: String?,
     onCreditSaleChanged: (Boolean) -> Unit,
     onPaymentTermSelected: (PaymentTermBO?) -> Unit
 ) {
+    val strings = LocalAppStrings.current
+    val hasCreditWarning = !creditSaleTooltipMessage.isNullOrBlank()
     Column(
-        modifier = Modifier.padding(end = 12.dp, start = 12.dp, bottom = 8.dp),
+        modifier = Modifier
+            .padding(end = 12.dp, start = 12.dp, bottom = 8.dp)
+            .animateContentSize(animationSpec = tween(260)),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         val canEnableCredit = paymentTerms.isNotEmpty()
-        Row(
+        Surface(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text("Venta de credito", style = MaterialTheme.typography.bodyMedium)
-            Switch(
-                checked = isCreditSale,
-                onCheckedChange = onCreditSaleChanged,
-                enabled = canEnableCredit
+            shape = RoundedCornerShape(10.dp),
+            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+            border = BorderStroke(
+                width = if (hasCreditWarning) 1.5.dp else 1.dp,
+                color = if (hasCreditWarning) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.outlineVariant
             )
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 6.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(strings.billing.creditSaleLabel, style = MaterialTheme.typography.bodyMedium)
+                Switch(
+                    checked = isCreditSale,
+                    onCheckedChange = onCreditSaleChanged,
+                    enabled = canEnableCredit,
+                    colors = SwitchDefaults.colors(
+                        checkedThumbColor = MaterialTheme.colorScheme.primary,
+                        checkedTrackColor = MaterialTheme.colorScheme.primaryContainer,
+                        checkedBorderColor = MaterialTheme.colorScheme.primaryContainer,
+                        uncheckedThumbColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                        uncheckedTrackColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.8f),
+                        uncheckedBorderColor = MaterialTheme.colorScheme.outlineVariant,
+                        disabledCheckedThumbColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f),
+                        disabledCheckedTrackColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f),
+                        disabledUncheckedThumbColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f),
+                        disabledUncheckedTrackColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+                    )
+                )
+            }
         }
 
-        if (isCreditSale) {
-            Text("Condiciones de pago", style = MaterialTheme.typography.bodyMedium)
-            var templateExpanded by remember { mutableStateOf(false) }
-            val templateLabel = selectedPaymentTerm?.name ?: "Selecciona la condicion de pago"
-            ExposedDropdownMenuBox(
-                expanded = templateExpanded, onExpandedChange = { templateExpanded = it }) {
-                AppTextField(
-                    value = templateLabel,
-                    onValueChange = {},
-                    label = "Selecciona la condicion de pago",
-                    placeholder = "Condicion de pago",
-                    modifier = Modifier//.fillMaxWidth()
-                        .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable),
-                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = templateExpanded) },
-                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) })
-                ExposedDropdownMenu(
-                    expanded = templateExpanded, onDismissRequest = { templateExpanded = false }) {
-                    paymentTerms.forEach { term ->
-                        DropdownMenuItem(text = { Text(term.name) }, onClick = {
-                            onPaymentTermSelected(term)
-                            templateExpanded = false
-                        })
+        AnimatedVisibility(
+            visible = isCreditSale,
+            enter = fadeIn(animationSpec = tween(260)) + expandVertically(animationSpec = tween(260)),
+            exit = fadeOut(animationSpec = tween(180)) + shrinkVertically(animationSpec = tween(180))
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(strings.billing.paymentTermsLabel, style = MaterialTheme.typography.bodyMedium)
+                var templateExpanded by remember { mutableStateOf(false) }
+                val templateLabel = selectedPaymentTerm?.name ?: strings.billing.paymentTermPlaceholder
+                ExposedDropdownMenuBox(
+                    expanded = templateExpanded, onExpandedChange = { templateExpanded = !templateExpanded }) {
+                    AppTextField(
+                        value = templateLabel,
+                        onValueChange = {},
+                        label = strings.billing.paymentTermLabel,
+                        placeholder = strings.billing.paymentTermPlaceholder,
+                        modifier = Modifier//.fillMaxWidth()
+                            .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable),
+                        readOnly = true,
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = templateExpanded) },
+                        leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) })
+                    ExposedDropdownMenu(
+                        expanded = templateExpanded, onDismissRequest = { templateExpanded = false }) {
+                        paymentTerms.forEach { term ->
+                            DropdownMenuItem(text = { Text(term.name) }, onClick = {
+                                onPaymentTermSelected(term)
+                                templateExpanded = false
+                            })
+                        }
                     }
                 }
-            }
-            selectedPaymentTerm?.let { term ->
-                val creditDays = term.creditDays ?: 0
-                val creditMonths = term.creditMonths ?: 0
-                val termsLabel = buildString {
-                    if (creditMonths > 0) {
-                        append("$creditMonths mes(es)")
-                    }
-                    if (creditDays > 0) {
-                        if (isNotEmpty()) append(" + ")
-                        append("$creditDays dia(s)")
-                    }
-                }.ifBlank { "Mismo dia" }
-                Text(
-                    text = "Terminos: $termsLabel",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                term.description?.takeIf { it.isNotBlank() }?.let { description ->
+                selectedPaymentTerm?.let { term ->
+                    val creditDays = term.creditDays ?: 0
+                    val creditMonths = term.creditMonths ?: 0
+                    val termsLabel = buildString {
+                        if (creditMonths > 0) {
+                            append("$creditMonths mes(es)")
+                        }
+                        if (creditDays > 0) {
+                            if (isNotEmpty()) append(" + ")
+                            append("$creditDays dia(s)")
+                        }
+                    }.ifBlank { strings.billing.sameDayLabel }
                     Text(
-                        text = description,
+                        text = "${strings.billing.termsLabel}: $termsLabel",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
+                    term.description?.takeIf { it.isNotBlank() }?.let { description ->
+                        Text(
+                            text = description,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
                 }
             }
-        } else if (!canEnableCredit) {
+        }
+
+        AnimatedVisibility(
+            visible = !isCreditSale && !canEnableCredit,
+            enter = fadeIn(animationSpec = tween(220)),
+            exit = fadeOut(animationSpec = tween(180))
+        ) {
             Text(
-                text = "No hay terminos de pago disponibles, Ventas de credito deshabilitadas.",
+                text = strings.billing.noPaymentTermsAvailable,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -2025,6 +2372,7 @@ fun AppTextField(
     placeholder: String? = null,
     singleLine: Boolean = true,
     enabled: Boolean = true,
+    readOnly: Boolean = false,
     isError: Boolean = false,
     supportingText: (@Composable () -> Unit)? = null,
     keyboardOptions: KeyboardOptions = KeyboardOptions.Default,
@@ -2040,6 +2388,7 @@ fun AppTextField(
         placeholder = placeholder?.let { { Text(it) } },
         singleLine = singleLine,
         enabled = enabled,
+        readOnly = readOnly,
         isError = isError,
         supportingText = supportingText,
         keyboardOptions = keyboardOptions,
@@ -2250,9 +2599,17 @@ fun MoneyTextField(
     }
     val transformation = remember(spec) { MoneyVisualTransformation(spec) }
 
-    var tfv by remember(rawValue, spec.decimals) {
+    var tfv by remember(spec.decimals) {
         val sanitized = sanitizeMoneyInput(rawValue, spec.decimals)
         mutableStateOf(TextFieldValue(sanitized, selection = TextRange(sanitized.length)))
+    }
+
+    LaunchedEffect(rawValue, spec.decimals) {
+        val sanitized = sanitizeMoneyInput(rawValue, spec.decimals)
+        if (sanitized != tfv.text) {
+            val nextCursor = tfv.selection.start.coerceIn(0, sanitized.length)
+            tfv = TextFieldValue(text = sanitized, selection = TextRange(nextCursor))
+        }
     }
 
     LaunchedEffect(tfv.text) {
@@ -2263,9 +2620,15 @@ fun MoneyTextField(
         value = tfv,
         onValueChange = { typed ->
             val sanitized = sanitizeMoneyInput(typed.text, spec.decimals)
-            tfv = TextFieldValue(
+            val typedCursor = typed.selection.end.coerceIn(0, typed.text.length)
+            val sanitizedPrefix = sanitizeMoneyInput(
+                typed.text.take(typedCursor),
+                spec.decimals
+            )
+            val nextCursor = sanitizedPrefix.length.coerceIn(0, sanitized.length)
+            tfv = typed.copy(
                 text = sanitized,
-                selection = TextRange(sanitized.length)
+                selection = TextRange(nextCursor)
             )
             onRawValueChange(sanitized)
         },

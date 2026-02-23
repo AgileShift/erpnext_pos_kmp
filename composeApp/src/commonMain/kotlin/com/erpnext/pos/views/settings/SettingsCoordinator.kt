@@ -34,6 +34,7 @@ class SettingsCoordinator(
     fun onSyncOnStartupChanged(enabled: Boolean) = viewModel.setSyncOnStartup(enabled)
     fun onWifiOnlyChanged(enabled: Boolean) = viewModel.setWifiOnly(enabled)
     fun onUseTtlChanged(enabled: Boolean) = viewModel.setUseTtl(enabled)
+    fun onTtlHoursChanged(hours: Int) = viewModel.setTtlHours(hours)
     fun onLanguageSelected(language: AppLanguage) =
         viewModel.setLanguage(language)
     fun onThemeSelected(theme: AppColorTheme) = viewModel.setTheme(theme)

@@ -10,10 +10,14 @@ class CustomerCoordinator(
     val viewModel: CustomerViewModel
 ) {
     val screenStateFlow = viewModel.stateFlow
+    val customersPagingFlow = viewModel.customersPagingFlow
+    val outstandingInvoicesPagingFlow = viewModel.outstandingInvoicesPagingFlow
+    val historyInvoicesPagingFlow = viewModel.historyInvoicesPagingFlow
     val invoicesState = viewModel.invoicesState
     val paymentState = viewModel.paymentState
     val historyState = viewModel.historyState
     val historyMessage = viewModel.historyMessage
+    val returnInfoMessage = viewModel.returnInfoMessage
     val historyActionBusy = viewModel.historyActionBusy
     val customerMessage = viewModel.customerMessage
     val dialogDataState = viewModel.dialogDataState
@@ -51,6 +55,8 @@ class CustomerCoordinator(
     )
 
     fun clearPaymentMessages() = viewModel.clearPaymentMessages()
+    fun downloadInvoicePdf(invoiceId: String, action: InvoicePdfActionOption) =
+        viewModel.downloadInvoicePdf(invoiceId, action)
     fun loadInvoiceHistory(customerId: String) = viewModel.loadInvoiceHistory(customerId)
     fun clearInvoiceHistory() = viewModel.clearInvoiceHistory()
     fun clearInvoiceHistoryMessages() = viewModel.clearHistoryMessage()

@@ -5,10 +5,11 @@ import com.erpnext.pos.localSource.dao.POSClosingEntryDao
 import com.erpnext.pos.localSource.dao.POSOpeningEntryDao
 import com.erpnext.pos.localSource.dao.POSOpeningEntryLinkDao
 import com.erpnext.pos.data.mappers.buildClosingEntryDto
-import com.erpnext.pos.data.repositories.ExchangeRateRepository
-import com.erpnext.pos.data.repositories.PosProfilePaymentMethodLocalRepository
 import com.erpnext.pos.localSource.dao.SalesInvoiceDao
 import com.erpnext.pos.localSource.dao.POSProfileDao
+import com.erpnext.pos.localSource.entities.CashboxEntity
+import com.erpnext.pos.localSource.entities.POSOpeningEntryEntity
+import com.erpnext.pos.localSource.entities.POSOpeningEntryLinkEntity
 import com.erpnext.pos.remoteSource.api.APIService
 import com.erpnext.pos.remoteSource.mapper.toEntity
 import com.erpnext.pos.utils.AppLogger
@@ -137,6 +138,11 @@ class ClosingEntrySyncRepository(
                 posCurrency = normalizeCurrency(profileCurrency),
                 rateResolver = { from, to -> exchangeRateRepository.getRate(from, to) }
             )
+            val paidInvoiceNames = paymentRows.asSequence()
+                .filter { (it.enteredAmount > 0.0001) || (it.amount > 0.0001) }
+                .map { it.invoiceName.trim() }
+                .filter { it.isNotBlank() }
+                .toSet()
 
             val dto = buildClosingEntryDto(
                 cashbox = cashbox,
@@ -144,7 +150,8 @@ class ClosingEntrySyncRepository(
                 postingDate = resolvedEndDate,
                 periodEndDate = resolvedEndDate,
                 paymentReconciliation = paymentReconciliation,
-                invoices = shiftInvoices
+                invoices = shiftInvoices,
+                paidInvoiceNames = paidInvoiceNames
             )
 
             cashboxDao.updateStatus(
@@ -152,6 +159,12 @@ class ClosingEntrySyncRepository(
                 status = false,
                 pceId = remoteClosing.name,
                 endDate = resolvedEndDate,
+                pendingSync = false
+            )
+            upsertClosingLinkForCashbox(
+                cashbox = cashbox,
+                remoteOpeningName = remoteOpeningName,
+                remoteClosingName = remoteClosing.name,
                 pendingSync = false
             )
             closingDao.insert(dto.toEntity(remoteClosing.name, pendingSync = false))
@@ -274,6 +287,11 @@ class ClosingEntrySyncRepository(
                 posCurrency = normalizeCurrency(profileCurrency),
                 rateResolver = { from, to -> exchangeRateRepository.getRate(from, to) }
             )
+            val paidInvoiceNames = paymentRows.asSequence()
+                .filter { (it.enteredAmount > 0.0001) || (it.amount > 0.0001) }
+                .map { it.invoiceName.trim() }
+                .filter { it.isNotBlank() }
+                .toSet()
             ensureRemoteOpeningEntry(remoteOpeningName, cashbox.localId)
             val dto = buildClosingEntryDto(
                 cashbox = cashbox,
@@ -281,18 +299,17 @@ class ClosingEntrySyncRepository(
                 postingDate = periodEnd,
                 periodEndDate = periodEnd,
                 paymentReconciliation = paymentReconciliation,
-                invoices = shiftInvoices
+                invoices = shiftInvoices,
+                paidInvoiceNames = paidInvoiceNames
             )
 
             if (remoteClosing != null) {
-                val submitOk = if (remoteClosing.docstatus == 1) {
-                    true
-                } else {
-                    runCatching { api.submitPOSClosingEntry(remoteClosing.name) }
-                        .onFailure { AppLogger.warn("ClosingEntrySyncRepository submit failed", it) }
-                        .getOrNull() != null
+                val pendingSync = remoteClosing.docstatus != 1
+                if (pendingSync) {
+                    AppLogger.warn(
+                        "ClosingEntrySyncRepository: remote closing ${remoteClosing.name} en borrador; submit legacy removido."
+                    )
                 }
-                val pendingSync = !submitOk
                 val resolvedEndDate = remoteClosing.periodEndDate ?: periodEnd
                 cashboxDao.updateStatus(
                     cashbox.localId,
@@ -300,6 +317,12 @@ class ClosingEntrySyncRepository(
                     pceId = remoteClosing.name,
                     endDate = resolvedEndDate,
                     pendingSync = pendingSync
+                )
+                upsertClosingLinkForCashbox(
+                    cashbox = cashbox,
+                    remoteOpeningName = remoteOpeningName,
+                    remoteClosingName = remoteClosing.name,
+                    pendingSync = false
                 )
                 closingDao.insert(dto.toEntity(remoteClosing.name, pendingSync = pendingSync))
                 cashboxDao.updateBalanceDetailsClosingEntry(cashbox.localId, remoteClosing.name)
@@ -320,16 +343,24 @@ class ClosingEntrySyncRepository(
                 com.erpnext.pos.remoteSource.dto.POSClosingEntryResponse(existingRemote)
             }
             if (response == null) return@forEach
-            val submitOk = runCatching { api.submitPOSClosingEntry(response.name) }
-                .onFailure { AppLogger.warn("ClosingEntrySyncRepository submit failed", it) }
-                .getOrNull()
-            val pendingSync = submitOk == null
+            val pendingSync = existingRemote != null
+            if (pendingSync) {
+                AppLogger.warn(
+                    "ClosingEntrySyncRepository: closing ${response.name} requiere revision manual; submit legacy removido."
+                )
+            }
             cashboxDao.updateStatus(
                 cashbox.localId,
                 status = false,
                 pceId = response.name,
                 endDate = periodEnd,
                 pendingSync = pendingSync
+            )
+            upsertClosingLinkForCashbox(
+                cashbox = cashbox,
+                remoteOpeningName = remoteOpeningName,
+                remoteClosingName = response.name,
+                pendingSync = false
             )
             closingDao.insert(dto.toEntity(response.name, pendingSync = pendingSync))
             cashboxDao.updateBalanceDetailsClosingEntry(cashbox.localId, response.name)
@@ -340,6 +371,79 @@ class ClosingEntrySyncRepository(
         }
 
         return hasChanges
+    }
+
+    private suspend fun upsertClosingLinkForCashbox(
+        cashbox: CashboxEntity,
+        remoteOpeningName: String?,
+        remoteClosingName: String,
+        pendingSync: Boolean
+    ) {
+        val existing = openingEntryLinkDao.getByCashboxId(cashbox.localId)
+        if (existing != null) {
+            val remoteOpening = remoteOpeningName?.trim()?.takeIf { it.isNotBlank() }
+            if (!remoteOpening.isNullOrBlank() &&
+                !remoteOpening.equals(existing.remoteOpeningEntryName, ignoreCase = true)
+            ) {
+                openingEntryLinkDao.updateRemoteName(existing.id, remoteOpening)
+                if (!pendingSync) {
+                    openingEntryLinkDao.markSynced(existing.id, remoteOpening)
+                }
+            } else if (!remoteOpening.isNullOrBlank() && !pendingSync && existing.pendingSync) {
+                openingEntryLinkDao.markSynced(existing.id, remoteOpening)
+            }
+            if (!remoteClosingName.equals(existing.remoteClosingEntryName, ignoreCase = true)) {
+                openingEntryLinkDao.updateRemoteClosingName(existing.id, remoteClosingName)
+            }
+            return
+        }
+
+        val localOpening = cashbox.openingEntryId
+            ?.trim()
+            ?.takeIf { it.isNotBlank() }
+            ?: remoteOpeningName?.trim()?.takeIf { it.isNotBlank() }
+        if (localOpening.isNullOrBlank()) {
+            AppLogger.warn(
+                "ClosingEntrySyncRepository: missing opening link for cashbox ${cashbox.localId}"
+            )
+            return
+        }
+        ensureOpeningEntryForLink(
+            cashbox = cashbox,
+            openingEntryName = localOpening,
+            pendingSync = pendingSync
+        )
+
+        val remoteOpening = remoteOpeningName?.trim()?.takeIf { it.isNotBlank() }
+            ?: localOpening.takeIf { !it.startsWith("LOCAL-", ignoreCase = true) }
+        openingEntryLinkDao.insert(
+            POSOpeningEntryLinkEntity(
+                cashboxId = cashbox.localId,
+                localOpeningEntryName = localOpening,
+                remoteOpeningEntryName = remoteOpening,
+                remoteClosingEntryName = remoteClosingName,
+                pendingSync = pendingSync
+            )
+        )
+    }
+
+    private suspend fun ensureOpeningEntryForLink(
+        cashbox: CashboxEntity,
+        openingEntryName: String,
+        pendingSync: Boolean
+    ) {
+        if (openingEntryDao.getByName(openingEntryName) != null) return
+        openingEntryDao.insert(
+            POSOpeningEntryEntity(
+                name = openingEntryName,
+                posProfile = cashbox.posProfile,
+                company = cashbox.company,
+                periodStartDate = cashbox.periodStartDate,
+                postingDate = cashbox.periodStartDate,
+                user = cashbox.user,
+                pendingSync = pendingSync
+            )
+        )
     }
 
     private suspend fun ensureRemoteOpeningEntry(remoteName: String, cashboxId: Long) {

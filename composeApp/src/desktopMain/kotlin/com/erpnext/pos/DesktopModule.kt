@@ -56,17 +56,7 @@ val desktopModule = module {
     single { get<AppDatabase>().territoryDao() }
     single { get<AppDatabase>().contactDao() }
     single { get<AppDatabase>().addressDao() }
+    single { get<AppDatabase>().supplierDao() }
+    single { get<AppDatabase>().companyAccountDao() }
 
-    // V2 DAOs
-    single { get<AppDatabase>().catalogDaoV2() }
-    single { get<AppDatabase>().inventoryDaoV2() }
-    single { get<AppDatabase>().customerDaoV2() }
-    single { get<AppDatabase>().salesInvoiceDaoV2() }
-    single { get<AppDatabase>().syncStatusDaoV2() }
-    single { get<AppDatabase>().quotationDaoV2() }
-    single { get<AppDatabase>().salesOrderDaoV2() }
-    single { get<AppDatabase>().deliveryNoteDaoV2() }
-    single { get<AppDatabase>().paymentEntryDaoV2() }
-    single { get<AppDatabase>().paymentScheduleDaoV2() }
-    single { get<AppDatabase>().posContextDaoV2() }
 }

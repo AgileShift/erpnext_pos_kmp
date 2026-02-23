@@ -2,30 +2,33 @@
 
 package com.erpnext.pos
 
+import AppColorTheme
 import AppTheme
 import AppThemeMode
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
-import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.tween
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.Logout
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Business
 import androidx.compose.material.icons.outlined.Print
@@ -36,59 +39,81 @@ import androidx.compose.material.icons.outlined.SwapHoriz
 import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material.icons.outlined.Wifi
 import androidx.compose.material.icons.outlined.WifiOff
-import androidx.compose.material3.*
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.DpOffset
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.material.icons.automirrored.outlined.Logout
+import androidx.compose.ui.unit.dp
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.rememberNavController
+import coil3.compose.LocalPlatformContext
+import coil3.compose.SubcomposeAsyncImage
+import coil3.request.ImageRequest
+import coil3.request.crossfade
 import com.erpnext.pos.NavGraph.Setup
 import com.erpnext.pos.base.getPlatformName
-import com.erpnext.pos.localization.ProvideAppStrings
-import com.erpnext.pos.localization.LocalAppStrings
-import com.erpnext.pos.navigation.DesktopNavigationRail
-import com.erpnext.pos.navigation.NavRoute
-import com.erpnext.pos.navigation.NavigationManager
-import com.erpnext.pos.navigation.GlobalTopBar
-import com.erpnext.pos.navigation.LocalTopBarController
-import com.erpnext.pos.navigation.TopBarController
-import com.erpnext.pos.navigation.ShiftOpenChip
-import com.erpnext.pos.navigation.StatusIconButton
-import com.erpnext.pos.navigation.formatShiftDuration
-import com.erpnext.pos.navigation.v2.BottomBarWithCenterFab
-import com.erpnext.pos.utils.view.SnackbarHost
-import com.erpnext.pos.utils.loading.LoadingIndicator
-import com.erpnext.pos.utils.loading.LoadingUiState
-import com.erpnext.pos.views.CashBoxManager
-import com.erpnext.pos.views.home.HomeRefreshController
-import com.erpnext.pos.utils.NetworkMonitor
-import com.erpnext.pos.localSource.preferences.ThemePreferences
+import com.erpnext.pos.domain.usecases.LogoutUseCase
+import com.erpnext.pos.localSource.dao.UserDao
+import com.erpnext.pos.localSource.preferences.GeneralPreferences
 import com.erpnext.pos.localSource.preferences.SyncPreferences
 import com.erpnext.pos.localSource.preferences.SyncSettings
-import com.erpnext.pos.utils.view.SnackbarController
+import com.erpnext.pos.localSource.preferences.ThemePreferences
+import com.erpnext.pos.localization.AppStrings
+import com.erpnext.pos.localization.LocalAppStrings
+import com.erpnext.pos.localization.ProvideAppStrings
+import com.erpnext.pos.navigation.BottomBarWithCenterFab
+import com.erpnext.pos.navigation.DesktopNavigationRail
+import com.erpnext.pos.navigation.GlobalTopBar
+import com.erpnext.pos.navigation.LocalTopBarController
+import com.erpnext.pos.navigation.NavRoute
+import com.erpnext.pos.navigation.NavigationManager
+import com.erpnext.pos.navigation.ShiftOpenChip
+import com.erpnext.pos.navigation.StatusIconButton
+import com.erpnext.pos.navigation.TopBarController
+import com.erpnext.pos.navigation.formatShiftDuration
+import com.erpnext.pos.remoteSource.oauth.TokenStore
 import com.erpnext.pos.sync.SyncManager
 import com.erpnext.pos.sync.SyncState
-import com.erpnext.pos.domain.usecases.LogoutUseCase
+import com.erpnext.pos.utils.NetworkMonitor
+import com.erpnext.pos.utils.loading.LoadingIndicator
+import com.erpnext.pos.utils.loading.LoadingUiState
+import com.erpnext.pos.utils.view.SnackbarController
+import com.erpnext.pos.utils.view.SnackbarHost
+import com.erpnext.pos.utils.view.SnackbarPosition
+import com.erpnext.pos.utils.view.SnackbarType
+import com.erpnext.pos.views.CashBoxManager
+import com.erpnext.pos.views.activity.ActivityCenter
 import com.erpnext.pos.views.billing.BillingResetController
-import com.erpnext.pos.remoteSource.oauth.AuthInfoStore
-import org.koin.compose.koinInject
-import kotlinx.coroutines.launch
+import com.erpnext.pos.views.home.HomeRefreshController
+import com.erpnext.pos.views.inventory.InventoryRefreshController
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import org.koin.compose.koinInject
 import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
 
@@ -100,29 +125,21 @@ fun shouldShowTopBar(currentRoute: String): Boolean {
     return shouldShowBottomBar(currentRoute)
 }
 
-private fun instanceLabel(url: String?): String? {
-    if (url.isNullOrBlank()) return null
-    val normalized = url
-        .removePrefix("https://")
-        .removePrefix("http://")
-        .trim()
-    return normalized.substringBefore("/").removePrefix("www.").ifBlank { null }
-}
-
-private fun defaultTitleForRoute(route: String): String {
+private fun defaultTitleForRoute(route: String, strings: AppStrings): String {
     return when {
-        route == NavRoute.Home.path -> "Inicio"
-        route == NavRoute.Inventory.path -> "Inventario"
-        route == NavRoute.Billing.path -> "Ventas"
-        route == NavRoute.Billing.path -> "POS Lab"
-        route == NavRoute.Customer.path -> "Clientes"
-        route == NavRoute.Credits.path -> "Créditos"
-        route == NavRoute.Quotation.path -> "Cotizaciones"
-        route == NavRoute.SalesOrder.path -> "Orden de venta"
-        route == NavRoute.DeliveryNote.path -> "Nota de entrega"
-        route.startsWith("reconciliation") -> "Reconciliación"
-        route.startsWith("payment-entry") -> "Entrada de pago"
-        route == NavRoute.Settings.path -> "Configuración"
+        route == NavRoute.Home.path -> strings.navigation.home
+        route == NavRoute.Inventory.path -> strings.navigation.inventory
+        route == NavRoute.Billing.path -> strings.navigation.billing
+        route == NavRoute.Customer.path -> strings.navigation.customer
+        route == NavRoute.Credits.path -> strings.navigation.credits
+        route == NavRoute.Quotation.path -> strings.navigation.quotations
+        route == NavRoute.SalesOrder.path -> strings.navigation.salesOrder
+        route == NavRoute.DeliveryNote.path -> strings.navigation.deliveryNote
+        route.startsWith("reconciliation") -> strings.navigation.reconciliation
+        route == NavRoute.InternalTransfer.path -> "Transferencia interna"
+        route.startsWith("payment-entry") -> strings.navigation.expenses
+        route == NavRoute.Activity.path -> strings.navigation.activity
+        route == NavRoute.Settings.path -> strings.navigation.settings
         else -> ""
     }
 }
@@ -143,13 +160,41 @@ private fun NavHostController.navigateSingle(route: String) {
     }
 }
 
+@Composable
+fun ImageFromUrl(
+    url: String,
+    modifier: Modifier = Modifier,
+) {
+    val strings = LocalAppStrings.current
+    SubcomposeAsyncImage(
+        model = ImageRequest.Builder(LocalPlatformContext.current)
+            .data(url)
+            .crossfade(true)
+            .build(),
+        contentDescription = null,
+        modifier = modifier,
+        contentScale = ContentScale.Crop,
+        loading = {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator()
+            }
+        },
+        error = {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Text(strings.common.errorLabel)
+            }
+        }
+    )
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AppNavigation() {
     val navController = rememberNavController()
-    // SnackbarController global provisto por Koin para compartir mensajes entre pantallas.
     val snackbarController = koinInject<SnackbarController>()
     val themePreferences = koinInject<ThemePreferences>()
+    val generalPreferences = koinInject<GeneralPreferences>()
+    val activityCenter = koinInject<ActivityCenter>()
     val syncManager = koinInject<SyncManager>()
     val syncPreferences = koinInject<SyncPreferences>()
     val networkMonitor = koinInject<NetworkMonitor>()
@@ -160,9 +205,11 @@ fun AppNavigation() {
     val loadingState by LoadingIndicator.state.collectAsState(initial = LoadingUiState())
     val cashBoxManager = koinInject<CashBoxManager>()
     val homeRefreshController = koinInject<HomeRefreshController>()
+    val inventoryRefreshController = koinInject<InventoryRefreshController>()
     val billingResetController = koinInject<BillingResetController>()
     val logoutUseCase = koinInject<LogoutUseCase>()
-    val authInfoStore = koinInject<AuthInfoStore>()
+    val tokenStore = koinInject<TokenStore>()
+    val userDao = koinInject<UserDao>()
     val topBarController = remember { TopBarController() }
     val scope = rememberCoroutineScope()
     val syncState by syncManager.state.collectAsState(initial = SyncState.IDLE)
@@ -172,39 +219,30 @@ fun AppNavigation() {
             syncOnStartup = true,
             wifiOnly = false,
             lastSyncAt = null,
-            useTtl = false
+            useTtl = false,
+            ttlHours = 6
         )
     )
     val isOnline by networkMonitor.isConnected.collectAsState(false)
+    val activityBadgeCount by activityCenter.unreadCount.collectAsState(0)
+    val printerEnabled by generalPreferences.printerEnabled.collectAsState(true)
     val posContext by cashBoxManager.contextFlow.collectAsState(null)
     val isCashboxOpen by cashBoxManager.cashboxState.collectAsState()
     val shiftStart by cashBoxManager.activeCashboxStart().collectAsState(null)
     var profileMenuExpanded by remember { mutableStateOf(false) }
-    var currentSite by remember { mutableStateOf<String?>(null) }
     var tick by remember { mutableStateOf(0L) }
     var settingsFromMenu by remember { mutableStateOf(false) }
 
-    LaunchedEffect(cashBoxManager) {
-        cashBoxManager.initializeContext()
-    }
     LaunchedEffect(Unit) {
         while (true) {
             tick = Clock.System.now().toEpochMilliseconds()
             delay(1000)
         }
     }
-    LaunchedEffect(Unit) {
-        currentSite = authInfoStore.getCurrentSite()
-    }
     val visibleEntries by navController.visibleEntries.collectAsState()
     val currentRoute = visibleEntries.lastOrNull()?.destination?.route ?: ""
 
-    LaunchedEffect(currentRoute) {
-        currentSite = authInfoStore.getCurrentSite()
-    }
-
     val isDesktop = getPlatformName() == "Desktop"
-    val titleFallback = defaultTitleForRoute(currentRoute)
     val previousRoute = navController.previousBackStackEntry?.destination?.route
     val noBackRoutes = setOf(
         NavRoute.Home.path,
@@ -235,11 +273,6 @@ fun AppNavigation() {
         navController.popBackStack()
     }
     val subtitle = topBarState.subtitle
-    val titleText = if (currentRoute == NavRoute.Home.path) {
-        "ERPNext POS"
-    } else {
-        titleFallback.ifBlank { "ERPNext POS" }
-    }
     val cashier = posContext?.cashier
     val cashierDisplayName = listOfNotNull(
         cashier?.firstName?.takeIf { it.isNotBlank() },
@@ -258,10 +291,20 @@ fun AppNavigation() {
         .joinToString("")
         .ifBlank { "C" }
     val companyName = posContext?.company?.takeIf { it.isNotBlank() }
-    val instanceName = instanceLabel(currentSite)
+    val localUserImage by produceState<String?>(initialValue = null) {
+        value = runCatching { userDao.getUserInfo()?.image?.trim()?.takeIf { it.isNotBlank() } }
+            .getOrNull()
+    }
+    val cashierImageUrl = cashier?.image?.trim()?.takeIf { it.isNotBlank() } ?: localUserImage
 
     AppTheme(theme = appTheme, themeMode = appThemeMode) {
         ProvideAppStrings {
+            val strings = LocalAppStrings.current
+            val titleText = if (currentRoute == NavRoute.Home.path) {
+                "ERPNext POS"
+            } else {
+                defaultTitleForRoute(currentRoute, strings).ifBlank { "ERPNext POS" }
+            }
             CompositionLocalProvider(LocalTopBarController provides topBarController) {
                 Scaffold(
                     containerColor = MaterialTheme.colorScheme.background,
@@ -272,7 +315,12 @@ fun AppNavigation() {
                                 navController = navController,
                                 contextProvider = cashBoxManager,
                                 leftItems = listOf(NavRoute.Home, NavRoute.Inventory),
-                                rightItems = listOf(NavRoute.Customer, NavRoute.Settings),
+                                rightItems = listOf(
+                                    NavRoute.Customer,
+                                    NavRoute.Expenses,
+                                    NavRoute.Activity,
+                                    NavRoute.Settings
+                                ),
                                 fabItem = NavRoute.Billing
                             )
                         }
@@ -286,7 +334,8 @@ fun AppNavigation() {
                         if (isDesktop && shouldShowBottomBar(currentRoute)) {
                             DesktopNavigationRail(
                                 navController = navController,
-                                contextProvider = cashBoxManager
+                                contextProvider = cashBoxManager,
+                                activityBadgeCount = activityBadgeCount
                             )
                         }
                         Column(
@@ -344,8 +393,7 @@ fun AppNavigation() {
                                             }
                                             ShiftOpenChip(
                                                 isOpen = isCashboxOpen,
-                                                duration = formatShiftDuration(shiftStart, tick),
-                                                closeAction = { }
+                                                duration = formatShiftDuration(shiftStart, tick)
                                             )
                                         }
                                     },
@@ -362,89 +410,129 @@ fun AppNavigation() {
                                             else -> MaterialTheme.colorScheme.onSurfaceVariant
                                         }
                                         val dbLabel = when (syncState) {
-                                            is SyncState.SYNCING -> "Base de datos: ${(syncState as SyncState.SYNCING).message}"
-                                            is SyncState.ERROR -> "Base de datos: ${(syncState as SyncState.ERROR).message}"
-                                            is SyncState.SUCCESS -> "Base de datos: Sincronizada"
+                                            is SyncState.SYNCING -> "${strings.common.databaseSyncing}: ${(syncState as SyncState.SYNCING).message}"
+                                            is SyncState.ERROR -> "${strings.common.databaseError}: ${(syncState as SyncState.ERROR).message}"
+                                            is SyncState.SUCCESS -> strings.common.databaseSynced
                                             else -> if (dbHealthy) {
-                                                "Base de datos: Saludable"
+                                                strings.common.databaseHealthy
                                             } else {
-                                                "Base de datos: Pendiente"
+                                                strings.common.databasePending
                                             }
                                         }
                                         val showNewSale = (currentRoute == NavRoute.Billing.path ||
                                                 currentRoute == NavRoute.Billing.path) &&
                                                 !subtitle.isNullOrBlank()
-                                        AnimatedVisibility(
-                                            visible = showNewSale,
-                                            enter = fadeIn(tween(180)),
-                                            exit = fadeOut(tween(160))
+                                        Row(
+                                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                            verticalAlignment = Alignment.CenterVertically
                                         ) {
+                                            AnimatedVisibility(
+                                                visible = showNewSale,
+                                                enter = fadeIn(tween(180)),
+                                                exit = fadeOut(tween(160))
+                                            ) {
+                                                StatusIconButton(
+                                                    label = strings.common.newSale,
+                                                    onClick = { billingResetController.reset() },
+                                                    tint = MaterialTheme.colorScheme.primary
+                                                ) {
+                                                    Icon(
+                                                        imageVector = Icons.Outlined.Add,
+                                                        contentDescription = null
+                                                    )
+                                                }
+                                            }
                                             StatusIconButton(
-                                                label = "Nueva venta",
-                                                onClick = { billingResetController.reset() },
-                                                tint = MaterialTheme.colorScheme.primary
+                                                label = if (isOnline) strings.common.internetConnected else strings.common.internetDisconnected,
+                                                onClick = {},
+                                                enabled = false,
+                                                tint = if (isOnline) Color(0xFF2E7D32)
+                                                else MaterialTheme.colorScheme.error,
                                             ) {
                                                 Icon(
-                                                    imageVector = Icons.Outlined.Add,
+                                                    if (isOnline) Icons.Outlined.Wifi else Icons.Outlined.WifiOff,
                                                     contentDescription = null
                                                 )
                                             }
-                                        }
-                                        StatusIconButton(
-                                            label = if (isOnline) "Internet: Conectado" else "Internet: Sin conexión",
-                                            onClick = {},
-                                            enabled = false,
-                                            tint = if (isOnline) Color(0xFF2E7D32)
-                                            else MaterialTheme.colorScheme.error,
-                                        ) {
-                                            Icon(
-                                                if (isOnline) Icons.Outlined.Wifi else Icons.Outlined.WifiOff,
-                                                contentDescription = null
-                                            )
-                                        }
-                                        StatusIconButton(
-                                            label = dbLabel,
-                                            onClick = {
-                                                if (!isCashboxOpen) {
-                                                    snackbarController.show(
-                                                        "No podemos sincronizar sin anter aperturar caja",
-                                                        com.erpnext.pos.utils.view.SnackbarType.Error,
-                                                        com.erpnext.pos.utils.view.SnackbarPosition.Bottom
-                                                    )
+                                            StatusIconButton(
+                                                label = dbLabel,
+                                                onClick = {
+                                                    if (!isCashboxOpen) {
+                                                        snackbarController.show(
+                                                            strings.common.openCashboxToSyncError,
+                                                            SnackbarType.Error,
+                                                            SnackbarPosition.Bottom
+                                                        )
+                                                    } else {
+                                                        scope.launch { syncManager.fullSync(force = true) }
+                                                    }
+                                                },
+                                                tint = dbTint,
+                                            ) {
+                                                if (syncState is SyncState.SYNCING) {
+                                                    CircularProgressIndicator(Modifier.size(18.dp))
                                                 } else {
-                                                    scope.launch { syncManager.fullSync(force = true) }
+                                                    Icon(
+                                                        Icons.Outlined.Storage,
+                                                        contentDescription = null
+                                                    )
                                                 }
-                                            },
-                                            tint = dbTint,
-                                        ) {
-                                            if (syncState is SyncState.SYNCING) {
-                                                CircularProgressIndicator(Modifier.size(18.dp))
-                                            } else {
+                                            }
+                                           /* StatusIconButton(
+                                                label = if (activityBadgeCount > 0) {
+                                                    "${strings.navigation.activity}: $activityBadgeCount"
+                                                } else {
+                                                    strings.navigation.activity
+                                                },
+                                                onClick = {
+                                                    navController.navigateSingle(NavRoute.Activity.path)
+                                                },
+                                                tint = if (activityBadgeCount > 0) {
+                                                    MaterialTheme.colorScheme.primary
+                                                } else {
+                                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                                }
+                                            ) {
                                                 Icon(
-                                                    Icons.Outlined.Storage,
+                                                    imageVector = Icons.Outlined.Notifications,
+                                                    contentDescription = null
+                                                )
+                                            }*/
+                                            StatusIconButton(
+                                                label = strings.common.retry,
+                                                onClick = {
+                                                    when (currentRoute) {
+                                                        NavRoute.Inventory.path -> inventoryRefreshController.refresh()
+                                                        NavRoute.Home.path -> homeRefreshController.refresh()
+                                                        else -> homeRefreshController.refresh()
+                                                    }
+                                                },
+                                            ) {
+                                                Icon(
+                                                    Icons.Outlined.Refresh,
                                                     contentDescription = null
                                                 )
                                             }
+                                            if (printerEnabled) {
+                                                val printerConnected = false
+                                                StatusIconButton(
+                                                    label = if (printerConnected) strings.common.printerConnected
+                                                    else strings.common.printerDisconnected,
+                                                    onClick = {},
+                                                    enabled = false,
+                                                    tint = if (printerConnected) MaterialTheme.colorScheme.primary
+                                                    else MaterialTheme.colorScheme.onSurfaceVariant
+                                                ) {
+                                                    Icon(
+                                                        Icons.Outlined.Print,
+                                                        contentDescription = null
+                                                    )
+                                                }
+                                            }
                                         }
-                                        StatusIconButton(
-                                            label = "Refrescar",
-                                            onClick = { homeRefreshController.refresh() },
-                                        ) {
-                                            Icon(Icons.Outlined.Refresh, contentDescription = null)
-                                        }
-                                        val printerConnected = false
-                                        StatusIconButton(
-                                            label = if (printerConnected) "Impresora: Conectada"
-                                            else "Impresora: Sin conexión",
-                                            onClick = {},
-                                            enabled = false,
-                                            tint = if (printerConnected) MaterialTheme.colorScheme.primary
-                                            else MaterialTheme.colorScheme.onSurfaceVariant
-                                        ) {
-                                            Icon(Icons.Outlined.Print, contentDescription = null)
-                                        }
-                                        Spacer(modifier = Modifier.width(8.dp))
+                                        //Spacer(modifier = Modifier.width(8.dp))
                                         Row(
+                                            modifier = Modifier.padding(start = 8.dp, end = 8.dp),
                                             verticalAlignment = Alignment.CenterVertically,
                                             horizontalArrangement = Arrangement.spacedBy(10.dp)
                                         ) {
@@ -482,7 +570,7 @@ fun AppNavigation() {
                                                                 color = MaterialTheme.colorScheme.onSurface
                                                             )
                                                             Text(
-                                                                text = "Cambiar instancia",
+                                                                text = strings.common.switchInstance,
                                                                 style = MaterialTheme.typography.labelSmall,
                                                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                                                             )
@@ -490,35 +578,39 @@ fun AppNavigation() {
                                                     }
                                                 }
                                             }
-                                            Column(horizontalAlignment = Alignment.End) {
-                                                Text(
-                                                    cashierDisplayName,
-                                                    style = MaterialTheme.typography.bodyMedium,
-                                                    fontWeight = FontWeight.SemiBold
-                                                )
-                                                Row(
-                                                    verticalAlignment = Alignment.CenterVertically,
-                                                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                                                ) {
-                                                    Surface(
-                                                        color = MaterialTheme.colorScheme.primary.copy(
-                                                            alpha = 0.12f
-                                                        ),
-                                                        shape = MaterialTheme.shapes.small
-                                                    ) {
-                                                        Text(
-                                                            if (isOnline) "Online" else "Offline",
-                                                            modifier = Modifier.padding(
-                                                                horizontal = 10.dp,
-                                                                vertical = 4.dp
-                                                            ),
-                                                            style = MaterialTheme.typography.labelSmall,
-                                                            color = if (isOnline) {
-                                                                MaterialTheme.colorScheme.primary
-                                                            } else {
-                                                                MaterialTheme.colorScheme.error
-                                                            }
+                                            if (cashier != null) {
+                                                Column(horizontalAlignment = Alignment.End) {
+                                                    Text(
+                                                        cashierDisplayName,
+                                                        style = MaterialTheme.typography.bodyMedium,
+                                                        fontWeight = FontWeight.SemiBold
+                                                    )
+                                                    Row(
+                                                        verticalAlignment = Alignment.CenterVertically,
+                                                        horizontalArrangement = Arrangement.spacedBy(
+                                                            6.dp
                                                         )
+                                                    ) {
+                                                        Surface(
+                                                            color = MaterialTheme.colorScheme.primary.copy(
+                                                                alpha = 0.12f
+                                                            ),
+                                                            shape = MaterialTheme.shapes.small
+                                                        ) {
+                                                            Text(
+                                                                if (isOnline) strings.common.online else strings.common.offline,
+                                                                modifier = Modifier.padding(
+                                                                    horizontal = 10.dp,
+                                                                    vertical = 4.dp
+                                                                ),
+                                                                style = MaterialTheme.typography.labelSmall,
+                                                                color = if (isOnline) {
+                                                                    MaterialTheme.colorScheme.primary
+                                                                } else {
+                                                                    MaterialTheme.colorScheme.error
+                                                                }
+                                                            )
+                                                        }
                                                     }
                                                 }
                                             }
@@ -536,11 +628,18 @@ fun AppNavigation() {
                                                             ) { profileMenuExpanded = true },
                                                         contentAlignment = Alignment.Center
                                                     ) {
-                                                        Text(
-                                                            text = cashierInitials,
-                                                            style = MaterialTheme.typography.labelLarge,
-                                                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                                                        )
+                                                        if (!cashierImageUrl.isNullOrBlank()) {
+                                                            ImageFromUrl(
+                                                                url = cashierImageUrl,
+                                                                modifier = Modifier.fillMaxSize()
+                                                            )
+                                                        } else {
+                                                            Text(
+                                                                text = cashierInitials,
+                                                                style = MaterialTheme.typography.labelLarge,
+                                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                            )
+                                                        }
                                                     }
                                                 }
                                                 DropdownMenu(
@@ -550,7 +649,7 @@ fun AppNavigation() {
                                                     },
                                                     offset = DpOffset(x = 0.dp, y = 8.dp)
                                                 ) {
-                                                    Column(
+                                                    /*Column(
                                                         modifier = Modifier.padding(
                                                             horizontal = 14.dp,
                                                             vertical = 8.dp
@@ -563,6 +662,7 @@ fun AppNavigation() {
                                                         )
                                                         Text(
                                                             text = if (isOnline) "Online" else "Offline",
+                                                            text = if (isOnline) strings.common.online else strings.common.offline,
                                                             style = MaterialTheme.typography.labelSmall,
                                                             color = if (isOnline) {
                                                                 MaterialTheme.colorScheme.primary
@@ -570,17 +670,37 @@ fun AppNavigation() {
                                                                 MaterialTheme.colorScheme.error
                                                             }
                                                         )
-                                                        if (instanceName != null) {
-                                                            Text(
-                                                                text = instanceName,
-                                                                style = MaterialTheme.typography.labelSmall,
-                                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                    }*/
+                                                    //HorizontalDivider()
+                                                    /*DropdownMenuItem(
+                                                        text = { Text("Pago de factura") },
+                                                        leadingIcon = {
+                                                            Icon(
+                                                                imageVector = NavRoute.PaymentEntry().icon,
+                                                                contentDescription = null
                                                             )
+                                                        },
+                                                        onClick = {
+                                                            profileMenuExpanded = false
+                                                            navController.navigateSingle(NavRoute.PaymentEntry().path)
                                                         }
-                                                    }
-                                                    HorizontalDivider()
+                                                    )
                                                     DropdownMenuItem(
-                                                        text = { Text("Configuración") },
+                                                        text = { Text("Transferencia interna") },
+                                                        leadingIcon = {
+                                                            Icon(
+                                                                imageVector = NavRoute.InternalTransfer.icon,
+                                                                contentDescription = null
+                                                            )
+                                                        },
+                                                        onClick = {
+                                                            profileMenuExpanded = false
+                                                            navController.navigateSingle(NavRoute.InternalTransfer.path)
+                                                        }
+                                                    )*/
+                                                    //HorizontalDivider()
+                                                    DropdownMenuItem(
+                                                        text = { Text(strings.navigation.settings) },
                                                         leadingIcon = {
                                                             Icon(
                                                                 imageVector = Icons.Outlined.Settings,
@@ -593,7 +713,7 @@ fun AppNavigation() {
                                                         }
                                                     )
                                                     DropdownMenuItem(
-                                                        text = { Text("Reconciliación") },
+                                                        text = { Text(strings.navigation.reconciliation) },
                                                         leadingIcon = {
                                                             Icon(
                                                                 imageVector = Icons.Outlined.Tune,
@@ -606,7 +726,7 @@ fun AppNavigation() {
                                                         }
                                                     )
                                                     DropdownMenuItem(
-                                                        text = { Text("Cambiar instancia") },
+                                                        text = { Text(strings.common.switchInstance) },
                                                         leadingIcon = {
                                                             Icon(
                                                                 imageVector = Icons.Outlined.SwapHoriz,
@@ -615,12 +735,16 @@ fun AppNavigation() {
                                                         },
                                                         onClick = {
                                                             profileMenuExpanded = false
+                                                            scope.launch {
+                                                                runCatching { tokenStore.clear() }
+                                                                cashBoxManager.clearContext()
+                                                            }
                                                             navController.navigateSingle(NavRoute.Login.path)
                                                         }
                                                     )
                                                     HorizontalDivider()
                                                     DropdownMenuItem(
-                                                        text = { Text("Cerrar sesión") },
+                                                        text = { Text(strings.common.logout) },
                                                         leadingIcon = {
                                                             Icon(
                                                                 imageVector = Icons.AutoMirrored.Outlined.Logout,
@@ -671,20 +795,28 @@ fun AppNavigation() {
                                     )
                                 ) {
                                     Surface(
-                                        color = MaterialTheme.colorScheme.surface,
-                                        tonalElevation = 2.dp,
-                                        shadowElevation = 4.dp
+                                        color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                                        shape = RoundedCornerShape(
+                                            bottomStart = 12.dp,
+                                            bottomEnd = 12.dp
+                                        ),
+                                        tonalElevation = 6.dp,
+                                        shadowElevation = 10.dp
                                     ) {
                                         Column(
                                             modifier = Modifier.fillMaxWidth()
                                         ) {
                                             val strings = LocalAppStrings.current
                                             val message = loadingState.message.ifBlank {
-                                                (syncState as? SyncState.SYNCING)?.message ?: "Procesando..."
+                                                (syncState as? SyncState.SYNCING)?.message
+                                                    ?: "Procesando..."
                                             }
                                             Text(
                                                 text = message,
-                                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                                                modifier = Modifier.padding(
+                                                    horizontal = 12.dp,
+                                                    vertical = 6.dp
+                                                ),
                                                 style = MaterialTheme.typography.labelMedium,
                                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                                             )
@@ -693,7 +825,10 @@ fun AppNavigation() {
                                             if (step != null && total != null && total > 0) {
                                                 Text(
                                                     text = "${strings.settings.syncStepLabel} $step ${strings.settings.syncStepOfLabel} $total",
-                                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp),
+                                                    modifier = Modifier.padding(
+                                                        horizontal = 12.dp,
+                                                        vertical = 2.dp
+                                                    ),
                                                     style = MaterialTheme.typography.labelSmall,
                                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                                 )
@@ -701,15 +836,35 @@ fun AppNavigation() {
                                             if (loadingState.progress != null) {
                                                 LinearProgressIndicator(
                                                     progress = { loadingState.progress ?: 0f },
-                                                    modifier = Modifier.fillMaxWidth(),
+                                                    modifier = Modifier
+                                                        .fillMaxWidth()
+                                                        .height(6.dp)
+                                                        .clip(
+                                                            RoundedCornerShape(
+                                                                bottomStart = 12.dp,
+                                                                bottomEnd = 12.dp
+                                                            )
+                                                        ),
                                                     color = MaterialTheme.colorScheme.primary,
-                                                    trackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.25f)
+                                                    trackColor = MaterialTheme.colorScheme.primary.copy(
+                                                        alpha = 0.15f
+                                                    )
                                                 )
                                             } else {
                                                 LinearProgressIndicator(
-                                                    modifier = Modifier.fillMaxWidth(),
+                                                    modifier = Modifier
+                                                        .fillMaxWidth()
+                                                        .height(6.dp)
+                                                        .clip(
+                                                            RoundedCornerShape(
+                                                                bottomStart = 12.dp,
+                                                                bottomEnd = 12.dp
+                                                            )
+                                                        ),
                                                     color = MaterialTheme.colorScheme.primary,
-                                                    trackColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.25f)
+                                                    trackColor = MaterialTheme.colorScheme.primary.copy(
+                                                        alpha = 0.15f
+                                                    )
                                                 )
                                             }
                                         }
@@ -721,7 +876,8 @@ fun AppNavigation() {
                                     navManager.navigationEvents.collect { event ->
                                         when (event) {
                                             is NavRoute.Login -> {
-                                                val route = navController.currentBackStackEntry?.destination?.route
+                                                val route =
+                                                    navController.currentBackStackEntry?.destination?.route
                                                 if (route != NavRoute.Login.path) {
                                                     navController.navigateSingle(NavRoute.Login.path)
                                                 }
@@ -759,7 +915,15 @@ fun AppNavigation() {
                                                 NavRoute.Settings.path
                                             )
 
+                                            is NavRoute.Activity -> navController.navigateSingle(
+                                                NavRoute.Activity.path
+                                            )
+
                                             is NavRoute.PaymentEntry -> navController.navigateSingle(
+                                                event.path
+                                            )
+                                            NavRoute.Expenses -> {}
+                                            is NavRoute.InternalTransfer -> navController.navigateSingle(
                                                 event.path
                                             )
 

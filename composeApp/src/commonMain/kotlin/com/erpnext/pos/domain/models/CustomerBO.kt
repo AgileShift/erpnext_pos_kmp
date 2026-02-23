@@ -16,5 +16,8 @@ data class CustomerBO(
     val pendingInvoices: Int? = 0,  // total monto pendiente
     val availableCredit: Double? = 0.0, // credit_limit - currentBalance
     val currency: String = "NIO",
+    val partyAccountCurrency: String? = null,
+    val receivableAccount: String? = null,
+    val receivableAccountCurrency: String? = null,
     val lastSyncedAt: Long? = null,
 )

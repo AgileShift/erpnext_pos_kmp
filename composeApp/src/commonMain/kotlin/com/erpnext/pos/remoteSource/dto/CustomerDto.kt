@@ -26,6 +26,10 @@ data class CustomerDto(
     val email: String? = null,
     @SerialName("image")
     val image: String? = null,
+    @SerialName("receivable_accounts")
+    val receivableAccounts: List<CustomerReceivableAccountDto> = emptyList(),
+    @SerialName("party_account_currency")
+    val partyAccountCurrency: String? = null,
 
     var availableCredit: Double? = null,
     var pendingInvoicesCount: Int? = null,
@@ -41,6 +45,16 @@ data class CustomerDto(
         return creditLimits.first()
     }
 }
+
+@Serializable
+data class CustomerReceivableAccountDto(
+    @SerialName("company")
+    val company: String? = null,
+    @SerialName("account")
+    val account: String? = null,
+    @SerialName("account_currency")
+    val accountCurrency: String? = null
+)
 
 @Serializable
 data class CustomerCreditLimitDto(

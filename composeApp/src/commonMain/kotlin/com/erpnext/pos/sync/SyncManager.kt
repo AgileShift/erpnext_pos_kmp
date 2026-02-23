@@ -1,53 +1,41 @@
 package com.erpnext.pos.sync
 
-import com.erpnext.pos.base.Resource
-import com.erpnext.pos.data.repositories.CompanyRepository
-import com.erpnext.pos.data.repositories.CustomerRepository
-import com.erpnext.pos.data.repositories.CustomerGroupRepository
-import com.erpnext.pos.data.repositories.DeliveryChargesRepository
-import com.erpnext.pos.data.repositories.ExchangeRateRepository
-import com.erpnext.pos.data.repositories.InventoryRepository
-import com.erpnext.pos.data.repositories.ModeOfPaymentRepository
-import com.erpnext.pos.data.repositories.PosProfilePaymentMethodSyncRepository
-import com.erpnext.pos.data.repositories.PaymentTermsRepository
-import com.erpnext.pos.data.repositories.SalesInvoiceRepository
-import com.erpnext.pos.data.repositories.ContactRepository
-import com.erpnext.pos.data.repositories.AddressRepository
-import com.erpnext.pos.data.repositories.TerritoryRepository
-import com.erpnext.pos.data.repositories.CurrencySettingsRepository
-import com.erpnext.pos.sync.PushSyncRunner
-import com.erpnext.pos.sync.SyncContextProvider
-import com.erpnext.pos.domain.sync.SyncContext
-import com.erpnext.pos.views.CashBoxManager
-import com.erpnext.pos.localSource.dao.POSProfileDao
-import com.erpnext.pos.localSource.preferences.SyncPreferences
-import com.erpnext.pos.localSource.preferences.SyncSettings
-import com.erpnext.pos.localSource.preferences.SyncLogPreferences
-import com.erpnext.pos.utils.NetworkMonitor
-import com.erpnext.pos.utils.AppLogger
-import com.erpnext.pos.utils.AppSentry
-import com.erpnext.pos.utils.loading.LoadingIndicator
 import com.erpnext.pos.auth.SessionRefresher
-import com.erpnext.pos.domain.policy.DefaultPolicy
-import com.erpnext.pos.domain.policy.PolicyInput
+import com.erpnext.pos.data.repositories.BootstrapSyncRepository
 import com.erpnext.pos.domain.models.SyncLogEntry
 import com.erpnext.pos.domain.models.SyncLogStatus
-import kotlinx.coroutines.CoroutineScope
+import com.erpnext.pos.domain.policy.DefaultPolicy
+import com.erpnext.pos.domain.policy.PolicyInput
+import com.erpnext.pos.domain.sync.SyncContext
+import com.erpnext.pos.localSource.preferences.BootstrapContextPreferences
+import com.erpnext.pos.localSource.preferences.GeneralPreferences
+import com.erpnext.pos.localSource.preferences.SyncLogPreferences
+import com.erpnext.pos.localSource.preferences.SyncPreferences
+import com.erpnext.pos.localSource.preferences.SyncSettings
+import com.erpnext.pos.utils.AppLogger
+import com.erpnext.pos.utils.AppSentry
+import com.erpnext.pos.utils.NetworkMonitor
+import com.erpnext.pos.utils.loading.LoadingIndicator
+import com.erpnext.pos.views.CashBoxManager
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.collect
-import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toLocalDateTime
 import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
+import kotlin.time.Instant
 
 interface ISyncManager {
     val state: StateFlow<SyncState>
@@ -56,31 +44,23 @@ interface ISyncManager {
     fun cancelSync()
 }
 
+@OptIn(ExperimentalTime::class)
 class SyncManager(
-    private val invoiceRepo: SalesInvoiceRepository,
-    private val customerRepo: CustomerRepository,
-    private val inventoryRepo: InventoryRepository,
-    private val modeOfPaymentRepo: ModeOfPaymentRepository,
-    private val posProfilePaymentMethodSyncRepository: PosProfilePaymentMethodSyncRepository,
-    private val stockSettingsRepository: com.erpnext.pos.data.repositories.StockSettingsRepository,
-    private val currencySettingsRepository: CurrencySettingsRepository,
-    private val paymentTermsRepo: PaymentTermsRepository,
-    private val deliveryChargesRepo: DeliveryChargesRepository,
-    private val contactRepo: ContactRepository,
-    private val addressRepo: AddressRepository,
-    private val customerGroupRepo: CustomerGroupRepository,
-    private val territoryRepo: TerritoryRepository,
-    private val exchangeRateRepo: ExchangeRateRepository,
+    private val bootstrapSyncRepository: BootstrapSyncRepository,
     private val syncPreferences: SyncPreferences,
     private val syncLogPreferences: SyncLogPreferences,
-    private val companyInfoRepo: CompanyRepository,
+    private val generalPreferences: GeneralPreferences,
     private val cashBoxManager: CashBoxManager,
-    private val posProfileDao: POSProfileDao,
     private val networkMonitor: NetworkMonitor,
     private val sessionRefresher: SessionRefresher,
     private val syncContextProvider: SyncContextProvider,
-    private val pushSyncManager: PushSyncRunner
+    private val pushSyncManager: PushSyncRunner,
+    private val bootstrapContextPreferences: BootstrapContextPreferences
 ) : ISyncManager {
+    companion object {
+        private const val BOOTSTRAP_REFRESH_INTERVAL_MS = 5 * 60 * 1000L
+        private const val STEP_COOLDOWN_MS = 1_000L
+    }
 
     private val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
     private var syncSettingsCache =
@@ -89,29 +69,34 @@ class SyncManager(
             syncOnStartup = true,
             wifiOnly = false,
             lastSyncAt = null,
-            useTtl = false
+            useTtl = false,
+            ttlHours = SyncTTL.DEFAULT_TTL_HOURS
         )
     private var lastSyncAttemptAt: Long? = null
     private val minSyncIntervalMillis = 2 * 60 * 1000L
+    private var offlineModeCache: Boolean = false
 
     private val _state = MutableStateFlow<SyncState>(SyncState.IDLE)
     override val state: StateFlow<SyncState> = _state.asStateFlow()
     private var syncJob: Job? = null
+    private val bootstrapMutex = Mutex()
 
     init {
         observeSyncSettings()
+        observeOfflineMode()
         observeConnectivity()
+        observeBootstrapRefresh()
     }
 
     @OptIn(ExperimentalTime::class)
     override fun fullSync(ttlHours: Int, force: Boolean) {
-        if (_state.value is SyncState.SYNCING || syncJob?.isActive == true) return
-
-        if (!cashBoxManager.cashboxState.value) {
-            AppLogger.info("SyncManager.fullSync skipped: cashbox is closed")
-            _state.value = SyncState.IDLE
+        if (offlineModeCache) {
+            _state.value = SyncState.ERROR("Modo offline activo. Desactívalo para sincronizar.")
+            AppLogger.info("SyncManager.fullSync skipped: offline mode enabled")
             return
         }
+        if (_state.value is SyncState.SYNCING || syncJob?.isActive == true) return
+        val effectiveTtlHours = ttlHours.coerceIn(1, 168)
         val now = Clock.System.now().toEpochMilliseconds()
         if (!force) {
             val lastAttempt = lastSyncAttemptAt
@@ -120,7 +105,7 @@ class SyncManager(
                 return
             }
             if (syncSettingsCache.useTtl &&
-                !SyncTTL.isExpired(syncSettingsCache.lastSyncAt, ttlHours)
+                !SyncTTL.isExpired(syncSettingsCache.lastSyncAt, effectiveTtlHours)
             ) {
                 AppLogger.info("SyncManager.fullSync skipped: TTL not expired")
                 return
@@ -128,12 +113,9 @@ class SyncManager(
         }
         lastSyncAttemptAt = now
 
-        /* TODO: Agregar POS Profiles con sus detalles, esto lo vamos a remover en la v2
-            Porque los perfiles ya vendran en el initial data y solo los que pertenecen al usuario
-         */
         syncJob = scope.launch {
-            AppSentry.breadcrumb("SyncManager.fullSync start (ttl=$ttlHours)")
-            AppLogger.info("SyncManager.fullSync start (ttl=$ttlHours)")
+            AppSentry.breadcrumb("SyncManager.fullSync start (ttl=$effectiveTtlHours)")
+            AppLogger.info("SyncManager.fullSync start (ttl=$effectiveTtlHours)")
             val startedAt = Clock.System.now().toEpochMilliseconds()
             val isOnline = networkMonitor.isConnected.first()
             if (!isOnline) {
@@ -151,7 +133,7 @@ class SyncManager(
             }
 
             val failures = mutableListOf<String>()
-            val steps = buildFullSyncSteps(ttlHours)
+            val steps = buildFullSyncSteps(effectiveTtlHours)
             LoadingIndicator.start(
                 message = "Sincronizando datos...",
                 progress = 0f,
@@ -159,26 +141,57 @@ class SyncManager(
                 totalSteps = steps.size
             )
             try {
-                steps.forEachIndexed { index, step ->
+                for (index in steps.indices) {
+                    val step = steps[index]
                     ensureActive()
                     val currentStep = index + 1
+                    val stepStartedAt = Clock.System.now().toEpochMilliseconds()
+                    AppLogger.info(
+                        "SyncManager.fullSync step $currentStep/${steps.size} started: ${step.label}"
+                    )
                     updateSyncProgress(
                         message = step.message,
                         currentStep = currentStep,
                         totalSteps = steps.size
                     )
                     val result = runStepWithRetry(step)
+                    val stepDurationMs =
+                        (Clock.System.now().toEpochMilliseconds() - stepStartedAt).coerceAtLeast(0)
+                    var shouldAbort = false
                     if (result != null) {
                         failures.add("${step.label}: $result")
+                        AppLogger.warn(
+                            "SyncManager.fullSync step $currentStep/${steps.size} failed after " +
+                                "${stepDurationMs}ms: ${step.label} -> $result"
+                        )
+                        if (step.haltOnFailure) {
+                            AppLogger.warn("SyncManager.fullSync aborted on critical step ${step.label}")
+                            shouldAbort = true
+                        }
+                    } else {
+                        AppLogger.info(
+                            "SyncManager.fullSync step $currentStep/${steps.size} finished in " +
+                                "${stepDurationMs}ms: ${step.label}"
+                        )
                     }
                     LoadingIndicator.update(progress = currentStep.toFloat() / steps.size.toFloat())
+                    if (shouldAbort) break
+                    if (index < steps.lastIndex) {
+                        delay(STEP_COOLDOWN_MS)
+                    }
                 }
                 if (failures.isEmpty()) {
                     _state.value = SyncState.SUCCESS
                     AppSentry.breadcrumb("SyncManager.fullSync success")
                     AppLogger.info("SyncManager.fullSync success")
                 } else {
-                    val summary = "Sincronización parcial: ${failures.size} de ${steps.size} fallaron."
+                    val firstFailure = failures.firstOrNull().orEmpty()
+                    val summary = if (firstFailure.isNotBlank()) {
+                        "Sincronización parcial: ${failures.size} de ${steps.size} fallaron. " +
+                                "Primer error: $firstFailure"
+                    } else {
+                        "Sincronización parcial: ${failures.size} de ${steps.size} fallaron."
+                    }
                     _state.value = SyncState.ERROR(summary)
                     AppSentry.breadcrumb(summary)
                     AppLogger.warn("SyncManager.fullSync partial: ${failures.joinToString(" | ")}")
@@ -187,7 +200,7 @@ class SyncManager(
             } catch (e: CancellationException) {
                 val message = "Sincronización cancelada."
                 _state.value = SyncState.ERROR(message)
-                AppLogger.warn("SyncManager.fullSync cancelled")
+                AppLogger.warn("SyncManager.fullSync cancelled", e)
             } catch (e: Exception) {
                 e.printStackTrace()
                 AppSentry.capture(e, "SyncManager.fullSync failed")
@@ -231,6 +244,10 @@ class SyncManager(
 
     @OptIn(ExperimentalTime::class)
     override fun syncInventory(force: Boolean) {
+        if (offlineModeCache) {
+            AppLogger.info("SyncManager.syncInventory skipped: offline mode enabled")
+            return
+        }
         if (_state.value is SyncState.SYNCING) return
         if (!cashBoxManager.cashboxState.value) {
             AppLogger.info("SyncManager.syncInventory skipped: cashbox is closed")
@@ -246,94 +263,7 @@ class SyncManager(
         }
         lastSyncAttemptAt = now
 
-        scope.launch {
-            AppSentry.breadcrumb("SyncManager.syncInventory start")
-            val isOnline = networkMonitor.isConnected.first()
-            if (!isOnline) {
-                AppLogger.warn("SyncManager.syncInventory aborted: offline")
-                return@launch
-            }
-            if (!sessionRefresher.ensureValidSession()) {
-                AppLogger.warn("SyncManager.syncInventory aborted: invalid session")
-                return@launch
-            }
-            val startedAt = Clock.System.now().toEpochMilliseconds()
-            val failures = mutableListOf<String>()
-            LoadingIndicator.start(
-                message = "Sincronizando inventario...",
-                progress = 0f,
-                currentStep = 1,
-                totalSteps = 1
-            )
-            try {
-                updateSyncProgress(
-                    message = "Sincronizando inventario...",
-                    currentStep = 1,
-                    totalSteps = 1
-                )
-                val errorMessage = runStepWithRetry(
-                    SyncStep(
-                        label = "Inventario",
-                        message = "Sincronizando inventario...",
-                        attempts = 2,
-                        initialDelayMs = 800L
-                    ) {
-                        val result = inventoryRepo.sync().filter { it !is Resource.Loading }.first()
-                        if (result is Resource.Error) {
-                            val error = Exception(
-                                result.message ?: "Error al sincronizar inventario"
-                            )
-                            AppSentry.capture(error, "Sync: inventory only failed")
-                            AppLogger.warn("Sync: inventory only failed", error)
-                            throw error
-                        }
-                    }
-                )
-                if (errorMessage != null) {
-                    failures.add("Inventario: $errorMessage")
-                }
-                LoadingIndicator.update(progress = 1f)
-                _state.value = if (failures.isEmpty()) SyncState.SUCCESS
-                else SyncState.ERROR("Sincronización parcial: Inventario")
-            } catch (e: CancellationException) {
-                _state.value = SyncState.ERROR("Sincronización cancelada.")
-            } catch (e: Exception) {
-                AppSentry.capture(e, "SyncManager.syncInventory failed")
-                AppLogger.warn("SyncManager.syncInventory failed", e)
-                _state.value = SyncState.ERROR("Error al sincronizar inventario: ${e.message}")
-            } finally {
-                val finishedAt = Clock.System.now().toEpochMilliseconds()
-                val status = when {
-                    failures.isEmpty() && _state.value is SyncState.SUCCESS -> SyncLogStatus.SUCCESS
-                    _state.value is SyncState.ERROR && (_state.value as SyncState.ERROR).message.contains("cancelada") ->
-                        SyncLogStatus.CANCELED
-                    failures.isNotEmpty() -> SyncLogStatus.PARTIAL
-                    else -> SyncLogStatus.ERROR
-                }
-                val message = when (val st = _state.value) {
-                    is SyncState.ERROR -> st.message
-                    is SyncState.SUCCESS -> "Sincronización de inventario exitosa."
-                    else -> "Sincronización de inventario finalizada."
-                }
-                runCatching {
-                    syncLogPreferences.append(
-                        SyncLogEntry(
-                            id = "sync-inventory-${startedAt}",
-                            startedAt = startedAt,
-                            finishedAt = finishedAt,
-                            durationMs = (finishedAt - startedAt).coerceAtLeast(0),
-                            totalSteps = 1,
-                            failedSteps = failures,
-                            status = status,
-                            message = message
-                        )
-                    )
-                }
-                LoadingIndicator.stop()
-                delay(2000)
-                _state.value = SyncState.IDLE
-            }
-        }
+        AppLogger.info("SyncManager.syncInventory skipped: pull deshabilitado en modo local-first")
     }
 
     override fun cancelSync() {
@@ -352,6 +282,10 @@ class SyncManager(
     }
 
     private suspend fun runPushQueue() {
+        if (offlineModeCache) {
+            AppLogger.warn("SyncManager: push queue skipped because offline mode is enabled")
+            return
+        }
         if (!cashBoxManager.cashboxState.value) {
             AppLogger.warn("SyncManager: push queue skipped because cashbox is closed")
             return
@@ -394,13 +328,14 @@ class SyncManager(
     }
 
     private suspend fun updateSyncProgress(message: String, currentStep: Int, totalSteps: Int) {
+        val progressPercent = ((currentStep.toFloat() / totalSteps.toFloat()) * 100f).toInt()
         _state.value = SyncState.SYNCING(
-            message = message,
+            message = "$message ($progressPercent%)",
             currentStep = currentStep,
             totalSteps = totalSteps
         )
         LoadingIndicator.update(
-            message = "$message ($currentStep/$totalSteps)",
+            message = "$message ($currentStep/$totalSteps - $progressPercent%)",
             progress = currentStep.toFloat() / totalSteps.toFloat(),
             currentStep = currentStep,
             totalSteps = totalSteps
@@ -408,14 +343,15 @@ class SyncManager(
     }
 
     private fun updateSyncProgressAsync(message: String, currentStep: Int, totalSteps: Int) {
+        val progressPercent = ((currentStep.toFloat() / totalSteps.toFloat()) * 100f).toInt()
         _state.value = SyncState.SYNCING(
-            message = message,
+            message = "$message ($progressPercent%)",
             currentStep = currentStep,
             totalSteps = totalSteps
         )
         scope.launch {
             LoadingIndicator.update(
-                message = "$message ($currentStep/$totalSteps)",
+                message = "$message ($currentStep/$totalSteps - $progressPercent%)",
                 progress = currentStep.toFloat() / totalSteps.toFloat(),
                 currentStep = currentStep,
                 totalSteps = totalSteps
@@ -444,168 +380,67 @@ class SyncManager(
         return null
     }
 
-    private fun buildFullSyncSteps(ttlHours: Int): List<SyncStep> {
-        return listOf(
-            SyncStep(label = "Métodos de pago", message = "Sincronizando métodos de pago...") {
-                AppSentry.breadcrumb("Sync: mode of payment")
-                val result = modeOfPaymentRepo.sync(ttlHours).filter { it !is Resource.Loading }.first()
-                if (result is Resource.Error) {
-                    val error = Exception(result.message ?: "Error al sincronizar métodos de pago")
-                    AppSentry.capture(error, "Sync: mode of payment failed")
-                    AppLogger.warn("Sync: mode of payment failed", error)
-                    throw error
-                }
-            },
-            SyncStep(label = "Clientes", message = "Sincronizando clientes...") {
-                AppSentry.breadcrumb("Sync: customers")
-                val result = customerRepo.sync().filter { it !is Resource.Loading }.first()
-                if (result is Resource.Error) {
-                    val error = Exception(result.message ?: "Error al sincronizar clientes")
-                    AppSentry.capture(error, "Sync: customers failed")
-                    AppLogger.warn("Sync: customers failed", error)
-                    throw error
-                }
-            },
-            SyncStep(label = "Categorías", message = "Sincronizando categorías de productos...") {
-                AppSentry.breadcrumb("Sync: categories")
-                val result = inventoryRepo.getCategories().filter { it !is Resource.Loading }.first()
-                if (result is Resource.Error) {
-                    val error = Exception(result.message ?: "Error al sincronizar categorías")
-                    AppSentry.capture(error, "Sync: categories failed")
-                    AppLogger.warn("Sync: categories failed", error)
-                    throw error
-                }
-            },
-            SyncStep(label = "Inventario", message = "Sincronizando inventario...") {
-                AppSentry.breadcrumb("Sync: inventory")
-                val result = inventoryRepo.sync().filter { it !is Resource.Loading }.first()
-                if (result is Resource.Error) {
-                    val error = Exception(result.message ?: "Error al sincronizar inventario")
-                    AppSentry.capture(error, "Sync: inventory failed")
-                    AppLogger.warn("Sync: inventory failed", error)
-                    throw error
-                }
-            },
-            SyncStep(label = "Facturas", message = "Sincronizando facturas...") {
-                AppSentry.breadcrumb("Sync: invoices")
-                val result = invoiceRepo.sync().filter { it !is Resource.Loading }.first()
-                if (result is Resource.Error) {
-                    val error = Exception(result.message ?: "Error al sincronizar facturas")
-                    AppSentry.capture(error, "Sync: invoices failed")
-                    AppLogger.warn("Sync: invoices failed", error)
-                    throw error
-                }
-                // Recalcula resúmenes de clientes luego de cambios en facturas.
-                runCatching { customerRepo.rebuildAllCustomerSummaries() }.onFailure { error ->
-                    AppSentry.capture(error, "Sync: rebuild customer summaries failed")
-                    AppLogger.warn("Sync: rebuild customer summaries failed", error)
-                }
-            },
-            SyncStep(label = "Términos de pago", message = "Sincronizando términos de pago...") {
-                AppSentry.breadcrumb("Sync: payment terms")
-                runCatching { paymentTermsRepo.fetchPaymentTerms() }.getOrElse { error ->
-                    val exception = Exception(error.message ?: "Error al sincronizar términos de pago")
-                    AppSentry.capture(exception, "Sync: payment terms failed")
-                    AppLogger.warn("Sync: payment terms failed", exception)
-                    throw exception
-                }
-            },
-            SyncStep(label = "Grupos de cliente", message = "Sincronizando grupos de cliente...") {
-                AppSentry.breadcrumb("Sync: customer groups")
-                runCatching { customerGroupRepo.fetchCustomerGroups() }.getOrElse { error ->
-                    val exception = Exception(error.message ?: "Error al sincronizar grupos de cliente")
-                    AppSentry.capture(exception, "Sync: customer groups failed")
-                    AppLogger.warn("Sync: customer groups failed", exception)
-                    throw exception
-                }
-            },
-            SyncStep(label = "Territorios", message = "Sincronizando territorios...") {
-                AppSentry.breadcrumb("Sync: territories")
-                runCatching { territoryRepo.fetchTerritories() }.getOrElse { error ->
-                    val exception = Exception(error.message ?: "Error al sincronizar territorios")
-                    AppSentry.capture(exception, "Sync: territories failed")
-                    AppLogger.warn("Sync: territories failed", exception)
-                    throw exception
-                }
-            },
-            SyncStep(label = "Cargos de envío", message = "Sincronizando cargos de envío...") {
-                AppSentry.breadcrumb("Sync: delivery charges")
-                runCatching { deliveryChargesRepo.fetchDeliveryCharges() }.getOrElse { error ->
-                    val exception = Exception(error.message ?: "Error al sincronizar cargos de envío")
-                    AppSentry.capture(exception, "Sync: delivery charges failed")
-                    AppLogger.warn("Sync: delivery charges failed", exception)
-                    throw exception
-                }
-            },
-            SyncStep(label = "Contactos", message = "Sincronizando contactos...") {
-                AppSentry.breadcrumb("Sync: contacts")
-                runCatching { contactRepo.fetchCustomerContacts() }.getOrElse { error ->
-                    val exception = Exception(error.message ?: "Error al sincronizar contactos")
-                    AppSentry.capture(exception, "Sync: contacts failed")
-                    AppLogger.warn("Sync: contacts failed", exception)
-                    throw exception
-                }
-            },
-            SyncStep(label = "Direcciones", message = "Sincronizando direcciones...") {
-                AppSentry.breadcrumb("Sync: addresses")
-                runCatching { addressRepo.fetchCustomerAddresses() }.getOrElse { error ->
-                    val exception = Exception(error.message ?: "Error al sincronizar direcciones")
-                    AppSentry.capture(exception, "Sync: addresses failed")
-                    AppLogger.warn("Sync: addresses failed", exception)
-                    throw exception
-                }
-            },
-            SyncStep(label = "Empresa", message = "Sincronizando información de la empresa...", attempts = 1) {
-                AppSentry.breadcrumb("Sync: company info")
-                runCatching { companyInfoRepo.getCompanyInfo() }.onFailure { error ->
-                    AppSentry.capture(error, "Sync: company info failed")
-                    AppLogger.warn("Sync: company info failed", error)
-                }
-            },
-            SyncStep(label = "Stock settings", message = "Sincronizando stock settings...", attempts = 1) {
-                runCatching { stockSettingsRepository.sync() }.onFailure { error ->
-                    AppSentry.capture(error, "Sync: stock settings failed")
-                    AppLogger.warn("Sync: stock settings failed", error)
-                }
-            },
-            SyncStep(label = "Moneda", message = "Sincronizando configuración de moneda...", attempts = 1) {
-                runCatching { currencySettingsRepository.sync() }.onFailure { error ->
-                    AppSentry.capture(error, "Sync: currency settings failed")
-                    AppLogger.warn("Sync: currency settings failed", error)
-                }
-            },
-            SyncStep(label = "Tasas de cambio", message = "Sincronizando tasas de cambio...") {
-                AppSentry.breadcrumb("Sync: exchange rates")
-                val enabledCurrencies =
-                    runCatching { exchangeRateRepo.getEnabledCurrencyCodes() }.getOrElse { emptyList() }
-                val normalized =
-                    enabledCurrencies.filter { it.isNotBlank() }.map { it.uppercase() }.distinct()
-                runCatching { exchangeRateRepo.syncRatesForCurrencies(normalized) }.onFailure { error ->
-                    AppSentry.capture(error, "Sync: exchange rates failed")
-                    AppLogger.warn("Sync: exchange rates failed", error)
-                }
-            },
-            SyncStep(label = "Métodos POS", message = "Sincronizando métodos del perfil POS...") {
-                val profile = posProfileDao.getActiveProfile()
-                if (profile != null) {
-                    runCatching {
-                        posProfilePaymentMethodSyncRepository.syncProfilePayments(profile.profileName)
-                    }.onFailure { error ->
-                        AppSentry.capture(error, "Sync: pos profile payments failed")
-                        AppLogger.warn("Sync: pos profile payments failed", error)
-                        throw error
-                    }
-                }
-            },
-            SyncStep(label = "Pendientes", message = "Sincronizando documentos pendientes...") {
-                runPushQueue()
+    private fun buildFullSyncSteps(@Suppress("UNUSED_PARAMETER") ttlHours: Int): List<SyncStep> {
+        var snapshot: BootstrapSyncRepository.Snapshot? = null
+        val bootstrapSections = bootstrapSyncRepository.orderedSections()
+        val bootstrapSteps = mutableListOf<SyncStep>()
+        bootstrapSteps += SyncStep(
+            label = "Bootstrap Fetch",
+            message = "Descargando datos desde ERP...",
+            haltOnFailure = true
+        ) {
+            val ctx = cashBoxManager.getContext() ?: cashBoxManager.initializeContext()
+            val profileName = ctx?.profileName?.trim().orEmpty()
+            val activeCashbox = cashBoxManager.getActiveCashboxWithDetails()
+            val openingEntryId = activeCashbox?.cashbox?.openingEntryId?.trim().orEmpty()
+            val fromDate = resolveModifiedSinceDate()
+            bootstrapContextPreferences.update(
+                profileName = profileName,
+                posOpeningEntry = openingEntryId,
+                fromDate = fromDate,
+                lastRequestAt = Clock.System.now().toEpochMilliseconds(),
+                lastError = ""
+            )
+            try {
+                snapshot = bootstrapSyncRepository.fetchSnapshot(profileName = null)
+                bootstrapContextPreferences.update(
+                    monthlySalesTarget = snapshot?.data?.context?.monthlySalesTarget,
+                    replaceMonthlySalesTarget = true
+                )
+            } catch (e: Exception) {
+                bootstrapContextPreferences.update(lastError = e.message ?: "Bootstrap Fetch failed")
+                throw e
             }
-        )
+        }
+        bootstrapSections.forEach { section ->
+            bootstrapSteps += SyncStep(
+                label = section.label,
+                message = section.message
+            ) {
+                val resolved = snapshot
+                    ?: throw IllegalStateException("No se pudo descargar el snapshot de sync.bootstrap")
+                bootstrapSyncRepository.persistSection(resolved, section)
+            }
+        }
+        bootstrapSteps += SyncStep(
+            label = "Caja",
+            message = "Reconciliando estado de caja..."
+        ) {
+            cashBoxManager.initializeContext()
+        }
+        bootstrapSteps += SyncStep(
+            label = "Pendientes",
+            message = "Sincronizando documentos pendientes..."
+        ) {
+            runPushQueue()
+        }
+        return bootstrapSteps
     }
 
     private data class SyncStep(
         val label: String,
         val message: String,
+        val haltOnFailure: Boolean = false,
         val attempts: Int = 3,
         val initialDelayMs: Long = 600L,
         val maxDelayMs: Long = 6_000L,
@@ -620,19 +455,93 @@ class SyncManager(
         }
     }
 
+    private fun observeOfflineMode() {
+        scope.launch {
+            generalPreferences.offlineMode.collect { enabled ->
+                offlineModeCache = enabled
+                if (enabled && _state.value is SyncState.SYNCING) {
+                    cancelSync()
+                }
+            }
+        }
+    }
+
     private fun observeConnectivity() {
         scope.launch {
             var wasConnected = false
             networkMonitor.isConnected.collect { connected ->
                 if (connected && !wasConnected && shouldAutoSyncOnConnection()) {
-                    fullSync()
+                    fullSync(ttlHours = syncSettingsCache.ttlHours, force = false)
                 }
                 wasConnected = connected
             }
         }
     }
 
+    private fun observeBootstrapRefresh() {
+        scope.launch {
+            while (true) {
+                delay(BOOTSTRAP_REFRESH_INTERVAL_MS)
+                refreshBootstrapSnapshot(trigger = "interval_5m")
+            }
+        }
+    }
+
+    private suspend fun refreshBootstrapSnapshot(trigger: String): Boolean {
+        return bootstrapMutex.withLock {
+            if (offlineModeCache) {
+                AppLogger.info("SyncManager.bootstrap skipped ($trigger): offline mode enabled")
+                return@withLock false
+            }
+            val isOnline = networkMonitor.isConnected.first()
+            if (!isOnline) {
+                AppLogger.info("SyncManager.bootstrap skipped ($trigger): offline")
+                return@withLock false
+            }
+            if (!sessionRefresher.ensureValidSession()) {
+                AppLogger.warn("SyncManager.bootstrap skipped ($trigger): invalid session")
+                return@withLock false
+            }
+            return@withLock runCatching {
+                val ctx = cashBoxManager.getContext() ?: cashBoxManager.initializeContext()
+                val profileName = ctx?.profileName?.trim().orEmpty()
+                val activeCashbox = cashBoxManager.getActiveCashboxWithDetails()
+                val openingEntryId = activeCashbox?.cashbox?.openingEntryId?.trim().orEmpty()
+                val fromDate = resolveModifiedSinceDate()
+                bootstrapContextPreferences.update(
+                    profileName = profileName,
+                    posOpeningEntry = openingEntryId,
+                    fromDate = fromDate,
+                    lastRequestAt = Clock.System.now().toEpochMilliseconds(),
+                    lastError = ""
+                )
+                val snapshot = bootstrapSyncRepository.fetchSnapshot(profileName = null)
+                bootstrapContextPreferences.update(
+                    monthlySalesTarget = snapshot.data.context?.monthlySalesTarget,
+                    replaceMonthlySalesTarget = true
+                )
+                bootstrapSyncRepository.persistAll(snapshot)
+                cashBoxManager.initializeContext()
+                AppLogger.info("SyncManager.bootstrap refreshed ($trigger)")
+                true
+            }.onFailure {
+                bootstrapContextPreferences.update(lastError = it.message ?: "Bootstrap refresh failed")
+                AppSentry.capture(it, "SyncManager.bootstrap failed ($trigger)")
+                AppLogger.warn("SyncManager.bootstrap failed ($trigger)", it)
+            }.getOrElse { false }
+        }
+    }
+
+    private suspend fun resolveModifiedSinceDate(): String? {
+        val lastSyncAt = syncSettingsCache.lastSyncAt ?: return syncContextProvider.buildContext()?.fromDate
+        return Instant.fromEpochMilliseconds(lastSyncAt)
+            .toLocalDateTime(TimeZone.currentSystemDefault())
+            .date
+            .toString()
+    }
+
     private fun shouldAutoSyncOnConnection(): Boolean {
+        if (offlineModeCache) return false
         if (!syncSettingsCache.autoSync) return false
         if (syncSettingsCache.wifiOnly) return false
         return _state.value !is SyncState.SYNCING

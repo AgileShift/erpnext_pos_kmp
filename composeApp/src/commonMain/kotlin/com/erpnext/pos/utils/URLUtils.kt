@@ -13,6 +13,8 @@ fun normalizeUrl(input: String): String {
 
 // Validación básica: no encadena, solo comprueba que tenga un dominio válido
 fun isValidUrlInput(input: String): Boolean {
-    val regex = Regex("^(https?://)?([a-zA-Z0-9.-]+)\\.[a-zA-Z]{2,}.*$")
-    return regex.matches(input.trim())
+    val trimmed = input.trim()
+    if (trimmed.isBlank()) return false
+    val normalized = normalizeUrl(trimmed)
+    return isValidUrl(normalized)
 }

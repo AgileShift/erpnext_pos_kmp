@@ -26,6 +26,7 @@ class InventoryViewModel(
     private val fetchCategoryUseCase: FetchCategoriesUseCase,
     private val fetchInventoryItemUseCase: FetchInventoryItemUseCase,
     private val context: CashBoxManager,
+    private val refreshController: InventoryRefreshController,
 ) : BaseViewModel() {
 
     private val _stateFlow = MutableStateFlow<InventoryState>(InventoryState.Loading)
@@ -41,6 +42,9 @@ class InventoryViewModel(
     init {
         loadCategoriesOnce()
         loadItemsReactive()
+        viewModelScope.launch {
+            refreshController.events.collectLatest { refresh() }
+        }
     }
 
     /**

@@ -6,7 +6,9 @@ import com.erpnext.pos.remoteSource.dto.TokenResponse
 import com.erpnext.pos.remoteSource.oauth.AuthInfoStore
 import com.erpnext.pos.remoteSource.oauth.TokenStore
 import com.erpnext.pos.remoteSource.oauth.TransientAuthStore
+import com.erpnext.pos.utils.AppLogger
 import com.erpnext.pos.utils.TokenUtils.decodePayload
+import com.erpnext.pos.utils.TokenUtils.resolveUserIdFromClaims
 import com.erpnext.pos.utils.instanceKeyFromUrl
 import com.github.javakeyring.Keyring
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -26,6 +28,12 @@ class DesktopTokenStore(
     private val stateFlow = MutableStateFlow<TokenResponse?>(null)
     private val json = Json { ignoreUnknownKeys = true }
     private val prefs: Preferences = Preferences.userRoot().node(prefsNode)
+    init {
+        AppLogger.info(
+            "DesktopTokenStore prefsNode=${prefs.absolutePath()} " +
+                "currentSite=${prefs.get("current_site", null) ?: "none"}"
+        )
+    }
 
     /**
      * Keyring best-effort:
@@ -59,9 +67,13 @@ class DesktopTokenStore(
     }
 
     private fun prefKey(key: String) = "secret.$key"
-    private suspend fun siteScopedKey(key: String): String {
-        val siteKey = instanceKeyFromUrl(getCurrentSite())
+    private fun siteScopedKeyForUrl(url: String?, key: String): String {
+        val siteKey = instanceKeyFromUrl(url)
         return "${siteKey}_$key"
+    }
+
+    private suspend fun siteScopedKey(key: String): String {
+        return siteScopedKeyForUrl(getCurrentSite(), key)
     }
 
     private inline fun <T> runKeyring(block: (Keyring) -> T): Result<T> {
@@ -109,30 +121,63 @@ class DesktopTokenStore(
     // TokenStore
     // ------------------------------------------------------------
     override suspend fun save(tokens: TokenResponse) {
-        clear()
-        if (tokens.id_token.isNullOrEmpty()) return
+        mutex.withLock {
+            val currentAccessToken = getSecret(siteScopedKey("access_token"))
+            val currentRefreshToken = getSecret(siteScopedKey("refresh_token"))
+            val currentIdToken = getSecret(siteScopedKey("id_token"))
+            val currentExpiresIn = prefs.getLong(siteScopedKey("expires_in"), 0L)
+            val currentUser = prefs.get(siteScopedKey("userId"), null)
 
-        val claims = decodePayload(tokens.id_token)
-        val userId = claims?.get("email").toString()
+            val mergedAccessToken = tokens.access_token.ifBlank { currentAccessToken.orEmpty() }
+            val mergedRefreshToken = tokens.refresh_token?.takeIf { it.isNotBlank() }
+                ?: currentRefreshToken?.takeIf { it.isNotBlank() }
+            val mergedIdToken = tokens.id_token?.takeIf { it.isNotBlank() }
+                ?: currentIdToken?.takeIf { it.isNotBlank() }
+            val mergedExpiresIn = tokens.expires_in ?: currentExpiresIn
 
-        // secretos
-        setSecret(siteScopedKey("access_token"), tokens.access_token)
-        setSecret(siteScopedKey("refresh_token"), tokens.refresh_token ?: "")
-        setSecret(siteScopedKey("id_token"), tokens.id_token)
+            if (mergedAccessToken.isNotBlank()) {
+                setSecret(siteScopedKey("access_token"), mergedAccessToken)
+            } else {
+                deleteSecret(siteScopedKey("access_token"))
+            }
+            if (mergedRefreshToken == null) {
+                deleteSecret(siteScopedKey("refresh_token"))
+            } else {
+                setSecret(siteScopedKey("refresh_token"), mergedRefreshToken)
+            }
+            if (mergedIdToken == null) {
+                deleteSecret(siteScopedKey("id_token"))
+            } else {
+                setSecret(siteScopedKey("id_token"), mergedIdToken)
+            }
 
-        // metadatos (no secretos)
-        prefs.putLong(siteScopedKey("expires_in"), tokens.expires_in ?: 0L)
-        prefs.put(siteScopedKey("userId"), userId)
-        prefs.flush()
+            prefs.putLong(siteScopedKey("expires_in"), mergedExpiresIn)
+            val decodedUser = mergedIdToken?.let { resolveUserIdFromClaims(decodePayload(it)) }
+                ?.takeIf { it.isNotBlank() }
+                ?: currentUser
+            if (decodedUser.isNullOrBlank()) {
+                prefs.remove(siteScopedKey("userId"))
+            } else {
+                prefs.put(siteScopedKey("userId"), decodedUser)
+            }
+            prefs.flush()
 
-        stateFlow.value = tokens
+            stateFlow.value = TokenResponse(
+                access_token = mergedAccessToken,
+                token_type = tokens.token_type,
+                expires_in = mergedExpiresIn,
+                refresh_token = mergedRefreshToken,
+                id_token = mergedIdToken,
+                scope = tokens.scope
+            )
+        }
     }
 
     override suspend fun load(): TokenResponse? = mutex.withLock {
         // si falla keyring, getSecret() retorna null o usa fallback, sin crashear
         val at = getSecret(siteScopedKey("access_token")) ?: return@withLock null
         val idToken = getSecret(siteScopedKey("id_token")) ?: return@withLock null
-        val rt = getSecret(siteScopedKey("refresh_token")) ?: ""
+        val rt = getSecret(siteScopedKey("refresh_token"))?.takeIf { it.isNotBlank() }
         val expires = prefs.getLong(siteScopedKey("expires_in"), 0L)
 
         val tokens = TokenResponse(
@@ -197,6 +242,37 @@ class DesktopTokenStore(
 
     override suspend fun getCurrentSite(): String? =
         prefs.get("current_site", null)
+
+    override suspend fun deleteSite(url: String): Boolean = mutex.withLock {
+        val list = loadAuthInfo()
+        if (list.none { it.url == url }) return@withLock false
+        val updated = list.filterNot { it.url == url }
+
+        deleteSecret(siteScopedKeyForUrl(url, "access_token"))
+        deleteSecret(siteScopedKeyForUrl(url, "refresh_token"))
+        deleteSecret(siteScopedKeyForUrl(url, "id_token"))
+        prefs.remove(siteScopedKeyForUrl(url, "expires_in"))
+        prefs.remove(siteScopedKeyForUrl(url, "userId"))
+
+        val currentSite = getCurrentSite()
+        if (currentSite == url) {
+            stateFlow.update { null }
+            val nextSite = updated.firstOrNull()?.url
+            if (nextSite.isNullOrBlank()) {
+                prefs.remove("current_site")
+            } else {
+                prefs.put("current_site", nextSite)
+            }
+        }
+
+        if (updated.isEmpty()) {
+            prefs.remove("sitesInfo")
+        } else {
+            prefs.put("sitesInfo", json.encodeToString(updated))
+        }
+        prefs.flush()
+        true
+    }
 
     override suspend fun updateSiteMeta(
         url: String,

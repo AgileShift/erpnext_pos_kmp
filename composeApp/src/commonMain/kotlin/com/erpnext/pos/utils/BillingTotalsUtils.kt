@@ -12,7 +12,7 @@ import com.erpnext.pos.views.billing.BillingState
 fun calculateTotals(state: BillingState.Success): BillingTotals {
     val subtotal = state.cartItems.sumOf { it.price * it.quantity }
     val taxes = state.sourceDocument?.totals?.taxTotal ?: 0.0
-    val discountInfo = resolveDiscountInfo(state, subtotal)
+    val discountInfo = resolveDiscountInfo(state, subtotal, taxes)
     val shippingAmount = state.shippingAmount.coerceAtLeast(0.0)
     val total = (subtotal + taxes - discountInfo.amount + shippingAmount).coerceAtLeast(0.0)
     return BillingTotals(
@@ -24,7 +24,7 @@ fun calculateTotals(state: BillingState.Success): BillingTotals {
     )
 }
 
-fun resolveDiscountInfo(state: BillingState.Success, subtotal: Double): DiscountInfo {
+fun resolveDiscountInfo(state: BillingState.Success, subtotal: Double, taxes: Double = 0.0): DiscountInfo {
     val hasPercent = state.manualDiscountPercent > 0.0
     val hasAmount = state.manualDiscountAmount > 0.0
     val source = when {
@@ -33,11 +33,16 @@ fun resolveDiscountInfo(state: BillingState.Success, subtotal: Double): Discount
         else -> DiscountSource.None
     }
     val percent = state.manualDiscountPercent.takeIf { it > 0.0 }?.coerceAtMost(100.0)
+    val discountBase = if (state.applyDiscountOn.equals("Grand Total", ignoreCase = true)) {
+        subtotal + taxes
+    } else {
+        subtotal
+    }
     val rawAmount = when {
-        percent != null -> subtotal * (percent / 100.0)
+        percent != null -> discountBase * (percent / 100.0)
         hasAmount -> state.manualDiscountAmount
         else -> 0.0
-    }.coerceIn(0.0, subtotal)
+    }.coerceIn(0.0, discountBase)
 
     val effectiveAmount = when (source) {
         DiscountSource.None -> 0.0

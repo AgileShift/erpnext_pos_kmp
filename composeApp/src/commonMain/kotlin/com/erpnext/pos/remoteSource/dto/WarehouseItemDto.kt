@@ -9,6 +9,8 @@ data class WarehouseItemDto(
     val itemCode: String,
     @SerialName("actual_qty")
     val actualQty: Double,
+    @SerialName("projected_qty")
+    val projectedQty: Double? = null,
     @SerialName("price")
     val price: Double,
     @SerialName("valuation_rate")
@@ -29,5 +31,9 @@ data class WarehouseItemDto(
     @SerialName("stock_uom")
     val stockUom: String,
     val brand: String = "",
-    val currency: String = "" // Inferido
+    val currency: String = "", // Inferido
+    @SerialName("stock_alert_reorder_level")
+    val stockAlertReorderLevel: Double? = null,
+    @SerialName("stock_alert_reorder_qty")
+    val stockAlertReorderQty: Double? = null
 )

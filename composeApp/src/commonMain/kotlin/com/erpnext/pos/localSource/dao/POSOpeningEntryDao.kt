@@ -35,6 +35,9 @@ interface POSOpeningEntryDao {
     @Update
     suspend fun update(entry: POSOpeningEntryEntity)
 
+    @Query("UPDATE tab_pos_opening_entry SET pending_sync = 0 WHERE name = :name")
+    suspend fun markSynced(name: String): Int
+
     @Query("DELETE FROM tab_pos_opening_entry WHERE name = :name")
     suspend fun delete(name: String)
 

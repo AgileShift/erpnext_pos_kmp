@@ -4,8 +4,8 @@ package com.erpnext.pos.views.home
 
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
@@ -13,27 +13,24 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.ArrowDownward
-import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.CloudOff
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.LocalOffer
 import androidx.compose.material.icons.filled.Settings
@@ -45,7 +42,6 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
@@ -70,13 +66,13 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.erpnext.pos.domain.models.POSProfileSimpleBO
 import com.erpnext.pos.domain.models.UserBO
-import com.erpnext.pos.localization.LocalAppStrings
 import com.erpnext.pos.localSource.preferences.SyncSettings
+import com.erpnext.pos.localization.LocalAppStrings
 import com.erpnext.pos.sync.SyncState
 import com.erpnext.pos.utils.datetimeNow
-import com.erpnext.pos.utils.toCurrencySymbol
-import com.erpnext.pos.utils.formatDoubleToString
 import com.erpnext.pos.utils.formatCurrency
+import com.erpnext.pos.utils.formatDoubleToString
+import com.erpnext.pos.utils.toCurrencySymbol
 import com.erpnext.pos.utils.view.SnackbarController
 import com.erpnext.pos.utils.view.SnackbarPosition
 import com.erpnext.pos.utils.view.SnackbarType
@@ -101,7 +97,6 @@ fun HomeScreen(
     val strings = LocalAppStrings.current
     val homeMetrics by actions.homeMetrics.collectAsState()
     val openingState by actions.openingState.collectAsState()
-    val openingEntryId by actions.openingEntryId.collectAsState()
     val isCashboxOpen by actions.isCashboxOpen().collectAsState()
     val inventoryAlertMessage by actions.inventoryAlertMessage.collectAsState()
 
@@ -189,9 +184,6 @@ fun HomeScreen(
                             ) {
                                 when (syncState) {
                                     is SyncState.SYNCING -> {
-                                        // --- INICIO DE LA SECCIÓN MEJORADA ---
-
-                                        // Creamos una transición infinita para la animación del icono.
                                         val infiniteTransition =
                                             rememberInfiniteTransition(label = "sync_icon_transition")
                                         val angle by infiniteTransition.animateFloat(
@@ -268,7 +260,6 @@ fun HomeScreen(
                                                 }
                                             }
                                         }
-                                        // --- FIN DE LA SECCIÓN MEJORADA ---
                                     }
 
                                     else -> {
@@ -302,16 +293,6 @@ fun HomeScreen(
                             }
                         }
 
-                        Spacer(Modifier.height(12.dp))
-
-                        if (isCashboxOpen && !openingEntryId.isNullOrBlank()) {
-                            Text(
-                                text = "POE actual: $openingEntryId",
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.padding(bottom = 8.dp)
-                            )
-                        }
                         // Botón abrir caja
                         if (!isCashboxOpen) {
                             Button(
@@ -387,21 +368,22 @@ private fun BISection(
         contentPadding = PaddingValues(bottom = 16.dp)
     ) {
         item {
-            Row(
-                modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                currencyMetrics.forEach { metric ->
-                    FilterChip(
-                        selected = metric.currency == selectedCurrency,
-                        onClick = { selectedCurrency = metric.currency },
-                        label = { Text(metric.currency) })
-                }
+            val target = metrics.salesTarget
+            val dailySalesTarget = when {
+                target == null -> null
+                target.secondaryCurrency != null &&
+                    target.secondaryCurrency.equals(selectedMetric.currency, ignoreCase = true) ->
+                    target.dailySecondary
+                target.baseCurrency.equals(selectedMetric.currency, ignoreCase = true) ->
+                    target.dailyBase
+                else -> null
             }
-        }
-
-        item {
-            HeroAndActionsRow(metric = selectedMetric, symbol = symbol, actions)
+            HeroAndActionsRow(
+                metric = selectedMetric,
+                symbol = symbol,
+                actions = actions,
+                dailySalesTarget = dailySalesTarget
+            )
         }
 
         metrics.salesTarget?.let { target ->
@@ -433,7 +415,12 @@ private fun BISection(
 }
 
 @Composable
-private fun HeroAndActionsRow(metric: CurrencyHomeMetric, symbol: String, actions: HomeAction) {
+private fun HeroAndActionsRow(
+    metric: CurrencyHomeMetric,
+    symbol: String,
+    actions: HomeAction,
+    dailySalesTarget: Double?
+) {
     BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
         val isWide = maxWidth >= 840.dp
         if (isWide) {
@@ -442,7 +429,10 @@ private fun HeroAndActionsRow(metric: CurrencyHomeMetric, symbol: String, action
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 LiveSalesCard(
-                    metric = metric, symbol = symbol, modifier = Modifier.weight(1f)
+                    metric = metric,
+                    symbol = symbol,
+                    dailySalesTarget = dailySalesTarget,
+                    modifier = Modifier.weight(1f)
                 )
                 QuickActionsGrid(modifier = Modifier.weight(1f), actions)
             }
@@ -451,7 +441,12 @@ private fun HeroAndActionsRow(metric: CurrencyHomeMetric, symbol: String, action
                 modifier = Modifier.fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                LiveSalesCard(metric = metric, symbol = symbol, modifier = Modifier.fillMaxWidth())
+                LiveSalesCard(
+                    metric = metric,
+                    symbol = symbol,
+                    dailySalesTarget = dailySalesTarget,
+                    modifier = Modifier.fillMaxWidth()
+                )
                 QuickActionsGrid(modifier = Modifier.fillMaxWidth(), actions)
             }
         }
@@ -460,9 +455,13 @@ private fun HeroAndActionsRow(metric: CurrencyHomeMetric, symbol: String, action
 
 @Composable
 private fun LiveSalesCard(
-    metric: CurrencyHomeMetric, symbol: String, modifier: Modifier = Modifier
+    metric: CurrencyHomeMetric,
+    symbol: String,
+    dailySalesTarget: Double?,
+    modifier: Modifier = Modifier
 ) {
-    val target = if (metric.salesLast7 > 0.0) metric.salesLast7 / 7.0 else metric.totalSalesToday
+    val target = dailySalesTarget?.takeIf { it > 0.0 }
+        ?: if (metric.salesLast7 > 0.0) metric.salesLast7 / 7.0 else metric.totalSalesToday
     val progress = if (target > 0.0) (metric.totalSalesToday / target) else 0.0
     Card(
         modifier = modifier,
@@ -948,9 +947,8 @@ fun InventoryAlertsCardPreview() {
                 6.0,
                 20.0
             )
-        ),
-        {}
-    )
+        )
+    ) {}
 }
 
 @Composable
@@ -1333,7 +1331,8 @@ fun HomePreview() {
                         syncOnStartup = true,
                         wifiOnly = false,
                         lastSyncAt = Clock.System.now().toEpochMilliseconds(),
-                        useTtl = false
+                        useTtl = false,
+                        ttlHours = 6
                     )
                 ),
                 homeMetrics = MutableStateFlow(HomeMetrics())

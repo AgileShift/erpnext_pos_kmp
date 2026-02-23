@@ -44,6 +44,7 @@ sealed class POSSettingState {
         val salesTargetConvertedWeekly: Double?,
         val salesTargetConvertedDaily: Double?,
         val salesTargetConversionStale: Boolean,
+        val salesTargetFromContext: Boolean,
         val syncLog: List<SyncLogEntry>
     ) : POSSettingState()
     data class Error(val message: String) : POSSettingState()
@@ -67,6 +68,7 @@ data class POSSettingAction(
     val onSyncOnStartupChanged: (Boolean) -> Unit = {},
     val onWifiOnlyChanged: (Boolean) -> Unit = {},
     val onUseTtlChanged: (Boolean) -> Unit = {},
+    val onTtlHoursChanged: (Int) -> Unit = {},
     val onLanguageSelected: (AppLanguage) -> Unit = {},
     val onThemeSelected: (AppColorTheme) -> Unit = {},
     val onThemeModeSelected: (AppThemeMode) -> Unit = {}

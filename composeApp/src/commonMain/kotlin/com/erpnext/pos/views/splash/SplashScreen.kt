@@ -20,7 +20,6 @@ fun SplashScreen(
 ) {
     LaunchedEffect(Unit) {
         delay(1000)
-        actions.initializeContext()
         actions.isAuth()
     }
 
@@ -37,4 +36,3 @@ fun SplashScreen(
         }
     }
 }
-

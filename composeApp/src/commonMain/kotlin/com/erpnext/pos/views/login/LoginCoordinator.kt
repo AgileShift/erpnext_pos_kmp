@@ -26,6 +26,10 @@ class LoginCoordinator(
         viewModel.toggleFavorite(site)
     }
 
+    fun onDeleteSite(site: Site) {
+        viewModel.deleteSite(site)
+    }
+
     fun onError(error: String) {
         viewModel.onError(error)
     }

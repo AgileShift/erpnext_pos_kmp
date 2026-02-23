@@ -10,9 +10,13 @@ import com.erpnext.pos.remoteSource.api.APIService
 import com.erpnext.pos.remoteSource.dto.PaymentEntryDto
 import com.erpnext.pos.remoteSource.dto.SalesInvoiceDto
 import com.erpnext.pos.remoteSource.paging.InvoiceRemoteMediator
-import com.erpnext.pos.remoteSource.sdk.ERPDocType
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.onStart
+
+data class InvoicePdfDownload(
+    val fileName: String,
+    val bytes: ByteArray
+)
 
 @OptIn(ExperimentalPagingApi::class)
 class SalesInvoiceRemoteSource(
@@ -38,7 +42,6 @@ class SalesInvoiceRemoteSource(
         grandTotal: Double?
     ): String? {
         return apiService.findInvoiceBySignature(
-            doctype = ERPDocType.SalesInvoice.path,
             posOpeningEntry = posOpeningEntry,
             postingDate = postingDate,
             customer = customer,
@@ -49,7 +52,7 @@ class SalesInvoiceRemoteSource(
     suspend fun fetchInvoice(name: String): SalesInvoiceDto? =
         runCatching { apiService.getSalesInvoiceByName(name) }.getOrNull()
 
-    suspend fun fetchInvoiceSmart(name: String, isPosHint: Boolean? = null): SalesInvoiceDto? {
+    suspend fun fetchInvoiceSmart(name: String): SalesInvoiceDto? {
         return fetchInvoice(name)
     }
     //apiService.getInvoiceDetail(name, baseUrl, headers)
@@ -75,12 +78,6 @@ class SalesInvoiceRemoteSource(
     suspend fun createInvoice(invoice: SalesInvoiceDto): SalesInvoiceDto =
         apiService.createSalesInvoice(invoice)
 
-    suspend fun updateInvoice(name: String, invoice: SalesInvoiceDto): SalesInvoiceDto =
-        apiService.updateSalesInvoice(name, invoice)
-
-    suspend fun submitInvoice(name: String) =
-        apiService.submitSalesInvoice(name)
-
     suspend fun cancelInvoice(name: String) =
         apiService.cancelSalesInvoice(name)
 
@@ -90,7 +87,15 @@ class SalesInvoiceRemoteSource(
     suspend fun fetchPaymentEntry(name: String): PaymentEntryDto? =
         runCatching { apiService.getPaymentEntryByName(name) }.getOrNull()
 
-    suspend fun deleteInvoice(name: String) = null
+    suspend fun downloadInvoicePdf(invoiceName: String): InvoicePdfDownload {
+        val payload = apiService.downloadSalesInvoicePdf(invoiceName)
+        return InvoicePdfDownload(
+            fileName = payload.fileName,
+            bytes = payload.bytes
+        )
+    }
+
+    fun deleteInvoice(name: String) = null
     //apiService.delete(name, baseUrl, headers)
 
     fun getAllInvoices(
