@@ -417,6 +417,7 @@ class APIService(
     ): TokenResponse? {
         try {
             require(expectedState == returnedState) { "CSRF state mismatch" }
+            AppLogger.info("exchangeCode redirect_uri -> ${oauthConfig.redirectUrl}")
             val res = tokenClient.post(oauthConfig.tokenUrl) {
                 contentType(ContentType.Application.FormUrlEncoded)
                 setBody(Parameters.build {
@@ -425,7 +426,6 @@ class APIService(
                     append("redirect_uri", oauthConfig.redirectUrl)
                     append("client_id", oauthConfig.clientId)
                     append("code_verifier", pkce.verifier)
-                    oauthConfig.clientSecret?.let { append("client_secret", it) }
                 }.formUrlEncode())
             }.body<TokenResponse>()
 
@@ -859,7 +859,8 @@ class APIService(
         )
         val raw = fetchBootstrapRaw(payload)
         val openShift = (raw["open_shift"] as? JsonObject)?.let { parseBootstrapOpenShift(it) }
-        val closingEntry = (raw["pos_closing_entry"] as? JsonObject)?.let { parseBootstrapClosingEntry(it) }
+        val closingEntry =
+            (raw["pos_closing_entry"] as? JsonObject)?.let { parseBootstrapClosingEntry(it) }
         return BootstrapShiftSnapshotDto(
             openShift = openShift,
             posClosingEntry = closingEntry
@@ -1156,6 +1157,7 @@ class APIService(
             hasMoreRaw.intOrNull != null -> hasMoreRaw.intOrNull != 0
             hasMoreRaw.contentOrNull != null ->
                 hasMoreRaw.contentOrNull?.lowercase() in setOf("1", "true", "yes")
+
             else -> null
         }
         return BootstrapPaginationMeta(
@@ -1231,7 +1233,7 @@ class APIService(
         }
         val shouldTryPageIndex =
             absolute.size <= baseItems.size &&
-                ((targetTotal != null && targetTotal > baseItems.size) || meta.hasMore != false)
+                    ((targetTotal != null && targetTotal > baseItems.size) || meta.hasMore != false)
         if (!shouldTryPageIndex) return absolute
 
         val pageIndex = runStrategy { page ->
@@ -1561,46 +1563,31 @@ class APIService(
         }
         val message = decodeMethodMessageAsObject(bodyText)
         val data = extractMethodDataOrThrow(message)
-        val clientId = data.stringOrNull("clientId") ?: data.stringOrNull("client_id")
+        val clientId = data.stringOrNull("client_id")
         if (clientId.isNullOrBlank()) {
-            throw IllegalStateException("Discovery no retornó clientId/client_id")
+            throw IllegalStateException("Discovery no retornó client_id")
         }
         val redirectUri = data.stringOrNull("default_redirect_uri")
-            ?: data["redirect_uris"]
-                ?.jsonArray
-                ?.mapNotNull { it.jsonPrimitive.contentOrNull }
-                ?.firstOrNull { it.isNotBlank() }
-            ?: data.stringOrNull("redirect_uri")
-            ?: if (platform == "desktop") BuildKonfig.DESKTOP_REDIRECT_URI else BuildKonfig.REDIRECT_URI
+            ?.trim()
+            ?.takeIf { it.isNotBlank() }
+            ?: run {
+                AppLogger.warn("Discovery missing default_redirect_uri, using fallback")
+                if (platform == "desktop") BuildKonfig.DESKTOP_REDIRECT_URI else BuildKonfig.REDIRECT_URI
+            }
+        AppLogger.info("Discovery default_redirect_uri -> $redirectUri")
         val scopes = data["scopes"]?.jsonArray?.mapNotNull { it.jsonPrimitive.contentOrNull }
             ?.filter { it.isNotBlank() }
             .orEmpty()
             .ifEmpty { listOf("all", "openid") }
-        val companyNode = data["company"] as? JsonObject
-        val discoveryCompanyName = listOfNotNull(
-            data.stringOrNull("company_name"),
-            data.stringOrNull("companyName"),
-            data.stringOrNull("company"),
-            data.stringOrNull("organization_name"),
-            data.stringOrNull("organizationName"),
-            companyNode?.stringOrNull("company"),
-            companyNode?.stringOrNull("name"),
-            companyNode?.stringOrNull("title"),
-            companyNode?.stringOrNull("company_name")
-        ).firstOrNull { it.isNotBlank() }
-        val name = discoveryCompanyName
+        val company = data.stringOrNull("company")
             ?: data.stringOrNull("name")
             ?: if (platform == "desktop") "ERPNext POS Desktop" else "ERPNext POS Mobile"
-        val clientSecret = data.stringOrNull("clientSecret")
-            ?: data.stringOrNull("client_secret")
-            ?: ""
         return LoginInfo(
             url = normalizedSite,
             redirectUrl = redirectUri,
             clientId = clientId,
-            clientSecret = clientSecret,
             scopes = scopes,
-            name = name
+            company = company
         )
     }
 
@@ -1975,7 +1962,8 @@ class APIService(
         val fallbackName = resolved.substringAfterLast('/').substringBefore('?')
         return InvoicePdfDownloadPayload(
             fileName = resolvePdfFileName(
-                raw = data.stringOrNull("filename") ?: data.stringOrNull("file_name") ?: fallbackName,
+                raw = data.stringOrNull("filename") ?: data.stringOrNull("file_name")
+                ?: fallbackName,
                 invoiceName = invoiceName
             ),
             bytes = bytes

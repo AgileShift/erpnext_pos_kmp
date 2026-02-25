@@ -5,10 +5,10 @@ import com.erpnext.pos.utils.AppLogger
 import com.erpnext.pos.utils.AppSentry
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
-import io.ktor.client.statement.bodyAsText
 import io.ktor.client.plugins.ClientRequestException
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
+import io.ktor.client.statement.bodyAsText
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.Parameters
@@ -26,20 +26,22 @@ suspend fun refreshAuthToken(
         ?: throw IllegalStateException("Missing ERPNext site URL in AuthInfoStore")
     val oauthConfig = authStore.loadAuthInfoByUrl(currentSite)
     val config = OAuthConfig(
-        oauthConfig.url,
-        oauthConfig.clientId,
-        oauthConfig.clientSecret,
-        oauthConfig.redirectUrl,
-        listOf("all", "openid")
+        baseUrl = oauthConfig.url,
+        clientId = oauthConfig.clientId,
+        redirectUrl = oauthConfig.redirectUrl,
+        scopes = listOf("all", "openid")
     )
     val refreshScopes = oauthConfig.scopes
         .filterNot { it.equals("openid", ignoreCase = true) }
         .filter { it.isNotBlank() }
     val requestTrace = "site=${currentSite.trim()} tokenUrl=${config.tokenUrl} " +
             "grant_type=refresh_token client_id=${maskClientId(oauthConfig.clientId)} " +
-            "client_secret_present=${oauthConfig.clientSecret.isNotBlank()} " +
             "redirect_uri=${maskRedirectUri(oauthConfig.redirectUrl)} " +
-            "scope=${if (refreshScopes.isEmpty()) "<same-as-original>" else refreshScopes.joinToString(" ")} " +
+            "scope=${
+                if (refreshScopes.isEmpty()) "<same-as-original>" else refreshScopes.joinToString(
+                    " "
+                )
+            } " +
             "refresh_token=${maskToken(normalizedRefreshToken)}"
     try {
         val params = Parameters.build {
@@ -48,9 +50,6 @@ suspend fun refreshAuthToken(
             append("client_id", oauthConfig.clientId)
             if (refreshScopes.isNotEmpty()) {
                 append("scope", refreshScopes.joinToString(" "))
-            }
-            oauthConfig.clientSecret.takeIf { it.isNotBlank() }?.let {
-                append("client_secret", it)
             }
             oauthConfig.redirectUrl.takeIf { it.isNotBlank() }?.let {
                 append("redirect_uri", it)
@@ -96,6 +95,7 @@ fun isRefreshTokenRejected(throwable: Throwable): Boolean {
         HttpStatusCode.BadRequest,
         HttpStatusCode.Unauthorized,
         HttpStatusCode.Forbidden -> true
+
         else -> false
     }
 }

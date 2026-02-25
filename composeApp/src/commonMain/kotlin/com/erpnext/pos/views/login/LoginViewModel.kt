@@ -62,6 +62,9 @@ class LoginViewModel(
                 } else {
                     oAuthConfigBase
                 }
+                AppLogger.info(
+                    "LoginViewModel.onAuthCodeReceived redirectUri -> ${oAuthConfig.redirectUrl}"
+                )
                 val authRequest = buildAuthorizeRequest(oAuthConfig)
                 AppLogger.info("LoginViewModel.onAuthCodeReceived -> exchanging code")
                 val tokens = withTimeout(30_000) {
@@ -106,14 +109,7 @@ class LoginViewModel(
             AppLogger.info("LoginViewModel.fetchSites")
             val sites = authStore.loadAuthInfo()
                 .map {
-                    val displayName = it.name
-                        .takeIf { value -> value.isNotBlank() }
-                        ?: it.url
-                            .removePrefix("https://")
-                            .removePrefix("http://")
-                            .substringBefore("/")
-                            .ifBlank { it.url }
-                    Site(it.url, displayName) //, it.lastUsedAt, it.isFavorite)
+                    Site(it.url, it.company) //, it.lastUsedAt, it.isFavorite)
                 }
                 .sortedWith(
                     compareByDescending<Site> { it.isFavorite }
@@ -135,6 +131,9 @@ class LoginViewModel(
                 val loginInfo = oauthService.getLoginWithSite(site.url)
                 authStore.saveAuthInfo(loginInfo)
                 val oauthConfig = loginInfo.toOAuthConfig()
+                AppLogger.info(
+                    "LoginViewModel.onSiteSelected redirectUri -> ${oauthConfig.redirectUrl}"
+                )
                 val request = if (isDesktop) {
                     AppLogger.info("LoginViewModel.onSiteSelected -> starting OAuthCallbackReceiver")
                     val redirectUri = runCatching {

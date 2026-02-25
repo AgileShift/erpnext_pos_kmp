@@ -11,7 +11,6 @@ data class AuthRequest(val url: String, val state: String, val pkce: Pkce)
 fun LoginInfo.toOAuthConfig(): OAuthConfig {
     return OAuthConfig(
         baseUrl = url,
-        clientSecret = clientSecret,
         clientId = clientId,
         redirectUrl = redirectUrl,
         scopes = scopes.ifEmpty { listOf("all", "openid") }

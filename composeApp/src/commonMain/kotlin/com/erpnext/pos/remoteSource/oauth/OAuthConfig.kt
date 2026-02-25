@@ -3,7 +3,6 @@ package com.erpnext.pos.remoteSource.oauth
 data class OAuthConfig(
     val baseUrl: String,
     val clientId: String,
-    val clientSecret: String? = null,
     val redirectUrl: String,
     val scopes: List<String> = listOf("all", "openid")
 ) {
