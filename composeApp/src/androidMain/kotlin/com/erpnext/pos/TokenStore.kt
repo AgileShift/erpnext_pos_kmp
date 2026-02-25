@@ -3,25 +3,25 @@ package com.erpnext.pos
 import android.content.Context
 import android.content.SharedPreferences
 import android.util.Base64
-import com.google.crypto.tink.Aead
-import com.google.crypto.tink.config.TinkConfig
-import com.google.crypto.tink.integration.android.AndroidKeysetManager
-import com.google.crypto.tink.aead.AeadKeyTemplates
+import androidx.core.content.edit
+import com.erpnext.pos.remoteSource.dto.LoginInfo
+import com.erpnext.pos.remoteSource.dto.TokenResponse
+import com.erpnext.pos.remoteSource.oauth.AuthInfoStore
 import com.erpnext.pos.remoteSource.oauth.TokenStore
 import com.erpnext.pos.remoteSource.oauth.TransientAuthStore
+import com.erpnext.pos.utils.TokenUtils.decodePayload
+import com.erpnext.pos.utils.TokenUtils.resolveUserIdFromClaims
+import com.erpnext.pos.utils.instanceKeyFromUrl
+import com.google.crypto.tink.Aead
+import com.google.crypto.tink.aead.AeadKeyTemplates
+import com.google.crypto.tink.config.TinkConfig
+import com.google.crypto.tink.integration.android.AndroidKeysetManager
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.json.Json
-import com.erpnext.pos.remoteSource.dto.LoginInfo
-import com.erpnext.pos.remoteSource.dto.TokenResponse
-import com.erpnext.pos.remoteSource.oauth.AuthInfoStore
-import com.erpnext.pos.utils.TokenUtils.decodePayload
-import com.erpnext.pos.utils.TokenUtils.resolveUserIdFromClaims
-import com.erpnext.pos.utils.instanceKeyFromUrl
-import androidx.core.content.edit
 
 /**
  * AndroidTokenStore

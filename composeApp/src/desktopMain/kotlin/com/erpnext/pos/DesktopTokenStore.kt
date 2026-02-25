@@ -213,9 +213,13 @@ class DesktopTokenStore(
     override suspend fun loadAuthInfoByUrl(url: String?, platform: String?): LoginInfo {
         val currentUrl = url?.takeIf { it.isNotBlank() } ?: getCurrentSite()
         val sitesInfo = loadAuthInfo()
-        return if (getPlatformName() == "Desktop")
-            sitesInfo.first { it.url == currentUrl && it.redirectUrl.contains("127.0.0.1") }
-        else sitesInfo.first { it.url == currentUrl }
+        val sameUrl = sitesInfo.filter { it.url == currentUrl }
+        if (getPlatformName() == "Desktop") {
+            sameUrl.firstOrNull { it.redirectUrl.contains("127.0.0.1") }?.let { return it }
+        }
+        sameUrl.firstOrNull()?.let { return it }
+        return sitesInfo.firstOrNull()
+            ?: throw NoSuchElementException("No auth info found for url=$currentUrl")
     }
 
     override suspend fun loadAuthInfo(): MutableList<LoginInfo> {

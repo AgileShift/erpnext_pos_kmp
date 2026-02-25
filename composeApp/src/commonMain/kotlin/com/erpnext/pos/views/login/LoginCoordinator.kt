@@ -34,6 +34,10 @@ class LoginCoordinator(
         viewModel.onError(error)
     }
 
+    fun clear() {
+        viewModel.clear()
+    }
+
     fun onReset() {
         viewModel.reset()
     }

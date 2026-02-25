@@ -1,7 +1,12 @@
 package com.erpnext.pos.localSource.dao
 
 import androidx.paging.PagingSource
-import androidx.room.*
+import androidx.room.Dao
+import androidx.room.Insert
+import androidx.room.OnConflictStrategy
+import androidx.room.Query
+import androidx.room.Transaction
+import androidx.room.Update
 import com.erpnext.pos.localSource.entities.POSInvoicePaymentEntity
 import com.erpnext.pos.localSource.entities.SalesInvoiceEntity
 import com.erpnext.pos.localSource.entities.SalesInvoiceItemEntity
@@ -884,7 +889,6 @@ interface SalesInvoiceDao {
             base_paid_amount = :basePaidAmount,
             base_change_amount = :baseChangeAmount,
             base_write_off_amount = :baseWriteOffAmount,
-            base_outstanding_amount = :baseOutstandingAmount,
             status = :status,
             docstatus = :docstatus,
             mode_of_payment = :modeOfPayment,
@@ -926,7 +930,6 @@ interface SalesInvoiceDao {
         basePaidAmount: Double?,
         baseChangeAmount: Double?,
         baseWriteOffAmount: Double?,
-        baseOutstandingAmount: Double?,
         status: String,
         docstatus: Int,
         modeOfPayment: String?,

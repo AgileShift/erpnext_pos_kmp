@@ -6,7 +6,7 @@ import kotlinx.serialization.Serializable
 @Serializable
 data class LoginInfo(
     val url: String,
-    @SerialName("redirect_uri")
+    @SerialName("default_redirect_uri")
     val redirectUrl: String,
     val clientId: String,
     val clientSecret: String,

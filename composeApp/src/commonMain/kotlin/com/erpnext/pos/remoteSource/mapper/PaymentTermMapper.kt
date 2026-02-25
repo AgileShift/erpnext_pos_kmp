@@ -2,7 +2,7 @@ package com.erpnext.pos.remoteSource.mapper
 
 import com.erpnext.pos.localSource.entities.DeliveryChargeEntity
 import com.erpnext.pos.localSource.entities.PaymentTermEntity
-import com.erpnext.pos.remoteSource.dto.DeliveryChargeDto
+import com.erpnext.pos.remoteSource.dto.ShippingRuleDto
 import com.erpnext.pos.remoteSource.dto.PaymentTermDto
 import kotlin.time.Clock
 
@@ -23,7 +23,7 @@ fun PaymentTermDto.toEntity(): PaymentTermEntity {
     )
 }
 
-fun DeliveryChargeDto.toEntity(): DeliveryChargeEntity {
+fun ShippingRuleDto.toEntity(): DeliveryChargeEntity {
     return DeliveryChargeEntity(
         label = this.label,
         defaultRate = this.defaultRate,

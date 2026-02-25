@@ -12,6 +12,7 @@ import com.erpnext.pos.remoteSource.dto.BootstrapPosSyncDto
 import com.erpnext.pos.remoteSource.dto.PaymentModesDto
 import com.erpnext.pos.remoteSource.dto.POSProfileDto
 import com.erpnext.pos.remoteSource.mapper.toEntity
+import com.erpnext.pos.utils.AppLogger
 import com.erpnext.pos.utils.RepoTrace
 import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
@@ -32,8 +33,7 @@ class PosProfilePaymentMethodSyncRepository(
         )
         val now = Clock.System.now().toEpochMilliseconds()
         val snapshot = apiService.getBootstrapPosSyncSnapshot()
-        val profiles = snapshot.posProfiles
-            ?: throw IllegalStateException("sync.bootstrap no retorno pos_profiles")
+        val profiles = resolveBootstrapProfiles(snapshot)
         return persistProfilesWithPaymentsSnapshot(profiles, now)
     }
 
@@ -50,7 +50,14 @@ class PosProfilePaymentMethodSyncRepository(
         val bootstrapSnapshot = apiService.getBootstrapPosSyncSnapshot(profileName = profileId)
         val bootstrapProfile = bootstrapSnapshot.posProfiles
             ?.firstOrNull { it.profileName == profileId }
-            ?: throw IllegalStateException("sync.bootstrap no retorno pos_profile=$profileId")
+            ?: runCatching {
+                AppLogger.warn(
+                    "sync.bootstrap no retorno pos_profile=$profileId, usando pos_profile.detail"
+                )
+                apiService.getPOSProfileDetails(profileId)
+            }.getOrElse {
+                throw IllegalStateException("sync.bootstrap no retorno pos_profile=$profileId")
+            }
         persistSingleProfileWithPayments(bootstrapProfile, now)
         syncModeOfPaymentDetails(
             profiles = listOf(bootstrapProfile),
@@ -65,8 +72,7 @@ class PosProfilePaymentMethodSyncRepository(
         snapshot: BootstrapPosSyncDto,
         now: Long = Clock.System.now().toEpochMilliseconds()
     ): List<PosProfileLocalEntity> {
-        val bootstrapProfiles = snapshot.posProfiles
-            ?: throw IllegalStateException("sync.bootstrap no retorno pos_profiles")
+        val bootstrapProfiles = resolveBootstrapProfiles(snapshot)
         val local = persistProfilesWithPaymentsSnapshot(bootstrapProfiles, now)
         syncModeOfPaymentDetails(
             profiles = bootstrapProfiles,
@@ -144,6 +150,26 @@ class PosProfilePaymentMethodSyncRepository(
             }
         }
         return localProfiles
+    }
+
+    private suspend fun resolveBootstrapProfiles(
+        snapshot: BootstrapPosSyncDto
+    ): List<POSProfileDto> {
+        val direct = snapshot.posProfiles?.filter { it.profileName.isNotBlank() }.orEmpty()
+        if (direct.isNotEmpty()) return direct
+        AppLogger.warn("sync.bootstrap no retorno pos_profiles, usando my_pos_profiles")
+        val simpleProfiles = apiService.getPOSProfiles()
+        if (simpleProfiles.isEmpty()) return emptyList()
+        return simpleProfiles.mapNotNull { profile ->
+            runCatching { apiService.getPOSProfileDetails(profile.profileName) }
+                .onFailure {
+                    AppLogger.warn(
+                        "pos_profile.detail failed for ${profile.profileName}",
+                        it
+                    )
+                }
+                .getOrNull()
+        }
     }
 
     private suspend fun persistSingleProfileWithPayments(profile: POSProfileDto, now: Long) {

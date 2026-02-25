@@ -11,7 +11,6 @@ import com.erpnext.pos.remoteSource.dto.BalanceDetailsDto
 import com.erpnext.pos.remoteSource.dto.SalesInvoiceDto
 import com.erpnext.pos.remoteSource.dto.SalesInvoiceItemDto
 import com.erpnext.pos.remoteSource.dto.SalesInvoicePaymentDto
-import com.erpnext.pos.utils.normalizeCurrency
 import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
 
@@ -87,10 +86,6 @@ fun BalanceDetailsEntity.toDto(): BalanceDetailsDto {
     )
 }
 
-fun List<BalanceDetailsEntity>.toDto(): List<BalanceDetailsDto> {
-    return this.map { it.toDto() }
-}
-
 // ------------------------------------------------------
 // 🔹 Remoto → Local (para guardar respuesta del servidor)
 // ------------------------------------------------------
@@ -159,8 +154,6 @@ fun SalesInvoiceDto.toEntity(): SalesInvoiceWithItemsAndPayments {
         basePaidAmount = resolveBaseAmount(paidResolved, basePaidAmount),
         baseChangeAmount = resolveBaseAmount(changeAmount, baseChangeAmount),
         baseWriteOffAmount = resolveBaseAmount(writeOffAmount, baseWriteOffAmount),
-        baseOutstandingAmount = resolveBaseAmount(outstandingResolved, baseOutstandingAmount)
-            ?: outstandingResolved,
         // El paid_amount remoto es la fuente de verdad para reconciliación y BI.
         paidAmount = paidResolved,
         status = status ?: "Draft",
@@ -254,7 +247,6 @@ fun SalesInvoiceEntity.toDto(): SalesInvoiceDto {
         basePaidAmount = basePaidAmount,
         baseChangeAmount = baseChangeAmount,
         baseWriteOffAmount = baseWriteOffAmount,
-        baseOutstandingAmount = baseOutstandingAmount,
     )
 }
 

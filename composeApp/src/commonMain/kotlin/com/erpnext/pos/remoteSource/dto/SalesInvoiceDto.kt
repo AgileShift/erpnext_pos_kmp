@@ -5,11 +5,6 @@ import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
-enum class SyncStatus() {
-    Pending,
-    Synced,
-    Failed
-}
 @OptIn(ExperimentalSerializationApi::class)
 @Serializable
 data class SalesInvoiceDto(
@@ -71,8 +66,6 @@ data class SalesInvoiceDto(
     val customPaymentCurrency: String? = null,
     @SerialName("custom_exchange_rate")
     val customExchangeRate: Double? = null,
-    @SerialName("posa_delivery_charges")
-    val posaDeliveryCharges: String? = null,
     @SerialName("is_pos")
     @Serializable(IntAsBooleanSerializer::class)
     val isPos: Boolean = false,
@@ -122,8 +115,6 @@ data class SalesInvoiceDto(
     val baseChangeAmount: Double? = null,
     @SerialName("base_write_off_amount")
     val baseWriteOffAmount: Double? = null,
-    @SerialName("base_outstanding_amount")
-    val baseOutstandingAmount: Double? = null,
 )
 
 @Serializable

@@ -27,6 +27,7 @@ fun rememberLoginActions(coordinator: LoginCoordinator): LoginAction {
             onDeleteSite = coordinator::onDeleteSite,
             onAddSite = coordinator::onAddSite,
             onError = coordinator::onError,
+            clear = coordinator::clear,
             onReset = coordinator::onReset,
             isAuthenticated = coordinator::isAuthenticated
         )

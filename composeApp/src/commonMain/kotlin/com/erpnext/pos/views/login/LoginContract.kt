@@ -18,6 +18,7 @@ data class LoginAction(
     val onAddSite: (String) -> Unit = {},
     val isAuthenticated: (TokenResponse) -> Unit = { },
     val onError: (error: String) -> Unit = {},
+    val clear: () -> Unit = {},
     val onReset: () -> Unit = {}
 )
 

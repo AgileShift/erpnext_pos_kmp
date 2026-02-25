@@ -1,7 +1,5 @@
 package com.erpnext.pos.domain.models
 
-import androidx.room.ColumnInfo
-
 data class SalesInvoiceBO(
     val invoiceId: String,
     val customerId: String,
@@ -23,7 +21,6 @@ data class SalesInvoiceBO(
     val basePaidAmount: Double? = null,
     val baseChangeAmount: Double? = null,
     val baseWriteOffAmount: Double? = null,
-    val baseOutstandingAmount: Double? = null,
     val isPos: Boolean? = false,
     val docStatus: Int,
     val currency: String?,

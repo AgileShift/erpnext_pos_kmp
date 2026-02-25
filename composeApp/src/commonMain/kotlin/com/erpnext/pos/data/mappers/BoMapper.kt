@@ -3,35 +3,34 @@ package com.erpnext.pos.data.mappers
 import androidx.paging.PagingData
 import androidx.paging.map
 import com.erpnext.pos.domain.models.CategoryBO
-import com.erpnext.pos.domain.models.CustomerGroupBO
 import com.erpnext.pos.domain.models.CustomerBO
+import com.erpnext.pos.domain.models.CustomerGroupBO
 import com.erpnext.pos.domain.models.DeliveryChargeBO
 import com.erpnext.pos.domain.models.ItemBO
-import com.erpnext.pos.domain.models.PaymentTermBO
 import com.erpnext.pos.domain.models.POSProfileBO
 import com.erpnext.pos.domain.models.POSProfileSimpleBO
 import com.erpnext.pos.domain.models.PaymentModesBO
+import com.erpnext.pos.domain.models.PaymentTermBO
 import com.erpnext.pos.domain.models.SalesInvoiceBO
 import com.erpnext.pos.domain.models.SalesInvoiceItemsBO
 import com.erpnext.pos.domain.models.SalesInvoicePaymentsBO
 import com.erpnext.pos.domain.models.TerritoryBO
 import com.erpnext.pos.domain.models.UserBO
 import com.erpnext.pos.localSource.entities.CategoryEntity
-import com.erpnext.pos.localSource.entities.CustomerGroupEntity
 import com.erpnext.pos.localSource.entities.CustomerEntity
+import com.erpnext.pos.localSource.entities.CustomerGroupEntity
+import com.erpnext.pos.localSource.entities.DeliveryChargeEntity
 import com.erpnext.pos.localSource.entities.ItemEntity
 import com.erpnext.pos.localSource.entities.POSInvoicePaymentEntity
 import com.erpnext.pos.localSource.entities.POSProfileEntity
+import com.erpnext.pos.localSource.entities.PaymentTermEntity
 import com.erpnext.pos.localSource.entities.PosProfileLocalEntity
 import com.erpnext.pos.localSource.entities.SalesInvoiceEntity
 import com.erpnext.pos.localSource.entities.SalesInvoiceItemEntity
 import com.erpnext.pos.localSource.entities.SalesInvoiceWithItemsAndPayments
-import com.erpnext.pos.localSource.entities.UserEntity
-import com.erpnext.pos.localSource.entities.PaymentTermEntity
-import com.erpnext.pos.localSource.entities.DeliveryChargeEntity
 import com.erpnext.pos.localSource.entities.TerritoryEntity
+import com.erpnext.pos.localSource.entities.UserEntity
 import com.erpnext.pos.remoteSource.dto.CategoryDto
-import com.erpnext.pos.remoteSource.dto.CustomerCreditLimitDto
 import com.erpnext.pos.remoteSource.dto.CustomerDto
 import com.erpnext.pos.remoteSource.dto.ItemDto
 import com.erpnext.pos.remoteSource.dto.POSProfileDto
@@ -341,7 +340,6 @@ fun SalesInvoiceEntity.toBO(): SalesInvoiceBO {
         basePaidAmount = this.basePaidAmount,
         baseChangeAmount = this.baseChangeAmount,
         baseWriteOffAmount = this.baseWriteOffAmount,
-        baseOutstandingAmount = this.baseOutstandingAmount,
         isPos = this.isPos,
         total = this.grandTotal,
         customerId = this.customer,
@@ -380,7 +378,6 @@ fun SalesInvoiceWithItemsAndPayments.toBO(): SalesInvoiceBO {
         basePaidAmount = invoice.basePaidAmount,
         baseChangeAmount = invoice.baseChangeAmount,
         baseWriteOffAmount = invoice.baseWriteOffAmount,
-        baseOutstandingAmount = invoice.baseOutstandingAmount,
         isPos = invoice.isPos,
         currency = invoice.currency,
         docStatus = invoice.docstatus,

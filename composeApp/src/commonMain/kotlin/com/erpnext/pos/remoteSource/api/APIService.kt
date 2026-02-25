@@ -19,7 +19,6 @@ import com.erpnext.pos.remoteSource.dto.CurrencyDto
 import com.erpnext.pos.remoteSource.dto.CustomerCreateDto
 import com.erpnext.pos.remoteSource.dto.CustomerDto
 import com.erpnext.pos.remoteSource.dto.CustomerGroupDto
-import com.erpnext.pos.remoteSource.dto.DeliveryChargeDto
 import com.erpnext.pos.remoteSource.dto.DocNameResponseDto
 import com.erpnext.pos.remoteSource.dto.ExchangeRateResponse
 import com.erpnext.pos.remoteSource.dto.InternalTransferCreateDto
@@ -46,6 +45,7 @@ import com.erpnext.pos.remoteSource.dto.PaymentOutSubmitDto
 import com.erpnext.pos.remoteSource.dto.PaymentReconciliationDto
 import com.erpnext.pos.remoteSource.dto.PaymentTermDto
 import com.erpnext.pos.remoteSource.dto.SalesInvoiceDto
+import com.erpnext.pos.remoteSource.dto.ShippingRuleDto
 import com.erpnext.pos.remoteSource.dto.StockSettingsDto
 import com.erpnext.pos.remoteSource.dto.SubmitResponseDto
 import com.erpnext.pos.remoteSource.dto.TerritoryDto
@@ -310,7 +310,7 @@ class APIService(
             .orEmpty()
     }
 
-    suspend fun fetchDeliveryCharges(): List<DeliveryChargeDto> {
+    suspend fun fetchDeliveryCharges(): List<ShippingRuleDto> {
         val payload = BootstrapRequestDto(
             includeInventory = false,
             includeCustomers = false,
@@ -320,7 +320,7 @@ class APIService(
             recentPaidOnly = true
         )
         val raw = fetchBootstrapRaw(payload)
-        return raw["delivery_charges"]?.let { json.decodeFromJsonElement<List<DeliveryChargeDto>>(it) }
+        return raw["delivery_charges"]?.let { json.decodeFromJsonElement<List<ShippingRuleDto>>(it) }
             .orEmpty()
     }
 
@@ -507,6 +507,7 @@ class APIService(
         if (issuer.isNullOrBlank() || site.isNullOrBlank()) return false
         val normalizedIssuer = normalizeUrl(issuer).trimEnd('/').lowercase()
         val normalizedSite = normalizeUrl(site).trimEnd('/').lowercase()
+        if (isEphemeralTunnel(normalizedSite)) return true
         if (normalizedIssuer == normalizedSite) return true
         val issuerHostPort = instanceHostPortKey(normalizedIssuer)
         val siteHostPort = instanceHostPortKey(normalizedSite)
@@ -520,6 +521,11 @@ class APIService(
             .removePrefix("https://")
             .removePrefix("http://")
         return noScheme.substringBefore('/').trim()
+    }
+
+    private fun isEphemeralTunnel(url: String): Boolean {
+        val host = instanceHostPortKey(url).lowercase()
+        return host.contains(".ngrok-") || host.endsWith(".ngrok-free.app")
     }
 
     suspend fun getExchangeRate(
@@ -1530,7 +1536,7 @@ class APIService(
         val endpoint =
             normalizedSite.trimEnd('/') + "/api/method/erpnext_pos.api.v1.discovery.resolve_site"
         val response = withRetries {
-            client.post {
+            client.get {
                 url { takeFrom(endpoint) }
                 contentType(ContentType.Application.Json)
                 setBody(
@@ -1559,7 +1565,12 @@ class APIService(
         if (clientId.isNullOrBlank()) {
             throw IllegalStateException("Discovery no retornó clientId/client_id")
         }
-        val redirectUri = data.stringOrNull("redirect_uri")
+        val redirectUri = data.stringOrNull("default_redirect_uri")
+            ?: data["redirect_uris"]
+                ?.jsonArray
+                ?.mapNotNull { it.jsonPrimitive.contentOrNull }
+                ?.firstOrNull { it.isNotBlank() }
+            ?: data.stringOrNull("redirect_uri")
             ?: if (platform == "desktop") BuildKonfig.DESKTOP_REDIRECT_URI else BuildKonfig.REDIRECT_URI
         val scopes = data["scopes"]?.jsonArray?.mapNotNull { it.jsonPrimitive.contentOrNull }
             ?.filter { it.isNotBlank() }
@@ -1878,8 +1889,6 @@ class APIService(
                 ?: data.baseGrandTotal,
             basePaidAmount = created["base_paid_amount"]?.jsonPrimitive?.doubleOrNull
                 ?: data.basePaidAmount,
-            baseOutstandingAmount = created["base_outstanding_amount"]?.jsonPrimitive?.doubleOrNull
-                ?: data.baseOutstandingAmount,
             debitTo = created.stringOrNull("debit_to") ?: data.debitTo
         )
     }

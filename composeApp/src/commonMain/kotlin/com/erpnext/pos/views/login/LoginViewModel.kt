@@ -1,21 +1,21 @@
 package com.erpnext.pos.views.login
 
 import androidx.lifecycle.viewModelScope
+import com.erpnext.pos.auth.InstanceSwitcher
 import com.erpnext.pos.base.BaseViewModel
 import com.erpnext.pos.base.getPlatformName
-import com.erpnext.pos.auth.InstanceSwitcher
 import com.erpnext.pos.navigation.AuthNavigator
 import com.erpnext.pos.navigation.NavRoute
 import com.erpnext.pos.navigation.NavigationManager
 import com.erpnext.pos.remoteSource.api.APIService
 import com.erpnext.pos.remoteSource.dto.TokenResponse
 import com.erpnext.pos.remoteSource.oauth.AuthInfoStore
+import com.erpnext.pos.remoteSource.oauth.TokenStore
+import com.erpnext.pos.remoteSource.oauth.TransientAuthStore
 import com.erpnext.pos.remoteSource.oauth.buildAuthorizeRequest
 import com.erpnext.pos.remoteSource.oauth.toOAuthConfig
-import com.erpnext.pos.remoteSource.oauth.TransientAuthStore
-import com.erpnext.pos.remoteSource.oauth.TokenStore
-import com.erpnext.pos.utils.TokenUtils
 import com.erpnext.pos.utils.AppLogger
+import com.erpnext.pos.utils.TokenUtils
 import com.erpnext.pos.utils.oauth.OAuthCallbackReceiver
 import com.erpnext.pos.views.CashBoxManager
 import kotlinx.coroutines.Dispatchers
@@ -113,7 +113,7 @@ class LoginViewModel(
                             .removePrefix("http://")
                             .substringBefore("/")
                             .ifBlank { it.url }
-                    Site(it.url, displayName, it.lastUsedAt, it.isFavorite)
+                    Site(it.url, displayName) //, it.lastUsedAt, it.isFavorite)
                 }
                 .sortedWith(
                     compareByDescending<Site> { it.isFavorite }
@@ -192,7 +192,11 @@ class LoginViewModel(
                 authStore.deleteSite(site.url)
             }.onFailure { error ->
                 AppLogger.warn("LoginViewModel.deleteSite -> error", error)
-                _stateFlow.update { LoginState.Error(error.message ?: "No se pudo eliminar la instancia") }
+                _stateFlow.update {
+                    LoginState.Error(
+                        error.message ?: "No se pudo eliminar la instancia"
+                    )
+                }
             }.onSuccess {
                 fetchSites()
             }
@@ -201,6 +205,13 @@ class LoginViewModel(
 
     fun onError(error: String) {
         _stateFlow.update { LoginState.Error(error) }
+    }
+
+    fun clear() {
+        viewModelScope.launch {
+            authStore.clearAuthInfo()
+            tokenStore.clear()
+        }
     }
 
     fun toggleFavorite(site: Site) {
@@ -215,7 +226,7 @@ class LoginViewModel(
 
     fun isAuthenticated(tokens: TokenResponse) {
         val isAuth = tokens.access_token.isNotBlank() &&
-            (tokens.id_token.isNullOrBlank() || TokenUtils.isValid(tokens.id_token))
+                (tokens.id_token.isNullOrBlank() || TokenUtils.isValid(tokens.id_token))
         _stateFlow.update { LoginState.Success() }
         if (isAuth) {
             viewModelScope.launch {
@@ -237,7 +248,12 @@ class LoginViewModel(
 
     private suspend fun clearCurrentSessionBeforeSwitch() {
         runCatching { tokenStore.clear() }
-            .onFailure { AppLogger.warn("LoginViewModel.clearCurrentSessionBeforeSwitch token clear failed", it) }
+            .onFailure {
+                AppLogger.warn(
+                    "LoginViewModel.clearCurrentSessionBeforeSwitch token clear failed",
+                    it
+                )
+            }
         contextProvider.clearContext()
         transientAuthStore.clearRedirectUri()
         transientAuthStore.clearPkceVerifier()

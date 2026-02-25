@@ -4,8 +4,8 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
 @Serializable
-data class DeliveryChargeDto(
+data class ShippingRuleDto(
     val label: String,
-    @SerialName("default_rate")
+    @SerialName("shipping_amount")
     val defaultRate: Double
 )

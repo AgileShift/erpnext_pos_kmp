@@ -9,13 +9,11 @@ import com.erpnext.pos.domain.repositories.ICustomerRepository
 import com.erpnext.pos.localSource.datasources.CustomerLocalSource
 import com.erpnext.pos.localSource.entities.SalesInvoiceWithItemsAndPayments
 import com.erpnext.pos.remoteSource.datasources.CustomerRemoteSource
-import com.erpnext.pos.remoteSource.dto.CustomerCreditLimitDto
 import com.erpnext.pos.remoteSource.dto.CustomerDto
+import com.erpnext.pos.remoteSource.mapper.resolveReceivableAccount
 import com.erpnext.pos.remoteSource.mapper.toBO
 import com.erpnext.pos.remoteSource.mapper.toEntities
 import com.erpnext.pos.remoteSource.mapper.toEntity
-import com.erpnext.pos.remoteSource.mapper.resolveReceivableAccount
-import com.erpnext.pos.sync.SyncTTL
 import com.erpnext.pos.utils.RepoTrace
 import com.erpnext.pos.utils.roundToCurrency
 import com.erpnext.pos.views.CashBoxManager
@@ -26,8 +24,6 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
-import kotlin.time.Clock
-import kotlin.collections.map
 
 class CustomerRepository(
     private val remoteSource: CustomerRemoteSource,
@@ -55,6 +51,7 @@ class CustomerRepository(
             state.isNullOrEmpty() -> localSource.getAllFiltered(search ?: "")
             search.isNullOrEmpty() -> if (state == "Todos") localSource.getAll()
             else localSource.getByCustomerState(state)
+
             else -> localSource.getAll()
         }.map { list -> list.map { it.toBO() } }
     }
@@ -83,17 +80,25 @@ class CustomerRepository(
             val profileId = context.requireContext().profileName
             val invoices = remoteData.invoices
             val entities = invoices.toEntities()
-            localSource.saveInvoices(entities.map { normalizeBaseOutstanding(mergeLocalInvoiceFields(it)) })
+            localSource.saveInvoices(entities.map {
+                normalizeBaseOutstanding(
+                    mergeLocalInvoiceFields(
+                        it
+                    )
+                )
+            })
             backfillMissingInvoiceItems(profileId)
 
             // Fetch all outstanding invoices once
             val allOutstanding = remoteData.invoices.filter { invoice ->
-                val outstanding = invoice.outstandingAmount ?: (invoice.grandTotal - (invoice.paidAmount ?: 0.0))
+                val outstanding =
+                    invoice.outstandingAmount ?: (invoice.grandTotal - (invoice.paidAmount ?: 0.0))
                 outstanding > 0.0
             }
             val remoteOutstandingNames = allOutstanding.mapNotNull { it.name }.toSet()
             val localOutstanding = localSource.getOutstandingInvoiceNames()
-            val missingOutstanding = localOutstanding.filterNot { remoteOutstandingNames.contains(it) }
+            val missingOutstanding =
+                localOutstanding.filterNot { remoteOutstandingNames.contains(it) }
             missingOutstanding.forEach { invoiceName ->
                 val local = localSource.getInvoiceByName(invoiceName)
                 val customerId = local?.invoice?.customer
@@ -125,7 +130,8 @@ class CustomerRepository(
                             totalPendingAmount = 0.0,
                             state = "Sin Pendientes",
                             receivableAccount = receivable?.account,
-                            receivableAccountCurrency = receivable?.accountCurrency ?: dto.partyAccountCurrency,
+                            receivableAccountCurrency = receivable?.accountCurrency
+                                ?: dto.partyAccountCurrency,
                             //address = null, //address ?: "",
                             //contact = null
                         )
@@ -164,9 +170,7 @@ class CustomerRepository(
         invoices.forEach { wrapper ->
             val invoice = wrapper.invoice
             val receivableCurrency = invoice.partyAccountCurrency ?: invoice.currency
-            val outstanding =
-                (invoice.outstandingAmount ?: invoice.baseOutstandingAmount)
-                    ?.coerceAtLeast(0.0) ?: 0.0
+            val outstanding = invoice.outstandingAmount.coerceAtLeast(0.0) ?: 0.0
             val rate = when {
                 receivableCurrency.equals(baseCurrency, ignoreCase = true) -> 1.0
                 else -> context.resolveExchangeRateBetween(
@@ -238,7 +242,6 @@ class CustomerRepository(
         val partyCurrency = payload.invoice.partyAccountCurrency ?: return payload
         if (!partyCurrency.equals(companyCurrency, ignoreCase = true)) return payload
         val invoice = payload.invoice.copy(
-            baseOutstandingAmount = payload.invoice.outstandingAmount,
             basePaidAmount = payload.invoice.paidAmount
         )
         return payload.copy(invoice = invoice)

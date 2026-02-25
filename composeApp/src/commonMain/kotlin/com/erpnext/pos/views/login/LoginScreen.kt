@@ -263,6 +263,15 @@ private fun LoginCard(
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
 
+            Button(
+                onClick = { actions.clear() },
+                enabled = true,
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(14.dp)
+            ) {
+                Text(text = "Limpiar instancias")
+            }
+
             when (state) {
                 is LoginState.Loading -> {
                     Row(
@@ -762,7 +771,7 @@ fun UrlInputField(
             errorMessage = if (isError) "URL inválida, usa http://ejemplo.com o https://ejemplo.com" else ""
         },
         label = { Text("URL del Sitio") },
-        placeholder = { Text("https://erp.frappe.cloud o http://192.168.1.10") },
+        placeholder = { Text("https://erp.frappe.cloud") },
         isError = isError,
         singleLine = true,
         textStyle = MaterialTheme.typography.bodyLarge.copy(

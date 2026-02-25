@@ -164,17 +164,6 @@ class SalesInvoiceRepository(
             local.basePaidAmount != null -> roundToCurrency((local.basePaidAmount ?: 0.0).coerceAtMost(baseGrand ?: Double.MAX_VALUE))
             else -> null
         }
-        val baseOutstanding = when {
-            rate != null -> roundToCurrency(newOutstanding * rate)
-            local.baseOutstandingAmount != null ->
-                roundToCurrency(
-                    ((local.baseOutstandingAmount ?: 0.0) - returnTotal).coerceAtLeast(
-                        0.0
-                    )
-                )
-
-            else -> null
-        }
         val newStatus = when {
             newOutstanding <= 0.0001 -> "Paid"
             newPaid > 0.0 -> "Partly Paid"
@@ -188,7 +177,6 @@ class SalesInvoiceRepository(
                 outstandingAmount = roundToCurrency(newOutstanding),
                 baseGrandTotal = baseGrand,
                 basePaidAmount = basePaid,
-                baseOutstandingAmount = baseOutstanding,
                 status = newStatus,
                 modifiedAt = now
             )
@@ -344,8 +332,8 @@ class SalesInvoiceRepository(
         invoice.paidAmount = cappedPaid
         invoice.basePaidAmount = rateToBase?.let { roundToCurrency(cappedPaid * it) }
             ?: invoice.basePaidAmount
-        invoice.baseOutstandingAmount = rateToBase?.let { roundToCurrency(newOutstanding * it) }
-            ?: invoice.baseOutstandingAmount
+        invoice.outstandingAmount = rateToBase?.let { roundToCurrency(newOutstanding * it) }
+            ?: invoice.outstandingAmount
         invoice.status = when {
             newOutstanding <= 0.0 -> "Paid"
             totalPaid <= epsilon -> "Unpaid"
@@ -468,15 +456,6 @@ class SalesInvoiceRepository(
         }
         val companyCurrency = context.getContext()?.companyCurrency
         val partyCurrency = remote.partyAccountCurrency
-        val baseOutstandingResolved = if (!companyCurrency.isNullOrBlank() &&
-            !partyCurrency.isNullOrBlank() &&
-            partyCurrency.equals(companyCurrency, ignoreCase = true)
-        ) {
-            resolvedOutstandingAmount
-        } else {
-            resolveBaseAmount(resolvedOutstandingAmount, remote.baseOutstandingAmount)
-                ?: resolvedOutstandingAmount
-        }
         val basePaidResolved = if (!companyCurrency.isNullOrBlank() &&
             !partyCurrency.isNullOrBlank() &&
             partyCurrency.equals(companyCurrency, ignoreCase = true)
@@ -525,7 +504,6 @@ class SalesInvoiceRepository(
                 remote.writeOffAmount,
                 remote.baseWriteOffAmount
             ),
-            baseOutstandingAmount = baseOutstandingResolved,
             status = resolvedStatus,
             docstatus = remote.docStatus ?: 0,
             modeOfPayment = remote.payments.firstOrNull()?.modeOfPayment,
@@ -956,7 +934,6 @@ class SalesInvoiceRepository(
         val partyCurrency = payload.invoice.partyAccountCurrency ?: return payload
         if (!partyCurrency.equals(companyCurrency, ignoreCase = true)) return payload
         val invoice = payload.invoice.copy(
-            baseOutstandingAmount = payload.invoice.outstandingAmount,
             basePaidAmount = payload.invoice.paidAmount
         )
         return payload.copy(invoice = invoice)

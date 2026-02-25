@@ -106,8 +106,6 @@ data class SalesInvoiceEntity(
     var baseChangeAmount: Double? = null,
     @ColumnInfo(name = "base_write_off_amount")
     var baseWriteOffAmount: Double? = null,
-    @ColumnInfo(name = "base_outstanding_amount")
-    var baseOutstandingAmount: Double? = null,
 
     // 📦 Contabilidad
     @ColumnInfo(name = "price_list")

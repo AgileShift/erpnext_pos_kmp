@@ -1,6 +1,5 @@
 package com.erpnext.pos.data
 
-import androidx.room.AutoMigration
 import androidx.room.ConstructedBy
 import androidx.room.Database
 import androidx.room.RoomDatabase
@@ -8,8 +7,8 @@ import androidx.room.RoomDatabaseConstructor
 import com.erpnext.pos.localSource.dao.AddressDao
 import com.erpnext.pos.localSource.dao.CashboxDao
 import com.erpnext.pos.localSource.dao.CategoryDao
-import com.erpnext.pos.localSource.dao.CompanyDao
 import com.erpnext.pos.localSource.dao.CompanyAccountDao
+import com.erpnext.pos.localSource.dao.CompanyDao
 import com.erpnext.pos.localSource.dao.ConfigurationDao
 import com.erpnext.pos.localSource.dao.ContactDao
 import com.erpnext.pos.localSource.dao.CustomerDao
@@ -35,8 +34,8 @@ import com.erpnext.pos.localSource.entities.AddressEntity
 import com.erpnext.pos.localSource.entities.BalanceDetailsEntity
 import com.erpnext.pos.localSource.entities.CashboxEntity
 import com.erpnext.pos.localSource.entities.CategoryEntity
-import com.erpnext.pos.localSource.entities.CompanyEntity
 import com.erpnext.pos.localSource.entities.CompanyAccountEntity
+import com.erpnext.pos.localSource.entities.CompanyEntity
 import com.erpnext.pos.localSource.entities.ConfigurationEntity
 import com.erpnext.pos.localSource.entities.ContactEntity
 import com.erpnext.pos.localSource.entities.CustomerEntity
@@ -95,12 +94,7 @@ import com.erpnext.pos.localSource.entities.UserEntity
         SupplierEntity::class,
         CompanyAccountEntity::class,
     ],
-    version = 12,
-    autoMigrations = [
-        AutoMigration(from = 8, to = 9),
-        AutoMigration(from = 9, to = 10),
-        AutoMigration(from = 11, to = 12)
-    ],
+    version = 13,
     exportSchema = true
 )
 @ConstructedBy(AppDatabaseConstructor::class)

@@ -15,9 +15,9 @@ fun resolveInvoiceDisplayAmounts(
     invoice: SalesInvoiceBO,
     companyCurrency: String
 ): InvoiceDisplayAmounts {
-    val invoiceCurrency = normalizeCurrency(invoice.currency) ?: normalizeCurrency(companyCurrency) ?: "USD"
-    val company = normalizeCurrency(companyCurrency) ?: invoiceCurrency
-    val receivable = normalizeCurrency(invoice.partyAccountCurrency) ?: company
+    val invoiceCurrency = normalizeCurrency(invoice.currency)
+    val company = normalizeCurrency(companyCurrency)
+    val receivable = normalizeCurrency(invoice.partyAccountCurrency)
     val totalInvoice = invoice.total
     val outstandingInvoice = invoice.outstandingAmount
     val totalCompany = invoice.baseGrandTotal ?: computeBaseAmount(
@@ -33,7 +33,6 @@ fun resolveInvoiceDisplayAmounts(
         else -> outstandingInvoice
     }
     val outstandingCompany = when {
-        invoice.baseOutstandingAmount != null -> invoice.baseOutstandingAmount
         receivable.equals(company, ignoreCase = true) -> outstandingInvoice
         company.equals(invoiceCurrency, ignoreCase = true) -> outstandingInvoiceResolved
         else -> outstandingInvoice
@@ -65,8 +64,8 @@ suspend fun resolveCompanyToTargetAmount(
     targetCurrency: String,
     rateResolver: suspend (from: String, to: String) -> Double?
 ): Double? {
-    val from = normalizeCurrency(companyCurrency) ?: return null
-    val to = normalizeCurrency(targetCurrency) ?: return null
+    val from = normalizeCurrency(companyCurrency)
+    val to = normalizeCurrency(targetCurrency)
     if (from.equals(to, ignoreCase = true)) return amountCompany
     val rate = rateResolver(from, to)?.takeIf { it > 0.0 } ?: return null
     return amountCompany * rate

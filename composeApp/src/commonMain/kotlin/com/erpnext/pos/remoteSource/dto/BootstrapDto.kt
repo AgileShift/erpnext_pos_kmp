@@ -149,7 +149,7 @@ data class BootstrapExchangeRatesDto(
     @SerialName("date")
     val date: String? = null,
     @SerialName("rates")
-    val rates: Map<String, Double> = emptyMap()
+    val rates: Map<String, Double?> = emptyMap()
 )
 
 @Serializable
@@ -174,8 +174,8 @@ data class BootstrapFullSnapshotDto(
     val exchangeRates: BootstrapExchangeRatesDto? = null,
     @SerialName("payment_terms")
     val paymentTerms: List<PaymentTermDto> = emptyList(),
-    @SerialName("delivery_charges")
-    val deliveryCharges: List<DeliveryChargeDto> = emptyList(),
+    @SerialName("shipping_rules")
+    val shippingRules: List<ShippingRuleDto> = emptyList(),
     @SerialName("customer_groups")
     val customerGroups: List<CustomerGroupDto> = emptyList(),
     @SerialName("territories")

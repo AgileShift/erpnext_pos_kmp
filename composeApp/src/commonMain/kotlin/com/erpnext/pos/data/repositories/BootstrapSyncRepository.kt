@@ -739,7 +739,7 @@ class BootstrapSyncRepository(
                 "companies=${data.resolvedCompanies.size}, " +
                 "exchange_rates=${if (data.exchangeRates != null) 1 else 0}, " +
                 "payment_terms=${data.paymentTerms.size}, " +
-                "delivery_charges=${data.deliveryCharges.size}, " +
+                "delivery_charges=${data.shippingRules.size}, " +
                 "suppliers=${data.suppliers.size}, " +
                 "company_accounts=${data.companyAccounts.size}, " +
                 "customer_groups=${data.customerGroups.size}, " +
@@ -762,7 +762,7 @@ class BootstrapSyncRepository(
             Section.STOCK_SETTINGS -> if (data.stockSettings != null) 1 else 0
             Section.EXCHANGE_RATES -> if (data.exchangeRates != null) 1 else 0
             Section.PAYMENT_TERMS -> data.paymentTerms.size
-            Section.DELIVERY_CHARGES -> data.deliveryCharges.size
+            Section.DELIVERY_CHARGES -> data.shippingRules.size
             Section.SUPPLIERS -> data.suppliers.size
             Section.COMPANY_ACCOUNTS -> data.companyAccounts.size
             Section.CUSTOMER_GROUPS -> data.customerGroups.size
@@ -819,8 +819,9 @@ class BootstrapSyncRepository(
         val normalizedRates = mutableMapOf<String, Double>()
         snapshot.data.exchangeRates?.rates?.forEach { (code, rate) ->
             val normalizedCode = code.trim().uppercase()
-            if (normalizedCode.isNotBlank() && rate > 0.0) {
-                normalizedRates[normalizedCode] = rate
+            val normalizedRate = rate ?: return@forEach
+            if (normalizedCode.isNotBlank() && normalizedRate > 0.0) {
+                normalizedRates[normalizedCode] = normalizedRate
             }
         }
 
@@ -860,7 +861,7 @@ class BootstrapSyncRepository(
     }
 
     private suspend fun persistDeliveryCharges(snapshot: Snapshot) {
-        val entities = snapshot.data.deliveryCharges.map { it.toEntity() }
+        val entities = snapshot.data.shippingRules.map { it.toEntity() }
         if (entities.isNotEmpty()) {
             deliveryChargeLocalSource.insertAll(entities)
         }
