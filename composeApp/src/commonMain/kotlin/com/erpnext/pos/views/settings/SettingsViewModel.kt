@@ -7,6 +7,7 @@ import AppThemeMode
 import androidx.lifecycle.viewModelScope
 import com.erpnext.pos.base.BaseViewModel
 import com.erpnext.pos.localSource.datasources.ExchangeRateLocalSource
+import com.erpnext.pos.localSource.preferences.BootstrapContextPreferences
 import com.erpnext.pos.localSource.preferences.GeneralPreferences
 import com.erpnext.pos.localSource.preferences.LanguagePreferences
 import com.erpnext.pos.localSource.preferences.ReturnPolicyPreferences
@@ -40,7 +41,8 @@ class SettingsViewModel(
     private val languagePreferences: LanguagePreferences,
     private val themePreferences: ThemePreferences,
     private val returnPolicyPreferences: ReturnPolicyPreferences,
-    private val exchangeRateLocalSource: ExchangeRateLocalSource
+    private val exchangeRateLocalSource: ExchangeRateLocalSource,
+    private val bootstrapContextPreferences: BootstrapContextPreferences
 ) : BaseViewModel() {
 
     private val _uiState: MutableStateFlow<POSSettingState> =
@@ -87,8 +89,12 @@ class SettingsViewModel(
                 val inventoryAlertHour = args[15] as Int
                 val inventoryAlertMinute = args[16] as Int
                 val salesTargetMonthlyLocal = args[17] as Double
-                val salesTargetFromContext = ctx?.monthlySalesTarget != null
-                val salesTargetMonthly = ctx?.monthlySalesTarget ?: salesTargetMonthlyLocal
+                val bootstrapSnapshot = bootstrapContextPreferences.load()
+                val salesTargetContext = ctx?.monthlySalesTarget?.takeIf { it > 0.0 }
+                val salesTargetBootstrap = bootstrapSnapshot.monthlySalesTarget?.takeIf { it > 0.0 }
+                val salesTargetFromContext = salesTargetContext != null
+                val salesTargetMonthly =
+                    salesTargetContext ?: salesTargetBootstrap ?: salesTargetMonthlyLocal.coerceAtLeast(0.0)
 
                 val baseCurrency = normalizeCurrency(ctx?.companyCurrency)
                 val secondaryCurrency = ctx?.currency?.let { normalizeCurrency(it) }

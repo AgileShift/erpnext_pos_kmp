@@ -10,6 +10,8 @@ import com.erpnext.pos.remoteSource.api.APIService
 import com.erpnext.pos.remoteSource.dto.CustomerCreateDto
 import com.erpnext.pos.remoteSource.dto.CustomerCreditLimitCreateDto
 import com.erpnext.pos.remoteSource.sdk.json
+import com.erpnext.pos.sync.PushQueueReport
+import com.erpnext.pos.sync.PushSyncConflict
 import com.erpnext.pos.utils.AppLogger
 import com.erpnext.pos.utils.AppSentry
 import com.erpnext.pos.views.CashBoxManager
@@ -40,10 +42,13 @@ class CustomerSyncRepository(
         outboxLocalSource.insert(outbox)
     }
 
-    suspend fun pushPending(): Boolean {
+    suspend fun pushPending(): Boolean = pushPendingWithReport().hasChanges
+
+    suspend fun pushPendingWithReport(): PushQueueReport {
         val pending = outboxLocalSource.getPending()
-        if (pending.isEmpty()) return false
+        if (pending.isEmpty()) return PushQueueReport.EMPTY
         var hasChanges = false
+        val conflicts = mutableListOf<PushSyncConflict>()
         val attemptAt = Clock.System.now().toEpochMilliseconds()
         pending.forEach { item ->
             try {
@@ -102,6 +107,14 @@ class CustomerSyncRepository(
             } catch (e: Exception) {
                 AppSentry.capture(e, "CustomerSyncRepository.pushPending failed")
                 AppLogger.warn("CustomerSyncRepository.pushPending failed", e)
+                if (isDuplicateCustomerError(e)) {
+                    conflicts += PushSyncConflict(
+                        docType = "Customer",
+                        localId = item.customerLocalId,
+                        remoteId = item.remoteId,
+                        reason = "Cliente local pendiente podría existir en remoto (error de duplicado)."
+                    )
+                }
                 outboxLocalSource.updateStatus(
                     localId = item.localId,
                     status = "Failed",
@@ -111,6 +124,25 @@ class CustomerSyncRepository(
                 )
             }
         }
-        return hasChanges
+        return PushQueueReport(
+            hasChanges = hasChanges,
+            conflicts = conflicts
+        )
+    }
+
+    private fun isDuplicateCustomerError(error: Throwable): Boolean {
+        val msg = buildList {
+            error.message?.let { add(it) }
+            (error as? com.erpnext.pos.remoteSource.sdk.FrappeException)
+                ?.errorResponse
+                ?._server_messages
+                ?.let { add(it) }
+        }
+            .joinToString(" | ")
+            .lowercase()
+        return msg.contains("duplicate") ||
+            msg.contains("already exists") ||
+            msg.contains("ya existe") ||
+            msg.contains("must be unique")
     }
 }

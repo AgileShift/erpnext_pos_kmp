@@ -302,52 +302,87 @@ class SyncManager(
         }
     }
 
-    private suspend fun runPushQueue() {
+    private suspend fun runPushQueue(
+        updateProgress: Boolean,
+        trigger: String
+    ): PushQueueReport {
         if (offlineModeCache) {
             AppLogger.warn("SyncManager: push queue skipped because offline mode is enabled")
-            return
+            return PushQueueReport.EMPTY
         }
         if (!cashBoxManager.cashboxState.value) {
             AppLogger.warn(
                 "SyncManager: cashbox is closed, but pending push will continue with fallback context"
             )
         }
-        val resolved = syncContextProvider.buildContext()
-        val ctx = resolved ?: run {
-            val base = cashBoxManager.getContext() ?: cashBoxManager.resolveContextForSync()
-            if (base == null) {
-                AppLogger.warn("SyncManager: push queue skipped because context is not ready")
-                return
-            }
-            val instanceId = base.company.ifBlank { base.profileName }.ifBlank { base.username }
-            val companyId = base.company.ifBlank { base.profileName }
-            if (instanceId.isBlank() || companyId.isBlank()) {
-                AppLogger.warn("SyncManager: push queue skipped because instance/company is blank")
-                return
-            }
-            SyncContext(
-                instanceId = instanceId,
-                companyId = companyId,
-                territoryId = base.territory ?: base.route ?: "",
-                warehouseId = base.warehouse ?: "",
-                priceList = base.priceList ?: base.currency,
-                fromDate = resolveModifiedSinceDate()
-                    ?: DefaultPolicy(PolicyInput(3)).invoicesFromDate()
-            )
-        }
+        val ctx = resolvePushContext() ?: return PushQueueReport.EMPTY
         val syncing = _state.value as? SyncState.SYNCING
         val currentStep = syncing?.currentStep ?: 1
         val totalSteps = syncing?.totalSteps ?: 1
-        updateSyncProgress("Sincronizando pendientes...", currentStep, totalSteps)
+        if (updateProgress) {
+            updateSyncProgress("Sincronizando pendientes...", currentStep, totalSteps)
+        }
         try {
-            pushSyncManager.runPushQueue(ctx) { docType ->
-                updateSyncProgressAsync("Sincronizando $docType...", currentStep, totalSteps)
+            val report = pushSyncManager.runPushQueue(ctx) { docType ->
+                if (updateProgress) {
+                    updateSyncProgressAsync("Sincronizando $docType...", currentStep, totalSteps)
+                } else {
+                    AppLogger.info("SyncManager.pushQueue($trigger): $docType")
+                }
             }
+            logPushReport(trigger, report)
+            return report
         } catch (e: Throwable) {
             AppSentry.capture(e, "SyncManager.pushQueue failed")
             AppLogger.warn("SyncManager.pushQueue failed", e, reportToSentry = false)
             throw e
         }
+    }
+
+    private suspend fun resolvePushContext(): SyncContext? {
+        val resolved = syncContextProvider.buildContext()
+        if (resolved != null) return resolved
+        val base = cashBoxManager.getContext() ?: cashBoxManager.resolveContextForSync()
+        if (base == null) {
+            AppLogger.warn("SyncManager: push queue skipped because context is not ready")
+            return null
+        }
+        val instanceId = base.company.ifBlank { base.profileName }.ifBlank { base.username }
+        val companyId = base.company.ifBlank { base.profileName }
+        if (instanceId.isBlank() || companyId.isBlank()) {
+            AppLogger.warn("SyncManager: push queue skipped because instance/company is blank")
+            return null
+        }
+        return SyncContext(
+            instanceId = instanceId,
+            companyId = companyId,
+            territoryId = base.territory ?: base.route ?: "",
+            warehouseId = base.warehouse ?: "",
+            priceList = base.priceList ?: base.currency,
+            fromDate = resolveModifiedSinceDate()
+                ?: DefaultPolicy(PolicyInput(3)).invoicesFromDate()
+        )
+    }
+
+    private fun logPushReport(trigger: String, report: PushQueueReport) {
+        if (!report.hasConflicts) return
+        val sample = report.conflicts
+            .take(3)
+            .joinToString(" | ") { conflict ->
+                val remote = conflict.remoteId?.takeIf { it.isNotBlank() } ?: "remote:unknown"
+                "${conflict.docType} local:${conflict.localId} -> $remote"
+            }
+        val message = "Push detectó ${report.conflictCount} registro(s) ya existentes en remoto."
+        AppLogger.warn("SyncManager.$trigger: $message $sample")
+        AppSentry.breadcrumb(
+            message = "SyncManager.push conflict detected",
+            category = "sync.push",
+            data = mapOf(
+                "trigger" to trigger,
+                "conflict_count" to report.conflictCount.toString(),
+                "sample" to sample
+            )
+        )
     }
 
     private suspend fun updateSyncProgress(message: String, currentStep: Int, totalSteps: Int) {
@@ -408,6 +443,13 @@ class SyncManager(
         val bootstrapSections = bootstrapSyncRepository.orderedSections()
         val bootstrapSteps = mutableListOf<SyncStep>()
         bootstrapSteps += SyncStep(
+            label = "Pendientes",
+            message = "Sincronizando pendientes antes de actualizar...",
+            haltOnFailure = true
+        ) {
+            runPushQueue(updateProgress = true, trigger = "full_sync_pre_pull")
+        }
+        bootstrapSteps += SyncStep(
             label = "Bootstrap Fetch",
             message = "Descargando datos desde ERP...",
             haltOnFailure = true
@@ -425,10 +467,13 @@ class SyncManager(
                 lastError = ""
             )
             try {
-                snapshot = bootstrapSyncRepository.fetchSnapshot(profileName = null)
+                val fetchedSnapshot = bootstrapSyncRepository.fetchSnapshot(profileName = null)
+                snapshot = fetchedSnapshot
+                val remoteMonthlyTarget = fetchedSnapshot.data.context?.monthlySalesTarget
+                    ?.takeIf { it > 0.0 }
                 bootstrapContextPreferences.update(
-                    monthlySalesTarget = snapshot.data.context?.monthlySalesTarget,
-                    replaceMonthlySalesTarget = true,
+                    monthlySalesTarget = remoteMonthlyTarget,
+                    replaceMonthlySalesTarget = remoteMonthlyTarget != null,
                     lastSuccessAt = Clock.System.now().toEpochMilliseconds()
                 )
             } catch (e: Exception) {
@@ -451,12 +496,6 @@ class SyncManager(
             message = "Reconciliando estado de caja..."
         ) {
             cashBoxManager.initializeContext()
-        }
-        bootstrapSteps += SyncStep(
-            label = "Pendientes",
-            message = "Sincronizando documentos pendientes..."
-        ) {
-            runPushQueue()
         }
         return bootstrapSteps
     }
@@ -556,6 +595,10 @@ class SyncManager(
                 return@withLock false
             }
             return@withLock runCatching {
+                runPushQueue(
+                    updateProgress = false,
+                    trigger = "bootstrap_refresh_$trigger"
+                )
                 val ctx = cashBoxManager.getContext() ?: cashBoxManager.initializeContext()
                 val profileName = ctx?.profileName?.trim().orEmpty()
                 val activeCashbox = cashBoxManager.getActiveCashboxWithDetails()
@@ -578,9 +621,11 @@ class SyncManager(
                     )
                 )
                 val snapshot = bootstrapSyncRepository.fetchSnapshot(profileName = null)
+                val remoteMonthlyTarget = snapshot.data.context?.monthlySalesTarget
+                    ?.takeIf { it > 0.0 }
                 bootstrapContextPreferences.update(
-                    monthlySalesTarget = snapshot.data.context?.monthlySalesTarget,
-                    replaceMonthlySalesTarget = true,
+                    monthlySalesTarget = remoteMonthlyTarget,
+                    replaceMonthlySalesTarget = remoteMonthlyTarget != null,
                     lastSuccessAt = Clock.System.now().toEpochMilliseconds()
                 )
                 bootstrapSyncRepository.persistAll(snapshot)

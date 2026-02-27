@@ -24,6 +24,8 @@ import com.erpnext.pos.remoteSource.dto.SalesInvoicePaymentDto
 import com.erpnext.pos.remoteSource.mapper.toDto
 import com.erpnext.pos.remoteSource.mapper.toEntities
 import com.erpnext.pos.remoteSource.mapper.toEntity
+import com.erpnext.pos.sync.PushQueueReport
+import com.erpnext.pos.sync.PushSyncConflict
 import com.erpnext.pos.sync.SyncTTL
 import com.erpnext.pos.utils.AppLogger
 import com.erpnext.pos.utils.RepoTrace
@@ -556,10 +558,13 @@ class SalesInvoiceRepository(
         return remote
     }
 
-    override suspend fun syncPendingInvoices() {
+    override suspend fun syncPendingInvoices(): PushQueueReport {
         RepoTrace.breadcrumb("SalesInvoiceRepository", "syncPendingInvoices")
         context.resolveContextForSync()
         val pending = getPendingSyncInvoices()
+        if (pending.isEmpty()) return PushQueueReport.EMPTY
+        var hasChanges = false
+        val conflicts = mutableListOf<PushSyncConflict>()
         pending.forEach { invoice ->
             try {
                 when {
@@ -567,15 +572,22 @@ class SalesInvoiceRepository(
                     invoice.invoice.invoiceName?.startsWith(
                         "LOCAL-",
                         ignoreCase = true
-                    ) == true -> handleLocalInvoice(invoice)
+                    ) == true -> {
+                        handleLocalInvoice(invoice)?.let { conflicts += it }
+                    }
 
                     else -> handleRemoteInvoice(invoice)
                 }
+                hasChanges = true
             } catch (e: Exception) {
                 RepoTrace.capture("SalesInvoiceRepository", "syncPendingInvoices", e)
                 markAsFailed(invoice.invoice.invoiceName ?: "")
             }
         }
+        return PushQueueReport(
+            hasChanges = hasChanges,
+            conflicts = conflicts
+        )
     }
 
     private suspend fun handleRemoteInvoice(invoice: SalesInvoiceWithItemsAndPayments) {
@@ -589,8 +601,10 @@ class SalesInvoiceRepository(
         updateLocalInvoiceFromRemote(localName, remote)
     }
 
-    private suspend fun handleLocalInvoice(invoice: SalesInvoiceWithItemsAndPayments) {
-        val localName = invoice.invoice.invoiceName ?: return
+    private suspend fun handleLocalInvoice(
+        invoice: SalesInvoiceWithItemsAndPayments
+    ): PushSyncConflict? {
+        val localName = invoice.invoice.invoiceName ?: return null
         val ctx = context.getContext() ?: context.resolveContextForSync()
         val allowNegativeStock = ctx?.allowNegativeStock == true
         val openingFromPayments = invoice.payments
@@ -603,7 +617,7 @@ class SalesInvoiceRepository(
             AppLogger.warn(
                 "handleLocalInvoice: missing profile/opening for pending local invoice $localName"
             )
-            return
+            return null
         }
         val normalizedInvoice = invoice.invoice.copy(
             profileId = resolvedProfile,
@@ -641,7 +655,7 @@ class SalesInvoiceRepository(
                     AppLogger.warn(
                         "handleLocalInvoice: insufficient stock for ${shortage.key} in $warehouse"
                     )
-                    return
+                    return null
                 }
             }
         }
@@ -656,7 +670,12 @@ class SalesInvoiceRepository(
             val existing = remoteSource.fetchInvoice(existingName)
             if (existing != null) {
                 updateLocalInvoiceFromRemote(localName, existing)
-                return
+                return PushSyncConflict(
+                    docType = "Sales Invoice",
+                    localId = localName,
+                    remoteId = existingName,
+                    reason = "Factura local pendiente ya existía en remoto; se adoptó el documento remoto."
+                )
             }
         }
 
@@ -673,6 +692,7 @@ class SalesInvoiceRepository(
                 "Factura remota en borrador ($createdName). El submit legado fue removido y requiere endpoint API v1."
             )
         }
+        return null
     }
 
     private suspend fun handleCancelledInvoice(invoice: SalesInvoiceWithItemsAndPayments) {

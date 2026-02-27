@@ -132,13 +132,18 @@ class ReconciliationViewModel(
                     errorMessage = null
                 )
             }
-            pushSyncRunner.runPushQueue(syncContext) { docType ->
+            val pushReport = pushSyncRunner.runPushQueue(syncContext) { docType ->
                 _closeState.update {
                     it.copy(
                         isSyncing = true,
                         syncMessage = "Sincronizando: $docType"
                     )
                 }
+            }
+            if (pushReport.hasConflicts) {
+                AppLogger.warn(
+                    "Reconciliation: push detectó ${pushReport.conflictCount} conflicto(s) remotos antes del cierre."
+                )
             }
             _closeState.update { it.copy(isSyncing = false, syncMessage = null, errorMessage = null) }
             true

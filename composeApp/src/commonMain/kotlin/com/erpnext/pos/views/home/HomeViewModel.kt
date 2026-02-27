@@ -265,12 +265,16 @@ class HomeViewModel(
 
     private suspend fun loadMetricsForActiveShift() {
         val openingId = resolveMetricsOpeningEntryId()
-        _homeMetrics.value = loadHomeMetricsUseCase(
+        val previous = _homeMetrics.value
+        val refreshed = loadHomeMetricsUseCase(
             HomeMetricInput(
                 days = 7,
                 nowMillis = Clock.System.now().toEpochMilliseconds(),
                 openingEntryId = openingId
             )
+        )
+        _homeMetrics.value = refreshed.copy(
+            salesTarget = previous.salesTarget
         )
     }
 
@@ -443,55 +447,53 @@ class HomeViewModel(
         return ((current - previous) / previous) * 100.0
     }
 
-    private fun refreshInventoryAlerts() {
-        viewModelScope.launch {
-            val ctx = syncContextProvider.buildContext() ?: return@launch
-            if (ctx.warehouseId.isBlank()) return@launch
-            val alertsEnabled = generalPreferences.getInventoryAlertsEnabled()
-            val alertHour = generalPreferences.getInventoryAlertHour()
-            val alertMinute = generalPreferences.getInventoryAlertMinute()
-            if (!alertsEnabled) {
-                _homeMetrics.update { it.copy(inventoryAlerts = emptyList()) }
-                scheduleDailyInventoryReminder(
-                    false,
-                    "Inventory Alerts",
-                    "",
-                    alertHour,
-                    alertMinute
-                )
-                return@launch
-            }
-            val alerts = loadInventoryAlertsUseCase(
-                InventoryAlertInput(
-                    instanceId = ctx.instanceId,
-                    companyId = ctx.companyId,
-                    warehouseId = ctx.warehouseId,
-                    limit = 20
-                )
-            )
-            _homeMetrics.update { it.copy(inventoryAlerts = alerts) }
-            val hasAlerts = alerts.isNotEmpty()
-            val scheduledMessage =
-                if (hasAlerts) "Alertas de inventario pendientes: ${alerts.size} (${ctx.warehouseId})"
-                else ""
+    private suspend fun refreshInventoryAlerts() {
+        val ctx = syncContextProvider.buildContext() ?: return
+        if (ctx.warehouseId.isBlank()) return
+        val alertsEnabled = generalPreferences.getInventoryAlertsEnabled()
+        val alertHour = generalPreferences.getInventoryAlertHour()
+        val alertMinute = generalPreferences.getInventoryAlertMinute()
+        if (!alertsEnabled) {
+            _homeMetrics.update { it.copy(inventoryAlerts = emptyList()) }
             scheduleDailyInventoryReminder(
-                hasAlerts,
+                false,
                 "Inventory Alerts",
-                scheduledMessage,
+                "",
                 alertHour,
                 alertMinute
             )
-            if (!hasAlerts) return@launch
+            return
+        }
+        val alerts = loadInventoryAlertsUseCase(
+            InventoryAlertInput(
+                instanceId = ctx.instanceId,
+                companyId = ctx.companyId,
+                warehouseId = ctx.warehouseId,
+                limit = 20
+            )
+        )
+        _homeMetrics.update { it.copy(inventoryAlerts = alerts) }
+        val hasAlerts = alerts.isNotEmpty()
+        val scheduledMessage =
+            if (hasAlerts) "Alertas de inventario pendientes: ${alerts.size} (${ctx.warehouseId})"
+            else ""
+        scheduleDailyInventoryReminder(
+            hasAlerts,
+            "Inventory Alerts",
+            scheduledMessage,
+            alertHour,
+            alertMinute
+        )
+        if (!hasAlerts) return
 
-            val today = Clock.System.now()
-                .toLocalDateTime(TimeZone.currentSystemDefault()).date.toString()
-            val lastDate = generalPreferences.getInventoryAlertDate()
-            if (lastDate != today) {
-                generalPreferences.setInventoryAlertDate(today)
-                val message = "Alertas de inventario: ${alerts.size} (${ctx.warehouseId})"
-                _inventoryAlertMessage.value = message
-                notifySystem("Inventory Alerts", message)
-            }
+        val today = Clock.System.now()
+            .toLocalDateTime(TimeZone.currentSystemDefault()).date.toString()
+        val lastDate = generalPreferences.getInventoryAlertDate()
+        if (lastDate != today) {
+            generalPreferences.setInventoryAlertDate(today)
+            val message = "Alertas de inventario: ${alerts.size} (${ctx.warehouseId})"
+            _inventoryAlertMessage.value = message
+            notifySystem("Inventory Alerts", message)
         }
     }
 
@@ -510,53 +512,60 @@ class HomeViewModel(
             .coerceAtLeast(1_000L)
     }
 
-    private fun refreshSalesTarget() {
-        viewModelScope.launch {
-            val ctx = contextManager.getContext() ?: return@launch
-            val monthly = ctx.monthlySalesTarget
-                ?: bootstrapContextPreferences.load().monthlySalesTarget
-                ?: generalPreferences.getSalesTargetMonthly()
-            if (monthly <= 0.0) {
-                _homeMetrics.update { it.copy(salesTarget = null) }
-                return@launch
-            }
+    private suspend fun refreshSalesTarget() {
+        val ctx = contextManager.getContext()
+        val current = _homeMetrics.value.salesTarget
+        val monthlyFromContext = ctx?.monthlySalesTarget?.takeIf { it > 0.0 }
+        val monthlyFromBootstrap = bootstrapContextPreferences.load().monthlySalesTarget
+            ?.takeIf { it > 0.0 }
+        val monthlyFromLocal = generalPreferences.getSalesTargetMonthly()
+            .takeIf { it > 0.0 }
+        val monthly = monthlyFromContext ?: monthlyFromBootstrap ?: monthlyFromLocal
 
-            val baseCurrency = normalizeCurrency(ctx.companyCurrency)
-            val secondaryCurrency = normalizeCurrency(ctx.currency)
-                .takeIf { it != baseCurrency }
+        if (monthly == null) {
+            if (ctx == null && current != null) return
+            _homeMetrics.update { it.copy(salesTarget = null) }
+            return
+        }
 
-            val now = Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault())
-            val daysInMonth = daysInMonth(now.year, now.month.number)
-            val daily = if (daysInMonth > 0) monthly / daysInMonth.toDouble() else 0.0
-            val weekly = daily * 7.0
+        val baseCurrency = normalizeCurrency(
+            ctx?.companyCurrency ?: current?.baseCurrency ?: ctx?.currency ?: "NIO"
+        )
+        val secondaryCurrency = normalizeCurrency(
+            ctx?.currency ?: current?.secondaryCurrency.orEmpty()
+        ).takeIf { it.isNotBlank() && it != baseCurrency }
 
-            val rate = if (secondaryCurrency != null) {
-                resolveLocalRate(baseCurrency, secondaryCurrency)
-            } else {
-                null
-            }
-            val rateValue = rate?.rate
-            val stale = rate?.let { isRateStale(it.lastSyncedAt) } ?: false
+        val now = Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault())
+        val daysInMonth = daysInMonth(now.year, now.month.number)
+        val daily = if (daysInMonth > 0) monthly / daysInMonth.toDouble() else 0.0
+        val weekly = daily * 7.0
 
-            val monthlySecondary = rateValue?.let { monthly * it }
-            val weeklySecondary = rateValue?.let { weekly * it }
-            val dailySecondary = rateValue?.let { daily * it }
+        val rate = if (secondaryCurrency != null) {
+            resolveLocalRate(baseCurrency, secondaryCurrency)
+        } else {
+            null
+        }
+        val rateValue = rate?.rate
+        val stale = rate?.let { isRateStale(it.lastSyncedAt) } ?: false
 
-            _homeMetrics.update {
-                it.copy(
-                    salesTarget = SalesTargetMetric(
-                        baseCurrency = baseCurrency,
-                        secondaryCurrency = secondaryCurrency,
-                        monthlyBase = monthly,
-                        weeklyBase = weekly,
-                        dailyBase = daily,
-                        monthlySecondary = monthlySecondary,
-                        weeklySecondary = weeklySecondary,
-                        dailySecondary = dailySecondary,
-                        conversionStale = stale
-                    )
+        val monthlySecondary = rateValue?.let { monthly * it }
+        val weeklySecondary = rateValue?.let { weekly * it }
+        val dailySecondary = rateValue?.let { daily * it }
+
+        _homeMetrics.update {
+            it.copy(
+                salesTarget = SalesTargetMetric(
+                    baseCurrency = baseCurrency,
+                    secondaryCurrency = secondaryCurrency,
+                    monthlyBase = monthly,
+                    weeklyBase = weekly,
+                    dailyBase = daily,
+                    monthlySecondary = monthlySecondary,
+                    weeklySecondary = weeklySecondary,
+                    dailySecondary = dailySecondary,
+                    conversionStale = stale
                 )
-            }
+            )
         }
     }
 

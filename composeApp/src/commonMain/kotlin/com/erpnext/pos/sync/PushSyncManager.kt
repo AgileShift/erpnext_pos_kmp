@@ -34,27 +34,40 @@ class PushSyncManager(
     private val cashBoxManager: CashBoxManager
 ) : PushSyncRunner {
 
-    override suspend fun runPushQueue(ctx: SyncContext, onDocType: (String) -> Unit): Boolean {
+    override suspend fun runPushQueue(
+        ctx: SyncContext,
+        onDocType: (String) -> Unit
+    ): PushQueueReport {
         return try {
-            var hasChanges = false
+            AppLogger.info(
+                "PushSyncManager: runPushQueue instance=${ctx.instanceId} company=${ctx.companyId}"
+            )
+            var report = PushQueueReport.EMPTY
+
             onDocType("Aperturas pendientes")
-            val openingsSynced = openingEntrySyncRepository.pushPending()
-            hasChanges = hasChanges || openingsSynced
+            report = report.merge(openingEntrySyncRepository.pushPendingWithReport())
+
             onDocType("Clientes pendientes")
-            val customersSynced = customerSyncRepository.pushPending()
-            hasChanges = hasChanges || customersSynced
+            report = report.merge(customerSyncRepository.pushPendingWithReport())
+
             onDocType("Facturas locales")
-            val pending = invoiceRepository.getPendingSyncInvoices()
-            if (pending.isNotEmpty()) {
-                invoiceRepository.syncPendingInvoices()
-                hasChanges = true
-            }
+            report = report.merge(invoiceRepository.syncPendingInvoices())
+
             onDocType("Pagos pendientes")
             val paymentsSynced = pushPendingPayments()
-            hasChanges = hasChanges || paymentsSynced
+            if (paymentsSynced && !report.hasChanges) {
+                report = report.copy(hasChanges = true)
+            }
+
             onDocType("Cierres pendientes")
-            val closingsSynced = closingEntrySyncRepository.pushPending()
-            hasChanges || closingsSynced
+            report = report.merge(closingEntrySyncRepository.pushPendingWithReport())
+
+            if (report.hasConflicts) {
+                AppLogger.warn(
+                    "PushSyncManager: detectados ${report.conflictCount} conflicto(s) con registros ya existentes en remoto."
+                )
+            }
+            report
         } catch (e: Throwable) {
             AppSentry.capture(e, "PushSyncManager: invoices push failed")
             AppLogger.warn("PushSyncManager: invoices push failed", e)

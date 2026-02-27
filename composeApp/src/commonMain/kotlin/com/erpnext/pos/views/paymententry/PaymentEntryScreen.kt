@@ -217,15 +217,6 @@ fun PaymentEntryScreen(
                                                 )
                                             }
 
-                                            ModeSelectorField(
-                                                label = "Modo de pago",
-                                                value = state.modeOfPayment,
-                                                options = state.availableModes,
-                                                shape = fieldShape,
-                                                colors = fieldColors,
-                                                onSelected = action.onModeOfPaymentChanged
-                                            )
-
                                             if (state.accountOptions.isNotEmpty()) {
                                                 ModeSelectorField(
                                                     label = "Cuenta de pago",

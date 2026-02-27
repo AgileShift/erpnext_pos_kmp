@@ -12,6 +12,8 @@ import com.erpnext.pos.localSource.entities.POSOpeningEntryEntity
 import com.erpnext.pos.localSource.entities.POSOpeningEntryLinkEntity
 import com.erpnext.pos.remoteSource.api.APIService
 import com.erpnext.pos.remoteSource.mapper.toEntity
+import com.erpnext.pos.sync.PushQueueReport
+import com.erpnext.pos.sync.PushSyncConflict
 import com.erpnext.pos.utils.AppLogger
 import com.erpnext.pos.utils.parseErpDateTimeToEpochMillis
 import com.erpnext.pos.utils.buildPaymentReconciliationSeeds
@@ -184,10 +186,13 @@ class ClosingEntrySyncRepository(
         return hasChanges
     }
 
-    suspend fun pushPending(): Boolean {
+    suspend fun pushPending(): Boolean = pushPendingWithReport().hasChanges
+
+    suspend fun pushPendingWithReport(): PushQueueReport {
         val pending = cashboxDao.getClosedPendingSync()
-        if (pending.isEmpty()) return false
+        if (pending.isEmpty()) return PushQueueReport.EMPTY
         var hasChanges = false
+        val conflicts = mutableListOf<PushSyncConflict>()
 
         pending.forEach { wrapper ->
             val cashbox = wrapper.cashbox
@@ -304,6 +309,14 @@ class ClosingEntrySyncRepository(
             )
 
             if (remoteClosing != null) {
+                conflicts += PushSyncConflict(
+                    docType = "POS Closing Entry",
+                    localId = localClosingName
+                        ?.takeIf { it.isNotBlank() }
+                        ?: "cashbox-${cashbox.localId}",
+                    remoteId = remoteClosing.name,
+                    reason = "Cierre local pendiente ya existía en remoto para la apertura activa."
+                )
                 val pendingSync = remoteClosing.docstatus != 1
                 if (pendingSync) {
                     AppLogger.warn(
@@ -370,7 +383,10 @@ class ClosingEntrySyncRepository(
             hasChanges = true
         }
 
-        return hasChanges
+        return PushQueueReport(
+            hasChanges = hasChanges,
+            conflicts = conflicts
+        )
     }
 
     private suspend fun upsertClosingLinkForCashbox(

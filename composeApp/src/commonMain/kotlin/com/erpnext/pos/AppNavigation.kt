@@ -161,6 +161,16 @@ private fun NavHostController.navigateSingle(route: String) {
     }
 }
 
+private fun NavHostController.navigateToLoginRoot() {
+    navigate(NavRoute.Login.path) {
+        popUpTo(graph.findStartDestination().id) {
+            saveState = false
+        }
+        launchSingleTop = true
+        restoreState = false
+    }
+}
+
 private fun NavHostController.navigateFromAuthToHome() {
     navigate(NavRoute.Home.path) {
         popUpTo(graph.findStartDestination().id) {
@@ -559,7 +569,7 @@ fun AppNavigation() {
                                                         interactionSource = remember { MutableInteractionSource() },
                                                         indication = null
                                                     ) {
-                                                        navController.navigateSingle(NavRoute.Login.path)
+                                                        navController.navigateToLoginRoot()
                                                     }
                                                 ) {
                                                     Row(
@@ -754,7 +764,7 @@ fun AppNavigation() {
                                                                 runCatching { tokenStore.clear() }
                                                                 cashBoxManager.clearContext()
                                                             }
-                                                            navController.navigateSingle(NavRoute.Login.path)
+                                                            navController.navigateToLoginRoot()
                                                         }
                                                     )
                                                     HorizontalDivider()
@@ -775,7 +785,7 @@ fun AppNavigation() {
                                                                     )
                                                                 }
                                                             }
-                                                            navController.navigateSingle(NavRoute.Login.path)
+                                                            navController.navigateToLoginRoot()
                                                         }
                                                     )
                                                 }
@@ -898,7 +908,7 @@ fun AppNavigation() {
                                                 val route =
                                                     navController.currentBackStackEntry?.destination?.route
                                                 if (route != NavRoute.Login.path) {
-                                                    navController.navigateSingle(NavRoute.Login.path)
+                                                    navController.navigateToLoginRoot()
                                                 }
                                             }
 
@@ -909,8 +919,14 @@ fun AppNavigation() {
                                                     if (route == NavRoute.Login.path ||
                                                         route == NavRoute.Splash.path
                                                     ) {
+                                                        AppLogger.info(
+                                                            "AppNavigation: Home navigation via auth reset"
+                                                        )
                                                         navController.navigateFromAuthToHome()
                                                     } else {
+                                                        AppLogger.info(
+                                                            "AppNavigation: Home navigation via top level"
+                                                        )
                                                         navController.navigateTopLevel(
                                                             NavRoute.Home.path
                                                         )

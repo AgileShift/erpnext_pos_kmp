@@ -10,6 +10,7 @@ import com.erpnext.pos.localSource.entities.SalesInvoiceEntity
 import com.erpnext.pos.localSource.entities.SalesInvoiceItemEntity
 import com.erpnext.pos.localSource.entities.SalesInvoiceWithItemsAndPayments
 import com.erpnext.pos.remoteSource.dto.SalesInvoiceDto
+import com.erpnext.pos.sync.PushQueueReport
 import kotlinx.coroutines.flow.Flow
 
 interface ISaleInvoiceRepository {
@@ -38,7 +39,7 @@ interface ISaleInvoiceRepository {
     suspend fun createRemoteInvoice(invoice: SalesInvoiceDto): SalesInvoiceDto
     suspend fun deleteRemoteInvoice(invoiceId: String)
 
-    suspend fun syncPendingInvoices()
+    suspend fun syncPendingInvoices(): PushQueueReport
 
     suspend fun sync(): Flow<Resource<List<SalesInvoiceBO>>>
 

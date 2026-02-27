@@ -7,6 +7,8 @@ import com.erpnext.pos.localSource.dao.POSOpeningEntryLinkDao
 import com.erpnext.pos.localSource.dao.SalesInvoiceDao
 import com.erpnext.pos.localSource.entities.PendingOpeningEntrySync
 import com.erpnext.pos.remoteSource.dto.POSOpeningEntrySummaryDto
+import com.erpnext.pos.sync.PushQueueReport
+import com.erpnext.pos.sync.PushSyncConflict
 import com.erpnext.pos.utils.AppLogger
 
 class OpeningEntrySyncRepository(
@@ -16,11 +18,14 @@ class OpeningEntrySyncRepository(
     private val cashboxDao: CashboxDao,
     private val salesInvoiceDao: SalesInvoiceDao
 ) {
-    suspend fun pushPending(): Boolean {
+    suspend fun pushPending(): Boolean = pushPendingWithReport().hasChanges
+
+    suspend fun pushPendingWithReport(): PushQueueReport {
         repairActiveOpenings()
         val pending = openingEntryLinkDao.getPendingSync()
-        if (pending.isEmpty()) return false
+        if (pending.isEmpty()) return PushQueueReport.EMPTY
         var hasChanges = false
+        val conflicts = mutableListOf<PushSyncConflict>()
 
         pending.forEach { candidate ->
             val dto = buildOpeningEntryDto(candidate.openingEntry, candidate.balanceDetails)
@@ -53,6 +58,12 @@ class OpeningEntrySyncRepository(
                         "OpeningEntrySyncRepository: adopted existing remote opening $remoteName " +
                             "after local push failure"
                     )
+                    conflicts += PushSyncConflict(
+                        docType = "POS Opening Entry",
+                        localId = candidate.openingEntry.name,
+                        remoteId = remoteName,
+                        reason = "Apertura local pendiente ya existía en remoto; se adoptó el registro remoto."
+                    )
                     return@onFailure
                 }
                 if (isCashierAssignedError(error)) {
@@ -66,7 +77,10 @@ class OpeningEntrySyncRepository(
             }
         }
 
-        return hasChanges
+        return PushQueueReport(
+            hasChanges = hasChanges,
+            conflicts = conflicts
+        )
     }
 
     suspend fun repairActiveOpenings() {

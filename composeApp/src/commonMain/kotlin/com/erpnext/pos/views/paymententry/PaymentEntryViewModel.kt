@@ -374,20 +374,19 @@ class PaymentEntryViewModel(
             targetMode = current.targetModeOfPayment.trim()
             if (current.entryType == PaymentEntryType.Pay) {
                 val selectedAccount = current.sourceAccount.trim()
-                val selectedMode = current.modeOfPayment.trim()
-                sourceMode = when {
-                    selectedMode.isNotBlank() -> selectedMode
-                    selectedAccount.isNotBlank() -> accountToMode[selectedAccount].orEmpty()
-                    else -> ""
+                if (selectedAccount.isBlank()) {
+                    _state.update {
+                        it.copy(
+                            errorMessage = "Selecciona la cuenta de pago (Paid From)."
+                        )
+                    }
+                    return
                 }
+                sourceMode = accountToMode[selectedAccount].orEmpty()
                 if (sourceMode.isBlank()) {
                     _state.update {
                         it.copy(
-                            errorMessage = if (selectedAccount.isNotBlank()) {
-                                "La cuenta seleccionada no tiene modo de pago configurado."
-                            } else {
-                                "Selecciona o ingresa el modo de pago."
-                            }
+                            errorMessage = "La cuenta seleccionada no tiene método de pago asociado."
                         )
                     }
                     return
@@ -410,7 +409,7 @@ class PaymentEntryViewModel(
             return
         }
         val payFromAccount = if (current.entryType == PaymentEntryType.Pay) {
-            current.sourceAccount.trim().ifBlank { modeToAccount[sourceMode].orEmpty() }
+            current.sourceAccount.trim()
         } else {
             ""
         }
