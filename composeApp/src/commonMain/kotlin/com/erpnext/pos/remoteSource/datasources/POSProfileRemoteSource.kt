@@ -3,29 +3,10 @@ package com.erpnext.pos.remoteSource.datasources
 import com.erpnext.pos.localSource.dao.POSProfileDao
 import com.erpnext.pos.remoteSource.api.APIService
 import com.erpnext.pos.remoteSource.dto.POSProfileDto
-import com.erpnext.pos.remoteSource.dto.POSOpeningEntryDto
-import com.erpnext.pos.remoteSource.dto.POSProfileSimpleDto
 import com.erpnext.pos.remoteSource.mapper.toEntity
 
 class POSProfileRemoteSource(
     private val api: APIService,
     private val posProfileDao: POSProfileDao
 ) {
-    suspend fun getPOSProfile(assignedTo: String? = null): List<POSProfileSimpleDto> {
-        assignedTo
-        return api.getPOSProfiles()
-    }
-
-    //TODO: Tengo que crear una tabla para poder guardar el estado actual de la caja, la informacion seria
-    // status, profileId, warehouseId, userId
-    suspend fun getPOSProfileDetails(profileId: String): POSProfileDto {
-        val profiles = api.getPOSProfileDetails(profileId)
-        posProfileDao.insertAll(listOf(profiles.toEntity()))
-        return profiles
-    }
-
-
-    suspend fun sync() {
-
-    }
 }

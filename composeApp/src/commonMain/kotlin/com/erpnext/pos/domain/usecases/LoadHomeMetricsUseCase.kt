@@ -3,14 +3,11 @@
 package com.erpnext.pos.domain.usecases
 
 import com.erpnext.pos.localSource.dao.SalesInvoiceDao
-import com.erpnext.pos.localSource.dao.CurrencyDailySalesTotal
 import com.erpnext.pos.views.home.DailyMetric
-import com.erpnext.pos.views.home.CurrencyHomeMetric
 import com.erpnext.pos.views.home.HomeMetrics
-import com.erpnext.pos.views.home.TopProductMetric
 import com.erpnext.pos.views.home.TopProductMarginMetric
+import com.erpnext.pos.views.home.TopProductMetric
 import kotlinx.datetime.DatePeriod
-import kotlinx.datetime.Instant
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.minus
@@ -18,6 +15,7 @@ import kotlinx.datetime.plus
 import kotlinx.datetime.toLocalDateTime
 import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
+import kotlin.time.Instant
 
 data class HomeMetricInput(
     val days: Int = 7,
@@ -31,25 +29,31 @@ class LoadHomeMetricsUseCase(
     override suspend fun useCaseFunction(input: HomeMetricInput): HomeMetrics {
         val tz = TimeZone.currentSystemDefault()
         val today = Instant.fromEpochMilliseconds(input.nowMillis).toLocalDateTime(tz).date
+        val todayString = today.toString()
         val dayOpeningEntryId = input.openingEntryId?.trim()?.takeIf { it.isNotBlank() }
         val startDate = today.minus(DatePeriod(days = input.days - 1))
         val startDate14 = today.minus(DatePeriod(days = 13))
         val dateStrings = generateDateRange(startDate, today)
 
-        // KPI del día sí van por turno (opening entry), el BI de totales/rangos queda global.
-        val totalSalesToday =
-            salesInvoiceDao.getTotalSalesForDate(today.toString(), dayOpeningEntryId) ?: 0.0
-        val invoicesToday =
-            salesInvoiceDao.getSalesCountForDate(today.toString(), dayOpeningEntryId)
-        val customersToday =
-            salesInvoiceDao.getDistinctCustomersForDate(today.toString(), dayOpeningEntryId)
+        // Con turno activo, los KPIs y ventanas de tendencia se calculan en el mismo alcance
+        // para evitar mezclar ventas globales con ventas del turno.
+        val trendOpeningEntryId = dayOpeningEntryId
+        val shiftSummaryToday = trendOpeningEntryId?.let { opening ->
+            salesInvoiceDao.getShiftTodaySummary(todayString, opening)
+        }
+        val totalSalesToday = shiftSummaryToday?.totalSalesToday
+            ?: (salesInvoiceDao.getTotalSalesForDate(todayString, trendOpeningEntryId) ?: 0.0)
+        val invoicesToday = shiftSummaryToday?.invoicesToday
+            ?: salesInvoiceDao.getSalesCountForDate(todayString, trendOpeningEntryId)
+        val customersToday = shiftSummaryToday?.customersToday
+            ?: salesInvoiceDao.getDistinctCustomersForDate(todayString, trendOpeningEntryId)
         val outstanding = salesInvoiceDao.getTotalOutstanding(null) ?: 0.0
         val avgTicket = if (invoicesToday > 0) totalSalesToday / invoicesToday else 0.0
 
         val rangeTotals14 = salesInvoiceDao.getDailySalesTotals(
             startDate = startDate14.toString(),
             endDate = today.toString(),
-            openingEntryId = null
+            openingEntryId = trendOpeningEntryId
         ).associateBy { it.date }
 
         val weekSeries = dateStrings.map { date ->
@@ -72,115 +76,69 @@ class LoadHomeMetricsUseCase(
         val compareVsYesterday = percentChange(totalSalesToday, salesYesterday)
         val compareVsLastWeek = percentChange(salesLast7, salesPrev7)
 
-        val currencySummaries = salesInvoiceDao.getSalesSummaryForDateByCurrency(
-            today.toString(),
-            dayOpeningEntryId
-        )
+        val currencySummaries = if (!trendOpeningEntryId.isNullOrBlank()) {
+            salesInvoiceDao.getShiftTodaySummaryByCurrency(todayString, trendOpeningEntryId)
+                .map { row ->
+                    com.erpnext.pos.localSource.dao.CurrencySalesSummary(
+                        currency = row.currency,
+                        total = row.totalSalesToday,
+                        invoices = row.invoicesToday,
+                        customers = row.customersToday
+                    )
+                }
+        } else {
+            salesInvoiceDao.getSalesSummaryForDateByCurrency(todayString, null)
+        }
         val outstandingByCurrency = salesInvoiceDao.getOutstandingTotalsByCurrency(null)
-            .associateBy { it.currency }
         val dailyTotalsByCurrency = salesInvoiceDao.getDailySalesTotalsByCurrency(
             startDate = startDate14.toString(),
             endDate = today.toString(),
-            openingEntryId = null
+            openingEntryId = trendOpeningEntryId
         )
         val marginTodayByCurrency = salesInvoiceDao.getEstimatedMarginTotalByCurrency(
-            startDate = today.toString(),
-            endDate = today.toString(),
+            startDate = todayString,
+            endDate = todayString,
             openingEntryId = dayOpeningEntryId
-        ).associateBy { it.currency }
+        )
         val marginLast7ByCurrency = salesInvoiceDao.getEstimatedMarginTotalByCurrency(
             startDate = last7Start.toString(),
             endDate = today.toString(),
-            openingEntryId = null
-        ).associateBy { it.currency }
+            openingEntryId = trendOpeningEntryId
+        )
         val costedTodayByCurrency = salesInvoiceDao.countItemsWithCostByCurrency(
-            startDate = today.toString(),
-            endDate = today.toString(),
+            startDate = todayString,
+            endDate = todayString,
             openingEntryId = dayOpeningEntryId
-        ).associateBy { it.currency }
+        )
         val totalItemsTodayByCurrency = salesInvoiceDao.countItemsInRangeByCurrency(
-            startDate = today.toString(),
-            endDate = today.toString(),
+            startDate = todayString,
+            endDate = todayString,
             openingEntryId = dayOpeningEntryId
-        ).associateBy { it.currency }
+        )
 
-        val availableCurrencies = salesInvoiceDao.getAvailableCurrencies(null)
-        val currencies = buildSet {
-            availableCurrencies.forEach { add(it) }
-            currencySummaries.forEach { add(it.currency) }
-            outstandingByCurrency.keys.forEach { add(it) }
-            dailyTotalsByCurrency.forEach { add(it.currency) }
-            marginTodayByCurrency.keys.forEach { add(it) }
-            marginLast7ByCurrency.keys.forEach { add(it) }
-        }.filter { it.isNotBlank() }.sorted()
-
-        val currencyMetrics = currencies.map { currency ->
-            val summary = currencySummaries.firstOrNull { it.currency == currency }
-            val dailyTotalsForCurrency = dailyTotalsByCurrency
-                .filter { it.currency == currency }
-                .associateBy(CurrencyDailySalesTotal::date)
-
-            val totalSalesTodayCurrency = summary?.total ?: 0.0
-            val invoicesTodayCurrency = summary?.invoices ?: 0
-            val customersTodayCurrency = summary?.customers ?: 0
-            val avgTicketCurrency = if (invoicesTodayCurrency > 0) {
-                totalSalesTodayCurrency / invoicesTodayCurrency
-            } else {
-                0.0
-            }
-
-            val weekSeriesCurrency = dateStrings.map { date ->
-                DailyMetric(date = date, total = dailyTotalsForCurrency[date]?.total ?: 0.0)
-            }
-
-            val salesYesterdayCurrency = dailyTotalsForCurrency[yesterday]?.total ?: 0.0
-            val salesLast7Currency = last7Dates.sumOf { dailyTotalsForCurrency[it]?.total ?: 0.0 }
-            val salesPrev7Currency = prev7Dates.sumOf { dailyTotalsForCurrency[it]?.total ?: 0.0 }
-
-            val marginTodayCurrency = marginTodayByCurrency[currency]?.margin
-            val marginTodayPercentCurrency = marginTodayCurrency?.takeIf {
-                totalSalesTodayCurrency > 0.0
-            }?.let { (it / totalSalesTodayCurrency) * 100.0 }
-
-            val marginLast7Currency = marginLast7ByCurrency[currency]?.margin
-            val marginLast7PercentCurrency = marginLast7Currency?.takeIf {
-                salesLast7Currency > 0.0
-            }?.let { (it / salesLast7Currency) * 100.0 }
-
-            val costedCount = costedTodayByCurrency[currency]?.count ?: 0
-            val totalItemsCount = totalItemsTodayByCurrency[currency]?.count ?: 0
-            val costCoveragePercentCurrency = if (totalItemsCount > 0) {
-                (costedCount.toDouble() / totalItemsCount.toDouble()) * 100.0
-            } else {
-                null
-            }
-
-            CurrencyHomeMetric(
-                currency = currency,
-                totalSalesToday = totalSalesTodayCurrency,
-                invoicesToday = invoicesTodayCurrency,
-                avgTicket = avgTicketCurrency,
-                customersToday = customersTodayCurrency,
-                outstandingTotal = outstandingByCurrency[currency]?.total ?: 0.0,
-                salesYesterday = salesYesterdayCurrency,
-                salesLast7 = salesLast7Currency,
-                salesPrev7 = salesPrev7Currency,
-                compareVsYesterday = percentChange(totalSalesTodayCurrency, salesYesterdayCurrency),
-                compareVsLastWeek = percentChange(salesLast7Currency, salesPrev7Currency),
-                marginToday = marginTodayCurrency,
-                marginTodayPercent = marginTodayPercentCurrency,
-                marginLast7 = marginLast7Currency,
-                marginLast7Percent = marginLast7PercentCurrency,
-                costCoveragePercent = costCoveragePercentCurrency,
-                weekSeries = weekSeriesCurrency
+        val availableCurrencies = salesInvoiceDao.getAvailableCurrencies(trendOpeningEntryId)
+        val currencyMetrics = HomeCurrencyMetricsCalculator.build(
+            HomeCurrencyMetricsCalculator.Input(
+                dateStrings = dateStrings,
+                yesterday = yesterday,
+                last7Dates = last7Dates,
+                prev7Dates = prev7Dates,
+                availableCurrencies = availableCurrencies,
+                currencySummaries = currencySummaries,
+                outstandingTotalsByCurrency = outstandingByCurrency,
+                dailyTotalsByCurrency = dailyTotalsByCurrency,
+                marginTodayByCurrency = marginTodayByCurrency,
+                marginLast7ByCurrency = marginLast7ByCurrency,
+                costedTodayByCurrency = costedTodayByCurrency,
+                totalItemsTodayByCurrency = totalItemsTodayByCurrency
             )
-        }
+        )
 
         val topProductsByMargin = salesInvoiceDao.getTopProductsByMargin(
             startDate = startDate.toString(),
             endDate = today.toString(),
             limit = 5,
-            openingEntryId = null
+            openingEntryId = trendOpeningEntryId
         ).map {
             val percent = if (it.total > 0.0) (it.margin / it.total) * 100.0 else null
             TopProductMarginMetric(
@@ -197,7 +155,7 @@ class LoadHomeMetricsUseCase(
             startDate = startDate.toString(),
             endDate = today.toString(),
             limit = 5,
-            openingEntryId = null
+            openingEntryId = trendOpeningEntryId
         ).map {
             TopProductMetric(
                 itemCode = it.itemCode,
@@ -208,13 +166,13 @@ class LoadHomeMetricsUseCase(
         }
 
         val costedItemsToday = salesInvoiceDao.countItemsWithCost(
-            startDate = today.toString(),
-            endDate = today.toString(),
+            startDate = todayString,
+            endDate = todayString,
             openingEntryId = dayOpeningEntryId
         )
         val totalItemsToday = salesInvoiceDao.countItemsInRange(
-            startDate = today.toString(),
-            endDate = today.toString(),
+            startDate = todayString,
+            endDate = todayString,
             openingEntryId = dayOpeningEntryId
         )
         val costCoveragePercent = if (totalItemsToday > 0) {
@@ -224,8 +182,8 @@ class LoadHomeMetricsUseCase(
         }
         val marginToday = if (costedItemsToday > 0) {
             salesInvoiceDao.getEstimatedMarginTotal(
-                startDate = today.toString(),
-                endDate = today.toString(),
+                startDate = todayString,
+                endDate = todayString,
                 openingEntryId = dayOpeningEntryId
             ) ?: 0.0
         } else {
@@ -238,13 +196,13 @@ class LoadHomeMetricsUseCase(
         val costedItemsLast7 = salesInvoiceDao.countItemsWithCost(
             startDate = last7Start.toString(),
             endDate = today.toString(),
-            openingEntryId = null
+            openingEntryId = trendOpeningEntryId
         )
         val marginLast7 = if (costedItemsLast7 > 0) {
             salesInvoiceDao.getEstimatedMarginTotal(
                 startDate = last7Start.toString(),
                 endDate = today.toString(),
-                openingEntryId = null
+                openingEntryId = trendOpeningEntryId
             ) ?: 0.0
         } else {
             null

@@ -2,15 +2,15 @@ package com.erpnext.pos.data.repositories
 
 import com.erpnext.pos.localSource.dao.ModeOfPaymentDao
 import com.erpnext.pos.localSource.dao.POSProfileDao
-import com.erpnext.pos.localSource.dao.PosProfilePaymentMethodDao
 import com.erpnext.pos.localSource.dao.PosProfileLocalDao
+import com.erpnext.pos.localSource.dao.PosProfilePaymentMethodDao
 import com.erpnext.pos.localSource.entities.ModeOfPaymentEntity
 import com.erpnext.pos.localSource.entities.PosProfileLocalEntity
 import com.erpnext.pos.localSource.entities.PosProfilePaymentMethodEntity
 import com.erpnext.pos.remoteSource.api.APIService
 import com.erpnext.pos.remoteSource.dto.BootstrapPosSyncDto
-import com.erpnext.pos.remoteSource.dto.PaymentModesDto
 import com.erpnext.pos.remoteSource.dto.POSProfileDto
+import com.erpnext.pos.remoteSource.dto.PaymentModesDto
 import com.erpnext.pos.remoteSource.mapper.toEntity
 import com.erpnext.pos.utils.AppLogger
 import com.erpnext.pos.utils.RepoTrace
@@ -25,19 +25,7 @@ class PosProfilePaymentMethodSyncRepository(
     private val posProfilePaymentMethodDao: PosProfilePaymentMethodDao,
     private val modeOfPaymentDao: ModeOfPaymentDao
 ) {
-    suspend fun syncProfiles(assignedTo: String?): List<PosProfileLocalEntity> {
-        RepoTrace.breadcrumb(
-            "PosProfilePaymentMethodSyncRepository",
-            "syncProfiles",
-            "assignedTo=$assignedTo"
-        )
-        val now = Clock.System.now().toEpochMilliseconds()
-        val snapshot = apiService.getBootstrapPosSyncSnapshot()
-        val profiles = resolveBootstrapProfiles(snapshot)
-        return persistProfilesWithPaymentsSnapshot(profiles, now)
-    }
-
-    suspend fun syncProfilesWithPayments(assignedTo: String?): List<PosProfileLocalEntity> {
+    suspend fun syncProfilesWithPayments(): List<PosProfileLocalEntity> {
         RepoTrace.breadcrumb("PosProfilePaymentMethodSyncRepository", "syncProfilesWithPayments")
         val now = Clock.System.now().toEpochMilliseconds()
         val snapshot = apiService.getBootstrapPosSyncSnapshot()
@@ -72,7 +60,9 @@ class PosProfilePaymentMethodSyncRepository(
         snapshot: BootstrapPosSyncDto,
         now: Long = Clock.System.now().toEpochMilliseconds()
     ): List<PosProfileLocalEntity> {
-        val bootstrapProfiles = resolveBootstrapProfiles(snapshot)
+        val bootstrapProfiles = snapshot.posProfiles
+            ?.filter { it.profileName.isNotBlank() }
+            .orEmpty()
         val local = persistProfilesWithPaymentsSnapshot(bootstrapProfiles, now)
         syncModeOfPaymentDetails(
             profiles = bootstrapProfiles,
@@ -150,26 +140,6 @@ class PosProfilePaymentMethodSyncRepository(
             }
         }
         return localProfiles
-    }
-
-    private suspend fun resolveBootstrapProfiles(
-        snapshot: BootstrapPosSyncDto
-    ): List<POSProfileDto> {
-        val direct = snapshot.posProfiles?.filter { it.profileName.isNotBlank() }.orEmpty()
-        if (direct.isNotEmpty()) return direct
-        AppLogger.warn("sync.bootstrap no retorno pos_profiles, usando my_pos_profiles")
-        val simpleProfiles = apiService.getPOSProfiles()
-        if (simpleProfiles.isEmpty()) return emptyList()
-        return simpleProfiles.mapNotNull { profile ->
-            runCatching { apiService.getPOSProfileDetails(profile.profileName) }
-                .onFailure {
-                    AppLogger.warn(
-                        "pos_profile.detail failed for ${profile.profileName}",
-                        it
-                    )
-                }
-                .getOrNull()
-        }
     }
 
     private suspend fun persistSingleProfileWithPayments(profile: POSProfileDto, now: Long) {

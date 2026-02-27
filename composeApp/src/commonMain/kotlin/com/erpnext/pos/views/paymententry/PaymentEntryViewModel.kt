@@ -6,6 +6,7 @@ import com.erpnext.pos.domain.usecases.CreateInternalTransferInput
 import com.erpnext.pos.domain.usecases.CreateInternalTransferUseCase
 import com.erpnext.pos.domain.usecases.CreatePaymentOutInput
 import com.erpnext.pos.domain.usecases.CreatePaymentOutUseCase
+import com.erpnext.pos.domain.usecases.FetchSupplierOutstandingPurchaseInvoicesUseCase
 import com.erpnext.pos.domain.usecases.FetchCustomersLocalUseCase
 import com.erpnext.pos.domain.usecases.FetchSuppliersLocalUseCase
 import com.erpnext.pos.domain.usecases.FetchCompanyAccountsLocalUseCase
@@ -16,6 +17,7 @@ import com.erpnext.pos.localSource.preferences.GeneralPreferences
 import com.erpnext.pos.navigation.NavRoute
 import com.erpnext.pos.navigation.NavigationManager
 import com.erpnext.pos.remoteSource.dto.InternalTransferCreateDto
+import com.erpnext.pos.remoteSource.dto.PaymentEntryReferenceCreateDto
 import com.erpnext.pos.remoteSource.dto.PaymentOutCreateDto
 import com.erpnext.pos.utils.NetworkMonitor
 import com.erpnext.pos.utils.view.DateTimeProvider
@@ -40,6 +42,7 @@ class PaymentEntryViewModel(
     private val cashBoxManager: CashBoxManager,
     private val fetchCustomersLocalUseCase: FetchCustomersLocalUseCase,
     private val fetchSuppliersLocalUseCase: FetchSuppliersLocalUseCase,
+    private val fetchSupplierOutstandingPurchaseInvoicesUseCase: FetchSupplierOutstandingPurchaseInvoicesUseCase,
     private val fetchCompanyAccountsLocalUseCase: FetchCompanyAccountsLocalUseCase,
     private val createPaymentOutUseCase: CreatePaymentOutUseCase,
     private val createInternalTransferUseCase: CreateInternalTransferUseCase,
@@ -89,6 +92,7 @@ class PaymentEntryViewModel(
             availableModes = current.availableModes,
             accountOptions = current.accountOptions,
             partyOptions = current.partyOptions,
+            supplierPendingInvoices = emptyList(),
             isOnline = current.isOnline,
             offlineModeEnabled = current.offlineModeEnabled,
             referenceDate = draftReferenceDateFor(PaymentEntryType.Receive)
@@ -180,6 +184,9 @@ class PaymentEntryViewModel(
                 invoiceId = if (entryType == PaymentEntryType.Receive) it.invoiceId else "",
                 sourceAccount = if (entryType == PaymentEntryType.InternalTransfer) it.sourceAccount else "",
                 targetAccount = if (entryType == PaymentEntryType.InternalTransfer) it.targetAccount else "",
+                supplierPendingInvoices = if (entryType == PaymentEntryType.Pay) it.supplierPendingInvoices else emptyList(),
+                supplierInvoicesLoading = if (entryType == PaymentEntryType.Pay) it.supplierInvoicesLoading else false,
+                supplierInvoicesError = if (entryType == PaymentEntryType.Pay) it.supplierInvoicesError else null,
                 referenceNoError = null,
                 referenceDateError = null,
                 errorMessage = null,
@@ -197,7 +204,31 @@ class PaymentEntryViewModel(
     }
 
     fun onModeOfPaymentChanged(value: String) {
-        _state.update { it.copy(modeOfPayment = value) }
+        val normalized = value.trim()
+        val paymentCurrency = modeToCurrency[normalized]
+            ?.takeIf { it.isNotBlank() }
+            ?: _state.value.currencyCode
+        val inferredAccount = modeToAccount[normalized].orEmpty()
+        _state.update {
+            it.copy(
+                modeOfPayment = value,
+                currencyCode = paymentCurrency,
+                sourceAccount = if (it.entryType == PaymentEntryType.Pay && inferredAccount.isNotBlank()) {
+                    inferredAccount
+                } else {
+                    it.sourceAccount
+                },
+                supplierInvoicesError = null
+            )
+        }
+        val current = _state.value
+        if (current.entryType == PaymentEntryType.Pay && current.supplierPendingInvoices.isNotEmpty()) {
+            refreshSupplierInvoiceConversions(
+                invoices = current.supplierPendingInvoices,
+                paymentCurrency = current.currencyCode,
+                amountText = current.amount
+            )
+        }
     }
 
     fun onTargetModeOfPaymentChanged(value: String) {
@@ -205,7 +236,20 @@ class PaymentEntryViewModel(
     }
 
     fun onSourceAccountChanged(value: String) {
-        _state.update { it.copy(sourceAccount = value) }
+        val normalized = value.trim()
+        val inferredMode = accountToMode[normalized].orEmpty()
+        if (_state.value.entryType == PaymentEntryType.Pay && inferredMode.isNotBlank()) {
+            onModeOfPaymentChanged(inferredMode)
+            _state.update { state ->
+                state.copy(
+                    sourceAccount = value,
+                    modeOfPayment = inferredMode,
+                    errorMessage = null
+                )
+            }
+        } else {
+            _state.update { it.copy(sourceAccount = value, errorMessage = null) }
+        }
     }
 
     fun onTargetAccountChanged(value: String) {
@@ -214,7 +258,19 @@ class PaymentEntryViewModel(
 
     fun onAmountChanged(value: String) {
         amountDraftByType[_state.value.entryType] = value
-        _state.update { it.copy(amount = value, errorMessage = null) }
+        _state.update {
+            val updated = it.copy(amount = value, errorMessage = null)
+            if (updated.entryType == PaymentEntryType.Pay) {
+                updated.copy(
+                    supplierPendingInvoices = reallocateSupplierInvoices(
+                        updated.supplierPendingInvoices,
+                        value
+                    )
+                )
+            } else {
+                updated
+            }
+        }
     }
 
     fun onConceptChanged(value: String) {
@@ -222,7 +278,30 @@ class PaymentEntryViewModel(
     }
 
     fun onPartyChanged(value: String) {
-        _state.update { it.copy(party = value) }
+        _state.update {
+            it.copy(
+                party = value,
+                supplierPendingInvoices = emptyList(),
+                supplierInvoicesLoading = false,
+                supplierInvoicesError = null
+            )
+        }
+        if (_state.value.entryType == PaymentEntryType.Pay) {
+            loadSupplierOutstandingInvoices(value)
+        }
+    }
+
+    fun onSupplierInvoiceToggled(invoiceName: String) {
+        _state.update {
+            val updatedList = it.supplierPendingInvoices.map { row ->
+                if (row.invoiceName != invoiceName) row else row.copy(selected = !row.selected)
+            }
+            it.copy(
+                supplierPendingInvoices = reallocateSupplierInvoices(updatedList, it.amount),
+                supplierInvoicesError = null,
+                errorMessage = null
+            )
+        }
     }
 
     fun onReferenceNoChanged(value: String) {
@@ -292,11 +371,33 @@ class PaymentEntryViewModel(
                 return
             }
         } else {
-            sourceMode = current.modeOfPayment.trim()
             targetMode = current.targetModeOfPayment.trim()
-            if (sourceMode.isBlank()) {
-                _state.update { it.copy(errorMessage = "Selecciona o ingresa el modo de pago.") }
-                return
+            if (current.entryType == PaymentEntryType.Pay) {
+                val selectedAccount = current.sourceAccount.trim()
+                val selectedMode = current.modeOfPayment.trim()
+                sourceMode = when {
+                    selectedMode.isNotBlank() -> selectedMode
+                    selectedAccount.isNotBlank() -> accountToMode[selectedAccount].orEmpty()
+                    else -> ""
+                }
+                if (sourceMode.isBlank()) {
+                    _state.update {
+                        it.copy(
+                            errorMessage = if (selectedAccount.isNotBlank()) {
+                                "La cuenta seleccionada no tiene modo de pago configurado."
+                            } else {
+                                "Selecciona o ingresa el modo de pago."
+                            }
+                        )
+                    }
+                    return
+                }
+            } else {
+                sourceMode = current.modeOfPayment.trim()
+                if (sourceMode.isBlank()) {
+                    _state.update { it.copy(errorMessage = "Selecciona o ingresa el modo de pago.") }
+                    return
+                }
             }
         }
 
@@ -304,13 +405,77 @@ class PaymentEntryViewModel(
             _state.update { it.copy(errorMessage = "La entrada solo está permitida para cobro de factura.") }
             return
         }
-        if (current.entryType == PaymentEntryType.Pay && current.concept.isBlank()) {
-            _state.update { it.copy(errorMessage = "El concepto del gasto es requerido.") }
-            return
-        }
         if (current.entryType == PaymentEntryType.Pay && current.party.isBlank()) {
             _state.update { it.copy(errorMessage = "Selecciona un proveedor para el gasto.") }
             return
+        }
+        val payFromAccount = if (current.entryType == PaymentEntryType.Pay) {
+            current.sourceAccount.trim().ifBlank { modeToAccount[sourceMode].orEmpty() }
+        } else {
+            ""
+        }
+        if (current.entryType == PaymentEntryType.Pay && payFromAccount.isBlank()) {
+            _state.update {
+                it.copy(errorMessage = "Selecciona una cuenta de pago válida para registrar el gasto.")
+            }
+            return
+        }
+
+        val selectedSupplierReferences = if (current.entryType == PaymentEntryType.Pay) {
+            current.supplierPendingInvoices.filter { it.selected && it.allocatedAmountInvoiceCurrency > 0.0 }
+        } else {
+            emptyList()
+        }
+        val selectedSupplierRows = if (current.entryType == PaymentEntryType.Pay) {
+            current.supplierPendingInvoices.filter { it.selected }
+        } else {
+            emptyList()
+        }
+        if (current.entryType == PaymentEntryType.Pay &&
+            current.supplierPendingInvoices.isNotEmpty() &&
+            selectedSupplierReferences.isEmpty()
+        ) {
+            _state.update {
+                it.copy(
+                    errorMessage = if (selectedSupplierRows.any { row -> row.conversionError }) {
+                        "No se pudo convertir las facturas seleccionadas. Verifica la tasa de cambio."
+                    } else {
+                        "Selecciona al menos una factura pendiente del proveedor."
+                    }
+                )
+            }
+            return
+        }
+        if (current.entryType == PaymentEntryType.Pay && selectedSupplierReferences.isNotEmpty()) {
+            if (selectedSupplierReferences.any { it.conversionError }) {
+                _state.update {
+                    it.copy(errorMessage = "No se pudo convertir una o más facturas a la moneda de la cuenta de pago.")
+                }
+                return
+            }
+            val selectedOutstandingPaymentCurrency = selectedSupplierRows
+                .filterNot { it.conversionError }
+                .sumOf(::resolveOutstandingInPaymentCurrency)
+            if (amount + 0.009 < selectedOutstandingPaymentCurrency) {
+                _state.update {
+                    it.copy(
+                        errorMessage = "El monto debe ser igual o mayor al saldo adeudado de las facturas seleccionadas."
+                    )
+                }
+                return
+            }
+        }
+        val selectedOutstandingPaymentCurrency = selectedSupplierRows
+            .filterNot { it.conversionError }
+            .sumOf(::resolveOutstandingInPaymentCurrency)
+        val changeInFavor = if (
+            current.entryType == PaymentEntryType.Pay &&
+            selectedSupplierReferences.isNotEmpty() &&
+            amount > selectedOutstandingPaymentCurrency
+        ) {
+            roundMoney(amount - selectedOutstandingPaymentCurrency)
+        } else {
+            0.0
         }
 
         _state.update {
@@ -347,13 +512,24 @@ class PaymentEntryViewModel(
                     }
 
                     PaymentEntryType.Pay -> {
-                        val paidFromAccount = modeToAccount[sourceMode].orEmpty()
+                        val paidFromAccount = payFromAccount
+                            .ifBlank { modeToAccount[sourceMode].orEmpty() }
                         if (paidFromAccount.isBlank()) {
                             error("No se encontró la cuenta contable para el modo de pago seleccionado.")
                         }
                         val context =
                             cashBoxManager.getContext() ?: cashBoxManager.initializeContext()
                             ?: error("No hay contexto POS activo.")
+                        val availableFunds = cashBoxManager.getAvailableFundsForMode(sourceMode)
+                        if (availableFunds + 0.009 < amount) {
+                            error(
+                                "Fondos insuficientes para $sourceMode. Disponible: ${
+                                    roundMoney(
+                                        availableFunds
+                                    )
+                                } ${current.currencyCode}."
+                            )
+                        }
                         val fromCurrency = modeToCurrency[sourceMode]
                             ?.takeIf { it.isNotBlank() }
                             ?: context.companyCurrency
@@ -379,6 +555,15 @@ class PaymentEntryViewModel(
                             paidAmount = amount,
                             receivedAmount = receivedAmount,
                             paidFrom = paidFromAccount,
+                            references = selectedSupplierReferences.map { invoice ->
+                                PaymentEntryReferenceCreateDto(
+                                    referenceDoctype = "Purchase Invoice",
+                                    referenceName = invoice.invoiceName,
+                                    totalAmount = invoice.totalAmountInvoiceCurrency.takeIf { it > 0.0 },
+                                    outstandingAmount = invoice.outstandingAmountInvoiceCurrency.takeIf { it > 0.0 },
+                                    allocatedAmount = invoice.allocatedAmountInvoiceCurrency
+                                )
+                            },
                             referenceNo = current.referenceNo.trim().takeIf { it.isNotBlank() },
                             referenceDate = current.referenceDate.trim().takeIf { it.isNotBlank() }
                         )
@@ -389,10 +574,9 @@ class PaymentEntryViewModel(
                                 payload = payload
                             )
                         )
-                        cashBoxManager.registerCashMovement(
+                        cashBoxManager.registerSupplierPaymentOutflow(
                             modeOfPayment = sourceMode,
                             amount = amount,
-                            isIncoming = false,
                             note = narration
                         )
                     }
@@ -453,7 +637,15 @@ class PaymentEntryViewModel(
                             "Transferencia interna registrada por $amount de ${current.sourceAccount} a ${current.targetAccount}."
 
                         PaymentEntryType.Pay ->
-                            "Gasto registrado por $amount desde $sourceMode."
+                            if (selectedSupplierReferences.isNotEmpty()) {
+                                if (changeInFavor > 0.0) {
+                                    "Pago a proveedor registrado por $amount desde $sourceMode. Vuelto a favor: ${roundMoney(changeInFavor)} ${current.currencyCode}."
+                                } else {
+                                    "Pago a proveedor registrado por $amount desde $sourceMode."
+                                }
+                            } else {
+                                "Gasto registrado por $amount desde $sourceMode."
+                            }
 
                         PaymentEntryType.Receive ->
                             if (current.invoiceId.isNotBlank()) {
@@ -470,6 +662,9 @@ class PaymentEntryViewModel(
                         targetAccount = "",
                         concept = "",
                         party = if (current.entryType == PaymentEntryType.Pay) "" else it.party,
+                        supplierPendingInvoices = if (current.entryType == PaymentEntryType.Pay) emptyList() else it.supplierPendingInvoices,
+                        supplierInvoicesLoading = false,
+                        supplierInvoicesError = null,
                         referenceNo = "",
                         referenceDate = DateTimeProvider.todayDate(),
                         referenceNoError = null,
@@ -522,6 +717,204 @@ class PaymentEntryViewModel(
             state.notes.trim().takeIf { it.isNotBlank() }?.let { add("Nota: $it") }
         }
         return segments.joinToString(" | ")
+    }
+
+    private fun loadSupplierOutstandingInvoices(party: String) {
+        val supplier = party.trim()
+        if (supplier.isBlank()) return
+        executeUseCase(
+            action = {
+                _state.update {
+                    it.copy(
+                        supplierInvoicesLoading = true,
+                        supplierInvoicesError = null,
+                        errorMessage = null
+                    )
+                }
+                val invoices = fetchSupplierOutstandingPurchaseInvoicesUseCase(supplier)
+                    .filter { it.outstandingAmount > 0.0 && !isSupplierInvoiceClosed(it.status) }
+                    .sortedBy { it.postingDate.orEmpty() }
+                    .map { dto ->
+                        SupplierPendingInvoiceUi(
+                            invoiceName = dto.name,
+                            status = dto.status.orEmpty(),
+                            postingDate = dto.postingDate.orEmpty(),
+                            dueDate = dto.dueDate.orEmpty(),
+                            invoiceCurrency = dto.currency.orEmpty(),
+                            paymentCurrency = _state.value.currencyCode,
+                            totalAmountInvoiceCurrency = dto.grandTotal,
+                            outstandingAmountInvoiceCurrency = dto.outstandingAmount
+                        )
+                    }
+                val paymentCurrency = _state.value.currencyCode
+                val convertedInvoices = enrichSupplierInvoicesWithConversion(invoices, paymentCurrency)
+                _state.update { state ->
+                    if (state.entryType != PaymentEntryType.Pay || !state.party.trim().equals(supplier, ignoreCase = false)) {
+                        state
+                    } else {
+                        state.copy(
+                            supplierInvoicesLoading = false,
+                            supplierInvoicesError = null,
+                            supplierPendingInvoices = reallocateSupplierInvoices(convertedInvoices, state.amount)
+                        )
+                    }
+                }
+            },
+            exceptionHandler = { throwable ->
+                _state.update { state ->
+                    if (state.entryType != PaymentEntryType.Pay) {
+                        state
+                    } else {
+                        state.copy(
+                            supplierInvoicesLoading = false,
+                            supplierPendingInvoices = emptyList(),
+                            supplierInvoicesError = throwable.message ?: "No se pudieron cargar facturas pendientes del proveedor."
+                        )
+                    }
+                }
+            },
+            showLoading = false
+        )
+    }
+
+    private fun reallocateSupplierInvoices(
+        invoices: List<SupplierPendingInvoiceUi>,
+        amountText: String
+    ): List<SupplierPendingInvoiceUi> {
+        var remaining = amountText.trim().toDoubleOrNull()?.coerceAtLeast(0.0) ?: 0.0
+        return invoices.map { row ->
+            if (!row.selected) {
+                row.copy(
+                    allocatedAmountPaymentCurrency = 0.0,
+                    allocatedAmountInvoiceCurrency = 0.0
+                )
+            } else if (row.conversionError) {
+                row.copy(
+                    allocatedAmountPaymentCurrency = 0.0,
+                    allocatedAmountInvoiceCurrency = 0.0
+                )
+            } else {
+                val rate = row.paymentToInvoiceRate ?: 1.0
+                val maxPaymentAmount = row.outstandingAmountPaymentCurrency
+                    ?: if (rate > 0.0) row.outstandingAmountInvoiceCurrency / rate else 0.0
+                val allocatedPayment = minOf(remaining, maxPaymentAmount.coerceAtLeast(0.0))
+                val allocatedInvoice = (allocatedPayment * rate)
+                    .coerceAtMost(row.outstandingAmountInvoiceCurrency.coerceAtLeast(0.0))
+                remaining = (remaining - allocatedPayment).coerceAtLeast(0.0)
+                row.copy(
+                    allocatedAmountPaymentCurrency = roundMoney(allocatedPayment),
+                    allocatedAmountInvoiceCurrency = roundMoney(allocatedInvoice)
+                )
+            }
+        }
+    }
+
+    private fun refreshSupplierInvoiceConversions(
+        invoices: List<SupplierPendingInvoiceUi>,
+        paymentCurrency: String,
+        amountText: String
+    ) {
+        executeUseCase(
+            action = {
+                _state.update { it.copy(supplierInvoicesLoading = true, supplierInvoicesError = null) }
+                val converted = enrichSupplierInvoicesWithConversion(invoices, paymentCurrency)
+                _state.update { state ->
+                    state.copy(
+                        supplierInvoicesLoading = false,
+                        supplierInvoicesError = null,
+                        supplierPendingInvoices = reallocateSupplierInvoices(converted, amountText)
+                    )
+                }
+            },
+            exceptionHandler = { throwable ->
+                _state.update {
+                    it.copy(
+                        supplierInvoicesLoading = false,
+                        supplierInvoicesError = throwable.message
+                            ?: "No se pudieron recalcular conversiones de facturas."
+                    )
+                }
+            },
+            showLoading = false
+        )
+    }
+
+    private suspend fun enrichSupplierInvoicesWithConversion(
+        invoices: List<SupplierPendingInvoiceUi>,
+        paymentCurrency: String
+    ): List<SupplierPendingInvoiceUi> {
+        return invoices.map { row ->
+            val invoiceCurrency = row.invoiceCurrency.ifBlank { paymentCurrency }
+            if (paymentCurrency.isBlank() || invoiceCurrency.equals(paymentCurrency, ignoreCase = true)) {
+                row.copy(
+                    paymentCurrency = paymentCurrency,
+                    paymentToInvoiceRate = 1.0,
+                    outstandingAmountPaymentCurrency = roundMoney(row.outstandingAmountInvoiceCurrency),
+                    conversionError = false
+                )
+            } else {
+                val rate = resolveRateBetweenCurrencies(
+                    fromCurrency = paymentCurrency,
+                    toCurrency = invoiceCurrency
+                )
+                if (rate == null || rate <= 0.0) {
+                    row.copy(
+                        paymentCurrency = paymentCurrency,
+                        paymentToInvoiceRate = null,
+                        outstandingAmountPaymentCurrency = null,
+                        conversionError = true
+                    )
+                } else {
+                    row.copy(
+                        paymentCurrency = paymentCurrency,
+                        paymentToInvoiceRate = rate,
+                        outstandingAmountPaymentCurrency = roundMoney(
+                            row.outstandingAmountInvoiceCurrency / rate
+                        ),
+                        conversionError = false
+                    )
+                }
+            }
+        }
+    }
+
+    private suspend fun resolveRateBetweenCurrencies(
+        fromCurrency: String,
+        toCurrency: String
+    ): Double? {
+        if (fromCurrency.equals(toCurrency, ignoreCase = true)) return 1.0
+        val direct = cashBoxManager.resolveExchangeRateBetween(
+            fromCurrency = fromCurrency,
+            toCurrency = toCurrency,
+            allowNetwork = true
+        )
+        if (direct != null && direct > 0.0) return direct
+        val reverse = cashBoxManager.resolveExchangeRateBetween(
+            fromCurrency = toCurrency,
+            toCurrency = fromCurrency,
+            allowNetwork = true
+        )
+        return reverse?.takeIf { it > 0.0 }?.let { 1.0 / it }
+    }
+
+    private fun roundMoney(value: Double): Double =
+        kotlin.math.round(value * 100.0) / 100.0
+
+    private fun resolveOutstandingInPaymentCurrency(row: SupplierPendingInvoiceUi): Double {
+        val paymentOutstanding = row.outstandingAmountPaymentCurrency
+        if (paymentOutstanding != null) return paymentOutstanding.coerceAtLeast(0.0)
+
+        val rate = row.paymentToInvoiceRate
+        if (rate != null && rate > 0.0) {
+            return (row.outstandingAmountInvoiceCurrency / rate).coerceAtLeast(0.0)
+        }
+        return row.outstandingAmountInvoiceCurrency.coerceAtLeast(0.0)
+    }
+
+    private fun isSupplierInvoiceClosed(status: String?): Boolean {
+        val normalized = status?.trim()?.lowercase().orEmpty()
+        if (normalized.isBlank()) return false
+        return normalized == "paid" || normalized == "cancelled" || normalized == "canceled"
     }
 
     private data class PaymentEntryFieldErrors(

@@ -31,7 +31,4 @@ class POSProfileRepository(
                 throw error
             }
     }
-
-    override suspend fun sync() {
-    }
 }

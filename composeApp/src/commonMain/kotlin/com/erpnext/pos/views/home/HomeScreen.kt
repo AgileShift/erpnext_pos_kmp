@@ -336,7 +336,37 @@ private fun BISection(
     actions: HomeAction,
     modifier: Modifier = Modifier
 ) {
-    val currencyMetrics = metrics.currencyMetrics
+    val currencyMetrics = if (metrics.currencyMetrics.isNotEmpty()) {
+        metrics.currencyMetrics
+    } else {
+        val target = metrics.salesTarget
+        val targetCurrency = target?.secondaryCurrency ?: target?.baseCurrency
+        if (targetCurrency.isNullOrBlank()) {
+            emptyList()
+        } else {
+            listOf(
+                CurrencyHomeMetric(
+                    currency = targetCurrency,
+                    totalSalesToday = metrics.totalSalesToday,
+                    invoicesToday = metrics.invoicesToday,
+                    avgTicket = metrics.avgTicket,
+                    customersToday = metrics.customersToday,
+                    outstandingTotal = metrics.outstandingTotal,
+                    salesYesterday = metrics.salesYesterday,
+                    salesLast7 = metrics.salesLast7,
+                    salesPrev7 = metrics.salesPrev7,
+                    compareVsYesterday = metrics.compareVsYesterday,
+                    compareVsLastWeek = metrics.compareVsLastWeek,
+                    marginToday = metrics.marginToday,
+                    marginTodayPercent = metrics.marginTodayPercent,
+                    marginLast7 = metrics.marginLast7,
+                    marginLast7Percent = metrics.marginLast7Percent,
+                    costCoveragePercent = metrics.costCoveragePercent,
+                    weekSeries = metrics.weekSeries
+                )
+            )
+        }
+    }
     val strings = LocalAppStrings.current
     if (currencyMetrics.isEmpty()) {
         Column(

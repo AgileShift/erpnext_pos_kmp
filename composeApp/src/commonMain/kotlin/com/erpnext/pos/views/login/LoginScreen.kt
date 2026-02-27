@@ -317,9 +317,9 @@ private fun LoginCard(
                 }
 
                 is LoginState.Authenticated -> {
-                    LaunchedEffect(state.tokens) {
-                        actions.isAuthenticated(state.tokens)
-                    }
+//                    LaunchedEffect(state.tokens) {
+//                        actions.isAuthenticated(state.tokens)
+//                    }
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.Center

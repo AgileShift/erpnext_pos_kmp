@@ -20,6 +20,7 @@ class PaymentEntryCoordinator(
     fun onAmountChanged(value: String) = viewModel.onAmountChanged(value)
     fun onConceptChanged(value: String) = viewModel.onConceptChanged(value)
     fun onPartyChanged(value: String) = viewModel.onPartyChanged(value)
+    fun onSupplierInvoiceToggled(invoiceName: String) = viewModel.onSupplierInvoiceToggled(invoiceName)
     fun onReferenceNoChanged(value: String) = viewModel.onReferenceNoChanged(value)
     fun onReferenceDateChanged(value: String) = viewModel.onReferenceDateChanged(value)
     fun onNotesChanged(value: String) = viewModel.onNotesChanged(value)

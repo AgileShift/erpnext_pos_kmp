@@ -34,6 +34,9 @@ data class PaymentEntryState(
     val availableModes: List<String> = emptyList(),
     val accountOptions: List<String> = emptyList(),
     val partyOptions: List<String> = emptyList(),
+    val supplierPendingInvoices: List<SupplierPendingInvoiceUi> = emptyList(),
+    val supplierInvoicesLoading: Boolean = false,
+    val supplierInvoicesError: String? = null,
     val isOnline: Boolean = true,
     val offlineModeEnabled: Boolean = false,
     val isSubmitting: Boolean = false,
@@ -52,9 +55,27 @@ data class PaymentEntryAction(
     val onAmountChanged: (String) -> Unit = {},
     val onConceptChanged: (String) -> Unit = {},
     val onPartyChanged: (String) -> Unit = {},
+    val onSupplierInvoiceToggled: (String) -> Unit = {},
     val onReferenceNoChanged: (String) -> Unit = {},
     val onReferenceDateChanged: (String) -> Unit = {},
     val onNotesChanged: (String) -> Unit = {},
     val onSubmit: () -> Unit = {},
     val onBack: () -> Unit = {}
+)
+
+data class SupplierPendingInvoiceUi(
+    val invoiceName: String,
+    val status: String = "",
+    val postingDate: String = "",
+    val dueDate: String = "",
+    val invoiceCurrency: String = "",
+    val paymentCurrency: String = "",
+    val totalAmountInvoiceCurrency: Double = 0.0,
+    val outstandingAmountInvoiceCurrency: Double = 0.0,
+    val paymentToInvoiceRate: Double? = null,
+    val outstandingAmountPaymentCurrency: Double? = null,
+    val allocatedAmountPaymentCurrency: Double = 0.0,
+    val allocatedAmountInvoiceCurrency: Double = 0.0,
+    val conversionError: Boolean = false,
+    val selected: Boolean = false
 )

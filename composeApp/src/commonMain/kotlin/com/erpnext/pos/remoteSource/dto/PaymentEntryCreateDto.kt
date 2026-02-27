@@ -1,9 +1,11 @@
 package com.erpnext.pos.remoteSource.dto
 
 import kotlinx.serialization.EncodeDefault
+import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
+@OptIn(ExperimentalSerializationApi::class)
 @Serializable
 data class PaymentEntryCreateDto(
     @SerialName("company")

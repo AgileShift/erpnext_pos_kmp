@@ -11,6 +11,7 @@ import com.erpnext.pos.remoteSource.dto.BalanceDetailsDto
 import com.erpnext.pos.remoteSource.dto.SalesInvoiceDto
 import com.erpnext.pos.remoteSource.dto.SalesInvoiceItemDto
 import com.erpnext.pos.remoteSource.dto.SalesInvoicePaymentDto
+import com.erpnext.pos.utils.roundToCurrency
 import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
 
@@ -108,20 +109,14 @@ fun SalesInvoiceDto.toEntity(): SalesInvoiceWithItemsAndPayments {
         return baseAmount ?: (amount * rate)
     }
 
-    val paidResolved = when {
-        (paidAmount ?: 0.0) > 0.0001 -> paidAmount ?: 0.0
-        payments.isNotEmpty() -> payments.sumOf { it.amount }
-        else -> paidAmount ?: 0.0
-    }
-    val rawOutstanding = outstandingAmount ?: (grandTotal - paidResolved)
-    val shouldDefaultOutstanding =
-        outstandingAmount == null &&
-            paidResolved <= 0.0001 &&
-            payments.isEmpty() &&
-            isReturn != 1 &&
-            grandTotal > 0.0 &&
-            rawOutstanding < grandTotal - 0.01
-    val outstandingResolved = if (shouldDefaultOutstanding) grandTotal else rawOutstanding
+    val financials = resolveInvoiceFinancialsFromRemote(
+        grandTotal = grandTotal,
+        paidAmount = paidAmount,
+        outstandingAmount = outstandingAmount,
+        payments = payments,
+        isReturn = isReturn,
+        status = status
+    )
 
     // Se asegura que la factura local conserve los montos pagados recibidos del servidor.
     val headerWarehouse = items.firstOrNull { !it.warehouse.isNullOrBlank() }?.warehouse
@@ -143,7 +138,7 @@ fun SalesInvoiceDto.toEntity(): SalesInvoiceWithItemsAndPayments {
         netTotal = netTotal,
         taxTotal = totalTaxesAndCharges ?: 0.0,
         grandTotal = grandTotal,
-        outstandingAmount = outstandingResolved,
+        outstandingAmount = financials.outstandingAmount,
         baseTotal = resolveBaseAmount(total ?: netTotal, baseTotal),
         baseNetTotal = resolveBaseAmount(netTotal, baseNetTotal),
         baseTotalTaxesAndCharges = resolveBaseAmount(totalTaxesAndCharges, baseTotalTaxesAndCharges),
@@ -151,11 +146,11 @@ fun SalesInvoiceDto.toEntity(): SalesInvoiceWithItemsAndPayments {
         baseRoundingAdjustment = resolveBaseAmount(roundingAdjustment, baseRoundingAdjustment),
         baseRoundedTotal = resolveBaseAmount(roundedTotal, baseRoundedTotal),
         baseDiscountAmount = resolveBaseAmount(discountAmount, baseDiscountAmount),
-        basePaidAmount = resolveBaseAmount(paidResolved, basePaidAmount),
+        basePaidAmount = resolveBaseAmount(financials.paidAmount, basePaidAmount),
         baseChangeAmount = resolveBaseAmount(changeAmount, baseChangeAmount),
         baseWriteOffAmount = resolveBaseAmount(writeOffAmount, baseWriteOffAmount),
         // El paid_amount remoto es la fuente de verdad para reconciliación y BI.
-        paidAmount = paidResolved,
+        paidAmount = financials.paidAmount,
         status = status ?: "Draft",
         syncStatus = "Synced",
         docstatus = resolveDocStatus(status, docStatus),
@@ -257,4 +252,81 @@ private fun resolveDocStatus(status: String?, docStatus: Int?): Int {
         "cancelled", "return" -> 2
         else -> 0
     }
+}
+
+private data class ResolvedInvoiceFinancials(
+    val paidAmount: Double,
+    val outstandingAmount: Double
+)
+
+private fun resolveInvoiceFinancialsFromRemote(
+    grandTotal: Double,
+    paidAmount: Double?,
+    outstandingAmount: Double?,
+    payments: List<SalesInvoicePaymentDto>,
+    isReturn: Int,
+    status: String?
+): ResolvedInvoiceFinancials {
+    val tolerance = 0.01
+    val total = grandTotal.coerceAtLeast(0.0)
+    val paidFromField = (paidAmount ?: 0.0).coerceAtLeast(0.0)
+    val paidFromPayments = payments.sumOf { it.amount }.coerceAtLeast(0.0)
+    val paidMissing = paidFromField <= tolerance && paidFromPayments <= tolerance
+
+    var paidResolved = when {
+        paidFromField > tolerance -> paidFromField
+        paidFromPayments > tolerance -> paidFromPayments
+        else -> 0.0
+    }.coerceAtMost(total)
+
+    val outstandingProvided = outstandingAmount
+        ?.coerceAtLeast(0.0)
+        ?.coerceAtMost(total)
+    var outstandingResolved = outstandingProvided ?: (total - paidResolved).coerceAtLeast(0.0)
+    val inferredPaidFromOutstanding = (total - outstandingResolved).coerceAtLeast(0.0)
+    val statusSuggestsPayment = status?.trim()?.lowercase() in setOf(
+        "paid",
+        "partly paid",
+        "partly paid and discounted",
+        "credit note issued"
+    )
+
+    if (outstandingProvided != null &&
+        inferredPaidFromOutstanding > tolerance &&
+        (paidMissing || statusSuggestsPayment ||
+            kotlin.math.abs((total - paidResolved) - outstandingResolved) > tolerance)
+    ) {
+        paidResolved = inferredPaidFromOutstanding
+    }
+
+    if (outstandingProvided == null &&
+        paidMissing &&
+        isReturn != 1 &&
+        total > 0.0 &&
+        outstandingResolved < total - tolerance
+    ) {
+        paidResolved = 0.0
+        outstandingResolved = total
+    }
+
+    if (outstandingProvided == null) {
+        outstandingResolved = (total - paidResolved).coerceAtLeast(0.0)
+    } else {
+        val expectedOutstanding = (total - paidResolved).coerceAtLeast(0.0)
+        if (kotlin.math.abs(expectedOutstanding - outstandingResolved) > tolerance) {
+            paidResolved = inferredPaidFromOutstanding
+            outstandingResolved = outstandingProvided
+        }
+    }
+
+    paidResolved = roundToCurrency(paidResolved.coerceIn(0.0, total))
+    outstandingResolved = roundToCurrency(outstandingResolved.coerceIn(0.0, total))
+    if (kotlin.math.abs((total - paidResolved) - outstandingResolved) > tolerance) {
+        paidResolved = roundToCurrency((total - outstandingResolved).coerceAtLeast(0.0))
+    }
+
+    return ResolvedInvoiceFinancials(
+        paidAmount = paidResolved,
+        outstandingAmount = outstandingResolved
+    )
 }

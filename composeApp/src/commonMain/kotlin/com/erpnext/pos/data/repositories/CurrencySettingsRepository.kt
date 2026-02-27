@@ -30,31 +30,23 @@ class CurrencySettingsRepository(
     }
 
     suspend fun sync(): CurrencyPrecisionSnapshot? {
-        val settings = api.getSystemSettingsRaw() ?: return null
         val enabledCurrencies = api.getEnabledCurrencies()
             .map { normalizeCurrency(it.name) }
             .filter { it.isNotBlank() }
             .distinct()
             .ifEmpty { listOf("USD", "NIO") }
 
-        val currencyPrecision = settings.intOrNull("currency_precision")
-        val floatPrecision = settings.intOrNull("float_precision")
-        val roundingMethod = settings.stringOrNull("rounding_method")
 
-        val defaultPrecision = currencyPrecision ?: floatPrecision ?: 2
+        val defaultPrecision = 2
         val currencyMap = mutableMapOf<String, CurrencyPrecisionEntry>()
 
         enabledCurrencies.forEach { code ->
             val detail = api.getCurrencyDetail(code) ?: return@forEach
             val precision = resolveCurrencyPrecision(detail, defaultPrecision)
-            val cashScale = precision
-            currencyMap[code] = CurrencyPrecisionEntry(precision = precision, cashScale = cashScale)
+            currencyMap[code] = CurrencyPrecisionEntry(precision = precision, cashScale = precision)
         }
 
         val snapshot = CurrencyPrecisionSnapshot(
-            currencyPrecision = currencyPrecision,
-            floatPrecision = floatPrecision,
-            roundingMethod = roundingMethod,
             currencies = currencyMap
         )
         preferences.save(snapshot)

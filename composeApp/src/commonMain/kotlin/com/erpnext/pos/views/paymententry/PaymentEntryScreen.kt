@@ -19,12 +19,15 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.automirrored.filled.CompareArrows
@@ -33,6 +36,7 @@ import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Payments
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
@@ -70,7 +74,6 @@ import com.erpnext.pos.utils.view.SnackbarController
 import com.erpnext.pos.utils.view.SnackbarPosition
 import com.erpnext.pos.utils.view.SnackbarType
 import com.erpnext.pos.views.billing.MoneyTextField
-import kotlinx.datetime.Instant
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.atStartOfDayIn
@@ -78,6 +81,7 @@ import kotlinx.datetime.toLocalDateTime
 import org.jetbrains.compose.ui.tooling.preview.Preview
 import org.koin.compose.koinInject
 import kotlin.time.ExperimentalTime
+import kotlin.time.Instant
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -167,187 +171,282 @@ fun PaymentEntryScreen(
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(16.dp)
                     ) {
-                        Column(
+                        BoxWithConstraints(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(12.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                                .padding(12.dp)
                         ) {
-                            val title = if (state.entryType == PaymentEntryType.Pay) {
-                                "Información de la parte"
-                            } else {
-                                "Cuenta y cobro"
-                            }
-                            Text(
-                                title,
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.SemiBold
-                            )
+                            val showInvoicesOnRight = state.entryType == PaymentEntryType.Pay && maxWidth > 940.dp
 
-                            ModeSelectorField(
-                                label = "Modo de pago",
-                                value = state.modeOfPayment,
-                                options = state.availableModes,
-                                shape = fieldShape,
-                                colors = fieldColors,
-                                onSelected = action.onModeOfPaymentChanged
-                            )
-
-                            if (state.entryType == PaymentEntryType.Pay) {
-                                if (state.partyOptions.isNotEmpty()) {
-                                    ModeSelectorField(
-                                        label = "Proveedor / Tercero",
-                                        value = state.party,
-                                        options = state.partyOptions,
-                                        shape = fieldShape,
-                                        colors = fieldColors,
-                                        onSelected = action.onPartyChanged
-                                    )
+                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                val title = if (state.entryType == PaymentEntryType.Pay) {
+                                    "Gastos (Master/Details)"
                                 } else {
-                                    OutlinedTextField(
-                                        value = state.party,
-                                        onValueChange = action.onPartyChanged,
-                                        modifier = Modifier.fillMaxWidth(),
-                                        label = { Text("Proveedor / Tercero") },
+                                    "Cuenta y cobro"
+                                }
+                                Text(
+                                    title,
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+
+                                if (state.entryType == PaymentEntryType.Pay) {
+                                    val partyAndConceptSection: @Composable (Modifier) -> Unit = { sectionModifier ->
+                                        Column(
+                                            modifier = sectionModifier,
+                                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                                        ) {
+                                            if (state.partyOptions.isNotEmpty()) {
+                                                ModeSelectorField(
+                                                    label = "Proveedor / Tercero",
+                                                    value = state.party,
+                                                    options = state.partyOptions,
+                                                    shape = fieldShape,
+                                                    colors = fieldColors,
+                                                    onSelected = action.onPartyChanged
+                                                )
+                                            } else {
+                                                OutlinedTextField(
+                                                    value = state.party,
+                                                    onValueChange = action.onPartyChanged,
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                    label = { Text("Proveedor / Tercero") },
+                                                    shape = fieldShape,
+                                                    colors = fieldColors,
+                                                    singleLine = true
+                                                )
+                                            }
+
+                                            ModeSelectorField(
+                                                label = "Modo de pago",
+                                                value = state.modeOfPayment,
+                                                options = state.availableModes,
+                                                shape = fieldShape,
+                                                colors = fieldColors,
+                                                onSelected = action.onModeOfPaymentChanged
+                                            )
+
+                                            if (state.accountOptions.isNotEmpty()) {
+                                                ModeSelectorField(
+                                                    label = "Cuenta de pago",
+                                                    value = state.sourceAccount,
+                                                    options = state.accountOptions,
+                                                    shape = fieldShape,
+                                                    colors = fieldColors,
+                                                    onSelected = action.onSourceAccountChanged
+                                                )
+                                            }
+
+                                            OutlinedTextField(
+                                                value = state.concept,
+                                                onValueChange = action.onConceptChanged,
+                                                modifier = Modifier.fillMaxWidth(),
+                                                label = { Text("Concepto del gasto (opcional)") },
+                                                placeholder = { Text("Describe motivo y naturaleza del gasto") },
+                                                shape = fieldShape,
+                                                colors = fieldColors,
+                                                minLines = 3,
+                                                maxLines = 5
+                                            )
+
+                                            ExpenseDetailFieldsSection(
+                                                state = state,
+                                                action = action,
+                                                fieldShape = fieldShape,
+                                                fieldColors = fieldColors
+                                            )
+                                        }
+                                    }
+
+                                    if (showInvoicesOnRight) {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                            verticalAlignment = Alignment.Top
+                                        ) {
+                                            partyAndConceptSection(Modifier.weight(0.95f))
+                                            SupplierPendingInvoicesSection(
+                                                modifier = Modifier.weight(1.05f),
+                                                visible = true,
+                                                invoices = state.supplierPendingInvoices,
+                                                paymentCurrency = state.currencyCode,
+                                                enteredAmountText = state.amount,
+                                                isLoading = state.supplierInvoicesLoading,
+                                                errorMessage = state.supplierInvoicesError,
+                                                onToggleInvoice = action.onSupplierInvoiceToggled
+                                            )
+                                        }
+                                    } else {
+                                        partyAndConceptSection(Modifier.fillMaxWidth())
+                                        SupplierPendingInvoicesSection(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            visible = true,
+                                            invoices = state.supplierPendingInvoices,
+                                            paymentCurrency = state.currencyCode,
+                                            enteredAmountText = state.amount,
+                                            isLoading = state.supplierInvoicesLoading,
+                                            errorMessage = state.supplierInvoicesError,
+                                            onToggleInvoice = action.onSupplierInvoiceToggled
+                                        )
+                                    }
+                                }
+                                if (state.entryType == PaymentEntryType.Receive) {
+                                    ModeSelectorField(
+                                        label = "Modo de pago",
+                                        value = state.modeOfPayment,
+                                        options = state.availableModes,
                                         shape = fieldShape,
                                         colors = fieldColors,
-                                        singleLine = true
+                                        onSelected = action.onModeOfPaymentChanged
                                     )
                                 }
-
-                                OutlinedTextField(
-                                    value = state.concept,
-                                    onValueChange = action.onConceptChanged,
-                                    modifier = Modifier.fillMaxWidth(),
-                                    label = { Text("Concepto del gasto") },
-                                    placeholder = { Text("Describe motivo y naturaleza del gasto") },
-                                    shape = fieldShape,
-                                    colors = fieldColors,
-                                    minLines = 3,
-                                    maxLines = 5
-                                )
                             }
                         }
                     }
                 }
             }
 
-            ElevatedCard(
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(16.dp)
-            ) {
-                BoxWithConstraints(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(12.dp)
+            if (state.entryType != PaymentEntryType.Pay) {
+                ElevatedCard(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp)
                 ) {
-                    val wide = maxWidth > 720.dp
-                    val medium = maxWidth > 460.dp
+                    BoxWithConstraints(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(12.dp)
+                    ) {
+                        val wide = maxWidth > 720.dp
+                        val medium = maxWidth > 460.dp
 
-                    val detailTitle = when (state.entryType) {
-                        PaymentEntryType.Pay -> "Detalle del gasto"
-                        PaymentEntryType.InternalTransfer -> "Detalle de transferencia"
-                        PaymentEntryType.Receive -> "Detalle del cobro"
-                    }
-                    val referenceNoLabelCompact = when (state.entryType) {
-                        PaymentEntryType.InternalTransfer -> "Ref. transferencia"
-                        PaymentEntryType.Pay -> "Ref. comprobante"
-                        PaymentEntryType.Receive -> "Ref. cobro"
-                    }
-                    val referenceNoLabelFull = when (state.entryType) {
-                        PaymentEntryType.InternalTransfer -> "Referencia de transferencia"
-                        PaymentEntryType.Pay -> "Referencia del comprobante"
-                        PaymentEntryType.Receive -> "Número de referencia"
-                    }
-                    val referenceNoPlaceholder = when (state.entryType) {
-                        PaymentEntryType.InternalTransfer -> "TRX-001"
-                        PaymentEntryType.Pay -> "FACT/CHK-001"
-                        PaymentEntryType.Receive -> "REF-001"
-                    }
-                    val amountLabel = when (state.entryType) {
-                        PaymentEntryType.Pay -> "Monto del gasto"
-                        PaymentEntryType.InternalTransfer -> "Monto a transferir"
-                        PaymentEntryType.Receive -> "Monto a registrar"
-                    }
+                        val detailTitle = when (state.entryType) {
+                            PaymentEntryType.Pay -> "Detalle del gasto"
+                            PaymentEntryType.InternalTransfer -> "Detalle de transferencia"
+                            PaymentEntryType.Receive -> "Detalle del cobro"
+                        }
+                        val referenceNoLabelCompact = when (state.entryType) {
+                            PaymentEntryType.InternalTransfer -> "Ref. transferencia"
+                            PaymentEntryType.Pay -> "Ref. comprobante"
+                            PaymentEntryType.Receive -> "Ref. cobro"
+                        }
+                        val referenceNoLabelFull = when (state.entryType) {
+                            PaymentEntryType.InternalTransfer -> "Referencia de transferencia"
+                            PaymentEntryType.Pay -> "Referencia del comprobante"
+                            PaymentEntryType.Receive -> "Número de referencia"
+                        }
+                        val referenceNoPlaceholder = when (state.entryType) {
+                            PaymentEntryType.InternalTransfer -> "TRX-001"
+                            PaymentEntryType.Pay -> "FACT/CHK-001"
+                            PaymentEntryType.Receive -> "REF-001"
+                        }
+                        val amountLabel = when (state.entryType) {
+                            PaymentEntryType.Pay -> "Monto del gasto"
+                            PaymentEntryType.InternalTransfer -> "Monto a transferir"
+                            PaymentEntryType.Receive -> "Monto a registrar"
+                        }
 
-                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Text(
-                            detailTitle,
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                        Text(
-                            text = when (state.entryType) {
-                                PaymentEntryType.Pay -> "Completa el monto y, si aplica, los datos del comprobante bancario."
-                                PaymentEntryType.InternalTransfer -> "Usa referencia y fecha cuando la cuenta origen o destino sea bancaria."
-                                PaymentEntryType.Receive -> "Registra el importe cobrado y la referencia si el medio de pago la requiere."
-                            },
-                            style = MaterialTheme.typography.bodySmall,
-                            color = colorScheme.onSurfaceVariant
-                        )
-
-                        if (wide) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                verticalAlignment = Alignment.Top
-                            ) {
-                                MoneyTextField(
-                                    currencyCode = state.currencyCode,
-                                    rawValue = state.amount,
-                                    onRawValueChange = action.onAmountChanged,
-                                    modifier = Modifier.weight(1.15f),
-                                    label = amountLabel,
-                                    imeAction = androidx.compose.ui.text.input.ImeAction.Next
-                                )
-                                Column(
-                                    modifier = Modifier.weight(1f),
-                                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
-                                    OutlinedTextField(
-                                        value = state.referenceNo,
-                                        onValueChange = action.onReferenceNoChanged,
-                                        modifier = Modifier.fillMaxWidth(),
-                                        label = { Text(referenceNoLabelCompact) },
-                                        placeholder = { Text(referenceNoPlaceholder) },
-                                        isError = state.referenceNoError != null,
-                                        supportingText = { state.referenceNoError?.let { Text(it) } },
-                                        shape = fieldShape,
-                                        colors = fieldColors,
-                                        singleLine = true
-                                    )
-                                    ReferenceDatePickerField(
-                                        value = state.referenceDate,
-                                        onDateSelected = action.onReferenceDateChanged,
-                                        modifier = Modifier.fillMaxWidth(),
-                                        label = "Fecha referencia",
-                                        isError = state.referenceDateError != null,
-                                        errorText = state.referenceDateError,
-                                        shape = fieldShape,
-                                        colors = fieldColors
-                                    )
-                                }
-                            }
-                        } else {
-                            MoneyTextField(
-                                currencyCode = state.currencyCode,
-                                rawValue = state.amount,
-                                onRawValueChange = action.onAmountChanged,
-                                label = amountLabel,
-                                imeAction = androidx.compose.ui.text.input.ImeAction.Next
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text(
+                                detailTitle,
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Text(
+                                text = when (state.entryType) {
+                                    PaymentEntryType.Pay -> "Completa el monto y, si aplica, los datos del comprobante bancario."
+                                    PaymentEntryType.InternalTransfer -> "Usa referencia y fecha cuando la cuenta origen o destino sea bancaria."
+                                    PaymentEntryType.Receive -> "Registra el importe cobrado y la referencia si el medio de pago la requiere."
+                                },
+                                style = MaterialTheme.typography.bodySmall,
+                                color = colorScheme.onSurfaceVariant
                             )
 
-                            if (medium) {
+                            if (wide) {
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
                                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                                     verticalAlignment = Alignment.Top
                                 ) {
+                                    MoneyTextField(
+                                        currencyCode = state.currencyCode,
+                                        rawValue = state.amount,
+                                        onRawValueChange = action.onAmountChanged,
+                                        modifier = Modifier.weight(1.15f),
+                                        label = amountLabel,
+                                        imeAction = androidx.compose.ui.text.input.ImeAction.Next
+                                    )
+                                    Column(
+                                        modifier = Modifier.weight(1f),
+                                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        OutlinedTextField(
+                                            value = state.referenceNo,
+                                            onValueChange = action.onReferenceNoChanged,
+                                            modifier = Modifier.fillMaxWidth(),
+                                            label = { Text(referenceNoLabelCompact) },
+                                            placeholder = { Text(referenceNoPlaceholder) },
+                                            isError = state.referenceNoError != null,
+                                            supportingText = { state.referenceNoError?.let { Text(it) } },
+                                            shape = fieldShape,
+                                            colors = fieldColors,
+                                            singleLine = true
+                                        )
+                                        ReferenceDatePickerField(
+                                            value = state.referenceDate,
+                                            onDateSelected = action.onReferenceDateChanged,
+                                            modifier = Modifier.fillMaxWidth(),
+                                            label = "Fecha referencia",
+                                            isError = state.referenceDateError != null,
+                                            errorText = state.referenceDateError,
+                                            shape = fieldShape,
+                                            colors = fieldColors
+                                        )
+                                    }
+                                }
+                            } else {
+                                MoneyTextField(
+                                    currencyCode = state.currencyCode,
+                                    rawValue = state.amount,
+                                    onRawValueChange = action.onAmountChanged,
+                                    label = amountLabel,
+                                    imeAction = androidx.compose.ui.text.input.ImeAction.Next
+                                )
+
+                                if (medium) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                        verticalAlignment = Alignment.Top
+                                    ) {
+                                        OutlinedTextField(
+                                            value = state.referenceNo,
+                                            onValueChange = action.onReferenceNoChanged,
+                                            modifier = Modifier.weight(1f),
+                                            label = { Text(referenceNoLabelCompact) },
+                                            placeholder = { Text(referenceNoPlaceholder) },
+                                            isError = state.referenceNoError != null,
+                                            supportingText = { state.referenceNoError?.let { Text(it) } },
+                                            shape = fieldShape,
+                                            colors = fieldColors,
+                                            singleLine = true
+                                        )
+                                        ReferenceDatePickerField(
+                                            value = state.referenceDate,
+                                            onDateSelected = action.onReferenceDateChanged,
+                                            modifier = Modifier.weight(1f),
+                                            label = "Fecha referencia",
+                                            isError = state.referenceDateError != null,
+                                            errorText = state.referenceDateError,
+                                            shape = fieldShape,
+                                            colors = fieldColors
+                                        )
+                                    }
+                                } else {
                                     OutlinedTextField(
                                         value = state.referenceNo,
                                         onValueChange = action.onReferenceNoChanged,
-                                        modifier = Modifier.weight(1f),
-                                        label = { Text(referenceNoLabelCompact) },
+                                        modifier = Modifier.fillMaxWidth(),
+                                        label = { Text(referenceNoLabelFull) },
                                         placeholder = { Text(referenceNoPlaceholder) },
                                         isError = state.referenceNoError != null,
                                         supportingText = { state.referenceNoError?.let { Text(it) } },
@@ -358,41 +457,16 @@ fun PaymentEntryScreen(
                                     ReferenceDatePickerField(
                                         value = state.referenceDate,
                                         onDateSelected = action.onReferenceDateChanged,
-                                        modifier = Modifier.weight(1f),
-                                        label = "Fecha referencia",
+                                        modifier = Modifier.fillMaxWidth(),
+                                        label = "Fecha de referencia",
                                         isError = state.referenceDateError != null,
                                         errorText = state.referenceDateError,
                                         shape = fieldShape,
                                         colors = fieldColors
                                     )
                                 }
-                            } else {
-                                OutlinedTextField(
-                                    value = state.referenceNo,
-                                    onValueChange = action.onReferenceNoChanged,
-                                    modifier = Modifier.fillMaxWidth(),
-                                    label = { Text(referenceNoLabelFull) },
-                                    placeholder = { Text(referenceNoPlaceholder) },
-                                    isError = state.referenceNoError != null,
-                                    supportingText = { state.referenceNoError?.let { Text(it) } },
-                                    shape = fieldShape,
-                                    colors = fieldColors,
-                                    singleLine = true
-                                )
-                                ReferenceDatePickerField(
-                                    value = state.referenceDate,
-                                    onDateSelected = action.onReferenceDateChanged,
-                                    modifier = Modifier.fillMaxWidth(),
-                                    label = "Fecha de referencia",
-                                    isError = state.referenceDateError != null,
-                                    errorText = state.referenceDateError,
-                                    shape = fieldShape,
-                                    colors = fieldColors
-                                )
                             }
-                        }
 
-                        if (state.entryType != PaymentEntryType.Pay) {
                             OutlinedTextField(
                                 value = state.notes,
                                 onValueChange = action.onNotesChanged,
@@ -457,6 +531,333 @@ fun PaymentEntryScreen(
             )
         }
     }
+}
+
+@Composable
+private fun ExpenseDetailFieldsSection(
+    state: PaymentEntryState,
+    action: PaymentEntryAction,
+    fieldShape: RoundedCornerShape,
+    fieldColors: androidx.compose.material3.TextFieldColors
+) {
+    BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+        val wide = maxWidth > 620.dp
+        val medium = maxWidth > 460.dp
+
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(
+                text = "Detalle del gasto",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold
+            )
+            Text(
+                text = "Completa el monto y, si aplica, los datos del comprobante bancario.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+            if (wide) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.Top
+                ) {
+                    MoneyTextField(
+                        currencyCode = state.currencyCode,
+                        rawValue = state.amount,
+                        onRawValueChange = action.onAmountChanged,
+                        modifier = Modifier.weight(1.15f),
+                        label = "Monto del gasto",
+                        imeAction = androidx.compose.ui.text.input.ImeAction.Next
+                    )
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        OutlinedTextField(
+                            value = state.referenceNo,
+                            onValueChange = action.onReferenceNoChanged,
+                            modifier = Modifier.fillMaxWidth(),
+                            label = { Text("Ref. comprobante") },
+                            placeholder = { Text("FACT/CHK-001") },
+                            isError = state.referenceNoError != null,
+                            supportingText = { state.referenceNoError?.let { Text(it) } },
+                            shape = fieldShape,
+                            colors = fieldColors,
+                            singleLine = true
+                        )
+                        ReferenceDatePickerField(
+                            value = state.referenceDate,
+                            onDateSelected = action.onReferenceDateChanged,
+                            modifier = Modifier.fillMaxWidth(),
+                            label = "Fecha referencia",
+                            isError = state.referenceDateError != null,
+                            errorText = state.referenceDateError,
+                            shape = fieldShape,
+                            colors = fieldColors
+                        )
+                    }
+                }
+            } else {
+                MoneyTextField(
+                    currencyCode = state.currencyCode,
+                    rawValue = state.amount,
+                    onRawValueChange = action.onAmountChanged,
+                    label = "Monto del gasto",
+                    imeAction = androidx.compose.ui.text.input.ImeAction.Next
+                )
+
+                if (medium) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.Top
+                    ) {
+                        OutlinedTextField(
+                            value = state.referenceNo,
+                            onValueChange = action.onReferenceNoChanged,
+                            modifier = Modifier.weight(1f),
+                            label = { Text("Ref. comprobante") },
+                            placeholder = { Text("FACT/CHK-001") },
+                            isError = state.referenceNoError != null,
+                            supportingText = { state.referenceNoError?.let { Text(it) } },
+                            shape = fieldShape,
+                            colors = fieldColors,
+                            singleLine = true
+                        )
+                        ReferenceDatePickerField(
+                            value = state.referenceDate,
+                            onDateSelected = action.onReferenceDateChanged,
+                            modifier = Modifier.weight(1f),
+                            label = "Fecha referencia",
+                            isError = state.referenceDateError != null,
+                            errorText = state.referenceDateError,
+                            shape = fieldShape,
+                            colors = fieldColors
+                        )
+                    }
+                } else {
+                    OutlinedTextField(
+                        value = state.referenceNo,
+                        onValueChange = action.onReferenceNoChanged,
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text("Referencia del comprobante") },
+                        placeholder = { Text("FACT/CHK-001") },
+                        isError = state.referenceNoError != null,
+                        supportingText = { state.referenceNoError?.let { Text(it) } },
+                        shape = fieldShape,
+                        colors = fieldColors,
+                        singleLine = true
+                    )
+                    ReferenceDatePickerField(
+                        value = state.referenceDate,
+                        onDateSelected = action.onReferenceDateChanged,
+                        modifier = Modifier.fillMaxWidth(),
+                        label = "Fecha de referencia",
+                        isError = state.referenceDateError != null,
+                        errorText = state.referenceDateError,
+                        shape = fieldShape,
+                        colors = fieldColors
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SupplierPendingInvoicesSection(
+    modifier: Modifier = Modifier,
+    visible: Boolean,
+    invoices: List<SupplierPendingInvoiceUi>,
+    paymentCurrency: String,
+    enteredAmountText: String,
+    isLoading: Boolean,
+    errorMessage: String?,
+    onToggleInvoice: (String) -> Unit
+) {
+    if (!visible) return
+
+    val scheme = MaterialTheme.colorScheme
+    val selectedInvoices = invoices.filter { it.selected && !it.conversionError }
+    val selectedOutstandingInPaymentCurrency = selectedInvoices.sumOf {
+        resolveOutstandingInPaymentCurrency(it) ?: 0.0
+    }
+    val enteredAmount = enteredAmountText.trim().toDoubleOrNull()?.coerceAtLeast(0.0) ?: 0.0
+    val hasSelected = selectedInvoices.isNotEmpty()
+    val changeInFavor = if (hasSelected && enteredAmount > selectedOutstandingInPaymentCurrency) {
+        enteredAmount - selectedOutstandingInPaymentCurrency
+    } else {
+        0.0
+    }
+
+    ElevatedCard(
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(14.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(10.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(
+                text = "Facturas pendientes del proveedor",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold
+            )
+            Text(
+                text = "Selecciona las facturas a las que se aplicará este pago. La asignación se calcula automáticamente según el monto en la moneda de la cuenta de pago.",
+                style = MaterialTheme.typography.bodySmall,
+                color = scheme.onSurfaceVariant
+            )
+            Text(
+                text = "Pendientes: ${invoices.size}  |  Seleccionadas: ${selectedInvoices.size}",
+                style = MaterialTheme.typography.bodySmall,
+                color = scheme.onSurfaceVariant
+            )
+            if (hasSelected) {
+                Text(
+                    text = "Adeudado seleccionado (${paymentCurrency.ifBlank { "Moneda pago" }}): " +
+                        formatInvoiceAmount(paymentCurrency, selectedOutstandingInPaymentCurrency),
+                    style = MaterialTheme.typography.bodySmall
+                )
+                if (changeInFavor > 0.0) {
+                    Text(
+                        text = "Vuelto a favor: ${formatInvoiceAmount(paymentCurrency, changeInFavor)}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = scheme.primary,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+            }
+
+            if (isLoading) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                    Text("Cargando facturas pendientes...", style = MaterialTheme.typography.bodySmall)
+                }
+            }
+
+            errorMessage?.let {
+                Text(
+                    text = it,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = scheme.error
+                )
+            }
+
+            if (!isLoading && errorMessage == null && invoices.isEmpty()) {
+                Text(
+                    text = "No hay facturas pendientes para este proveedor.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = scheme.onSurfaceVariant
+                )
+            }
+
+            if (invoices.isNotEmpty()) {
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 360.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    items(items = invoices, key = { it.invoiceName }) { invoice ->
+                        val outstandingInPaymentCurrency = resolveOutstandingInPaymentCurrency(invoice)
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(scheme.surface)
+                                .clickable { onToggleInvoice(invoice.invoiceName) }
+                                .padding(8.dp),
+                            verticalAlignment = Alignment.Top,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Checkbox(
+                                checked = invoice.selected,
+                                onCheckedChange = { onToggleInvoice(invoice.invoiceName) }
+                            )
+                            Column(
+                                modifier = Modifier.weight(1f),
+                                verticalArrangement = Arrangement.spacedBy(2.dp)
+                            ) {
+                                Text(invoice.invoiceName, fontWeight = FontWeight.SemiBold)
+                                if (invoice.status.isNotBlank()) {
+                                    Text(
+                                        text = "Estado: ${invoice.status}",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = scheme.onSurfaceVariant
+                                    )
+                                }
+                                val dates = listOf(
+                                    invoice.postingDate.takeIf { it.isNotBlank() }?.let { "Emisión: $it" },
+                                    invoice.dueDate.takeIf { it.isNotBlank() }?.let { "Vence: $it" }
+                                ).filterNotNull().joinToString("  •  ")
+                                if (dates.isNotBlank()) {
+                                    Text(
+                                        dates,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = scheme.onSurfaceVariant
+                                    )
+                                }
+                                Text(
+                                    text = "Adeudado (factura): ${formatInvoiceAmount(invoice.invoiceCurrency, invoice.outstandingAmountInvoiceCurrency)}",
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                                if (outstandingInPaymentCurrency != null) {
+                                    Text(
+                                        text = "Adeudado (${paymentCurrency.ifBlank { "Moneda pago" }}): " +
+                                            formatInvoiceAmount(paymentCurrency, outstandingInPaymentCurrency),
+                                        style = MaterialTheme.typography.bodySmall
+                                    )
+                                }
+                                if (invoice.conversionError) {
+                                    Text(
+                                        text = "No se encontró tipo de cambio ${invoice.paymentCurrency} -> ${invoice.invoiceCurrency}",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = scheme.error
+                                    )
+                                }
+                                if (invoice.selected) {
+                                    Text(
+                                        text = "Aplicado (${paymentCurrency.ifBlank { "Moneda pago" }}): " +
+                                            formatInvoiceAmount(paymentCurrency, invoice.allocatedAmountPaymentCurrency),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = if (invoice.allocatedAmountPaymentCurrency > 0.0) scheme.primary else scheme.error
+                                    )
+                                    Text(
+                                        text = "Aplicado (factura): " +
+                                            formatInvoiceAmount(invoice.invoiceCurrency, invoice.allocatedAmountInvoiceCurrency),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = if (invoice.allocatedAmountInvoiceCurrency > 0.0) scheme.primary else scheme.error
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+private fun formatInvoiceAmount(currency: String, amount: Double): String {
+    val code = currency.ifBlank { "" }
+    val rounded = kotlin.math.round(amount * 100.0) / 100.0
+    return if (code.isBlank()) rounded.toString() else "$code $rounded"
+}
+
+private fun resolveOutstandingInPaymentCurrency(invoice: SupplierPendingInvoiceUi): Double? {
+    invoice.outstandingAmountPaymentCurrency?.let { return it }
+    val rate = invoice.paymentToInvoiceRate
+    if (rate != null && rate > 0.0) {
+        return invoice.outstandingAmountInvoiceCurrency / rate
+    }
+    return null
 }
 
 @Composable

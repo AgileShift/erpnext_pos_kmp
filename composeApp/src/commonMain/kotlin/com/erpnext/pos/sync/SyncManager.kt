@@ -101,20 +101,33 @@ class SyncManager(
         if (!force) {
             val lastAttempt = lastSyncAttemptAt
             if (lastAttempt != null && now - lastAttempt < minSyncIntervalMillis) {
-                AppLogger.info("SyncManager.fullSync skipped: within min interval")
+                AppLogger.info(
+                    "SyncManager.fullSync skipped: within min interval " +
+                        "(elapsedMs=${now - lastAttempt}, minMs=$minSyncIntervalMillis, force=$force)"
+                )
                 return
             }
             if (syncSettingsCache.useTtl &&
                 !SyncTTL.isExpired(syncSettingsCache.lastSyncAt, effectiveTtlHours)
             ) {
-                AppLogger.info("SyncManager.fullSync skipped: TTL not expired")
+                AppLogger.info(
+                    "SyncManager.fullSync skipped: TTL not expired " +
+                        "(ttlHours=$effectiveTtlHours, lastSyncAt=${syncSettingsCache.lastSyncAt})"
+                )
                 return
             }
         }
         lastSyncAttemptAt = now
 
         syncJob = scope.launch {
-            AppSentry.breadcrumb("SyncManager.fullSync start (ttl=$effectiveTtlHours)")
+            AppSentry.breadcrumb(
+                message = "SyncManager.fullSync start",
+                category = "sync.full",
+                data = mapOf(
+                    "ttl_hours" to effectiveTtlHours.toString(),
+                    "force" to force.toString()
+                )
+            )
             AppLogger.info("SyncManager.fullSync start (ttl=$effectiveTtlHours)")
             val startedAt = Clock.System.now().toEpochMilliseconds()
             val isOnline = networkMonitor.isConnected.first()
@@ -203,8 +216,16 @@ class SyncManager(
                 AppLogger.warn("SyncManager.fullSync cancelled", e)
             } catch (e: Exception) {
                 e.printStackTrace()
-                AppSentry.capture(e, "SyncManager.fullSync failed")
-                AppLogger.warn("SyncManager.fullSync failed", e)
+                AppSentry.capture(
+                    throwable = e,
+                    message = "SyncManager.fullSync failed",
+                    tags = mapOf("component" to "sync.full"),
+                    extras = mapOf(
+                        "ttl_hours" to effectiveTtlHours.toString(),
+                        "force" to force.toString()
+                    )
+                )
+                AppLogger.warn("SyncManager.fullSync failed", e, reportToSentry = false)
                 _state.value = SyncState.ERROR("Error durante la sincronización: ${e.message}")
             } finally {
                 syncJob = null
@@ -287,11 +308,13 @@ class SyncManager(
             return
         }
         if (!cashBoxManager.cashboxState.value) {
-            AppLogger.warn("SyncManager: push queue skipped because cashbox is closed")
-            return
+            AppLogger.warn(
+                "SyncManager: cashbox is closed, but pending push will continue with fallback context"
+            )
         }
-        val ctx = syncContextProvider.buildContext() ?: run {
-            val base = cashBoxManager.getContext()
+        val resolved = syncContextProvider.buildContext()
+        val ctx = resolved ?: run {
+            val base = cashBoxManager.getContext() ?: cashBoxManager.resolveContextForSync()
             if (base == null) {
                 AppLogger.warn("SyncManager: push queue skipped because context is not ready")
                 return
@@ -308,7 +331,7 @@ class SyncManager(
                 territoryId = base.territory ?: base.route ?: "",
                 warehouseId = base.warehouse ?: "",
                 priceList = base.priceList ?: base.currency,
-                fromDate = syncContextProvider.buildContext()?.fromDate
+                fromDate = resolveModifiedSinceDate()
                     ?: DefaultPolicy(PolicyInput(3)).invoicesFromDate()
             )
         }
@@ -322,7 +345,7 @@ class SyncManager(
             }
         } catch (e: Throwable) {
             AppSentry.capture(e, "SyncManager.pushQueue failed")
-            AppLogger.warn("SyncManager.pushQueue failed", e)
+            AppLogger.warn("SyncManager.pushQueue failed", e, reportToSentry = false)
             throw e
         }
     }
@@ -404,8 +427,9 @@ class SyncManager(
             try {
                 snapshot = bootstrapSyncRepository.fetchSnapshot(profileName = null)
                 bootstrapContextPreferences.update(
-                    monthlySalesTarget = snapshot?.data?.context?.monthlySalesTarget,
-                    replaceMonthlySalesTarget = true
+                    monthlySalesTarget = snapshot.data.context?.monthlySalesTarget,
+                    replaceMonthlySalesTarget = true,
+                    lastSuccessAt = Clock.System.now().toEpochMilliseconds()
                 )
             } catch (e: Exception) {
                 bootstrapContextPreferences.update(lastError = e.message ?: "Bootstrap Fetch failed")
@@ -489,6 +513,11 @@ class SyncManager(
 
     private suspend fun refreshBootstrapSnapshot(trigger: String): Boolean {
         return bootstrapMutex.withLock {
+            val now = Clock.System.now().toEpochMilliseconds()
+            if (_state.value is SyncState.SYNCING || syncJob?.isActive == true) {
+                AppLogger.info("SyncManager.bootstrap skipped ($trigger): sync in progress")
+                return@withLock false
+            }
             if (offlineModeCache) {
                 AppLogger.info("SyncManager.bootstrap skipped ($trigger): offline mode enabled")
                 return@withLock false
@@ -502,6 +531,30 @@ class SyncManager(
                 AppLogger.warn("SyncManager.bootstrap skipped ($trigger): invalid session")
                 return@withLock false
             }
+            val bootstrapSnapshot = bootstrapContextPreferences.load()
+            val effectiveTtlHours = syncSettingsCache.ttlHours.coerceIn(1, 168)
+            if (syncSettingsCache.useTtl &&
+                trigger.startsWith("interval") &&
+                !SyncTTL.isExpired(
+                    bootstrapSnapshot.lastSuccessAt ?: bootstrapSnapshot.lastRequestAt,
+                    effectiveTtlHours
+                )
+            ) {
+                AppLogger.info(
+                    "SyncManager.bootstrap skipped ($trigger): TTL not expired " +
+                        "(ttlHours=$effectiveTtlHours, lastSuccessAt=${bootstrapSnapshot.lastSuccessAt}, " +
+                        "lastRequestAt=${bootstrapSnapshot.lastRequestAt})"
+                )
+                AppSentry.breadcrumb(
+                    message = "SyncManager.bootstrap skipped TTL",
+                    category = "sync.bootstrap",
+                    data = mapOf(
+                        "trigger" to trigger,
+                        "ttl_hours" to effectiveTtlHours.toString()
+                    )
+                )
+                return@withLock false
+            }
             return@withLock runCatching {
                 val ctx = cashBoxManager.getContext() ?: cashBoxManager.initializeContext()
                 val profileName = ctx?.profileName?.trim().orEmpty()
@@ -512,13 +565,23 @@ class SyncManager(
                     profileName = profileName,
                     posOpeningEntry = openingEntryId,
                     fromDate = fromDate,
-                    lastRequestAt = Clock.System.now().toEpochMilliseconds(),
+                    lastRequestAt = now,
                     lastError = ""
+                )
+                AppSentry.breadcrumb(
+                    message = "SyncManager.bootstrap refresh start",
+                    category = "sync.bootstrap",
+                    data = mapOf(
+                        "trigger" to trigger,
+                        "ttl_enabled" to syncSettingsCache.useTtl.toString(),
+                        "ttl_hours" to effectiveTtlHours.toString()
+                    )
                 )
                 val snapshot = bootstrapSyncRepository.fetchSnapshot(profileName = null)
                 bootstrapContextPreferences.update(
                     monthlySalesTarget = snapshot.data.context?.monthlySalesTarget,
-                    replaceMonthlySalesTarget = true
+                    replaceMonthlySalesTarget = true,
+                    lastSuccessAt = Clock.System.now().toEpochMilliseconds()
                 )
                 bootstrapSyncRepository.persistAll(snapshot)
                 cashBoxManager.initializeContext()
@@ -526,8 +589,16 @@ class SyncManager(
                 true
             }.onFailure {
                 bootstrapContextPreferences.update(lastError = it.message ?: "Bootstrap refresh failed")
-                AppSentry.capture(it, "SyncManager.bootstrap failed ($trigger)")
-                AppLogger.warn("SyncManager.bootstrap failed ($trigger)", it)
+                AppSentry.capture(
+                    throwable = it,
+                    message = "SyncManager.bootstrap failed ($trigger)",
+                    tags = mapOf("component" to "sync.bootstrap", "trigger" to trigger),
+                    extras = mapOf(
+                        "ttl_enabled" to syncSettingsCache.useTtl.toString(),
+                        "ttl_hours" to effectiveTtlHours.toString()
+                    )
+                )
+                AppLogger.warn("SyncManager.bootstrap failed ($trigger)", it, reportToSentry = false)
             }.getOrElse { false }
         }
     }

@@ -1,7 +1,7 @@
 package com.erpnext.pos.remoteSource.dto
 
-import io.ktor.util.date.GMTDate
 import kotlinx.serialization.EncodeDefault
+import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
@@ -23,6 +23,7 @@ data class TaxDetailDto(
     val amount: Double
 )
 
+@OptIn(ExperimentalSerializationApi::class)
 @Serializable
 data class POSOpeningEntryDto(
     @SerialName("pos_profile")

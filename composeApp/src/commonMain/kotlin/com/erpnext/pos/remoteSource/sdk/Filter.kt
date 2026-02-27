@@ -1,6 +1,9 @@
 package com.erpnext.pos.remoteSource.sdk
 
-import kotlinx.serialization.json.*
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonArray
 
 /**
  * Filter tipado: evita Any en la API pública.
@@ -24,7 +27,7 @@ private fun toJsonElement(value: Any): JsonElement = when (value) {
                 is Number -> add(JsonPrimitive(v))
                 is Boolean -> add(JsonPrimitive(v))
                 null -> add(JsonNull)
-                else -> throw IllegalArgumentException("Tipo no soportado en lista de filtro: ${v!!::class.simpleName}")
+                else -> throw IllegalArgumentException("Tipo no soportado en lista de filtro: ${v::class.simpleName}")
             }
         }
     }

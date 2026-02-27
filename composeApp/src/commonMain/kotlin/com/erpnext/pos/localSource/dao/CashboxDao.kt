@@ -84,6 +84,20 @@ interface CashboxDao {
         amount: Double
     ): Int
 
+    @Query(
+        """
+        UPDATE balance_details
+        SET opening_amount = opening_amount - :amount
+        WHERE cashbox_id = :cashboxId
+          AND mode_of_payment = :modeOfPayment
+        """
+    )
+    suspend fun subtractOpeningAmount(
+        cashboxId: Long,
+        modeOfPayment: String,
+        amount: Double
+    ): Int
+
     @Insert(entity = POSOpeningEntryEntity::class, onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertOpeningEntry(entry: POSOpeningEntryEntity)
 

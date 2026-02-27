@@ -1,8 +1,8 @@
 package com.erpnext.pos.sync
 
-import com.erpnext.pos.data.repositories.ExchangeRateRepository
-import com.erpnext.pos.data.repositories.CustomerSyncRepository
 import com.erpnext.pos.data.repositories.ClosingEntrySyncRepository
+import com.erpnext.pos.data.repositories.CustomerSyncRepository
+import com.erpnext.pos.data.repositories.ExchangeRateRepository
 import com.erpnext.pos.data.repositories.OpeningEntrySyncRepository
 import com.erpnext.pos.data.repositories.SalesInvoiceRepository
 import com.erpnext.pos.domain.models.CustomerBO
@@ -14,8 +14,8 @@ import com.erpnext.pos.localSource.datasources.InvoiceLocalSource
 import com.erpnext.pos.utils.AppLogger
 import com.erpnext.pos.utils.AppSentry
 import com.erpnext.pos.utils.buildCurrencySpecs
-import com.erpnext.pos.utils.buildPaymentModeDetailMap
 import com.erpnext.pos.utils.buildPaymentEntryDtoWithRateResolver
+import com.erpnext.pos.utils.buildPaymentModeDetailMap
 import com.erpnext.pos.utils.normalizeCurrency
 import com.erpnext.pos.views.CashBoxManager
 import com.erpnext.pos.views.billing.PaymentLine
@@ -66,7 +66,7 @@ class PushSyncManager(
     private suspend fun pushPendingPayments(): Boolean {
         val pendingPayments = invoiceLocalSource.getPendingPayments()
         if (pendingPayments.isEmpty()) return false
-        val context = cashBoxManager.getContext() ?: return false
+        val context = cashBoxManager.getContext() ?: cashBoxManager.resolveContextForSync() ?: return false
         val modeDefinitions = runCatching { modeOfPaymentDao.getAllModes(context.company) }
             .getOrElse { emptyList() }
         val paymentModeDetails = buildPaymentModeDetailMap(modeDefinitions)
@@ -125,9 +125,7 @@ class PushSyncManager(
                     return@forEach
                 }
             val receivableCurrency = normalizeCurrency(invoice.partyAccountCurrency)
-                ?: normalizeCurrency(invoice.currency)
-                ?: "USD"
-            val invoiceCurrency = normalizeCurrency(invoice.currency) ?: receivableCurrency
+            val invoiceCurrency = normalizeCurrency(invoice.currency)
             val invoiceToReceivableRate = com.erpnext.pos.utils.CurrencyService.resolveInvoiceToReceivableRate(
                 invoiceCurrency = invoiceCurrency,
                 receivableCurrency = receivableCurrency,
@@ -137,8 +135,6 @@ class PushSyncManager(
 
             val enteredAmount = payment.enteredAmount.takeIf { it > 0.0 } ?: payment.amount
             val paymentCurrency = normalizeCurrency(payment.paymentCurrency)
-                ?: normalizeCurrency(invoice.currency)
-                ?: receivableCurrency
             val resolvedReference = payment.paymentReference?.takeIf { it.isNotBlank() }
                 ?: "POSPAY-LCL-${invoiceName}-${payment.id}"
 

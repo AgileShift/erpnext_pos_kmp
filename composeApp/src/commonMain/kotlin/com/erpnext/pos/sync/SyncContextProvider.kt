@@ -9,7 +9,7 @@ class SyncContextProvider(
     private val datePolicy: DatePolicy
 ) {
     suspend fun buildContext(): SyncContext? {
-        val ctx = contextManager.getContext() ?: contextManager.initializeContext() ?: return null
+        val ctx = contextManager.getContext() ?: contextManager.resolveContextForSync() ?: return null
         val instanceId = ctx.company.ifBlank { ctx.profileName }.ifBlank { ctx.username }
         val companyId = ctx.company.ifBlank { ctx.profileName }
         if (instanceId.isBlank() || companyId.isBlank()) return null

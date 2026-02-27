@@ -43,7 +43,7 @@ class LoginCoordinator(
     }
 
     fun isAuthenticated(tokens: TokenResponse) {
-        viewModel.isAuthenticated(tokens)
+        //viewModel.isAuthenticated(tokens)
     }
 }
 

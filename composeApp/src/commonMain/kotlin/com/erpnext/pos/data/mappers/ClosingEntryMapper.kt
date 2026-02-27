@@ -5,8 +5,8 @@ import com.erpnext.pos.localSource.entities.SalesInvoiceEntity
 import com.erpnext.pos.remoteSource.dto.POSClosingEntryDto
 import com.erpnext.pos.remoteSource.dto.POSClosingSalesInvoiceDto
 import com.erpnext.pos.remoteSource.dto.PaymentReconciliationDto
-import com.erpnext.pos.utils.roundToCurrency
 import com.erpnext.pos.utils.PaymentReconciliationSeed
+import com.erpnext.pos.utils.roundToCurrency
 
 fun buildClosingEntryDto(
     cashbox: CashboxEntity,
@@ -52,7 +52,7 @@ private fun buildClosingSalesInvoiceRows(
         if (!invoice.profileId.equals(expectedProfile, ignoreCase = true)) return@mapNotNull null
         if (!invoice.posOpeningEntry.equals(expectedOpening, ignoreCase = true)) return@mapNotNull null
         if (paidInvoiceNames.isNotEmpty() && !paidInvoiceNames.contains(rawName)) return@mapNotNull null
-        if ((invoice.paidAmount ?: 0.0) <= 0.0001) return@mapNotNull null
+        if (invoice.paidAmount <= 0.0001) return@mapNotNull null
         if (!seen.add(rawName)) return@mapNotNull null
         POSClosingSalesInvoiceDto(
             salesInvoice = rawName,

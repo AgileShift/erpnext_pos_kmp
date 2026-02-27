@@ -56,7 +56,7 @@ class InvoiceRemoteMediator(
                         if (entities.isNotEmpty()) salesInvoiceDao.insertFullInvoices(entities)
                     }
 
-                    else -> null
+                    else -> {}
                 }
 
                 MediatorResult.Success(endOfPaginationReached = endReached)

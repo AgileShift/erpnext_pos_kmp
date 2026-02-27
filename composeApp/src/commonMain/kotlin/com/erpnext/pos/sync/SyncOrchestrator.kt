@@ -34,7 +34,8 @@ class SyncOrchestrator(
     private val sessionRefresher: SessionRefresher,
     private val posProfilePaymentMethodSyncRepository: PosProfilePaymentMethodSyncRepository
 ) {
-    private val profileLocks = mutableMapOf<String, Mutex>()
+    private val openingProfileLocks = mutableMapOf<String, Mutex>()
+    private val bootstrapProfilesLock = Mutex()
 
     suspend fun bootstrapOpening(profileId: String): List<SyncJobResult> {
         if (profileId.isBlank()) {
@@ -46,7 +47,7 @@ class SyncOrchestrator(
                 )
             )
         }
-        val lock = profileLocks.getOrPut(profileId) { Mutex() }
+        val lock = openingProfileLocks.getOrPut(profileId) { Mutex() }
         return lock.withLock {
             val prereqResults = mutableListOf<SyncJobResult>()
             val isOnline = networkMonitor.isConnected.first()
@@ -80,10 +81,8 @@ class SyncOrchestrator(
         }
     }
 
-    suspend fun bootstrapProfiles(assignedTo: String?): List<SyncJobResult> {
-        val lockKey = assignedTo ?: "all"
-        val lock = profileLocks.getOrPut(lockKey) { Mutex() }
-        return lock.withLock {
+    suspend fun bootstrapProfiles(): List<SyncJobResult> {
+        return bootstrapProfilesLock.withLock {
             val isOnline = networkMonitor.isConnected.first()
             if (!isOnline) {
                 return@withLock listOf(
@@ -105,7 +104,7 @@ class SyncOrchestrator(
             }
             return@withLock listOf(
                 runJob("SyncPosProfiles", setOf(SyncPrerequisite.NEED_AUTH)) {
-                    posProfilePaymentMethodSyncRepository.syncProfilesWithPayments(assignedTo)
+                    posProfilePaymentMethodSyncRepository.syncProfilesWithPayments()
                 }
             )
         }

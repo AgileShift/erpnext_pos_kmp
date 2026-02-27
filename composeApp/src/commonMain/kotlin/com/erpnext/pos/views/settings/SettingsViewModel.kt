@@ -6,6 +6,7 @@ import AppColorTheme
 import AppThemeMode
 import androidx.lifecycle.viewModelScope
 import com.erpnext.pos.base.BaseViewModel
+import com.erpnext.pos.localSource.datasources.ExchangeRateLocalSource
 import com.erpnext.pos.localSource.preferences.GeneralPreferences
 import com.erpnext.pos.localSource.preferences.LanguagePreferences
 import com.erpnext.pos.localSource.preferences.ReturnPolicyPreferences
@@ -14,21 +15,18 @@ import com.erpnext.pos.localSource.preferences.SyncPreferences
 import com.erpnext.pos.localSource.preferences.SyncSettings
 import com.erpnext.pos.localSource.preferences.ThemePreferences
 import com.erpnext.pos.localization.AppLanguage
-import com.erpnext.pos.data.repositories.SalesTargetRepository
-import com.erpnext.pos.localSource.datasources.ExchangeRateLocalSource
 import com.erpnext.pos.sync.SyncManager
 import com.erpnext.pos.sync.SyncState
+import com.erpnext.pos.utils.normalizeCurrency
+import com.erpnext.pos.utils.notifications.configureInventoryAlertWorker
 import com.erpnext.pos.views.CashBoxManager
 import com.erpnext.pos.views.POSContext
-import com.erpnext.pos.utils.notifications.configureInventoryAlertWorker
-import com.erpnext.pos.utils.normalizeCurrency
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.number
-import kotlinx.datetime.plus
 import kotlinx.datetime.toLocalDateTime
 import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
@@ -42,7 +40,6 @@ class SettingsViewModel(
     private val languagePreferences: LanguagePreferences,
     private val themePreferences: ThemePreferences,
     private val returnPolicyPreferences: ReturnPolicyPreferences,
-    private val salesTargetRepository: SalesTargetRepository,
     private val exchangeRateLocalSource: ExchangeRateLocalSource
 ) : BaseViewModel() {
 

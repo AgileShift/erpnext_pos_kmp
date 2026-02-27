@@ -24,6 +24,7 @@ import com.erpnext.pos.remoteSource.dto.SalesInvoicePaymentDto
 import com.erpnext.pos.remoteSource.mapper.toDto
 import com.erpnext.pos.remoteSource.mapper.toEntities
 import com.erpnext.pos.remoteSource.mapper.toEntity
+import com.erpnext.pos.sync.SyncTTL
 import com.erpnext.pos.utils.AppLogger
 import com.erpnext.pos.utils.RepoTrace
 import com.erpnext.pos.utils.buildCurrencySpecs
@@ -104,11 +105,11 @@ class SalesInvoiceRepository(
                 ?.takeIf { it.isNotBlank() }
         val ensuredWarehouse = invoice.warehouse ?: ctx?.warehouse
 
-        val normalizedInvoice = invoice.copy(
+        val normalizedInvoice = normalizeLocalPaymentStatus(invoice.copy(
             profileId = ensuredProfile,
             warehouse = ensuredWarehouse,
             posOpeningEntry = openingEntryId
-        )
+        ))
         val normalizedItems = items.map { item ->
             if (!item.warehouse.isNullOrBlank() || ensuredWarehouse.isNullOrBlank()) item
             else item.copy(warehouse = ensuredWarehouse)
@@ -332,8 +333,7 @@ class SalesInvoiceRepository(
         invoice.paidAmount = cappedPaid
         invoice.basePaidAmount = rateToBase?.let { roundToCurrency(cappedPaid * it) }
             ?: invoice.basePaidAmount
-        invoice.outstandingAmount = rateToBase?.let { roundToCurrency(newOutstanding * it) }
-            ?: invoice.outstandingAmount
+        // Keep outstanding_amount in receivable/invoice party currency; do not overwrite it with base currency.
         invoice.status = when {
             newOutstanding <= 0.0 -> "Paid"
             totalPaid <= epsilon -> "Unpaid"
@@ -355,6 +355,7 @@ class SalesInvoiceRepository(
         current.syncStatus = "Pending"
         current.modifiedAt = Clock.System.now().toEpochMilliseconds()
         localSource.updateInvoice(current)
+        refreshCustomerSummaryWithRates(current.customer)
     }
 
     override suspend fun markAsSynced(invoiceName: String) {
@@ -406,29 +407,13 @@ class SalesInvoiceRepository(
         val localInvoice = localWithDetails?.invoice
         val remoteName = remote.name ?: return
         val now = Clock.System.now().toEpochMilliseconds()
-        // Se valida si el servidor trae montos pagados reales o si aún están en cero.
-        val remotePaid = when {
-            (remote.paidAmount ?: 0.0) > 0.0001 -> remote.paidAmount ?: 0.0
-            remote.payments.isNotEmpty() -> remote.payments.sumOf { it.amount }
-            else -> remote.paidAmount ?: 0.0
-        }
-        val remoteOutstandingRaw = remote.outstandingAmount
-        val remoteOutstanding = remoteOutstandingRaw ?: (remote.grandTotal - remotePaid)
+        val remoteFinancials = resolveRemoteFinancials(remote)
+        val remotePaid = remoteFinancials.paidAmount
+        val normalizedOutstanding = remoteFinancials.outstandingAmount
         val remoteTotal = remote.grandTotal
         val localPaid = localInvoice?.paidAmount ?: 0.0
         val localOutstanding = localInvoice?.outstandingAmount ?: 0.0
-        val shouldDefaultOutstanding =
-            remoteOutstandingRaw == null &&
-                remotePaid <= 0.0001 &&
-                remote.payments.isEmpty() &&
-                remote.isReturn != 1 &&
-                remoteTotal > 0.0 &&
-                remoteOutstanding < remoteTotal - 0.01
-        val normalizedOutstanding = if (shouldDefaultOutstanding) remoteTotal else remoteOutstanding
-        val remoteHasPayments =
-            remotePaid > 0.0 ||
-                (remoteOutstandingRaw != null && remoteOutstandingRaw < remoteTotal - 0.01) ||
-                (normalizedOutstanding < remoteTotal - 0.01)
+        val remoteHasPayments = remoteFinancials.hasPaymentSignal
         val remoteTotalChanged = localInvoice?.let {
             abs(it.grandTotal - remoteTotal) > 0.01
         } == true
@@ -462,7 +447,7 @@ class SalesInvoiceRepository(
         ) {
             resolvedPaidAmount
         } else {
-            resolveBaseAmount(remote.paidAmount, remote.basePaidAmount)
+            resolveBaseAmount(resolvedPaidAmount, remote.basePaidAmount)
         }
 
         localSource.updateFromRemote(
@@ -573,6 +558,7 @@ class SalesInvoiceRepository(
 
     override suspend fun syncPendingInvoices() {
         RepoTrace.breadcrumb("SalesInvoiceRepository", "syncPendingInvoices")
+        context.resolveContextForSync()
         val pending = getPendingSyncInvoices()
         pending.forEach { invoice ->
             try {
@@ -605,12 +591,41 @@ class SalesInvoiceRepository(
 
     private suspend fun handleLocalInvoice(invoice: SalesInvoiceWithItemsAndPayments) {
         val localName = invoice.invoice.invoiceName ?: return
-        val ctx = context.getContext()
+        val ctx = context.getContext() ?: context.resolveContextForSync()
         val allowNegativeStock = ctx?.allowNegativeStock == true
-        val warehouse = invoice.invoice.warehouse ?: ctx?.warehouse
+        val openingFromPayments = invoice.payments
+            .mapNotNull { it.posOpeningEntry?.trim() }
+            .firstOrNull { it.isNotBlank() }
+        val resolvedProfile = invoice.invoice.profileId?.takeIf { it.isNotBlank() } ?: ctx?.profileName
+        val resolvedOpening = invoice.invoice.posOpeningEntry?.takeIf { it.isNotBlank() } ?: openingFromPayments
+        if (resolvedProfile.isNullOrBlank() || resolvedOpening.isNullOrBlank()) {
+            markAsFailed(localName)
+            AppLogger.warn(
+                "handleLocalInvoice: missing profile/opening for pending local invoice $localName"
+            )
+            return
+        }
+        val normalizedInvoice = invoice.invoice.copy(
+            profileId = resolvedProfile,
+            posOpeningEntry = resolvedOpening
+        )
+        val normalizedPayments = invoice.payments.map { payment ->
+            if (!payment.posOpeningEntry.isNullOrBlank()) payment
+            else payment.copy(posOpeningEntry = resolvedOpening)
+        }
+        if (normalizedInvoice.profileId != invoice.invoice.profileId ||
+            normalizedInvoice.posOpeningEntry != invoice.invoice.posOpeningEntry
+        ) {
+            localSource.updateInvoice(normalizedInvoice)
+            if (normalizedPayments.isNotEmpty()) {
+                localSource.upsertPayments(normalizedPayments)
+            }
+        }
+        val payloadForSync = invoice.copy(invoice = normalizedInvoice, payments = normalizedPayments)
+        val warehouse = normalizedInvoice.warehouse ?: ctx?.warehouse
 
         if (!allowNegativeStock && !warehouse.isNullOrBlank() && invoice.items.isNotEmpty()) {
-            val itemTotals = invoice.items.groupBy { it.itemCode }.mapValues { entry ->
+            val itemTotals = payloadForSync.items.groupBy { it.itemCode }.mapValues { entry ->
                 entry.value.sumOf { it.qty }
             }
             val stock = runCatching {
@@ -632,10 +647,10 @@ class SalesInvoiceRepository(
         }
 
         val existingName = remoteSource.findExistingInvoiceName(
-            posOpeningEntry = invoice.invoice.posOpeningEntry,
-            postingDate = invoice.invoice.postingDate,
-            customer = invoice.invoice.customer,
-            grandTotal = invoice.invoice.grandTotal
+            posOpeningEntry = normalizedInvoice.posOpeningEntry,
+            postingDate = normalizedInvoice.postingDate,
+            customer = normalizedInvoice.customer,
+            grandTotal = normalizedInvoice.grandTotal
         )
         if (!existingName.isNullOrBlank()) {
             val existing = remoteSource.fetchInvoice(existingName)
@@ -647,7 +662,7 @@ class SalesInvoiceRepository(
 
         val dto = ensureDraftDocStatus(
             ensurePaymentEntryOnlyInvoice(
-                enrichPaymentsWithAccount(invoice.toDto())
+                enrichPaymentsWithAccount(payloadForSync.toDto())
             )
         )
         val created = remoteSource.createInvoice(dto)
@@ -728,6 +743,93 @@ class SalesInvoiceRepository(
             availableCredit = availableCredit?.let { roundToCurrency(it) },
             state = state
         )
+    }
+
+    private data class ResolvedRemoteFinancials(
+        val paidAmount: Double,
+        val outstandingAmount: Double,
+        val hasPaymentSignal: Boolean
+    )
+
+    private fun resolveRemoteFinancials(remote: SalesInvoiceDto): ResolvedRemoteFinancials {
+        val tolerance = 0.01
+        val total = remote.grandTotal.coerceAtLeast(0.0)
+        val paidFromField = (remote.paidAmount ?: 0.0).coerceAtLeast(0.0)
+        val paidFromPayments = remote.payments.sumOf { it.amount }.coerceAtLeast(0.0)
+        val paidMissing = paidFromField <= tolerance && paidFromPayments <= tolerance
+        var paidResolved = when {
+            paidFromField > tolerance -> paidFromField
+            paidFromPayments > tolerance -> paidFromPayments
+            else -> 0.0
+        }.coerceAtMost(total)
+
+        val outstandingProvided = remote.outstandingAmount
+            ?.coerceAtLeast(0.0)
+            ?.coerceAtMost(total)
+        var outstandingResolved = outstandingProvided ?: (total - paidResolved).coerceAtLeast(0.0)
+        val inferredPaidFromOutstanding = (total - outstandingResolved).coerceAtLeast(0.0)
+        val statusSuggestsPayment = remote.status?.trim()?.lowercase() in setOf(
+            "paid",
+            "partly paid",
+            "partly paid and discounted",
+            "credit note issued"
+        )
+
+        if (outstandingProvided != null &&
+            inferredPaidFromOutstanding > tolerance &&
+            (paidMissing || statusSuggestsPayment ||
+                abs((total - paidResolved) - outstandingResolved) > tolerance)
+        ) {
+            paidResolved = inferredPaidFromOutstanding
+        }
+
+        if (outstandingProvided == null &&
+            paidMissing &&
+            remote.isReturn != 1 &&
+            total > 0.0 &&
+            outstandingResolved < total - tolerance
+        ) {
+            paidResolved = 0.0
+            outstandingResolved = total
+        }
+
+        if (outstandingProvided == null) {
+            outstandingResolved = (total - paidResolved).coerceAtLeast(0.0)
+        } else {
+            val expectedOutstanding = (total - paidResolved).coerceAtLeast(0.0)
+            if (abs(expectedOutstanding - outstandingResolved) > tolerance) {
+                paidResolved = inferredPaidFromOutstanding
+                outstandingResolved = outstandingProvided
+            }
+        }
+
+        paidResolved = roundToCurrency(paidResolved.coerceIn(0.0, total))
+        outstandingResolved = roundToCurrency(outstandingResolved.coerceIn(0.0, total))
+        if (abs((total - paidResolved) - outstandingResolved) > tolerance) {
+            paidResolved = roundToCurrency((total - outstandingResolved).coerceAtLeast(0.0))
+        }
+
+        val hasPaymentSignal = paidResolved > tolerance || outstandingResolved < total - tolerance
+        return ResolvedRemoteFinancials(
+            paidAmount = paidResolved,
+            outstandingAmount = outstandingResolved,
+            hasPaymentSignal = hasPaymentSignal
+        )
+    }
+
+    private fun normalizeLocalPaymentStatus(invoice: SalesInvoiceEntity): SalesInvoiceEntity {
+        if (invoice.docstatus == 2) return invoice.copy(status = "Cancelled")
+        if (invoice.isReturn) return invoice
+
+        val outstanding = invoice.outstandingAmount.coerceAtLeast(0.0)
+        val paid = invoice.paidAmount.coerceAtLeast(0.0)
+        val normalizedStatus = when {
+            outstanding <= 0.0001 -> "Paid"
+            paid > 0.0001 -> "Partly Paid"
+            else -> "Unpaid"
+        }
+
+        return if (invoice.status == normalizedStatus) invoice else invoice.copy(status = normalizedStatus)
     }
 
     private suspend fun enrichPaymentsWithAccount(dto: SalesInvoiceDto): SalesInvoiceDto {
@@ -834,6 +936,11 @@ class SalesInvoiceRepository(
             onFetchFailed = { e ->
                 RepoTrace.capture("SalesInvoiceRepository", "sync", e)
                 e.printStackTrace()
+            },
+            traceName = "SalesInvoiceRepository.sync",
+            fetchTtlMillis = SyncTTL.DEFAULT_TTL_HOURS * 60L * 60L * 1000L,
+            resolveLocalUpdatedAtMillis = { _ ->
+                localSource.getOldestItem()?.lastSyncedAt?.takeIf { it > 0L }
             }
         )
     }

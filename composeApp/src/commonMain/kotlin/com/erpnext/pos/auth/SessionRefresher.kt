@@ -21,7 +21,8 @@ class SessionRefresher(
     private val apiService: APIService,
     private val navigationManager: NavigationManager,
     private val networkMonitor: NetworkMonitor,
-    private val cashBoxManager: Lazy<Any>? = null
+    private val cashBoxManager: Lazy<Any>? = null,
+    private val authFlowState: AuthFlowState? = null
 ) {
     private val mutex = Mutex()
     private val refreshThresholdSeconds = 30 * 60L // 30 minutos
@@ -29,6 +30,10 @@ class SessionRefresher(
 
     suspend fun ensureValidSession(): Boolean = mutex.withLock {
         AppLogger.info("SessionRefresher.ensureValidSession start")
+        if (authFlowState?.inProgress?.value == true) {
+            AppLogger.info("SessionRefresher.ensureValidSession skipped (auth flow)")
+            return true
+        }
         val isOnline = networkMonitor.isConnected.first()
         val tokens = tokenStore.load() ?: return if (isOnline) invalidateSession() else true
         val idToken = tokens.id_token
@@ -111,6 +116,10 @@ class SessionRefresher(
 
     private suspend fun invalidateSession(): Boolean {
         if (invalidated) return false
+        if (authFlowState?.inProgress?.value == true) {
+            AppLogger.info("SessionRefresher.invalidateSession skipped (auth flow)")
+            return false
+        }
         invalidated = true
         AppLogger.warn("SessionRefresher: invalidating session -> Login")
         tokenStore.clear()

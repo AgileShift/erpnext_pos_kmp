@@ -8,7 +8,9 @@ import androidx.paging.PagingData
 import androidx.paging.PagingSource
 import androidx.paging.PagingState
 import androidx.paging.RemoteMediator
+import com.erpnext.pos.utils.AppLogger
 import com.erpnext.pos.utils.AppSentry
+import kotlin.time.Clock
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.emitAll
@@ -31,24 +33,81 @@ inline fun <ResultType, RequestType> networkBoundResource(
     crossinline fetch: suspend () -> RequestType,                        // 🔹 Llama al API remoto
     crossinline saveFetchResult: suspend (RequestType) -> Unit,          // 🔹 Guarda el resultado remoto
     crossinline shouldFetch: suspend (ResultType) -> Boolean = { true }, // 🔹 Condición opcional de refresco
-    crossinline onFetchFailed: (Throwable) -> Unit = {}                  // 🔹 Manejo opcional de errores
+    crossinline onFetchFailed: (Throwable) -> Unit = {},                 // 🔹 Manejo opcional de errores
+    traceName: String = "networkBoundResource",
+    fetchTtlMillis: Long? = null,
+    noinline resolveLocalUpdatedAtMillis: (suspend (ResultType) -> Long?)? = null
 ): Flow<Resource<ResultType>> = flow {
     val localFlow = query()
     val localData = localFlow.firstOrNull()
+    val now = Clock.System.now().toEpochMilliseconds()
 
     emit(Resource.Loading(localData))
 
-    val flow = if (localData != null && !shouldFetch(localData)) {
+    val predicateFetch = if (localData == null) true else shouldFetch(localData)
+    val localUpdatedAtMillis = if (
+        localData != null &&
+        fetchTtlMillis != null &&
+        resolveLocalUpdatedAtMillis != null
+    ) {
+        runCatching { resolveLocalUpdatedAtMillis.invoke(localData) }.getOrNull()
+    } else {
+        null
+    }
+    val ttlAllowsFetch = when {
+        localData == null -> true
+        fetchTtlMillis == null || resolveLocalUpdatedAtMillis == null -> true
+        localUpdatedAtMillis == null || localUpdatedAtMillis <= 0L -> true
+        else -> (now - localUpdatedAtMillis) >= fetchTtlMillis
+    }
+    val shouldFetchNow = predicateFetch && ttlAllowsFetch
+    val decision = when {
+        localData == null -> "fetch:no_local_cache"
+        !predicateFetch -> "skip:predicate_false"
+        !ttlAllowsFetch -> "skip:ttl_not_expired"
+        else -> "fetch:predicate_true"
+    }
+    AppSentry.breadcrumb(
+        message = "$traceName $decision",
+        category = "network_bound_resource",
+        data = buildMap {
+            put("has_local", (localData != null).toString())
+            put("predicate_fetch", predicateFetch.toString())
+            put("ttl_allows_fetch", ttlAllowsFetch.toString())
+            fetchTtlMillis?.let { put("ttl_ms", it.toString()) }
+            localUpdatedAtMillis?.let { put("local_updated_at", it.toString()) }
+        }
+    )
+    if (!shouldFetchNow) {
+        AppLogger.info("$traceName skipped remote fetch ($decision)")
+    }
+
+    val flow = if (localData != null && !shouldFetchNow) {
         // 🔸 Si no necesitamos fetch, devolvemos cache directamente
         localFlow.map { Resource.Success(it) }
     } else {
         try {
+            AppLogger.info("$traceName remote fetch start")
+            val fetchStartedAt = Clock.System.now().toEpochMilliseconds()
             val remoteData = fetch()
             saveFetchResult(remoteData)
+            val fetchDurationMs =
+                (Clock.System.now().toEpochMilliseconds() - fetchStartedAt).coerceAtLeast(0)
+            AppLogger.info("$traceName remote fetch success (${fetchDurationMs}ms)")
             query().map { Resource.Success(it) }
         } catch (throwable: Throwable) {
             onFetchFailed(throwable)
-            AppSentry.capture(throwable, "networkBoundResource fetch failed")
+            AppSentry.capture(
+                throwable = throwable,
+                message = "$traceName fetch failed",
+                tags = mapOf("component" to "networkBoundResource", "trace" to traceName),
+                extras = buildMap {
+                    put("decision", decision)
+                    put("has_local", (localData != null).toString())
+                    fetchTtlMillis?.let { put("ttl_ms", it.toString()) }
+                    localUpdatedAtMillis?.let { put("local_updated_at", it.toString()) }
+                }
+            )
             localFlow.map { Resource.Error(throwable.message ?: "Error de red", it) }
         }
     }

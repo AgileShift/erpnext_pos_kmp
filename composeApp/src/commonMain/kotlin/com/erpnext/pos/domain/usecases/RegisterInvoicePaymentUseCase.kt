@@ -1,7 +1,6 @@
 package com.erpnext.pos.domain.usecases
 
 import com.erpnext.pos.data.repositories.SalesInvoiceRepository
-import com.erpnext.pos.domain.repositories.ISaleInvoiceRepository
 import com.erpnext.pos.domain.utils.UUIDGenerator
 import com.erpnext.pos.localSource.entities.POSInvoicePaymentEntity
 import com.erpnext.pos.utils.view.DateTimeProvider
@@ -33,7 +32,7 @@ class RegisterInvoicePaymentUseCase(
             modeOfPayment = input.modeOfPayment,
             amount = input.amount,
             enteredAmount = input.amount,
-            paymentCurrency = invoice.currency ?: invoice.partyAccountCurrency,
+            paymentCurrency = invoice.currency,
             exchangeRate = 1.0,
             paymentReference = "POSPAY-${UUIDGenerator().newId()}",
             paymentDate = DateTimeProvider.todayDate()

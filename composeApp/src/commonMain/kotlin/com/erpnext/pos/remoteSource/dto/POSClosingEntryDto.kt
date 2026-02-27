@@ -1,6 +1,7 @@
 package com.erpnext.pos.remoteSource.dto
 
 import kotlinx.serialization.EncodeDefault
+import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
@@ -23,6 +24,7 @@ data class POSClosingEntrySummaryDto(
     val docstatus: Int? = null
 )
 
+@OptIn(ExperimentalSerializationApi::class)
 @Serializable
 data class POSClosingEntryDto(
     @SerialName("pos_profile")

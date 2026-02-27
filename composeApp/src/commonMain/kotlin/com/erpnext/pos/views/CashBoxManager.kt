@@ -21,6 +21,7 @@ import com.erpnext.pos.localSource.dao.POSOpeningEntryDao
 import com.erpnext.pos.localSource.dao.POSOpeningEntryLinkDao
 import com.erpnext.pos.localSource.dao.POSProfileDao
 import com.erpnext.pos.localSource.dao.SalesInvoiceDao
+import com.erpnext.pos.localSource.dao.ShiftPaymentRow
 import com.erpnext.pos.localSource.dao.UserDao
 import com.erpnext.pos.localSource.entities.BalanceDetailsEntity
 import com.erpnext.pos.localSource.entities.CashboxEntity
@@ -44,6 +45,7 @@ import com.erpnext.pos.utils.normalizeCurrency
 import com.erpnext.pos.utils.parseErpDateTimeToEpochMillis
 import com.erpnext.pos.utils.toErpDateTime
 import io.ktor.util.date.getTimeMillis
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.IO
 import kotlinx.coroutines.flow.Flow
@@ -144,10 +146,10 @@ class CashBoxManager(
         if (canValidateRemoteShift) {
             val bootstrapShiftResult = runCatching {
                 api.getBootstrapShiftSnapshot()
+            }.onFailure {
+                if (it is CancellationException) throw it
+                AppLogger.warn("initializeContext: bootstrap open_shift lookup failed", it)
             }
-                .onFailure {
-                    AppLogger.warn("initializeContext: bootstrap open_shift lookup failed", it)
-                }
             val bootstrapSnapshot = bootstrapShiftResult.getOrNull()
             val bootstrapShift = bootstrapSnapshot?.openShift
             val bootstrapClosing = bootstrapSnapshot?.posClosingEntry
@@ -245,6 +247,33 @@ class CashBoxManager(
         }
 
         if (bootstrapWithoutOpenShift && resolvedCashbox != null) {
+            val resolvedProfile = when {
+                activeProfile != null && activeCashbox != null -> activeProfile
+                else -> runCatching {
+                    profileDao.getPOSProfile(resolvedCashbox.cashbox.posProfile)
+                }.getOrNull()
+            }
+            val hasPendingFinancials = hasPendingFinancialDocumentsForContext(
+                profileName = resolvedProfile?.profileName ?: resolvedCashbox.cashbox.posProfile,
+                openingEntryId = resolvedCashbox.cashbox.openingEntryId
+            )
+            if (hasPendingFinancials && resolvedProfile != null) {
+                AppLogger.warn(
+                    "initializeContext: open_shift=null but pending financial docs exist; " +
+                        "preserving local cashbox context for sync"
+                )
+                profileDao.updateProfileState(user.username, resolvedProfile.profileName, true)
+                _cashboxState.update { true }
+                currentContext = buildContextFrom(
+                    user = user,
+                    profile = resolvedProfile,
+                    cashboxId = resolvedCashbox.cashbox.localId,
+                    company = company
+                )
+                _contextFlow.value = currentContext
+                updateBootstrapContext(serverUser, currentContext)
+                return@withContext currentContext
+            }
             AppLogger.warn(
                 "initializeContext: sync.bootstrap returned open_shift=null, closing local cashbox(es)"
             )
@@ -280,7 +309,10 @@ class CashBoxManager(
             .onFailure { AppLogger.warn("initializeContext: reconcile remote closings failed", it) }
 
         val bootstrapShift = runCatching { api.getBootstrapOpenShift() }
-            .onFailure { AppLogger.warn("initializeContext: bootstrap open_shift after sync failed", it) }
+            .onFailure {
+                if (it is CancellationException) throw it
+                AppLogger.warn("initializeContext: bootstrap open_shift after sync failed", it)
+            }
             .getOrNull()
         if (bootstrapShift != null) {
             if (!isShiftOwnedByUser(bootstrapShift.user, user)) {
@@ -1250,10 +1282,121 @@ class CashBoxManager(
         return resolved
     }
 
+    private suspend fun hasPendingFinancialDocumentsForContext(
+        profileName: String?,
+        openingEntryId: String?
+    ): Boolean {
+        val normalizedProfile = profileName?.trim()?.lowercase()?.takeIf { it.isNotBlank() }
+        val normalizedOpening = openingEntryId?.trim()?.lowercase()?.takeIf { it.isNotBlank() }
+        val pendingInvoices = salesInvoiceDao.getPendingSyncInvoices().map { it.invoice }
+        val invoicesByName = pendingInvoices.associateBy { it.invoiceName?.trim().orEmpty() }
+
+        fun invoiceMatches(invoice: SalesInvoiceEntity): Boolean {
+            val invoiceName = invoice.invoiceName?.trim().orEmpty()
+            val isLocalInvoice = invoiceName.startsWith("LOCAL-", ignoreCase = true)
+            val invoiceProfile = invoice.profileId?.trim()?.lowercase()
+            val invoiceOpening = invoice.posOpeningEntry?.trim()?.lowercase()
+            val byProfile = normalizedProfile != null && normalizedProfile == invoiceProfile
+            val byOpening = normalizedOpening != null && normalizedOpening == invoiceOpening
+            val missingProfileButLocal = invoice.profileId.isNullOrBlank() && (isLocalInvoice || byOpening)
+            return isLocalInvoice || byProfile || byOpening || missingProfileButLocal
+        }
+
+        if (pendingInvoices.any(::invoiceMatches)) return true
+
+        val pendingPayments = salesInvoiceDao.getPendingPayments()
+        if (pendingPayments.isEmpty()) return false
+
+        return pendingPayments.any { payment ->
+            val parentName = payment.parentInvoice.trim()
+            val invoice = invoicesByName[parentName] ?: salesInvoiceDao.getInvoiceByName(parentName)?.invoice
+            if (invoice != null) {
+                invoiceMatches(invoice)
+            } else {
+                val byOpening = normalizedOpening != null &&
+                    normalizedOpening == payment.posOpeningEntry?.trim()?.lowercase()
+                parentName.startsWith("LOCAL-", ignoreCase = true) || byOpening
+            }
+        }
+    }
+
     fun getContext(): POSContext? = currentContext
 
     fun requireContext(): POSContext =
         currentContext ?: error("POS context not initialized. Call initializeContext() first.")
+
+    suspend fun resolveContextForSync(): POSContext? = withContext(Dispatchers.IO) {
+        currentContext?.let { return@withContext it }
+
+        runCatching { initializeContext() }
+            .getOrNull()
+            ?.let { return@withContext it }
+
+        val user = resolveCurrentUser(canUseRemote = false) ?: return@withContext null
+        val serverUser = resolveServerUserId(user).trim()
+        if (serverUser.isBlank()) return@withContext null
+
+        val bootstrapSnapshot = bootstrapContextPreferences.load()
+        val fallbackProfileName = bootstrapSnapshot.profileName
+            ?.trim()
+            ?.takeIf { it.isNotBlank() }
+            ?: profileDao.getActiveProfile()?.profileName
+            ?: findActiveCashboxForUser(serverUser)?.cashbox?.posProfile
+            ?: return@withContext null
+
+        val profile = runCatching {
+            profileDao.getPOSProfile(fallbackProfileName)
+        }.getOrNull() ?: return@withContext null
+        val company = companyDao.getCompanyInfo()
+        val activeCashbox = findActiveCashboxForProfile(serverUser, profile.profileName)
+            ?: findActiveCashboxForUser(serverUser)
+        val exchangeRate = resolveExchangeRate(profile.currency)
+        val allowedCurrencies = resolveSupportedCurrencies(profile.profileName, profile.currency)
+        val paymentModes = resolvePaymentModes(profile.profileName)
+
+        val fallbackContext = POSContext(
+            cashier = user.toBO(),
+            username = user.username ?: user.name,
+            profileName = profile.profileName,
+            company = company?.companyName ?: profile.company,
+            companyCurrency = company?.defaultCurrency ?: profile.currency,
+            allowNegativeStock = generalPreferences.allowNegativeStock.firstOrNull() == true,
+            warehouse = profile.warehouse,
+            route = profile.route,
+            territory = profile.route,
+            priceList = profile.sellingPriceList,
+            isCashBoxOpen = activeCashbox?.cashbox?.status == true,
+            cashboxId = activeCashbox?.cashbox?.localId,
+            incomeAccount = profile.incomeAccount,
+            expenseAccount = profile.expenseAccount,
+            branch = profile.branch,
+            applyDiscountOn = profile.applyDiscountOn,
+            currency = profile.currency,
+            partyAccountCurrency = company?.defaultCurrency ?: profile.currency,
+            exchangeRate = exchangeRate,
+            allowedCurrencies = allowedCurrencies,
+            paymentModes = paymentModes,
+            monthlySalesTarget = bootstrapSnapshot.monthlySalesTarget,
+            defaultReceivableAccount = company?.defaultReceivableAccount,
+            defaultReceivableAccountCurrency = company?.defaultReceivableAccountCurrency
+        )
+
+        currentContext = fallbackContext
+        _contextFlow.value = fallbackContext
+        _cashboxState.update { fallbackContext.isCashBoxOpen }
+
+        val openingEntry = activeCashbox?.cashbox?.openingEntryId
+            ?.trim()
+            ?.takeIf { it.isNotBlank() }
+            ?: bootstrapSnapshot.posOpeningEntry
+        bootstrapContextPreferences.update(
+            profileName = fallbackContext.profileName,
+            posOpeningEntry = openingEntry,
+            monthlySalesTarget = fallbackContext.monthlySalesTarget
+        )
+
+        fallbackContext
+    }
 
     fun clearContext() {
         currentContext = null
@@ -1392,6 +1535,55 @@ class CashBoxManager(
         }
     }
 
+    suspend fun getAvailableFundsByMode(): Map<String, Double> = withContext(Dispatchers.IO) {
+        val ctx = currentContext ?: initializeContext() ?: return@withContext emptyMap()
+        val activeCashbox = getActiveCashboxWithDetails() ?: return@withContext emptyMap()
+        computeExpectedFundsByMode(ctx, activeCashbox)
+    }
+
+    suspend fun getAvailableFundsForMode(modeOfPayment: String): Double = withContext(Dispatchers.IO) {
+        val normalizedMode = modeOfPayment.trim()
+        if (normalizedMode.isBlank()) return@withContext 0.0
+        val availableByMode = getAvailableFundsByMode()
+        availableByMode[normalizedMode] ?: 0.0
+    }
+
+    suspend fun registerSupplierPaymentOutflow(
+        modeOfPayment: String,
+        amount: Double,
+        note: String?
+    ) = withContext(Dispatchers.IO) {
+        require(amount > 0.0) { "El monto debe ser mayor que cero." }
+        val ctx = currentContext ?: initializeContext()
+            ?: error("No hay una caja abierta para registrar gasto de proveedor.")
+        val activeCashbox = getActiveCashboxWithDetails()
+            ?: error("Caja activa no disponible.")
+        val cashboxId = activeCashbox.cashbox.localId
+        val mode = modeOfPayment.trim()
+        require(mode.isNotBlank()) { "Modo de pago requerido." }
+
+        val availableByMode = computeExpectedFundsByMode(ctx, activeCashbox)
+        val available = availableByMode[mode]
+            ?: cashboxDao.getOpeningAmountForMode(cashboxId, mode)
+            ?: error("Modo no existe en apertura: $mode")
+        if (available + 0.009 < amount) {
+            error("Fondos insuficientes para $mode. Disponible: ${roundMoney(available)}")
+        }
+
+        val updatedRows = cashboxDao.subtractOpeningAmount(
+            cashboxId = cashboxId,
+            modeOfPayment = mode,
+            amount = amount
+        )
+        if (updatedRows <= 0) {
+            error("Modo no existe en apertura: $mode")
+        }
+        val projected = roundMoney(available - amount)
+        AppLogger.info(
+            "supplier-payment-outflow: profile=${ctx.profileName} cashbox=$cashboxId mode=$mode amount=$amount availableBefore=${roundMoney(available)} availableAfter=$projected note=${note?.trim().orEmpty()}"
+        )
+    }
+
     suspend fun registerInternalTransfer(
         sourceModeOfPayment: String,
         targetModeOfPayment: String,
@@ -1465,6 +1657,83 @@ class CashBoxManager(
             )
         }
     }
+
+    private suspend fun computeExpectedFundsByMode(
+        ctx: POSContext,
+        activeCashbox: CashboxWithDetails
+    ): Map<String, Double> {
+        val (invoices, paymentRows) = resolveShiftFinancialRows(ctx, activeCashbox)
+        val modeCurrency = runCatching {
+            paymentMethodLocalRepository.getMethodsForProfile(ctx.profileName)
+        }.getOrElse { emptyList() }
+            .associate { method ->
+                val currency = normalizeCurrency(method.currency ?: ctx.currency)
+                method.mopName to currency
+            }
+        val reconciliationSeeds = buildPaymentReconciliationSeeds(
+            balanceDetails = activeCashbox.details,
+            paymentRows = paymentRows,
+            invoices = invoices,
+            modeCurrency = modeCurrency,
+            posCurrency = normalizeCurrency(ctx.currency),
+            rateResolver = { from, to ->
+                resolveExchangeRateBetween(
+                    fromCurrency = from,
+                    toCurrency = to,
+                    allowNetwork = false
+                ) ?: exchangeRateRepository.getLocalRate(from, to)
+            }
+        )
+        return reconciliationSeeds.associate { seed ->
+            seed.modeOfPayment to roundMoney(seed.expectedAmount)
+        }
+    }
+
+    private suspend fun resolveShiftFinancialRows(
+        ctx: POSContext,
+        activeCashbox: CashboxWithDetails
+    ): Pair<List<SalesInvoiceEntity>, List<ShiftPaymentRow>> {
+        val startMillis = parseErpDateTimeToEpochMillis(activeCashbox.cashbox.periodStartDate)
+            ?: (getTimeMillis() - 86_400_000L)
+        val endMillis = activeCashbox.cashbox.periodEndDate?.let {
+            parseErpDateTimeToEpochMillis(it)
+        } ?: getTimeMillis()
+        val openingEntryId = activeCashbox.cashbox.openingEntryId?.takeIf { it.isNotBlank() }
+
+        val invoices = buildList {
+            if (!openingEntryId.isNullOrBlank()) {
+                addAll(salesInvoiceDao.getInvoicesForOpeningEntry(openingEntryId))
+            }
+            if (isEmpty()) {
+                addAll(
+                    salesInvoiceDao.getInvoicesForShift(
+                        profileId = ctx.profileName,
+                        startMillis = startMillis,
+                        endMillis = endMillis
+                    )
+                )
+            }
+        }
+        val paymentRows = buildList {
+            if (!openingEntryId.isNullOrBlank()) {
+                addAll(salesInvoiceDao.getPaymentsForOpeningEntry(openingEntryId))
+            }
+            if (isEmpty()) {
+                addAll(
+                    salesInvoiceDao.getShiftPayments(
+                        profileId = ctx.profileName,
+                        startMillis = startMillis,
+                        endMillis = endMillis
+                    )
+                )
+            }
+        }.filter { row -> row.enteredAmount > 0.0 || row.amount > 0.0 }
+
+        return invoices to paymentRows
+    }
+
+    private fun roundMoney(value: Double): Double =
+        kotlin.math.round(value * 100.0) / 100.0
 
     suspend fun resolveExchangeRateBetween(
         fromCurrency: String,

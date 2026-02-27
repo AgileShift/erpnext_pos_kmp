@@ -45,7 +45,8 @@ data class PaymentModesDto(
     @Serializable(with = IntAsBooleanSerializer::class)
     val allowInReturns: Boolean,
     val account: String? = null,
-    @SerialName("default_account") val defaultAccount: String? = null,
+    @SerialName("default_account")
+    val defaultAccount: String? = null,
     val currency: String? = null,
     @SerialName("account_currency") val accountCurrency: String? = null,
     @SerialName("account_type") val accountType: String? = null,

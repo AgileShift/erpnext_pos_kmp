@@ -14,8 +14,11 @@ import com.erpnext.pos.domain.usecases.InventoryAlertInput
 import com.erpnext.pos.domain.usecases.LoadHomeMetricsUseCase
 import com.erpnext.pos.domain.usecases.LoadInventoryAlertsUseCase
 import com.erpnext.pos.domain.usecases.LogoutUseCase
+import com.erpnext.pos.domain.usecases.ObserveHomeLiveShiftMetricsInput
+import com.erpnext.pos.domain.usecases.ObserveHomeLiveShiftMetricsUseCase
 import com.erpnext.pos.localSource.dao.POSProfileDao
 import com.erpnext.pos.localSource.datasources.ExchangeRateLocalSource
+import com.erpnext.pos.localSource.preferences.BootstrapContextPreferences
 import com.erpnext.pos.localSource.preferences.GeneralPreferences
 import com.erpnext.pos.localSource.preferences.SyncPreferences
 import com.erpnext.pos.localSource.preferences.SyncSettings
@@ -30,18 +33,26 @@ import com.erpnext.pos.sync.SyncState
 import com.erpnext.pos.utils.normalizeCurrency
 import com.erpnext.pos.utils.notifications.notifySystem
 import com.erpnext.pos.utils.notifications.scheduleDailyInventoryReminder
+import com.erpnext.pos.utils.AppLogger
 import com.erpnext.pos.views.CashBoxManager
 import com.erpnext.pos.views.PaymentModeWithAmount
 import com.erpnext.pos.views.reconciliation.ReconciliationMode
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeout
 import kotlinx.datetime.DatePeriod
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.atTime
@@ -52,7 +63,7 @@ import kotlinx.datetime.toLocalDateTime
 import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
 
-@OptIn(ExperimentalTime::class)
+@OptIn(ExperimentalTime::class, ExperimentalCoroutinesApi::class)
 class HomeViewModel(
     private val fetchUserInfoUseCase: FetchUserInfoUseCase,
     private val fetchPosProfileUseCase: FetchPosProfileUseCase,
@@ -66,13 +77,15 @@ class HomeViewModel(
     private val navManager: NavigationManager,
     private val loadHomeMetricsUseCase: LoadHomeMetricsUseCase,
     private val loadInventoryAlertsUseCase: LoadInventoryAlertsUseCase,
+    private val observeHomeLiveShiftMetricsUseCase: ObserveHomeLiveShiftMetricsUseCase,
     private val posProfileGate: PosProfileGate,
     private val openingGate: OpeningGate,
     private val homeRefreshController: HomeRefreshController,
     private val sessionRefresher: SessionRefresher,
     private val syncContextProvider: SyncContextProvider,
     private val generalPreferences: GeneralPreferences,
-    private val exchangeRateLocalSource: ExchangeRateLocalSource
+    private val exchangeRateLocalSource: ExchangeRateLocalSource,
+    private val bootstrapContextPreferences: BootstrapContextPreferences
 ) : BaseViewModel() {
     private val _stateFlow: MutableStateFlow<HomeState> = MutableStateFlow(HomeState.Loading)
     val stateFlow = _stateFlow.asStateFlow()
@@ -104,6 +117,7 @@ class HomeViewModel(
     private var posProfiles: List<POSProfileSimpleBO> = emptyList()
     private var lastInventoryProfile: String? = null
     private var lastMetricsOpeningEntryId: String? = null
+    private var isLoadingInitial: Boolean = false
 
     init {
         viewModelScope.launch {
@@ -137,6 +151,11 @@ class HomeViewModel(
             }
         }
         viewModelScope.launch {
+            observeLiveShiftMetrics().collectLatest { live ->
+                _homeMetrics.update { current -> mergeLiveShiftMetrics(current, live) }
+            }
+        }
+        viewModelScope.launch {
             syncState.collectLatest { state ->
                 if (state is SyncState.SUCCESS) {
                     refreshMetrics()
@@ -150,7 +169,11 @@ class HomeViewModel(
         }
         viewModelScope.launch {
             homeRefreshController.events.collectLatest {
-                loadInitialData()
+                if (_stateFlow.value is HomeState.POSProfiles) {
+                    refreshMetrics()
+                } else {
+                    loadInitialData()
+                }
             }
         }
         viewModelScope.launch {
@@ -198,21 +221,33 @@ class HomeViewModel(
     }
 
     fun loadInitialData() {
+        if (isLoadingInitial) return
+        isLoadingInitial = true
         _stateFlow.update { HomeState.Loading }
         executeUseCase(action = {
-            userInfo = fetchUserInfoUseCase.invoke(null)
-            when (val gate = posProfileGate.ensureReady(userInfo.email)) {
-                is GateResult.Failed -> error(gate.reason)
-                is GateResult.Pending -> error(gate.reason)
-                GateResult.Ready -> Unit
+            AppLogger.info("HomeViewModel.loadInitialData -> start")
+            withTimeout(30_000) {
+                userInfo = fetchUserInfoUseCase.invoke(null)
+                AppLogger.info("HomeViewModel.loadInitialData -> userInfo loaded")
+                when (val gate = posProfileGate.ensureReady()) {
+                    is GateResult.Failed -> error(gate.reason)
+                    is GateResult.Pending -> error(gate.reason)
+                    GateResult.Ready -> Unit
+                }
+                AppLogger.info("HomeViewModel.loadInitialData -> gate ready")
+                posProfiles = fetchPosProfileUseCase.invoke(userInfo.email)
+                AppLogger.info("HomeViewModel.loadInitialData -> profiles loaded")
+                loadMetricsForActiveShift()
+                refreshInventoryAlerts()
+                refreshSalesTarget()
+                _stateFlow.update { HomeState.POSProfiles(posProfiles, userInfo) }
+                AppLogger.info("HomeViewModel.loadInitialData -> done")
             }
-            posProfiles = fetchPosProfileUseCase.invoke(userInfo.email)
-            loadMetricsForActiveShift()
-            refreshInventoryAlerts()
-            refreshSalesTarget()
-            _stateFlow.update { HomeState.POSProfiles(posProfiles, userInfo) }
         }, exceptionHandler = { e ->
+            AppLogger.warn("HomeViewModel.loadInitialData -> error", e)
             _stateFlow.update { HomeState.Error(e.message ?: "Error") }
+        }, finallyHandler = {
+            isLoadingInitial = false
         }, loadingMessage = "Cargando inicio...")
     }
 
@@ -247,6 +282,165 @@ class HomeViewModel(
             ?.openingEntryId
             ?.trim()
             ?.takeIf { it.isNotBlank() }
+    }
+
+    private fun observeLiveShiftMetrics(): Flow<com.erpnext.pos.domain.usecases.HomeLiveShiftMetrics> {
+        return openingEntryId
+            .map { it?.trim()?.takeIf { value -> value.isNotBlank() } }
+            .distinctUntilChanged()
+            .flatMapLatest { openingId ->
+                if (openingId.isNullOrBlank()) {
+                    emptyFlow()
+                } else {
+                    observeHomeLiveShiftMetricsUseCase.observe(
+                        ObserveHomeLiveShiftMetricsInput(
+                            postingDate = Clock.System.now()
+                                .toLocalDateTime(TimeZone.currentSystemDefault())
+                                .date
+                                .toString(),
+                            openingEntryId = openingId
+                        )
+                    )
+                }
+            }
+    }
+
+    private fun mergeLiveShiftMetrics(
+        current: HomeMetrics,
+        live: com.erpnext.pos.domain.usecases.HomeLiveShiftMetrics
+    ): HomeMetrics {
+        val today = Clock.System.now()
+            .toLocalDateTime(TimeZone.currentSystemDefault())
+            .date
+            .toString()
+        val liveByCurrency = live.byCurrency.associateBy { normalizeCurrency(it.currency) }
+        val templateSeries = current.weekSeries
+
+        val existingByCurrency = current.currencyMetrics.associateBy {
+            normalizeCurrency(it.currency)
+        }
+        val allCurrencyKeys = (existingByCurrency.keys + liveByCurrency.keys).toList().sorted()
+
+        val mergedCurrencies = allCurrencyKeys.map { key ->
+            val existing = existingByCurrency[key]
+            val liveCurrency = liveByCurrency[key]
+            if (existing != null) {
+                val liveTotal = liveCurrency?.totalSalesToday ?: 0.0
+                val liveInvoices = liveCurrency?.invoicesToday ?: 0
+                val liveCustomers = liveCurrency?.customersToday ?: 0
+                val liveAvg = liveCurrency?.avgTicket ?: 0.0
+                val updatedSeries = updateWeekSeriesToday(existing.weekSeries, today, liveTotal)
+                val updatedSalesLast7 = if (updatedSeries.isNotEmpty()) {
+                    updatedSeries.sumOf { it.total }
+                } else {
+                    existing.salesLast7
+                }
+                existing.copy(
+                    totalSalesToday = liveTotal,
+                    invoicesToday = liveInvoices,
+                    avgTicket = liveAvg,
+                    customersToday = liveCustomers,
+                    salesLast7 = updatedSalesLast7,
+                    compareVsYesterday = percentChange(liveTotal, existing.salesYesterday),
+                    compareVsLastWeek = percentChange(updatedSalesLast7, existing.salesPrev7),
+                    weekSeries = updatedSeries
+                )
+            } else {
+                val currency = liveCurrency?.currency ?: key
+                val liveTotal = liveCurrency?.totalSalesToday ?: 0.0
+                val liveInvoices = liveCurrency?.invoicesToday ?: 0
+                val liveCustomers = liveCurrency?.customersToday ?: 0
+                val liveAvg = liveCurrency?.avgTicket ?: 0.0
+                val seededSeries = buildZeroBasedSeries(templateSeries, today, liveTotal)
+                val salesLast7 = if (seededSeries.isNotEmpty()) seededSeries.sumOf { it.total } else 0.0
+                CurrencyHomeMetric(
+                    currency = currency,
+                    totalSalesToday = liveTotal,
+                    invoicesToday = liveInvoices,
+                    avgTicket = liveAvg,
+                    customersToday = liveCustomers,
+                    outstandingTotal = 0.0,
+                    salesYesterday = 0.0,
+                    salesLast7 = salesLast7,
+                    salesPrev7 = 0.0,
+                    compareVsYesterday = null,
+                    compareVsLastWeek = null,
+                    marginToday = null,
+                    marginTodayPercent = null,
+                    marginLast7 = null,
+                    marginLast7Percent = null,
+                    costCoveragePercent = null,
+                    weekSeries = seededSeries
+                )
+            }
+        }
+
+        val updatedPrimarySeries = updateWeekSeriesToday(current.weekSeries, today, live.totalSalesToday)
+        val updatedSalesLast7 = if (updatedPrimarySeries.isNotEmpty()) {
+            updatedPrimarySeries.sumOf { it.total }
+        } else {
+            current.salesLast7
+        }
+
+        return current.copy(
+            totalSalesToday = live.totalSalesToday,
+            invoicesToday = live.invoicesToday,
+            avgTicket = live.avgTicket,
+            customersToday = live.customersToday,
+            salesLast7 = updatedSalesLast7,
+            compareVsYesterday = percentChange(live.totalSalesToday, current.salesYesterday),
+            compareVsLastWeek = percentChange(updatedSalesLast7, current.salesPrev7),
+            weekSeries = updatedPrimarySeries,
+            currencyMetrics = mergedCurrencies
+        )
+    }
+
+    private fun updateWeekSeriesToday(
+        series: List<DailyMetric>,
+        today: String,
+        todayTotal: Double
+    ): List<DailyMetric> {
+        if (series.isEmpty()) return series
+        var foundToday = false
+        val updated = series.map { metric ->
+            if (metric.date == today) {
+                foundToday = true
+                metric.copy(total = todayTotal)
+            } else {
+                metric
+            }
+        }
+        if (foundToday) return updated
+        val withoutLast = updated.dropLast(1)
+        return withoutLast + DailyMetric(date = today, total = todayTotal)
+    }
+
+    private fun buildZeroBasedSeries(
+        template: List<DailyMetric>,
+        today: String,
+        todayTotal: Double
+    ): List<DailyMetric> {
+        if (template.isEmpty()) {
+            return listOf(DailyMetric(date = today, total = todayTotal))
+        }
+        val dates = template.map { it.date }
+        var foundToday = false
+        val zeroed = dates.map { date ->
+            if (date == today) {
+                foundToday = true
+                DailyMetric(date = date, total = todayTotal)
+            } else {
+                DailyMetric(date = date, total = 0.0)
+            }
+        }
+        if (foundToday) return zeroed
+        val withoutLast = zeroed.dropLast(1)
+        return withoutLast + DailyMetric(date = today, total = todayTotal)
+    }
+
+    private fun percentChange(current: Double, previous: Double): Double? {
+        if (previous == 0.0) return null
+        return ((current - previous) / previous) * 100.0
     }
 
     private fun refreshInventoryAlerts() {
@@ -319,7 +513,9 @@ class HomeViewModel(
     private fun refreshSalesTarget() {
         viewModelScope.launch {
             val ctx = contextManager.getContext() ?: return@launch
-            val monthly = ctx.monthlySalesTarget ?: generalPreferences.getSalesTargetMonthly()
+            val monthly = ctx.monthlySalesTarget
+                ?: bootstrapContextPreferences.load().monthlySalesTarget
+                ?: generalPreferences.getSalesTargetMonthly()
             if (monthly <= 0.0) {
                 _homeMetrics.update { it.copy(salesTarget = null) }
                 return@launch

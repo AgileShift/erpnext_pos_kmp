@@ -14,6 +14,7 @@ import com.erpnext.pos.domain.usecases.StockDelta
 import com.erpnext.pos.localSource.datasources.InventoryLocalSource
 import com.erpnext.pos.remoteSource.datasources.InventoryRemoteSource
 import com.erpnext.pos.remoteSource.mapper.toEntity
+import com.erpnext.pos.sync.SyncTTL
 import com.erpnext.pos.utils.RepoTrace
 import com.erpnext.pos.views.CashBoxManager
 import kotlinx.coroutines.flow.Flow
@@ -77,12 +78,13 @@ class InventoryRepository(
                 localSource.insertAll(entities)
                 localSource.deleteMissing(entities.map { it.itemCode })
             },
-            shouldFetch = {
-                true
-                /*val first = localSource.getOldestItem()
-                first == null || SyncTTL.isExpired(first.lastSyncedAt)*/
-            },
-            onFetchFailed = { RepoTrace.capture("InventoryRepository", "sync", it) }
+            shouldFetch = { true },
+            onFetchFailed = { RepoTrace.capture("InventoryRepository", "sync", it) },
+            traceName = "InventoryRepository.sync",
+            fetchTtlMillis = SyncTTL.DEFAULT_TTL_HOURS * 60L * 60L * 1000L,
+            resolveLocalUpdatedAtMillis = { localData ->
+                localData.maxOfOrNull { it.lastSyncedAt ?: 0L }?.takeIf { it > 0L }
+            }
         )
     }
 }

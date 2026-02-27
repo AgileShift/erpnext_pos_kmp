@@ -4,16 +4,14 @@ package com.erpnext.pos.di
 
 import com.erpnext.pos.auth.AppLifecycleObserver
 import com.erpnext.pos.auth.SessionRefresher
+import com.erpnext.pos.auth.AuthFlowState
 import com.erpnext.pos.auth.TokenHeartbeat
 import com.erpnext.pos.data.AppDatabase
 import com.erpnext.pos.data.DatabaseBuilder
-import com.erpnext.pos.data.repositories.AddressRepository
 import com.erpnext.pos.data.repositories.BootstrapSyncRepository
-import com.erpnext.pos.data.repositories.CheckoutRepository
 import com.erpnext.pos.data.repositories.ClosingEntrySyncRepository
 import com.erpnext.pos.data.repositories.CompanyAccountRepository
 import com.erpnext.pos.data.repositories.CompanyRepository
-import com.erpnext.pos.data.repositories.ContactRepository
 import com.erpnext.pos.data.repositories.CurrencySettingsRepository
 import com.erpnext.pos.data.repositories.CustomerGroupRepository
 import com.erpnext.pos.data.repositories.CustomerRepository
@@ -33,7 +31,6 @@ import com.erpnext.pos.data.repositories.PosOpeningRepository
 import com.erpnext.pos.data.repositories.PosProfilePaymentMethodLocalRepository
 import com.erpnext.pos.data.repositories.PosProfilePaymentMethodSyncRepository
 import com.erpnext.pos.data.repositories.SalesInvoiceRepository
-import com.erpnext.pos.data.repositories.SalesTargetRepository
 import com.erpnext.pos.data.repositories.StockSettingsRepository
 import com.erpnext.pos.data.repositories.SupplierRepository
 import com.erpnext.pos.data.repositories.TerritoryRepository
@@ -77,6 +74,7 @@ import com.erpnext.pos.domain.usecases.FetchPosProfileUseCase
 import com.erpnext.pos.domain.usecases.FetchSalesInvoiceLocalUseCase
 import com.erpnext.pos.domain.usecases.FetchSalesInvoiceRemoteUseCase
 import com.erpnext.pos.domain.usecases.FetchSalesInvoiceWithItemsUseCase
+import com.erpnext.pos.domain.usecases.FetchSupplierOutstandingPurchaseInvoicesUseCase
 import com.erpnext.pos.domain.usecases.FetchSuppliersLocalUseCase
 import com.erpnext.pos.domain.usecases.FetchTerritoriesLocalUseCase
 import com.erpnext.pos.domain.usecases.FetchUserInfoUseCase
@@ -85,6 +83,7 @@ import com.erpnext.pos.domain.usecases.LoadHomeMetricsUseCase
 import com.erpnext.pos.domain.usecases.LoadInventoryAlertsUseCase
 import com.erpnext.pos.domain.usecases.LoadSourceDocumentsUseCase
 import com.erpnext.pos.domain.usecases.LogoutUseCase
+import com.erpnext.pos.domain.usecases.ObserveHomeLiveShiftMetricsUseCase
 import com.erpnext.pos.domain.usecases.MarkSalesInvoiceSyncedUseCase
 import com.erpnext.pos.domain.usecases.PartialReturnUseCase
 import com.erpnext.pos.domain.usecases.PushPendingCustomersUseCase
@@ -117,6 +116,7 @@ import com.erpnext.pos.localSource.preferences.GeneralPreferences
 import com.erpnext.pos.localSource.preferences.LanguagePreferences
 import com.erpnext.pos.localSource.preferences.OpeningSessionPreferences
 import com.erpnext.pos.localSource.preferences.ReturnLedgerPreferences
+import com.erpnext.pos.localSource.preferences.ReturnPolicyPreferences
 import com.erpnext.pos.localSource.preferences.SyncLogPreferences
 import com.erpnext.pos.localSource.preferences.SyncPreferences
 import com.erpnext.pos.localSource.preferences.ThemePreferences
@@ -222,6 +222,10 @@ val appModule = module {
             install(Logging) {
                 logger = object : Logger {
                     override fun log(message: String) {
+                        if (
+                            message.contains("CancellationException") &&
+                            message.contains("coroutine scope left the composition")
+                        ) return
                         print("KtorClient -> $message")
                     }
                 }
@@ -321,6 +325,7 @@ val appModule = module {
     single { SalesFlowContextStore() }
     single { HomeRefreshController() }
     single { BillingResetController() }
+    single { AuthFlowState() }
 
     single<CoroutineScope> { CoroutineScope(SupervisorJob() + Dispatchers.IO) }
     single { com.erpnext.pos.navigation.NavigationManagerHolder.instance }
@@ -330,7 +335,8 @@ val appModule = module {
             apiService = get(),
             navigationManager = get(),
             networkMonitor = get(),
-            cashBoxManager = lazy { get<CashBoxManager>() }
+            cashBoxManager = lazy { get<CashBoxManager>() },
+            authFlowState = get()
         )
     }
     single { AppLifecycleObserver() }
@@ -447,7 +453,7 @@ val appModule = module {
     //endregion
 
     //region Login DI
-    single { LoginViewModel(get(), get(), get(), get(), get(), get(), get(), get()) }
+    single { LoginViewModel(get(), get(), get(), get(), get(), get(), get(), get(), get()) }
     //endregion
 
     //region Splash DI
@@ -524,19 +530,17 @@ val appModule = module {
     single { CustomerRemoteSource(get()) }
     single { CustomerLocalSource(get(), get()) }
     single { CustomerOutboxLocalSource(get()) }
-    single { CustomerRepository(get(), get(), get(), get()) }
+    single { CustomerRepository(get(), get(), get(), get(), get()) }
     single { CustomerSyncRepository(get(), get(), get(), get(), get()) }
     single { FetchCustomerInvoicesLocalForPeriodUseCase(get()) }
     single { CreateCustomerUseCase(get(), get()) }
     single { PushPendingCustomersUseCase(get()) }
     single { CustomerGroupLocalSource(get()) }
     single { TerritoryLocalSource(get()) }
-    single { CustomerGroupRepository(get(), get()) }
-    single { TerritoryRepository(get(), get()) }
+    single { CustomerGroupRepository(get()) }
+    single { TerritoryRepository(get()) }
     single { ContactLocalSource(get()) }
     single { AddressLocalSource(get()) }
-    single { ContactRepository(get(), get()) }
-    single { AddressRepository(get(), get()) }
     single {
         CustomerViewModel(
             cashboxManager = get(),
@@ -583,16 +587,18 @@ val appModule = module {
             navManager = get(),
             loadHomeMetricsUseCase = get(),
             loadInventoryAlertsUseCase = get(),
+            observeHomeLiveShiftMetricsUseCase = get(),
             posProfileGate = get(),
             openingGate = get(),
             homeRefreshController = get(),
             sessionRefresher = get(),
             syncContextProvider = get(),
             generalPreferences = get(),
-            exchangeRateLocalSource = get()
+            exchangeRateLocalSource = get(),
+            bootstrapContextPreferences = get()
         )
     }
-    single<IUserRepository> { UserRepository(get(), get()) }
+    single<IUserRepository> { UserRepository(get()) }
     //endregion
 
     //region Invoices
@@ -621,6 +627,7 @@ val appModule = module {
     single { DeliveryNoteViewModel(get()) }
     single {
         PaymentEntryViewModel(
+            get(),
             get(),
             get(),
             get(),
@@ -668,7 +675,6 @@ val appModule = module {
     }
     single { SalesInvoiceRemoteSource(get(), get()) }
     single { InvoiceLocalSource(get()) }
-    single { CheckoutRepository(get(), get()) }
     //endregion
 
     //region Settings
@@ -676,7 +682,7 @@ val appModule = module {
     single { ActivityPreferences(get()) }
     single { ActivityCenter(get()) }
     single { ActivityViewModel(get(), get()) }
-    single { com.erpnext.pos.localSource.preferences.ReturnPolicyPreferences(get()) }
+    single { ReturnPolicyPreferences(get()) }
     single {
         SettingsViewModel(
             get(),
@@ -688,7 +694,6 @@ val appModule = module {
             get(),
             get(),
             get(),
-            get()
         )
     }
     //endregion
@@ -715,6 +720,7 @@ val appModule = module {
     single { FetchCustomersLocalUseCase(get()) }
     single { FetchCustomersLocalWithStateUseCase(get()) }
     single { FetchSuppliersLocalUseCase(get()) }
+    single { FetchSupplierOutstandingPurchaseInvoicesUseCase(get()) }
     single { FetchCompanyAccountsLocalUseCase(get()) }
     single { RebuildCustomerSummariesUseCase(get()) }
     single { FetchPaymentTermsLocalUseCase(get()) }
@@ -733,9 +739,9 @@ val appModule = module {
     single { CreatePaymentEntryUseCase(get()) }
     single { PartialReturnUseCase(get(), get(), get(), get(), get(), get()) }
     single { LoadHomeMetricsUseCase(get()) }
+    single { ObserveHomeLiveShiftMetricsUseCase(get()) }
     single { InventoryAlertRepository(get(), get(), get(), get(), get()) }
     single { LoadInventoryAlertsUseCase(get()) }
-    single { SalesTargetRepository(get(), get(), get()) }
     single { GetCompanyInfoUseCase(get()) }
     //endregion
 }

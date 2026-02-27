@@ -10,9 +10,9 @@ actual object AppLogger {
         AppSentry.breadcrumb(message)
     }
 
-    actual fun warn(message: String, throwable: Throwable?) {
+    actual fun warn(message: String, throwable: Throwable?, reportToSentry: Boolean) {
         if (throwable != null) Log.w(TAG, message, throwable) else Log.w(TAG, message)
-        if (throwable != null) {
+        if (throwable != null && reportToSentry) {
             AppSentry.capture(throwable, message)
         } else {
             AppSentry.breadcrumb(message)

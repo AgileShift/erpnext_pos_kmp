@@ -38,8 +38,8 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -52,8 +52,8 @@ import com.erpnext.pos.domain.models.SalesInvoiceBO
 import com.erpnext.pos.domain.usecases.InvoiceCancellationAction
 import com.erpnext.pos.localSource.preferences.ReturnPolicyPreferences
 import com.erpnext.pos.utils.formatCurrency
-import com.erpnext.pos.utils.resolveInvoiceDisplayAmounts
 import com.erpnext.pos.utils.normalizeCurrency
+import com.erpnext.pos.utils.resolveInvoiceDisplayAmounts
 import com.erpnext.pos.views.CashBoxManager
 import com.erpnext.pos.views.invoice.components.EmptyState
 import com.erpnext.pos.views.invoice.components.ErrorState
@@ -272,8 +272,6 @@ fun InvoiceListScreen(action: InvoiceAction) {
  ) {
     val cashboxManager: CashBoxManager = koinInject()
     val companyCurrency = normalizeCurrency(cashboxManager.getContext()?.companyCurrency)
-        ?: normalizeCurrency(cashboxManager.getContext()?.currency)
-        ?: "USD"
     val display = resolveInvoiceDisplayAmounts(
         invoice = invoice,
         companyCurrency = companyCurrency

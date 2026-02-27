@@ -42,7 +42,7 @@ class PosProfileGate(
         return validProfiles
     }
 
-    suspend fun ensureReady(assignedTo: String?): GateResult {
+    suspend fun ensureReady(): GateResult {
         val cachedProfileNames = posProfileLocalDao.getAll().map { it.profileName }
         if (cachedProfileNames.isNotEmpty()) {
             val validCachedProfiles = enforceProfilesWithRelations(cachedProfileNames)
@@ -52,7 +52,7 @@ class PosProfileGate(
         }
 
         AppLogger.info("PosProfileGate: cache miss, bootstrapping profiles")
-        val results = syncOrchestrator.bootstrapProfiles(assignedTo)
+        val results = syncOrchestrator.bootstrapProfiles()
         val hasFailure = results.any { it.status == SyncJobStatus.FAILED }
         if (hasFailure) {
             val message = results.firstOrNull { it.status == SyncJobStatus.FAILED }?.message

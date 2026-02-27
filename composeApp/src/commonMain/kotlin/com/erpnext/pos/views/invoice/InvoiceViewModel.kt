@@ -12,9 +12,9 @@ import com.erpnext.pos.domain.usecases.FetchPendingInvoiceUseCase
 import com.erpnext.pos.domain.usecases.FetchSalesInvoiceLocalUseCase
 import com.erpnext.pos.domain.usecases.InvoiceCancellationAction
 import com.erpnext.pos.domain.usecases.PendingInvoiceInput
+import com.erpnext.pos.localSource.preferences.ReturnPolicyPreferences
 import com.erpnext.pos.navigation.NavRoute
 import com.erpnext.pos.navigation.NavigationManager
-import com.erpnext.pos.localSource.preferences.ReturnPolicyPreferences
 import com.erpnext.pos.utils.parseErpDateTimeToEpochMillis
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.FlowPreview
@@ -27,8 +27,9 @@ import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlin.time.Clock
+import kotlin.time.ExperimentalTime
 
-@OptIn(FlowPreview::class, ExperimentalCoroutinesApi::class)
+@OptIn(FlowPreview::class, ExperimentalCoroutinesApi::class, ExperimentalTime::class)
 class InvoiceViewModel(
     private val fetchPendingInvoiceUseCase: FetchPendingInvoiceUseCase,
     private val cancelSalesInvoiceUseCase: CancelSalesInvoiceUseCase,
@@ -155,7 +156,7 @@ class InvoiceViewModel(
             val dateMatches = if (dateValue.isNullOrEmpty()) {
                 true
             } else {
-                invoice.postingDate?.startsWith(dateValue) == true
+                invoice.postingDate.startsWith(dateValue)
             }
             queryMatches && dateMatches
         }

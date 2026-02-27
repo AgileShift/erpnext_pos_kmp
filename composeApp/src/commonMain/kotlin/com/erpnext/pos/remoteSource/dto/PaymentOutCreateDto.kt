@@ -23,6 +23,8 @@ data class PaymentOutCreateDto(
     val receivedAmount: Double,
     @SerialName("paid_from")
     val paidFrom: String,
+    @SerialName("references")
+    val references: List<PaymentEntryReferenceCreateDto> = emptyList(),
     @SerialName("reference_no")
     val referenceNo: String? = null,
     @SerialName("reference_date")

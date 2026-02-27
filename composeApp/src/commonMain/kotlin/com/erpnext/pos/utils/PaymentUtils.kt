@@ -2,9 +2,9 @@
 
 package com.erpnext.pos.utils
 
-import com.erpnext.pos.localSource.entities.ModeOfPaymentEntity
 import com.erpnext.pos.domain.models.CustomerBO
 import com.erpnext.pos.domain.models.POSPaymentModeOption
+import com.erpnext.pos.localSource.entities.ModeOfPaymentEntity
 import com.erpnext.pos.localSource.entities.POSInvoicePaymentEntity
 import com.erpnext.pos.remoteSource.api.APIService
 import com.erpnext.pos.remoteSource.dto.PaymentEntryCreateDto
@@ -14,15 +14,14 @@ import com.erpnext.pos.utils.oauth.bd
 import com.erpnext.pos.utils.oauth.coerceAtLeastZero
 import com.erpnext.pos.utils.oauth.isZero
 import com.erpnext.pos.utils.oauth.minOfBd
-import com.erpnext.pos.utils.oauth.moneyScale
 import com.erpnext.pos.utils.oauth.moneyScaleDown
 import com.erpnext.pos.utils.oauth.roundCashIfNeeded
 import com.erpnext.pos.utils.oauth.safeMul
 import com.erpnext.pos.utils.oauth.toDouble
 import com.erpnext.pos.views.POSContext
 import com.erpnext.pos.views.billing.PaymentLine
-import kotlin.time.Clock
 import kotlin.math.pow
+import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
 
 
@@ -105,30 +104,6 @@ suspend fun resolveExchangeRateBetween(
         ?.let { 1 / it }
 
     return reverseRate
-}
-
-data class PaymentStatus(
-    val paidAmount: Double,
-    val outstandingAmount: Double,
-    val status: String
-)
-
-/**
- * Lógica de estado de pago. Para no acoplarlo a Billing, recibe una función `round`.
- */
-fun resolvePaymentStatus(
-    total: Double,
-    paymentLines: List<PaymentLine>,
-    round: (Double) -> Double
-): PaymentStatus {
-    val paidAmount = round(paymentLines.sumOf { it.baseAmount })
-    val roundedTotal = round(total)
-    val outstandingAmount = round((roundedTotal - paidAmount).coerceAtLeast(0.0))
-    val status =
-        if (outstandingAmount == roundedTotal) "Unpaid"
-        else if ((roundedTotal - outstandingAmount) > 0.0) "Partly Paid"
-        else "Paid"
-    return PaymentStatus(paidAmount, outstandingAmount, status)
 }
 
 fun requiresReference(mode: POSPaymentModeOption?): Boolean {
@@ -290,8 +265,7 @@ suspend fun buildPaymentEntryDto(
         ?.trim()?.uppercase()
         ?: error("No se pudo resolver moneda del pago ingresado")
     val paidToCurrency = (modeDefinition.currency?.takeIf { it.isNotBlank() }
-        ?: enteredCurrency
-        ?: error("No se pudo resolver moneda de paid_to"))
+        ?: enteredCurrency)
         .trim().uppercase()
     val rcSpec = resolveCurrencySpec(receivableCurrency, currencySpecs)
     val enteredSpec = resolveCurrencySpec(enteredCurrency, currencySpecs)
@@ -430,8 +404,7 @@ suspend fun buildPaymentEntryDtoWithRateResolver(
         ?.trim()?.uppercase()
         ?: error("No se pudo resolver moneda del pago ingresado")
     val paidToCurrency = (modeDefinition.currency?.takeIf { it.isNotBlank() }
-        ?: enteredCurrency
-        ?: error("No se pudo resolver moneda de paid_to"))
+        ?: enteredCurrency)
         .trim().uppercase()
 
     val rcSpec = resolveCurrencySpec(receivableCurrency, currencySpecs)

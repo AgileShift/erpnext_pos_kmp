@@ -1,34 +1,34 @@
 package com.erpnext.pos.views.payment
 
+import com.erpnext.pos.data.repositories.ExchangeRateRepository
 import com.erpnext.pos.domain.models.CustomerBO
 import com.erpnext.pos.domain.usecases.CreatePaymentEntryInput
 import com.erpnext.pos.domain.usecases.CreatePaymentEntryUseCase
 import com.erpnext.pos.domain.usecases.SaveInvoicePaymentsInput
 import com.erpnext.pos.domain.usecases.SaveInvoicePaymentsUseCase
-import com.erpnext.pos.data.repositories.ExchangeRateRepository
+import com.erpnext.pos.domain.utils.UUIDGenerator
 import com.erpnext.pos.localSource.datasources.InvoiceLocalSource
-import com.erpnext.pos.utils.NetworkMonitor
 import com.erpnext.pos.localSource.entities.ModeOfPaymentEntity
 import com.erpnext.pos.remoteSource.api.APIService
 import com.erpnext.pos.remoteSource.dto.SalesInvoiceDto
-import com.erpnext.pos.views.POSContext
-import com.erpnext.pos.views.billing.PaymentLine
-import com.erpnext.pos.domain.utils.UUIDGenerator
 import com.erpnext.pos.utils.InvoiceReceivableAmounts
+import com.erpnext.pos.utils.NetworkMonitor
 import com.erpnext.pos.utils.buildCurrencySpecs
 import com.erpnext.pos.utils.buildLocalPayments
 import com.erpnext.pos.utils.buildPaymentEntryDto
 import com.erpnext.pos.utils.normalizeCurrency
 import com.erpnext.pos.utils.oauth.CurrencySpec
+import com.erpnext.pos.utils.resolveMinorUnitTolerance
 import com.erpnext.pos.utils.resolvePaymentCurrencyForMode
 import com.erpnext.pos.utils.resolvePaymentToReceivableRate
 import com.erpnext.pos.utils.resolveRateToInvoiceCurrency
 import com.erpnext.pos.utils.roundToCurrency
-import kotlin.math.floor
+import com.erpnext.pos.utils.toBaseAmount
+import com.erpnext.pos.views.POSContext
+import com.erpnext.pos.views.billing.PaymentLine
+import kotlinx.coroutines.flow.first
 import kotlin.math.pow
 import kotlin.math.round
-import com.erpnext.pos.utils.toBaseAmount
-import kotlinx.coroutines.flow.first
 
 class PaymentHandler(
     private val api: APIService,
@@ -182,18 +182,16 @@ class PaymentHandler(
         val remoteEntryByReference = mutableMapOf<String, String?>()
 
         if (createdInvoice != null) {
-            val resolvedInvoice = createdInvoice
-            val resolvedInvoiceName = resolvedInvoice.name ?: invoiceNameForLocal
-            val invoiceForPayment = resolvedInvoice
-            resolvedInvoiceCurrency = normalizeCurrency(invoiceForPayment.currency)
-            resolvedReceivableCurrency = normalizeCurrency(invoiceForPayment.partyAccountCurrency)
+            val resolvedInvoiceName = createdInvoice.name ?: invoiceNameForLocal
+            resolvedInvoiceCurrency = normalizeCurrency(createdInvoice.currency)
+            resolvedReceivableCurrency = normalizeCurrency(createdInvoice.partyAccountCurrency)
 
             val rateInvToRcResolved =
                 com.erpnext.pos.utils.CurrencyService.resolveInvoiceToReceivableRateUnified(
                     invoiceCurrency = resolvedInvoiceCurrency,
                     receivableCurrency = resolvedReceivableCurrency,
-                    conversionRate = invoiceForPayment.conversionRate,
-                    customExchangeRate = invoiceForPayment.customExchangeRate,
+                    conversionRate = createdInvoice.conversionRate,
+                    customExchangeRate = createdInvoice.customExchangeRate,
                     posCurrency = context.currency,
                     posExchangeRate = context.exchangeRate,
                     rateResolver = { from, to ->
@@ -205,19 +203,19 @@ class PaymentHandler(
                     }
                 )?.takeIf { it > 0.0 }
 
-            val remoteGrandTotal = invoiceForPayment.grandTotal
-            val remoteOutstanding = invoiceForPayment.outstandingAmount ?: remoteGrandTotal
+            val remoteGrandTotal = createdInvoice.grandTotal
+            val remoteOutstanding = createdInvoice.outstandingAmount ?: remoteGrandTotal
 
             val totalRc = when {
                 resolvedReceivableCurrency.equals(resolvedInvoiceCurrency, ignoreCase = true) ->
                     remoteGrandTotal
 
                 resolvedReceivableCurrency.equals(companyCurrency, ignoreCase = true) &&
-                    (invoiceForPayment.baseGrandTotal) != null &&
-                    (invoiceForPayment.baseGrandTotal ?: 0.0) > 0.0 ->
-                    invoiceForPayment.baseGrandTotal
+                    (createdInvoice.baseGrandTotal) != null &&
+                        createdInvoice.baseGrandTotal > 0.0 ->
+                    createdInvoice.baseGrandTotal
 
-                rateInvToRcResolved != null -> invoiceForPayment.grandTotal * rateInvToRcResolved
+                rateInvToRcResolved != null -> createdInvoice.grandTotal * rateInvToRcResolved
                 else -> remoteGrandTotal
             }
 
@@ -226,15 +224,19 @@ class PaymentHandler(
                     remoteOutstanding
 
                 resolvedReceivableCurrency.equals(companyCurrency, ignoreCase = true) &&
-                    (invoiceForPayment.baseGrandTotal) != null -> {
-                    val baseTotal = invoiceForPayment.baseGrandTotal
-                    val basePaid = invoiceForPayment.basePaidAmount ?: 0.0
-                    ((baseTotal ?: 0.0) - basePaid).coerceAtLeast(0.0)
+                    (createdInvoice.baseGrandTotal) != null -> {
+                    val baseTotal = createdInvoice.baseGrandTotal
+                    val basePaid = createdInvoice.basePaidAmount ?: 0.0
+                    (baseTotal - basePaid).coerceAtLeast(0.0)
                 }
 
                 rateInvToRcResolved != null -> {
-                    val invOutstanding = remoteOutstanding
-                    (invOutstanding * rateInvToRcResolved).coerceAtLeast(0.0)
+                    val converted = (remoteOutstanding * rateInvToRcResolved).coerceAtLeast(0.0)
+                    val rcTolerance = resolveMinorUnitTolerance(resolvedReceivableCurrency, currencySpecs)
+                    val outstandingLooksAlreadyReceivable =
+                        kotlin.math.abs(remoteOutstanding - totalRc) <= (rcTolerance * 2)
+                    if (outstandingLooksAlreadyReceivable) remoteOutstanding.coerceAtLeast(0.0)
+                    else converted
                 }
 
                 else -> remoteOutstanding
@@ -242,17 +244,17 @@ class PaymentHandler(
 
             receivableAmounts = InvoiceReceivableAmounts(
                 receivableCurrency = resolvedReceivableCurrency,
-                totalRc = totalRc ?: 0.0,
+                totalRc = totalRc,
                 outstandingRc = outstandingRcResolved
             )
             remainingOutstandingRc = receivableAmounts.outstandingRc
-            if (paymentLines.isNotEmpty() && ((remainingOutstandingRc ?: 0.0) <= 0.0)) {
+            if (paymentLines.isNotEmpty() && (remainingOutstandingRc <= 0.0)) {
                 remainingOutstandingRc = receivableAmounts.totalRc.takeIf { it > 0.0 }
             }
 
             if (isOnline) {
                 val paidFrom = resolvePaidFromAccount(
-                    invoice = invoiceForPayment,
+                    invoice = createdInvoice,
                     invoiceNameForLocal = invoiceNameForLocal,
                     context = context,
                     customer = customer,
@@ -307,7 +309,7 @@ class PaymentHandler(
                             context = context,
                             customer = customer,
                             postingDate = postingDate,
-                            invoiceId = invoiceForPayment.name ?: resolvedInvoiceName,
+                            invoiceId = createdInvoice.name ?: resolvedInvoiceName,
                             invoiceTotalRc = receivableAmounts.totalRc,
                             outstandingRc = outstandingForEntry,
                             paidFromAccount = paidFrom,

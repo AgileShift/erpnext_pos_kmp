@@ -121,7 +121,9 @@ class DesktopTokenStore(
     // TokenStore
     // ------------------------------------------------------------
     override suspend fun save(tokens: TokenResponse) {
+        AppLogger.info("DesktopTokenStore.save -> waiting mutex")
         mutex.withLock {
+            AppLogger.info("DesktopTokenStore.save -> mutex acquired currentSite=${getCurrentSite()}")
             val currentAccessToken = getSecret(siteScopedKey("access_token"))
             val currentRefreshToken = getSecret(siteScopedKey("refresh_token"))
             val currentIdToken = getSecret(siteScopedKey("id_token"))
@@ -170,6 +172,7 @@ class DesktopTokenStore(
                 id_token = mergedIdToken,
                 scope = tokens.scope
             )
+            AppLogger.info("DesktopTokenStore.save -> completed")
         }
     }
 
@@ -283,6 +286,7 @@ class DesktopTokenStore(
         lastUsedAt: Long?,
         isFavorite: Boolean?
     ) = mutex.withLock {
+        AppLogger.info("DesktopTokenStore.updateSiteMeta -> start url=$url")
         val list = loadAuthInfo()
         val updated = list.map { item ->
             if (item.url != url) return@map item
@@ -293,6 +297,7 @@ class DesktopTokenStore(
         }
         prefs.put("sitesInfo", json.encodeToString(updated))
         prefs.flush()
+        AppLogger.info("DesktopTokenStore.updateSiteMeta -> done url=$url")
     }
 
     override suspend fun clearAuthInfo() = mutex.withLock {

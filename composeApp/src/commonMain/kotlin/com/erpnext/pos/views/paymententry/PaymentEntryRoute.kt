@@ -59,6 +59,7 @@ fun rememberPaymentEntryActions(coordinator: PaymentEntryCoordinator): PaymentEn
             onAmountChanged = coordinator::onAmountChanged,
             onConceptChanged = coordinator::onConceptChanged,
             onPartyChanged = coordinator::onPartyChanged,
+            onSupplierInvoiceToggled = coordinator::onSupplierInvoiceToggled,
             onReferenceNoChanged = coordinator::onReferenceNoChanged,
             onReferenceDateChanged = coordinator::onReferenceDateChanged,
             onNotesChanged = coordinator::onNotesChanged,

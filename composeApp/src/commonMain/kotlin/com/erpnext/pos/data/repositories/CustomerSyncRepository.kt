@@ -13,8 +13,6 @@ import com.erpnext.pos.remoteSource.sdk.json
 import com.erpnext.pos.utils.AppLogger
 import com.erpnext.pos.utils.AppSentry
 import com.erpnext.pos.views.CashBoxManager
-import kotlinx.serialization.encodeToString
-import kotlinx.serialization.decodeFromString
 import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
 
@@ -50,7 +48,7 @@ class CustomerSyncRepository(
         pending.forEach { item ->
             try {
                 val payload = json.decodeFromString<CustomerCreatePayload>(item.payloadJson)
-                val remoteId = item.remoteId ?: run {
+                item.remoteId ?: run {
                     val creditLimits = payload.creditLimit?.let {
                         listOf(
                             CustomerCreditLimitCreateDto(

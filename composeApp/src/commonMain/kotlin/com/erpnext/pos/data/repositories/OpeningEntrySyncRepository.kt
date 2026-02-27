@@ -38,8 +38,8 @@ class OpeningEntrySyncRepository(
                 cashboxDao.updatePendingSync(candidate.cashbox.localId, false)
                 hasChanges = true
             }.onFailure { error ->
-                if (isCashierAssignedError(error)) {
-                    val remote = resolveRemoteOpenSession(candidate) ?: return@onFailure
+                val remote = resolveRemoteOpenSession(candidate)
+                if (remote != null && remote.name.isNotBlank()) {
                     val remoteName = remote.name
                     openingEntryLinkDao.updateRemoteName(candidate.link.id, remoteName)
                     cashboxDao.updateOpeningEntryId(candidate.cashbox.localId, remoteName)
@@ -49,6 +49,17 @@ class OpeningEntrySyncRepository(
                     openingEntryDao.update(candidate.openingEntry.copy(pendingSync = false))
                     cashboxDao.updatePendingSync(candidate.cashbox.localId, false)
                     hasChanges = true
+                    AppLogger.info(
+                        "OpeningEntrySyncRepository: adopted existing remote opening $remoteName " +
+                            "after local push failure"
+                    )
+                    return@onFailure
+                }
+                if (isCashierAssignedError(error)) {
+                    AppLogger.warn(
+                        "OpeningEntrySyncRepository: cashier-assigned conflict without resolvable remote opening",
+                        error
+                    )
                     return@onFailure
                 }
                 AppLogger.warn("OpeningEntrySyncRepository pushPending failed", error)

@@ -13,6 +13,7 @@ data class BootstrapContextSnapshot(
     val monthlySalesTarget: Double? = null,
     val fromDate: String? = null,
     val lastRequestAt: Long? = null,
+    val lastSuccessAt: Long? = null,
     val lastError: String? = null
 )
 
@@ -37,6 +38,7 @@ class BootstrapContextPreferences(
         replaceMonthlySalesTarget: Boolean = false,
         fromDate: String? = null,
         lastRequestAt: Long? = null,
+        lastSuccessAt: Long? = null,
         lastError: String? = null
     ) {
         val current = load()
@@ -47,6 +49,7 @@ class BootstrapContextPreferences(
                 ?: current.monthlySalesTarget),
             fromDate = fromDate?.takeIf { it.isNotBlank() } ?: current.fromDate,
             lastRequestAt = lastRequestAt ?: current.lastRequestAt,
+            lastSuccessAt = lastSuccessAt ?: current.lastSuccessAt,
             lastError = lastError ?: current.lastError
         )
         store.saveRaw(key, json.encodeToString(merged))

@@ -3,7 +3,6 @@ package com.erpnext.pos.remoteSource.api
 import com.erpnext.pos.BuildKonfig
 import com.erpnext.pos.base.getPlatformName
 import com.erpnext.pos.localSource.preferences.BootstrapContextPreferences
-import com.erpnext.pos.remoteSource.dto.AccountDetailDto
 import com.erpnext.pos.remoteSource.dto.AddressListDto
 import com.erpnext.pos.remoteSource.dto.BalanceDetailsDto
 import com.erpnext.pos.remoteSource.dto.BootstrapClosingEntryDto
@@ -26,8 +25,6 @@ import com.erpnext.pos.remoteSource.dto.InternalTransferSubmitDto
 import com.erpnext.pos.remoteSource.dto.ItemDto
 import com.erpnext.pos.remoteSource.dto.LinkRefDto
 import com.erpnext.pos.remoteSource.dto.LoginInfo
-import com.erpnext.pos.remoteSource.dto.ModeOfPaymentDetailDto
-import com.erpnext.pos.remoteSource.dto.ModeOfPaymentDto
 import com.erpnext.pos.remoteSource.dto.OutstandingInfo
 import com.erpnext.pos.remoteSource.dto.POSClosingEntryDto
 import com.erpnext.pos.remoteSource.dto.POSClosingEntryResponse
@@ -44,6 +41,7 @@ import com.erpnext.pos.remoteSource.dto.PaymentOutCreateDto
 import com.erpnext.pos.remoteSource.dto.PaymentOutSubmitDto
 import com.erpnext.pos.remoteSource.dto.PaymentReconciliationDto
 import com.erpnext.pos.remoteSource.dto.PaymentTermDto
+import com.erpnext.pos.remoteSource.dto.PurchaseInvoiceOutstandingDto
 import com.erpnext.pos.remoteSource.dto.SalesInvoiceDto
 import com.erpnext.pos.remoteSource.dto.ShippingRuleDto
 import com.erpnext.pos.remoteSource.dto.StockSettingsDto
@@ -228,10 +226,6 @@ class APIService(
         )
     }
 
-    fun getCompanyMonthlySalesTarget(companyId: String): Double? {
-        return null
-    }
-
     suspend fun getStockSettings(): List<StockSettingsDto> {
         return runCatching {
             val payload = BootstrapRequestDto(
@@ -274,6 +268,17 @@ class APIService(
             clientRequestId = clientRequestId,
             payload = payload
         )
+    }
+
+    suspend fun fetchOutstandingPurchaseInvoicesForSupplier(supplier: String): List<PurchaseInvoiceOutstandingDto> {
+        val normalizedSupplier = supplier.trim()
+        if (normalizedSupplier.isBlank()) return emptyList()
+        requireAuthenticatedSession("frappe.client.get_list Purchase Invoice")
+
+        val bySupplier = fetchPurchaseInvoicesByFilterField("supplier", normalizedSupplier)
+        if (bySupplier.isNotEmpty()) return bySupplier
+
+        return fetchPurchaseInvoicesByFilterField("supplier_name", normalizedSupplier)
     }
 
     suspend fun fetchInvoicesForTerritoryFromDate(
@@ -429,7 +434,9 @@ class APIService(
                 }.formUrlEncode())
             }.body<TokenResponse>()
 
+            AppLogger.info("exchangeCode -> token response received, saving tokens")
             store.save(res)
+            AppLogger.info("exchangeCode -> tokens saved")
             return res
         } catch (e: Throwable) {
             e.printStackTrace()
@@ -575,10 +582,6 @@ class APIService(
             .orEmpty()
     }
 
-    suspend fun getSystemSettingsRaw(): JsonObject? {
-        return null
-    }
-
     suspend fun getCurrencyDetail(code: String): JsonObject? {
         val normalized = code.trim().uppercase()
         if (normalized.isBlank()) return null
@@ -595,57 +598,6 @@ class APIService(
             .asSequence()
             .mapNotNull { it as? JsonObject }
             .firstOrNull { it["name"]?.jsonPrimitive?.contentOrNull == normalized }
-    }
-
-    suspend fun getActiveModeOfPayment(): List<ModeOfPaymentDto> {
-        val snapshot = getBootstrapPosSyncSnapshot()
-        return snapshot.resolvedPaymentMethods
-            .orEmpty()
-            .asSequence()
-            .filter { it.enabled }
-            .map { payment ->
-                ModeOfPaymentDto(
-                    name = payment.modeOfPayment,
-                    modeOfPayment = payment.modeOfPayment,
-                    currency = payment.accountCurrency ?: payment.currency,
-                    enabled = payment.enabled
-                )
-            }
-            .distinctBy { it.modeOfPayment }
-            .toList()
-    }
-
-    suspend fun getModeOfPaymentDetail(name: String): ModeOfPaymentDetailDto? {
-        val normalized = name.trim()
-        if (normalized.isBlank()) return null
-        val payment = getBootstrapPosSyncSnapshot().resolvedPaymentMethods
-            .orEmpty()
-            .firstOrNull { it.modeOfPayment == normalized || it.name == normalized }
-            ?: return null
-        return ModeOfPaymentDetailDto(
-            name = payment.modeOfPayment,
-            modeOfPayment = payment.modeOfPayment,
-            enabled = payment.enabled,
-            type = payment.accountType ?: payment.modeOfPaymentType,
-            accounts = payment.accounts
-        )
-    }
-
-    suspend fun getAccountDetail(name: String): AccountDetailDto? {
-        val normalized = name.trim()
-        if (normalized.isBlank()) return null
-        val payment = getBootstrapPosSyncSnapshot().resolvedPaymentMethods
-            .orEmpty()
-            .firstOrNull { method ->
-                method.account == normalized || method.defaultAccount == normalized ||
-                        method.accounts.any { it.defaultAccount == normalized }
-            } ?: return null
-        return AccountDetailDto(
-            name = normalized,
-            accountCurrency = payment.accountCurrency ?: payment.currency,
-            accountType = payment.accountType ?: payment.modeOfPaymentType,
-            company = payment.company
-        )
     }
 
     suspend fun getCategories(): List<CategoryDto> {
@@ -914,6 +866,73 @@ class APIService(
                 "La respuesta no contiene 'message'. Respuesta: $bodyText"
             )
         return json.decodeFromJsonElement(messageElement)
+    }
+
+    private suspend fun fetchPurchaseInvoicesByFilterField(
+        filterField: String,
+        supplierValue: String
+    ): List<PurchaseInvoiceOutstandingDto> {
+        val url = authStore.getCurrentSite()
+        if (url.isNullOrBlank()) throw Exception("URL Invalida")
+        val endpoint = url.trimEnd('/') + "/api/method/frappe.client.get_list"
+        val escapedSupplierValue = supplierValue
+            .replace("\\", "\\\\")
+            .replace("\"", "\\\"")
+        val fieldsJson = """
+            ["name","supplier","supplier_name","posting_date","due_date","currency","status","grand_total","outstanding_amount"]
+        """.trimIndent()
+        val filtersJson = """
+            [["$filterField","=","$escapedSupplierValue"],["docstatus","=",1],["outstanding_amount",">",0]]
+        """.trimIndent()
+
+        val response = withRetries {
+            client.post {
+                url { takeFrom(endpoint) }
+                contentType(ContentType.Application.FormUrlEncoded)
+                setBody(
+                    FormDataContent(
+                        Parameters.build {
+                            append("doctype", "Purchase Invoice")
+                            append("fields", fieldsJson)
+                            append("filters", filtersJson)
+                            append("order_by", "posting_date asc")
+                            append("limit_page_length", "200")
+                        }
+                    )
+                )
+            }
+        }
+        val bodyText = response.bodyAsText()
+        if (!response.status.isSuccess()) {
+            try {
+                val err = json.decodeFromString<FrappeErrorResponse>(bodyText)
+                throw FrappeException(err.exception ?: "Error: ${response.status.value}", err)
+            } catch (e: Exception) {
+                throw Exception(
+                    "Error en frappe.client.get_list Purchase Invoice: ${response.status} - $bodyText",
+                    e
+                )
+            }
+        }
+
+        val rows = decodeMethodMessage<JsonArray>(bodyText)
+        return rows.mapNotNull { element ->
+            val row = element as? JsonObject ?: return@mapNotNull null
+            val name = row.stringOrNull("name") ?: return@mapNotNull null
+            val outstanding = row.numberOrNull("outstanding_amount") ?: 0.0
+            if (outstanding <= 0.0) return@mapNotNull null
+            PurchaseInvoiceOutstandingDto(
+                name = name,
+                supplier = row.stringOrNull("supplier"),
+                supplierName = row.stringOrNull("supplier_name"),
+                postingDate = row.stringOrNull("posting_date"),
+                dueDate = row.stringOrNull("due_date"),
+                currency = row.stringOrNull("currency"),
+                status = row.stringOrNull("status"),
+                grandTotal = row.numberOrNull("grand_total") ?: 0.0,
+                outstandingAmount = outstanding
+            )
+        }.sortedBy { it.postingDate.orEmpty() }
     }
 
     private fun decodeMethodMessageAsObject(bodyText: String): JsonObject {
@@ -1443,6 +1462,11 @@ class APIService(
         return raw.toIntOrNull()
     }
 
+    private fun JsonObject.numberOrNull(key: String): Double? {
+        val primitive = this[key]?.jsonPrimitive ?: return null
+        return primitive.doubleOrNull ?: primitive.contentOrNull?.toDoubleOrNull()
+    }
+
     private fun isSameUserIdentifier(left: String?, right: String?): Boolean {
         val normalizedLeft = left?.trim()?.lowercase()?.takeIf { it.isNotBlank() } ?: return false
         val normalizedRight = right?.trim()?.lowercase()?.takeIf { it.isNotBlank() } ?: return false
@@ -1745,7 +1769,7 @@ class APIService(
             .filter { it.customer == customer }
             .filter { invoice ->
                 val posting = invoice.postingDate.take(10)
-                posting >= startDate && posting <= endDate
+                posting in startDate..endDate
             }
             .sortedByDescending { it.postingDate }
             .toList()

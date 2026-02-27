@@ -5,7 +5,7 @@ actual object AppLogger {
         // No-op for iOS for now.
     }
 
-    actual fun warn(message: String, throwable: Throwable?) {
+    actual fun warn(message: String, throwable: Throwable?, reportToSentry: Boolean) {
         // No-op for iOS for now.
     }
 }

@@ -100,6 +100,7 @@ import com.erpnext.pos.remoteSource.oauth.TokenStore
 import com.erpnext.pos.sync.SyncManager
 import com.erpnext.pos.sync.SyncState
 import com.erpnext.pos.utils.NetworkMonitor
+import com.erpnext.pos.utils.AppLogger
 import com.erpnext.pos.utils.loading.LoadingIndicator
 import com.erpnext.pos.utils.loading.LoadingUiState
 import com.erpnext.pos.utils.view.SnackbarController
@@ -157,6 +158,17 @@ private fun NavHostController.navigateTopLevel(route: String) {
 private fun NavHostController.navigateSingle(route: String) {
     navigate(route) {
         launchSingleTop = true
+    }
+}
+
+private fun NavHostController.navigateFromAuthToHome() {
+    navigate(NavRoute.Home.path) {
+        popUpTo(graph.findStartDestination().id) {
+            inclusive = true
+            saveState = false
+        }
+        launchSingleTop = true
+        restoreState = false
     }
 }
 
@@ -241,6 +253,9 @@ fun AppNavigation() {
     }
     val visibleEntries by navController.visibleEntries.collectAsState()
     val currentRoute = visibleEntries.lastOrNull()?.destination?.route ?: ""
+    LaunchedEffect(currentRoute) {
+        AppLogger.info("AppNavigation currentRoute -> $currentRoute")
+    }
 
     val isDesktop = getPlatformName() == "Desktop"
     val previousRoute = navController.previousBackStackEntry?.destination?.route
@@ -874,6 +889,10 @@ fun AppNavigation() {
                                 val navManager: NavigationManager = koinInject()
                                 LaunchedEffect(Unit) {
                                     navManager.navigationEvents.collect { event ->
+                                        AppLogger.info(
+                                            "AppNavigation nav event -> ${event::class.simpleName} " +
+                                                "currentRoute=${navController.currentBackStackEntry?.destination?.route}"
+                                        )
                                         when (event) {
                                             is NavRoute.Login -> {
                                                 val route =
@@ -883,9 +902,27 @@ fun AppNavigation() {
                                                 }
                                             }
 
-                                            is NavRoute.Home -> navController.navigateTopLevel(
-                                                NavRoute.Home.path
-                                            )
+                                            is NavRoute.Home -> {
+                                                val route =
+                                                    navController.currentBackStackEntry?.destination?.route
+                                                runCatching {
+                                                    if (route == NavRoute.Login.path ||
+                                                        route == NavRoute.Splash.path
+                                                    ) {
+                                                        navController.navigateFromAuthToHome()
+                                                    } else {
+                                                        navController.navigateTopLevel(
+                                                            NavRoute.Home.path
+                                                        )
+                                                    }
+                                                }.onFailure { error ->
+                                                    AppLogger.warn(
+                                                        "AppNavigation: Home navigation failed, fallback to single",
+                                                        error
+                                                    )
+                                                    navController.navigateSingle(NavRoute.Home.path)
+                                                }
+                                            }
                                             //is NavRoute.Billing -> navController.navigateTopLevel(NavRoute.Billing.path)
                                             is NavRoute.Billing -> navController.navigateSingle(
                                                 NavRoute.Billing.path
