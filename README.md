@@ -47,7 +47,7 @@ This repository includes versioned hooks in `.githooks/`.
 ./scripts/install-git-hooks.sh
 ```
 2. What runs automatically:
-- `pre-commit`: `./gradlew spotlessCheck` (only when staged files include `.kt` or `.kts`)
+- `pre-commit`: runs Spotless only on staged `.kt/.kts`, auto-applies format, re-stages files, then validates.
 - `pre-push`: `./gradlew spotlessCheck detekt test :androidApp:compileDebugKotlin`
 
 3. Emergency bypass:
@@ -61,7 +61,7 @@ SKIP_GIT_HOOKS=1 git push
 - **Detekt** for static analysis with baseline per module:
   - `composeApp/detekt-baseline.xml`
   - `androidApp/detekt-baseline.xml`
-  - currently configured as non-blocking (`ignoreFailures=true`) to surface debt without stopping delivery.
+  - configured as blocking (`ignoreFailures=false`) to prevent new debt from being merged.
 - **Dependabot** for automated dependency update PRs (Gradle + GitHub Actions).
 
 ### Local commands

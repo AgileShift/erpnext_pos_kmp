@@ -16,18 +16,24 @@ if [[ -z "$staged_files" ]]; then
   exit 0
 fi
 
-has_kotlin_changes() {
-  if command -v rg >/dev/null 2>&1; then
-    printf '%s\n' "$staged_files" | rg -q '\.(kt|kts)$'
-  else
-    printf '%s\n' "$staged_files" | grep -Eq '\.(kt|kts)$'
-  fi
-}
-
-if ! has_kotlin_changes; then
+kotlin_files="$(printf '%s\n' "$staged_files" | grep -E '\.(kt|kts)$' || true)"
+if [[ -z "$kotlin_files" ]]; then
   echo "[pre-commit] No staged Kotlin/Gradle Kotlin files. Skipping Spotless."
   exit 0
 fi
 
-echo "[pre-commit] Running Spotless check..."
-./gradlew spotlessCheck
+spotless_targets_csv="$(printf '%s\n' "$kotlin_files" | paste -sd, -)"
+
+echo "[pre-commit] Running Spotless apply for staged Kotlin files..."
+./gradlew --quiet --warning-mode=none \
+  spotlessKotlinApply spotlessKotlinGradleApply \
+  -PspotlessIdeHook="$spotless_targets_csv"
+
+while IFS= read -r file; do
+  [[ -n "$file" ]] && git add "$file"
+done <<< "$kotlin_files"
+
+echo "[pre-commit] Running Spotless check for staged Kotlin files..."
+./gradlew --quiet --warning-mode=none \
+  spotlessKotlinCheck spotlessKotlinGradleCheck \
+  -PspotlessIdeHook="$spotless_targets_csv"
