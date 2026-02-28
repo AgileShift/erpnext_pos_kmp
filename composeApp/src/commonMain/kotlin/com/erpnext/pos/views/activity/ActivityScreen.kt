@@ -22,7 +22,6 @@ import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.ErrorOutline
 import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material.icons.outlined.Schedule
-import androidx.compose.material3.Button
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.FilterChip
@@ -32,7 +31,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.erpnext.pos.localization.LocalAppStrings
@@ -60,13 +58,7 @@ fun ActivityScreen(
 ) {
   val strings = LocalAppStrings.current
   Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
-    /* ActivityHero(
-        unreadCount = state.unreadCount,
-        syncState = state.syncState,
-        strings = strings,
-        onMarkAllRead = onMarkAllRead
-    )
-    Spacer(modifier = Modifier.height(12.dp))*/
+    onMarkAllRead
     ActivityFilters(current = state.filter, strings = strings, onFilterChange = onFilterChange)
     Spacer(modifier = Modifier.height(12.dp))
     if (state.entries.isEmpty()) {
@@ -78,80 +70,6 @@ fun ActivityScreen(
       ) {
         items(state.entries, key = { it.id }) { item ->
           ActivityItemCard(item = item, onClick = { onMarkRead(item.id) })
-        }
-      }
-    }
-  }
-}
-
-@Composable
-private fun ActivityHero(
-    unreadCount: Int,
-    syncState: SyncState,
-    strings: com.erpnext.pos.localization.AppStrings,
-    onMarkAllRead: () -> Unit,
-) {
-  val gradient =
-      Brush.horizontalGradient(
-          colors =
-              listOf(
-                  MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.95f),
-                  MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.95f),
-              )
-      )
-  ElevatedCard(
-      shape = RoundedCornerShape(24.dp),
-      elevation = CardDefaults.elevatedCardElevation(defaultElevation = 4.dp),
-      modifier = Modifier.fillMaxWidth(),
-  ) {
-    Column(modifier = Modifier.fillMaxWidth().background(gradient).padding(16.dp)) {
-      Row(
-          modifier = Modifier.fillMaxWidth(),
-          horizontalArrangement = Arrangement.SpaceBetween,
-          verticalAlignment = Alignment.CenterVertically,
-      ) {
-        Column {
-          Text(
-              text = "Notificaciones y Actividad",
-              style = MaterialTheme.typography.titleMedium,
-              fontWeight = FontWeight.Bold,
-          )
-          Text(
-              text = "${strings.activity.pendingLabel}: $unreadCount",
-              style = MaterialTheme.typography.bodySmall,
-              color = MaterialTheme.colorScheme.onSurfaceVariant,
-          )
-        }
-        Box(
-            modifier =
-                Modifier.background(
-                        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.55f),
-                        shape = RoundedCornerShape(999.dp),
-                    )
-                    .padding(horizontal = 10.dp, vertical = 5.dp)
-        ) {
-          Text(
-              text =
-                  when (syncState) {
-                    is SyncState.SYNCING -> strings.activity.statusSyncing
-                    is SyncState.ERROR -> strings.activity.statusError
-                    SyncState.SUCCESS -> strings.activity.statusSynced
-                    SyncState.IDLE -> strings.activity.statusIdle
-                  },
-              style = MaterialTheme.typography.labelSmall,
-          )
-        }
-      }
-      Spacer(modifier = Modifier.height(12.dp))
-      Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        Button(
-            onClick = onMarkAllRead,
-            enabled = unreadCount > 0,
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-          Icon(Icons.Outlined.CheckCircle, contentDescription = null)
-          Spacer(modifier = Modifier.width(6.dp))
-          Text(strings.activity.markReadButton)
         }
       }
     }

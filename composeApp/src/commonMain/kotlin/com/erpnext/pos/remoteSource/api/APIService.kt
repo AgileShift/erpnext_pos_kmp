@@ -597,32 +597,27 @@ class APIService(
     val tokenUser = store.loadUser()?.trim().orEmpty()
     if (tokenUser.isBlank()) {
       store.clear()
-      throw IllegalStateException(
-          "Sesion invalida: no hay usuario autenticado para abrir caja. Vuelve a iniciar sesion."
-      )
+    }
+    check(tokenUser.isNotBlank()) {
+      "Sesion invalida: no hay usuario autenticado para abrir caja. Vuelve a iniciar sesion."
     }
     val authenticated =
         runCatching { fetchAuthenticatedUser() }
             .onFailure { AppLogger.warn("openCashbox: get_authenticated_user failed", it) }
             .getOrNull()
-            ?: throw IllegalStateException(
-                "No se pudo resolver el usuario autenticado del servidor. Vuelve a iniciar sesion."
-            )
+    checkNotNull(authenticated) {
+      "No se pudo resolver el usuario autenticado del servidor. Vuelve a iniciar sesion."
+    }
     val authenticatedUser =
         authenticated.name.trim().ifBlank { authenticated.username?.trim().orEmpty() }
-    if (authenticatedUser.isBlank()) {
-      throw IllegalStateException(
-          "El endpoint get_authenticated_user no devolvio un identificador de usuario valido."
-      )
+    check(authenticatedUser.isNotBlank()) {
+      "El endpoint get_authenticated_user no devolvio un identificador de usuario valido."
     }
     val requestedUser = pos.user?.trim()
-    if (
-        !requestedUser.isNullOrBlank() &&
-            !requestedUser.equals(authenticatedUser, ignoreCase = true)
+    require(
+        requestedUser.isNullOrBlank() || requestedUser.equals(authenticatedUser, ignoreCase = true)
     ) {
-      throw IllegalArgumentException(
-          "payload.user ($requestedUser) no coincide con el usuario autenticado ($authenticatedUser)."
-      )
+      "payload.user ($requestedUser) no coincide con el usuario autenticado ($authenticatedUser)."
     }
     if (!tokenUser.equals(authenticatedUser, ignoreCase = true)) {
       AppLogger.warn(
@@ -655,7 +650,7 @@ class APIService(
               ) == true
           if (mismatch) {
             store.clear()
-            throw IllegalStateException(
+            error(
                 "Sesion invalida: el usuario autenticado no coincide con payload.user. Vuelve a iniciar sesion."
             )
           }
@@ -859,7 +854,7 @@ class APIService(
         val err = json.decodeFromString<FrappeErrorResponse>(bodyText)
         throw FrappeException(err.exception ?: "Error: ${response.status.value}", err)
       } catch (e: Exception) {
-        throw Exception(
+        throw IllegalStateException(
             "Error en frappe.client.get_list Purchase Invoice: ${response.status} - $bodyText",
             e,
         )

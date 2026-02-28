@@ -494,10 +494,7 @@ class SyncManager(
       bootstrapSteps +=
           SyncStep(label = section.label, message = section.message) {
             val resolved =
-                snapshot
-                    ?: throw IllegalStateException(
-                        "No se pudo descargar el snapshot de sync.bootstrap"
-                    )
+                checkNotNull(snapshot) { "No se pudo descargar el snapshot de sync.bootstrap" }
             bootstrapSyncRepository.persistSection(resolved, section)
           }
     }

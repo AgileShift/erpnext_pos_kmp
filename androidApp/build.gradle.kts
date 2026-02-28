@@ -43,7 +43,7 @@ kotlin { compilerOptions { jvmTarget.set(JvmTarget.JVM_11) } }
 detekt {
   buildUponDefaultConfig = true
   allRules = false
-  ignoreFailures = true
+  ignoreFailures = false
   config.setFrom(rootProject.file("config/detekt/detekt.yml"))
   baseline = file("detekt-baseline.xml")
   source.setFrom("src/main/kotlin")

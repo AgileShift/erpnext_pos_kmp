@@ -53,10 +53,8 @@ class PartialReturnUseCase(
     val isOnline = networkMonitor.isConnected.firstOrNull() == true
 
     val returnItems = buildReturnItems(invoice, input.itemsToReturnByCode)
-    if (returnItems.isEmpty()) {
-      throw IllegalArgumentException(
-          "No hay cantidades pendientes por devolver para los artículos seleccionados."
-      )
+    require(returnItems.isNotEmpty()) {
+      "No hay cantidades pendientes por devolver para los artículos seleccionados."
     }
 
     if (isOnline) {

@@ -4,7 +4,7 @@ build:
 
 config:
   validation: true
-  warningsAsErrors: false
+  warningsAsErrors: true
 
 processors:
   active: true
@@ -31,7 +31,7 @@ complexity:
   LongParameterList:
     active: true
     functionThreshold: 8
-    constructorThreshold: 9
+    constructorThreshold: 10
     ignoreDefaultParameters: true
     ignoreDataClasses: true
     ignoreAnnotated:
@@ -39,8 +39,17 @@ complexity:
   CyclomaticComplexMethod:
     active: true
     threshold: 20
+  NestedBlockDepth:
+    active: true
+    threshold: 4
+  LargeClass:
+    active: true
+    threshold: 600
 
 style:
   ReturnCount:
     active: true
     max: 4
+  ThrowsCount:
+    active: true
+    max: 2

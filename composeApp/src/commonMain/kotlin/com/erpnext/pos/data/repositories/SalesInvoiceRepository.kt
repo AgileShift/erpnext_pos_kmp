@@ -134,14 +134,12 @@ class SalesInvoiceRepository(
             payment.copy(posOpeningEntry = openingEntryId)
           }
         }
-    if (
-        (normalizedInvoice.isPos || ctx?.isCashBoxOpen == true) &&
+    check(
+        !((normalizedInvoice.isPos || ctx?.isCashBoxOpen == true) &&
             (normalizedInvoice.profileId.isNullOrBlank() ||
-                normalizedInvoice.posOpeningEntry.isNullOrBlank())
+                normalizedInvoice.posOpeningEntry.isNullOrBlank()))
     ) {
-      throw IllegalStateException(
-          "Falta POS Profile o apertura de caja activa para guardar la factura."
-      )
+      "Falta POS Profile o apertura de caja activa para guardar la factura."
     }
 
     localSource.saveInvoiceLocally(normalizedInvoice, normalizedItems, normalizedPayments)
@@ -219,12 +217,11 @@ class SalesInvoiceRepository(
     entity.invoice.profileId = profileId
     entity.invoice.posOpeningEntry = openingEntryId
     entity.payments.forEach { it.posOpeningEntry = openingEntryId }
-    if (
-        entity.invoice.profileId.isNullOrBlank() || entity.invoice.posOpeningEntry.isNullOrBlank()
+    check(
+        !(entity.invoice.profileId.isNullOrBlank() ||
+            entity.invoice.posOpeningEntry.isNullOrBlank())
     ) {
-      throw IllegalStateException(
-          "Falta POS Profile o apertura de caja activa para crear la factura."
-      )
+      "Falta POS Profile o apertura de caja activa para crear la factura."
     }
     val providedRate = dto.conversionRate
     if (entity.invoice.conversionRate == null && providedRate != null && providedRate > 0.0) {
@@ -247,10 +244,8 @@ class SalesInvoiceRepository(
         requireNotNull(invoice.invoiceName) { "Invoice name is required to apply payments." }
     val existingPayments = localSource.getPaymentsForInvoice(invoiceId)
     // Si hay un pago fallido pendiente, no permitimos registrar uno nuevo hasta reintento.
-    if (existingPayments.any { it.syncStatus.equals("Failed", ignoreCase = true) }) {
-      throw IllegalStateException(
-          "Existe un pago fallido pendiente de sincronizar; reintenta antes de registrar otro."
-      )
+    check(!existingPayments.any { it.syncStatus.equals("Failed", ignoreCase = true) }) {
+      "Existe un pago fallido pendiente de sincronizar; reintenta antes de registrar otro."
     }
     val existingRefs =
         existingPayments.mapNotNull { it.paymentReference?.trim()?.uppercase() }.toSet()
@@ -272,10 +267,8 @@ class SalesInvoiceRepository(
                 }
                 ?.openingEntryId
                 ?.takeIf { it.isNotBlank() }
-    if (ensuredProfile.isNullOrBlank() || ensuredOpening.isNullOrBlank()) {
-      throw IllegalStateException(
-          "Falta POS Profile o apertura de caja activa para registrar pagos."
-      )
+    check(!(ensuredProfile.isNullOrBlank() || ensuredOpening.isNullOrBlank())) {
+      "Falta POS Profile o apertura de caja activa para registrar pagos."
     }
     invoice.profileId = ensuredProfile
     invoice.posOpeningEntry = ensuredOpening
@@ -602,10 +595,8 @@ class SalesInvoiceRepository(
   private suspend fun handleRemoteInvoice(invoice: SalesInvoiceWithItemsAndPayments) {
     val localName = invoice.invoice.invoiceName ?: return
     val remote = remoteSource.fetchInvoice(localName) ?: return
-    if ((remote.docStatus ?: 0) == 0) {
-      throw IllegalStateException(
-          "Factura remota en borrador ($localName). El submit legado fue removido y requiere endpoint API v1."
-      )
+    check((remote.docStatus ?: 0) != 0) {
+      "Factura remota en borrador ($localName). El submit legado fue removido y requiere endpoint API v1."
     }
     updateLocalInvoiceFromRemote(localName, remote)
   }
@@ -695,11 +686,9 @@ class SalesInvoiceRepository(
         )
     val created = remoteSource.createInvoice(dto)
     updateLocalInvoiceFromRemote(localName, created)
-    if ((created.docStatus ?: 0) == 0) {
+    check((created.docStatus ?: 0) != 0) {
       val createdName = created.name ?: localName
-      throw IllegalStateException(
-          "Factura remota en borrador ($createdName). El submit legado fue removido y requiere endpoint API v1."
-      )
+      "Factura remota en borrador ($createdName). El submit legado fue removido y requiere endpoint API v1."
     }
     return null
   }

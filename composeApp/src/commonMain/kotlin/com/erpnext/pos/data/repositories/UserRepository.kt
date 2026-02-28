@@ -9,10 +9,10 @@ import com.erpnext.pos.utils.RepoTrace
 class UserRepository(private val userDao: UserDao) : IUserRepository {
   override suspend fun getUserInfo(): UserBO {
     RepoTrace.breadcrumb("UserRepository", "getUserInfo")
-    val local = userDao.getUserInfo()
-    if (local != null) return local.toBO()
-    throw IllegalStateException(
-        "No hay usuario local cacheado. Ejecuta sincronización para cargar datos."
-    )
+    val local =
+        checkNotNull(userDao.getUserInfo()) {
+          "No hay usuario local cacheado. Ejecuta sincronización para cargar datos."
+        }
+    return local.toBO()
   }
 }

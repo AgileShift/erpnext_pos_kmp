@@ -14,6 +14,7 @@ import com.erpnext.pos.remoteSource.api.APIService
 import com.erpnext.pos.remoteSource.dto.SalesInvoiceDto
 import com.erpnext.pos.utils.InvoiceReceivableAmounts
 import com.erpnext.pos.utils.NetworkMonitor
+import com.erpnext.pos.utils.PaymentEntryBuildInput
 import com.erpnext.pos.utils.buildCurrencySpecs
 import com.erpnext.pos.utils.buildLocalPayments
 import com.erpnext.pos.utils.buildPaymentEntryDto
@@ -318,21 +319,23 @@ class PaymentHandler(
 
             val paymentEntry =
                 buildPaymentEntryDto(
-                    api = api,
-                    line = adjustedLine,
-                    context = context,
-                    customer = customer,
-                    postingDate = postingDate,
-                    invoiceId = createdInvoice.name ?: resolvedInvoiceName,
-                    invoiceTotalRc = receivableAmounts.totalRc,
-                    outstandingRc = outstandingForEntry,
-                    paidFromAccount = paidFrom,
-                    partyAccountCurrency = resolvedReceivableCurrency,
-                    invoiceCurrency = resolvedInvoiceCurrency,
-                    invoiceToReceivableRate = rateInvToRcResolved,
-                    currencySpecs = currencySpecs,
-                    paymentModeDetails = paymentModeDetails,
-                    referenceDoctype = "Sales Invoice",
+                    PaymentEntryBuildInput(
+                        api = api,
+                        line = adjustedLine,
+                        context = context,
+                        customer = customer,
+                        postingDate = postingDate,
+                        invoiceId = createdInvoice.name ?: resolvedInvoiceName,
+                        invoiceTotalRc = receivableAmounts.totalRc,
+                        outstandingRc = outstandingForEntry,
+                        paidFromAccount = paidFrom,
+                        partyAccountCurrency = resolvedReceivableCurrency,
+                        invoiceCurrency = resolvedInvoiceCurrency,
+                        invoiceToReceivableRate = rateInvToRcResolved,
+                        currencySpecs = currencySpecs,
+                        paymentModeDetails = paymentModeDetails,
+                        referenceDoctype = "Sales Invoice",
+                    )
                 )
 
             val paymentResult = runCatching {
