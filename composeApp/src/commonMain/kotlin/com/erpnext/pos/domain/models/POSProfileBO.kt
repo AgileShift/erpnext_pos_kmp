@@ -14,6 +14,7 @@ data class POSProfileBO(
     val applyDiscountOn: String = "",
     val branch: String? = "",
     val currency: String = "",
+    val allowPartialPayment: Boolean = false,
     val paymentModes: List<PaymentModesBO>,
 )
 

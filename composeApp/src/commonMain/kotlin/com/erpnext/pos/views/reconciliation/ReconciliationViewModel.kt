@@ -106,14 +106,14 @@ class ReconciliationViewModel(
 
   private suspend fun prepareForClose(): Boolean {
     _closeState.update { it.copy(isSyncing = false, syncMessage = null, errorMessage = null) }
-    val isOnline = networkMonitor.isConnected.firstOrNull() == true
-    if (!isOnline) {
-      return true
-    }
-    if (!sessionRefresher.ensureValidSession()) {
-      AppLogger.warn(
-          "Reconciliation: sesión no válida durante pre-cierre; se continuará en modo offline-first."
-      )
+    val canUseRemote = cashBoxManager.canUseRemoteOperations()
+    if (!canUseRemote) {
+      val isOnline = networkMonitor.isConnected.firstOrNull() == true
+      if (isOnline && !sessionRefresher.ensureValidSession()) {
+        AppLogger.warn(
+            "Reconciliation: sesión no válida durante pre-cierre; se continuará en modo offline-first."
+        )
+      }
       return true
     }
     val syncContext = syncContextProvider.buildContext()

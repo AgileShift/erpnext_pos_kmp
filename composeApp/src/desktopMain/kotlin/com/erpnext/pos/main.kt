@@ -17,38 +17,37 @@ import org.koin.compose.KoinApplication
 import org.koin.core.logger.Level
 
 fun main() = application {
-  DesktopLogger.init()
-  DesktopLogger.info("Desktop app started")
-  AppSentry.init()
+    DesktopLogger.init()
+    DesktopLogger.info("Desktop app started")
+    AppSentry.init()
 
-  // Default Desktop Size
-  val state =
-      rememberWindowState(
-          width = 1215.dp,
-          height = 810.dp,
-      )
+    // Default Desktop Size
+    val state = rememberWindowState(
+        width = 1300.dp,
+        height = 813.dp
+    )
 
-  Window(
-      undecorated = false,
-      transparent = false,
-      icon = rememberVectorPainter(Icons.Default.PointOfSale),
-      onCloseRequest = ::exitApplication,
-      title = "ERPNext POS",
-      state = state,
-  ) {
-    val restartToken by DesktopRuntimeRestart.restartToken.collectAsState()
-    LaunchedEffect(restartToken) {
-      DesktopLogger.info("Desktop runtime restart token=$restartToken")
+    Window(
+        undecorated = false,
+        transparent = false,
+        icon = rememberVectorPainter(Icons.Default.PointOfSale),
+        onCloseRequest = ::exitApplication,
+        title = "ERPNext POS",
+        state = state,
+    ) {
+        val restartToken by DesktopRuntimeRestart.restartToken.collectAsState()
+        LaunchedEffect(restartToken) {
+            DesktopLogger.info("Desktop runtime restart token=$restartToken")
+        }
+        key(restartToken) {
+            KoinApplication(
+                application = {
+                    printLogger(Level.DEBUG)
+                    modules(appModule, desktopModule)
+                }
+            ) {
+                AppNavigation()
+            }
+        }
     }
-    key(restartToken) {
-      KoinApplication(
-          application = {
-            printLogger(Level.DEBUG)
-            modules(appModule, desktopModule)
-          }
-      ) {
-        AppNavigation()
-      }
-    }
-  }
 }

@@ -76,10 +76,6 @@ import io.ktor.http.contentType
 import io.ktor.http.formUrlEncode
 import io.ktor.http.isSuccess
 import io.ktor.http.takeFrom
-import kotlin.io.encoding.Base64
-import kotlin.io.encoding.ExperimentalEncodingApi
-import kotlin.time.Clock
-import kotlin.time.ExperimentalTime
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
@@ -93,6 +89,10 @@ import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import kotlin.io.encoding.Base64
+import kotlin.io.encoding.ExperimentalEncodingApi
+import kotlin.time.Clock
+import kotlin.time.ExperimentalTime
 
 @OptIn(ExperimentalTime::class)
 class APIService(
@@ -1426,9 +1426,14 @@ class APIService(
     return normalizedLeft == normalizedRight
   }
 
-  suspend fun closeCashbox(entry: POSClosingEntryDto): POSClosingEntryResponse {
-    return postMethodWithPayload(
+  suspend fun closeCashbox(
+      clientRequestId: String,
+      entry: POSClosingEntryDto,
+  ): POSClosingEntryResponse {
+    // Este endpoint exige envelope idempotente {client_request_id, payload}.
+    return postMethodWithPayloadAndClientRequest(
         methodPath = "erpnext_pos.api.v1.pos_session.closing_create_submit",
+        clientRequestId = clientRequestId,
         payload = entry,
     )
   }

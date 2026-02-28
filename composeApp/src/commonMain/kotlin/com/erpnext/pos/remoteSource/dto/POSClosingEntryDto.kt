@@ -19,16 +19,10 @@ data class POSClosingEntrySummaryDto(
 @OptIn(ExperimentalSerializationApi::class)
 @Serializable
 data class POSClosingEntryDto(
-    @SerialName("pos_profile") val posProfile: String,
+    // Contracto actual de closing_create_submit: payload minimo calculado por backend.
     @SerialName("pos_opening_entry") val posOpeningEntry: String,
-    val user: String,
-    @SerialName("posting_date") val postingDate: String,
-    @SerialName("company") val company: String,
-    @SerialName("period_start_date") val periodStartDate: String,
     @SerialName("period_end_date") val periodEndDate: String,
     @SerialName("payment_reconciliation") val paymentReconciliation: List<PaymentReconciliationDto>,
-    @SerialName("sales_invoices") val salesInvoices: List<POSClosingSalesInvoiceDto> = emptyList(),
-    @EncodeDefault(EncodeDefault.Mode.NEVER) @SerialName("docstatus") val docStatus: Int? = null,
 )
 
 @Serializable
@@ -45,8 +39,13 @@ data class POSClosingSalesInvoiceDto(
 @Serializable
 data class PaymentReconciliationDto(
     @SerialName("mode_of_payment") val modeOfPayment: String,
-    @SerialName("opening_amount") val openingAmount: Double,
-    @SerialName("expected_amount") val expectedAmount: Double,
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    @SerialName("opening_amount")
+    val openingAmount: Double? = null,
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    @SerialName("expected_amount")
+    val expectedAmount: Double? = null,
     @SerialName("closing_amount") val closingAmount: Double,
-    val difference: Double,
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    val difference: Double? = null,
 )

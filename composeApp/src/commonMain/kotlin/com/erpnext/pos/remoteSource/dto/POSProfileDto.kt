@@ -25,6 +25,9 @@ data class POSProfileDto(
     @SerialName("apply_discount_on") val applyDiscountOn: String,
     @SerialName("cost_center") val costCenter: String? = null,
     @SerialName("selling_price_list") val sellingPriceList: String,
+    @SerialName("allow_partial_payment")
+    @Serializable(with = IntAsBooleanSerializer::class)
+    val allowPartialPayment: Boolean = false,
 )
 
 @Serializable

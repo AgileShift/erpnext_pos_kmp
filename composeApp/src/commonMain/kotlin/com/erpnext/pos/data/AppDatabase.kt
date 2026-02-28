@@ -95,7 +95,7 @@ import com.erpnext.pos.localSource.entities.UserEntity
             SupplierEntity::class,
             CompanyAccountEntity::class,
         ],
-    version = 14,
+    version = 15,
     exportSchema = true,
 )
 @ConstructedBy(AppDatabaseConstructor::class)

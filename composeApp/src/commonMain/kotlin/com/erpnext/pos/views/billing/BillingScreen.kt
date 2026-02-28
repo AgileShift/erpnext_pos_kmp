@@ -224,12 +224,14 @@ fun BillingScreen(
             ?: return@LaunchedEffect
     popupMessage = message
     popupInvoice = successDialogInvoice
-    delay(3000)
-    popupMessage = null
-    popupInvoice = null
-    action.onClearSuccessMessage()
-    if (step == LabCheckoutStep.Checkout) {
-      step = LabCheckoutStep.Cart
+    delay(5000)
+    if (!popupMessage.isNullOrBlank()) {
+      popupMessage = null
+      popupInvoice = null
+      action.onClearSuccessMessage()
+      if (step == LabCheckoutStep.Checkout) {
+        step = LabCheckoutStep.Cart
+      }
     }
   }
 
@@ -502,6 +504,9 @@ fun BillingScreen(
             popupMessage = null
             popupInvoice = null
             action.onClearSuccessMessage()
+            if (step == LabCheckoutStep.Checkout) {
+              step = LabCheckoutStep.Cart
+            }
           },
           properties = DialogProperties(dismissOnClickOutside = true, dismissOnBackPress = true),
       ) {
@@ -543,6 +548,9 @@ fun BillingScreen(
                   popupMessage = null
                   popupInvoice = null
                   action.onClearSuccessMessage()
+                  if (step == LabCheckoutStep.Checkout) {
+                    step = LabCheckoutStep.Cart
+                  }
                 }
             ) {
               Text(strings.billing.closeButton)
@@ -1010,7 +1018,7 @@ private fun BillingLabCheckoutStep(
 
       @Composable
       fun CreditCard(modifier: Modifier = Modifier) {
-        if (state.paymentTerms.isNotEmpty()) {
+        if (state.paymentTerms.isNotEmpty() || !state.allowPartialPayment) {
           Card(
               modifier = modifier,
               colors = CardDefaults.cardColors(containerColor = panelBg),
@@ -1022,8 +1030,24 @@ private fun BillingLabCheckoutStep(
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
               SectionHeader(title = strings.billing.creditSaleLabel, accent = colors.tertiary)
+              if (!state.allowPartialPayment) {
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(10.dp),
+                    color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.45f),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.error),
+                ) {
+                  Text(
+                      text = strings.billing.creditSalesNotAllowedBanner,
+                      style = MaterialTheme.typography.bodySmall,
+                      color = MaterialTheme.colorScheme.onErrorContainer,
+                      modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                  )
+                }
+              }
               CreditTermsSection(
                   isCreditSale = state.isCreditSale,
+                  allowPartialPayment = state.allowPartialPayment,
                   paymentTerms = state.paymentTerms,
                   selectedPaymentTerm = state.selectedPaymentTerm,
                   creditSaleTooltipMessage = state.creditSaleTooltipMessage,
@@ -2182,6 +2206,7 @@ private fun DiscountShippingInputs(state: BillingState.Success, action: BillingA
 @Composable
 private fun CreditTermsSection(
     isCreditSale: Boolean,
+    allowPartialPayment: Boolean,
     paymentTerms: List<PaymentTermBO>,
     selectedPaymentTerm: PaymentTermBO?,
     creditSaleTooltipMessage: String?,
@@ -2197,52 +2222,54 @@ private fun CreditTermsSection(
       verticalArrangement = Arrangement.spacedBy(8.dp),
   ) {
     val canEnableCredit = paymentTerms.isNotEmpty()
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(10.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
-        border =
-            BorderStroke(
-                width = if (hasCreditWarning) 1.5.dp else 1.dp,
-                color =
-                    if (hasCreditWarning) MaterialTheme.colorScheme.error
-                    else MaterialTheme.colorScheme.outlineVariant,
-            ),
-    ) {
-      Row(
-          modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 6.dp),
-          horizontalArrangement = Arrangement.SpaceBetween,
-          verticalAlignment = Alignment.CenterVertically,
+    if (allowPartialPayment) {
+      Surface(
+          modifier = Modifier.fillMaxWidth(),
+          shape = RoundedCornerShape(10.dp),
+          color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+          border =
+              BorderStroke(
+                  width = if (hasCreditWarning) 1.5.dp else 1.dp,
+                  color =
+                      if (hasCreditWarning) MaterialTheme.colorScheme.error
+                      else MaterialTheme.colorScheme.outlineVariant,
+              ),
       ) {
-        Text(strings.billing.creditSaleLabel, style = MaterialTheme.typography.bodyMedium)
-        Switch(
-            checked = isCreditSale,
-            onCheckedChange = onCreditSaleChanged,
-            enabled = canEnableCredit,
-            colors =
-                SwitchDefaults.colors(
-                    checkedThumbColor = MaterialTheme.colorScheme.primary,
-                    checkedTrackColor = MaterialTheme.colorScheme.primaryContainer,
-                    checkedBorderColor = MaterialTheme.colorScheme.primaryContainer,
-                    uncheckedThumbColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                    uncheckedTrackColor =
-                        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.8f),
-                    uncheckedBorderColor = MaterialTheme.colorScheme.outlineVariant,
-                    disabledCheckedThumbColor =
-                        MaterialTheme.colorScheme.primary.copy(alpha = 0.5f),
-                    disabledCheckedTrackColor =
-                        MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f),
-                    disabledUncheckedThumbColor =
-                        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f),
-                    disabledUncheckedTrackColor =
-                        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
-                ),
-        )
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 6.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+          Text(strings.billing.creditSaleLabel, style = MaterialTheme.typography.bodyMedium)
+          Switch(
+              checked = isCreditSale,
+              onCheckedChange = onCreditSaleChanged,
+              enabled = canEnableCredit,
+              colors =
+                  SwitchDefaults.colors(
+                      checkedThumbColor = MaterialTheme.colorScheme.primary,
+                      checkedTrackColor = MaterialTheme.colorScheme.primaryContainer,
+                      checkedBorderColor = MaterialTheme.colorScheme.primaryContainer,
+                      uncheckedThumbColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                      uncheckedTrackColor =
+                          MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.8f),
+                      uncheckedBorderColor = MaterialTheme.colorScheme.outlineVariant,
+                      disabledCheckedThumbColor =
+                          MaterialTheme.colorScheme.primary.copy(alpha = 0.5f),
+                      disabledCheckedTrackColor =
+                          MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f),
+                      disabledUncheckedThumbColor =
+                          MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f),
+                      disabledUncheckedTrackColor =
+                          MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+                  ),
+          )
+        }
       }
     }
 
     AnimatedVisibility(
-        visible = isCreditSale,
+        visible = allowPartialPayment && isCreditSale,
         enter = fadeIn(animationSpec = tween(260)) + expandVertically(animationSpec = tween(260)),
         exit = fadeOut(animationSpec = tween(180)) + shrinkVertically(animationSpec = tween(180)),
     ) {
@@ -2316,7 +2343,7 @@ private fun CreditTermsSection(
     }
 
     AnimatedVisibility(
-        visible = !isCreditSale && !canEnableCredit,
+        visible = allowPartialPayment && !isCreditSale && !canEnableCredit,
         enter = fadeIn(animationSpec = tween(220)),
         exit = fadeOut(animationSpec = tween(180)),
     ) {

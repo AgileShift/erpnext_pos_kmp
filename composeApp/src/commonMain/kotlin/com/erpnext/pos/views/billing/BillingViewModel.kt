@@ -13,6 +13,11 @@ import com.erpnext.pos.domain.models.ItemBO
 import com.erpnext.pos.domain.models.POSCurrencyOption
 import com.erpnext.pos.domain.models.POSPaymentModeOption
 import com.erpnext.pos.domain.models.PaymentTermBO
+import com.erpnext.pos.domain.policy.SalesPostingBlockReason
+import com.erpnext.pos.domain.policy.SalesPostingDecision
+import com.erpnext.pos.domain.policy.SalesPostingPolicy
+import com.erpnext.pos.domain.policy.SalesPostingResolution
+import com.erpnext.pos.domain.policy.SalesPostingType
 import com.erpnext.pos.domain.usecases.AdjustLocalInventoryInput
 import com.erpnext.pos.domain.usecases.AdjustLocalInventoryUseCase
 import com.erpnext.pos.domain.usecases.BillingProductsQueryInput
@@ -46,7 +51,6 @@ import com.erpnext.pos.remoteSource.dto.SalesInvoicePaymentScheduleDto
 import com.erpnext.pos.remoteSource.sdk.extractReservedStockItemCode
 import com.erpnext.pos.remoteSource.sdk.toUserMessage
 import com.erpnext.pos.utils.NetworkMonitor
-import com.erpnext.pos.utils.RoundedTotal
 import com.erpnext.pos.utils.buildPaymentModeDetailMap
 import com.erpnext.pos.utils.calculateTotals
 import com.erpnext.pos.utils.normalizeCurrency
@@ -241,6 +245,7 @@ class BillingViewModel(
                   exchangeRate = contextProvider.getContext()?.exchangeRate ?: 1.0,
                   paymentTerms = paymentTerms,
                   deliveryCharges = deliveryCharges,
+                  allowPartialPayment = context.allowPartialPayment,
                   applyDiscountOn =
                       context.applyDiscountOn?.takeIf { it.isNotBlank() } ?: "Grand Total",
                   exchangeRateByCurrency = exchangeRateByCurrency,
@@ -684,6 +689,7 @@ class BillingViewModel(
 
   fun onCreditSaleChanged(isCreditSale: Boolean) {
     val current = requireSuccessState() ?: return
+    if (!current.allowPartialPayment && isCreditSale) return
     if (isCreditSale && current.paymentTerms.isEmpty()) return
 
     _state.update {
@@ -839,14 +845,20 @@ class BillingViewModel(
                       )
                       .line
                 }
+            val postingDecision =
+                resolvePostingDecision(
+                    total = totals.total,
+                    paid = resolvedPaymentLines.sumOf { it.baseAmount },
+                    isCreditSale = isCreditSale,
+                    allowPartialPayment = context.allowPartialPayment,
+                    currency = invoiceCurrency,
+                )
 
             val postingDate = DateTimeProvider.todayDate()
             val dueDate =
                 resolveDueDate(isCreditSale, postingDate, currentWithHints.selectedPaymentTerm)
             val paymentSchedule =
                 buildPaymentSchedule(isCreditSale, currentWithHints.selectedPaymentTerm, dueDate)
-
-            val rounding = resolveRoundedTotal(totals.total, invoiceCurrency)
 
             val invoiceCurrencyNormalized = normalizeCurrency(invoiceCurrency)
             val companyCurrencyNormalized = normalizeCurrency(companyCurrency)
@@ -880,7 +892,7 @@ class BillingViewModel(
                     paymentSchedule = paymentSchedule,
                     paymentLines = resolvedPaymentLines,
                     invoiceCurrency = invoiceCurrency,
-                    rounding = rounding,
+                    postingDecision = postingDecision,
                     conversionRate = conversionRate,
                     postingDate = postingDate,
                     dueDate = dueDate,
@@ -928,21 +940,7 @@ class BillingViewModel(
               }
             }
 
-            val paymentResult =
-                paymentHandler.registerPayments(
-                    paymentLines = resolvedPaymentLines,
-                    createdInvoice = created,
-                    invoiceNameForLocal = invoiceNameForLocal,
-                    postingDate = postingDate,
-                    context = context,
-                    customer = customer,
-                    exchangeRateByCurrency = currentWithHints.exchangeRateByCurrency,
-                    paymentModeDetails = paymentModeDetails,
-                    posOpeningEntry = openingEntryId,
-                )
-            invoiceNameForLocal = paymentResult.invoiceNameForLocal
-            val remotePaymentsSucceeded = paymentResult.remotePaymentsSucceeded
-            if (remotePaymentsSucceeded) {
+            if (created != null) {
               runCatching { markSalesInvoiceSyncedUseCase(invoiceNameForLocal) }
             }
 
@@ -1386,7 +1384,7 @@ class BillingViewModel(
       paymentSchedule: List<SalesInvoicePaymentScheduleDto>,
       paymentLines: List<PaymentLine>,
       invoiceCurrency: String,
-      rounding: RoundedTotal,
+      postingDecision: SalesPostingDecision,
       conversionRate: Double?,
       postingDate: String,
       dueDate: String,
@@ -1404,36 +1402,27 @@ class BillingViewModel(
     val couponCode = current.discountCode.trim().takeIf { it.isNotBlank() }
     val applyDiscountOn = current.applyDiscountOn.takeIf { it.isNotBlank() } ?: "Grand Total"
 
-    val isPosSale = true
-    require(!posOpeningEntry.isNullOrBlank()) { "Falta POS Opening Entry para crear factura POS." }
-    // Flujo PaymentEntry-only:
-    // La factura POS se crea con una linea placeholder (monto 0) para cumplir validacion ERP.
-    // El cobro real se registra via Payment Entry.
-    val invoiceCurrencyResolved = normalizeCurrency(invoiceCurrency)
-    val placeholderMode =
-        resolvePosInvoicePlaceholderMode(
-            current = current,
-            paymentLines = paymentLines,
-            invoiceCurrency = invoiceCurrencyResolved,
-        ) ?: error("No se pudo resolver un modo de pago POS para crear la factura.")
-    val payments =
-        listOf(
-            SalesInvoicePaymentDto(
-                modeOfPayment = placeholderMode,
-                amount = 0.0,
-                account = null,
-                paymentReference = null,
-            )
-        )
-    val resolvedPaid = 0.0
-    val resolvedOutstanding = roundForCurrency(rounding.roundedTotal, invoiceCurrency)
-    val resolvedStatus = "Unpaid"
+    if (postingDecision.isPos) {
+      require(!posOpeningEntry.isNullOrBlank()) { "Falta POS Opening Entry para crear factura POS." }
+    }
 
-    val hasRounding = kotlin.math.abs(rounding.roundingAdjustment) > 0.0001
+    val rounded = resolveRoundedTotal(totals.total, invoiceCurrency)
+    val payments =
+        buildInvoicePayments(
+            paymentLines = paymentLines,
+            paidAmount = postingDecision.paidAmount,
+            invoiceCurrency = invoiceCurrency,
+        )
+    val resolvedPaid = roundForCurrency(postingDecision.paidAmount, invoiceCurrency)
+    val resolvedOutstanding = roundForCurrency(postingDecision.outstandingAmount, invoiceCurrency)
+    val resolvedChange = roundForCurrency(postingDecision.changeAmount, invoiceCurrency)
+    val resolvedStatus = postingDecision.status
+
+    val hasRounding = kotlin.math.abs(rounded.roundingAdjustment) > 0.0001
     val roundedTotalField =
-        if (hasRounding) roundForCurrency(rounding.roundedTotal, invoiceCurrency) else null
+        if (hasRounding) roundForCurrency(rounded.roundedTotal, invoiceCurrency) else null
     val roundingAdjustmentField =
-        if (hasRounding) roundForCurrency(rounding.roundingAdjustment, invoiceCurrency) else null
+        if (hasRounding) roundForCurrency(rounded.roundingAdjustment, invoiceCurrency) else null
     val receivableAccount =
         customer.receivableAccount?.takeIf { it.isNotBlank() }
             ?: context.defaultReceivableAccount?.takeIf { it.isNotBlank() }
@@ -1463,7 +1452,7 @@ class BillingViewModel(
         totalTaxesAndCharges = taxes,
         netTotal = netTotal,
         paidAmount = resolvedPaid,
-        changeAmount = null,
+        changeAmount = resolvedChange.takeIf { it > 0.0 },
         discountAmount = resolvedDiscountAmount,
         applyDiscountOn = applyDiscountOn,
         additionalDiscountPercentage = resolvedDiscountPercent,
@@ -1472,38 +1461,43 @@ class BillingViewModel(
         payments = payments,
         paymentSchedule = paymentSchedule,
         paymentTerms = if (current.isCreditSale) current.selectedPaymentTerm?.name else null,
-        posProfile = context.profileName,
-        posOpeningEntry = posOpeningEntry,
+        posProfile = if (postingDecision.isPos) context.profileName else null,
+        posOpeningEntry = if (postingDecision.isPos) posOpeningEntry else null,
         remarks = paymentMetadata,
         customExchangeRate = null,
         updateStock = true,
         docStatus = 0,
-        isPos = isPosSale,
+        isPos = postingDecision.isPos,
         doctype = "Sales Invoice",
     )
   }
 
-  private fun resolvePosInvoicePlaceholderMode(
-      current: BillingState.Success,
+  private fun buildInvoicePayments(
       paymentLines: List<PaymentLine>,
+      paidAmount: Double,
       invoiceCurrency: String,
-  ): String? {
-    val preferred =
-        paymentLines.mapNotNull { it.modeOfPayment.takeIf { mode -> mode.isNotBlank() } }.distinct()
-    val available =
-        current.paymentModes
-            .mapNotNull { it.modeOfPayment.takeIf { mode -> mode.isNotBlank() } }
-            .distinct()
-    val candidates = (preferred + available).distinct()
-
-    val modeMatchingInvoiceCurrency =
-        candidates.firstOrNull { mode ->
-          val modeCurrency = paymentModeDetails[mode]?.currency?.let { normalizeCurrency(it) }
-          !modeCurrency.isNullOrBlank() && modeCurrency.equals(invoiceCurrency, ignoreCase = true)
-        }
-    if (!modeMatchingInvoiceCurrency.isNullOrBlank()) return modeMatchingInvoiceCurrency
-
-    return available.firstOrNull() ?: preferred.firstOrNull()
+  ): List<SalesInvoicePaymentDto> {
+    if (paidAmount <= 0.0) return emptyList()
+    var remaining = roundForCurrency(paidAmount, invoiceCurrency)
+    val payments = mutableListOf<SalesInvoicePaymentDto>()
+    paymentLines.forEach { line ->
+      if (remaining <= 0.0) return@forEach
+      val mode = line.modeOfPayment.trim()
+      if (mode.isBlank()) return@forEach
+      val baseAmount = roundForCurrency(line.baseAmount.coerceAtLeast(0.0), invoiceCurrency)
+      if (baseAmount <= 0.0) return@forEach
+      val applied = roundForCurrency(minOf(baseAmount, remaining), invoiceCurrency)
+      if (applied <= 0.0) return@forEach
+      payments +=
+          SalesInvoicePaymentDto(
+              modeOfPayment = mode,
+              amount = applied,
+              account = null,
+              paymentReference = line.referenceNumber,
+          )
+      remaining = roundForCurrency((remaining - applied).coerceAtLeast(0.0), invoiceCurrency)
+    }
+    return payments
   }
 
   private fun buildInvoiceItems(
@@ -1702,13 +1696,6 @@ class BillingViewModel(
     if (posContext.profileName.isBlank()) {
       return tr(spanish = "No hay POS Profile activo.", english = "There is no active POS Profile.")
     }
-    val openingEntryId = contextProvider.getActiveCashboxWithDetails()?.cashbox?.openingEntryId
-    if (openingEntryId.isNullOrBlank()) {
-      return tr(
-          spanish = "No hay apertura de caja activa.",
-          english = "There is no active cashbox opening.",
-      )
-    }
     if (current.selectedCustomer == null)
         return tr(
             spanish = "Selecciona un cliente antes de finalizar la venta.",
@@ -1733,29 +1720,39 @@ class BillingViewModel(
     val paid = roundForCurrency(current.paidAmountBase, current.currency)
     val tolerance = resolveMinorUnitTolerance(current.currency)
 
-    if (!current.isCreditSale && paid + tolerance < total)
-        return tr(
-            spanish = "El monto pagado debe cubrir el total antes de finalizar la venta.",
-            english = "Paid amount must cover the total before finalizing the sale.",
+    val postingResolution =
+        SalesPostingPolicy.decide(
+            totalAmount = total,
+            paidAmount = paid,
+            isCreditSale = current.isCreditSale,
+            allowPartialPayment = posContext.allowPartialPayment,
+            tolerance = tolerance,
         )
-
-    if (current.isCreditSale && paid + tolerance >= total)
-        return tr(
-            spanish =
-                "Una venta de crédito no puede tener pago completo. Desactiva \"Venta de crédito\" para registrarla como contado.",
-            english =
-                "A credit sale cannot have full payment. Disable \"Credit sale\" to register it as cash.",
-        )
+    val postingDecision =
+        (postingResolution as? SalesPostingResolution.Allowed)?.decision
+            ?: return mapPostingBlockToMessage(
+                (postingResolution as SalesPostingResolution.Blocked).reason
+            )
 
     /*if (current.isCreditSale && current.paymentLines.isNotEmpty()) {
         return "Las ventas a crédito no pueden incluir líneas de pago."
     }*/
 
-    if (!current.isCreditSale && current.paymentLines.isEmpty())
+    if (postingDecision.type != SalesPostingType.NonPosCredit && current.paymentLines.isEmpty())
         return tr(
             spanish = "Agrega al menos un pago o marca la venta como crédito.",
             english = "Add at least one payment line or mark the sale as credit.",
         )
+
+    if (postingDecision.isPos) {
+      val openingEntryId = contextProvider.getActiveCashboxWithDetails()?.cashbox?.openingEntryId
+      if (openingEntryId.isNullOrBlank()) {
+        return tr(
+            spanish = "No hay apertura de caja activa.",
+            english = "There is no active cashbox opening.",
+        )
+      }
+    }
 
     current.cartItems.forEach { item ->
       val available = item.availableQty ?: productStockByCode[item.itemCode] ?: 0.0
@@ -1779,25 +1776,64 @@ class BillingViewModel(
     val total = roundForCurrency(current.total, current.currency)
     val paid = roundForCurrency(current.paidAmountBase, current.currency)
     val tolerance = resolveMinorUnitTolerance(current.currency)
+    val allowPartialPayment = contextProvider.getContext()?.allowPartialPayment ?: false
+    return when (
+        val resolution =
+            SalesPostingPolicy.decide(
+                totalAmount = total,
+                paidAmount = paid,
+                isCreditSale = true,
+                allowPartialPayment = allowPartialPayment,
+                tolerance = tolerance,
+            )) {
+      is SalesPostingResolution.Blocked -> mapPostingBlockToMessage(resolution.reason)
+      is SalesPostingResolution.Allowed -> null
+    }
+  }
 
-    return when {
-      paid > total + tolerance ->
+  private fun mapPostingBlockToMessage(reason: SalesPostingBlockReason): String {
+    return when (reason) {
+      SalesPostingBlockReason.CashSaleRequiresFullPayment ->
+          tr(
+              spanish = "El monto pagado debe cubrir el total antes de finalizar la venta.",
+              english = "Paid amount must cover the total before finalizing the sale.",
+          )
+      SalesPostingBlockReason.CreditSaleCannotBeFullyPaid ->
           tr(
               spanish =
-                  "La venta está marcada como crédito, pero el pago excede el total. Desactiva \"Venta de crédito\" para registrarla como contado.",
+                  "Una venta de crédito no puede tener pago completo. Desactiva \"Venta de crédito\" para registrarla como contado.",
               english =
-                  "Sale is marked as credit, but payment exceeds total. Disable \"Credit sale\" to register it as cash.",
+                  "A credit sale cannot have full payment. Disable \"Credit sale\" to register it as cash.",
           )
-
-      paid + tolerance >= total ->
+      SalesPostingBlockReason.PartialPaymentNotAllowedByProfile ->
           tr(
               spanish =
-                  "La venta está marcada como crédito, pero el pago ya cubre el total. Desactiva \"Venta de crédito\" para registrarla como contado.",
+                  "Este POS Profile no permite pagos parciales. Registra la venta de contado o como crédito completo sin abono.",
               english =
-                  "Sale is marked as credit, but payment already covers the total. Disable \"Credit sale\" to register it as cash.",
+                  "This POS profile does not allow partial payments. Register the sale as cash or full credit without payment.",
           )
+    }
+  }
 
-      else -> null
+  private fun resolvePostingDecision(
+      total: Double,
+      paid: Double,
+      isCreditSale: Boolean,
+      allowPartialPayment: Boolean,
+      currency: String?,
+  ): SalesPostingDecision {
+    val tolerance = resolveMinorUnitTolerance(currency)
+    return when (
+        val resolution =
+            SalesPostingPolicy.decide(
+                totalAmount = total,
+                paidAmount = paid,
+                isCreditSale = isCreditSale,
+                allowPartialPayment = allowPartialPayment,
+                tolerance = tolerance,
+            )) {
+      is SalesPostingResolution.Allowed -> resolution.decision
+      is SalesPostingResolution.Blocked -> error(mapPostingBlockToMessage(resolution.reason))
     }
   }
 }

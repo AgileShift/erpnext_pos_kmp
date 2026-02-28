@@ -23,6 +23,7 @@ data class POSProfileEntity(
     @ColumnInfo("apply_discount_on") var applyDiscountOn: String,
     @ColumnInfo("cost_center") var costCenter: String? = null,
     @ColumnInfo("selling_price_list") var sellingPriceList: String,
+    @ColumnInfo("allow_partial_payment") var allowPartialPayment: Boolean = false,
     @ColumnInfo(name = "active") var active: Boolean? = false,
     @ColumnInfo(name = "user") var user: String? = null,
     @ColumnInfo(name = "is_deleted") var isDeleted: Boolean = false,

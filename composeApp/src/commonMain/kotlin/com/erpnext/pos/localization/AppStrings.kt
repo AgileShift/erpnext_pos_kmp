@@ -149,6 +149,7 @@ data class BillingStrings(
     val sameDayLabel: String,
     val termsLabel: String,
     val noPaymentTermsAvailable: String,
+    val creditSalesNotAllowedBanner: String,
     val checkoutButton: String,
     val checkoutDataTitle: String,
     val checkoutReviewSubtitle: String,
@@ -487,6 +488,8 @@ object AppStringsFactory {
                   termsLabel = "Términos",
                   noPaymentTermsAvailable =
                       "No hay términos de pago disponibles. Las ventas a crédito están deshabilitadas.",
+                  creditSalesNotAllowedBanner =
+                      "Este POS no permite venta a crédito. Solo aplica contado.",
                   checkoutButton = "Checkout",
                   checkoutDataTitle = "Datos de pago",
                   checkoutReviewSubtitle = "Revisa y confirma la venta",
@@ -864,6 +867,8 @@ object AppStringsFactory {
                   termsLabel = "Terms",
                   noPaymentTermsAvailable =
                       "No payment terms available. Credit sales are disabled.",
+                  creditSalesNotAllowedBanner =
+                      "This POS profile does not allow credit sales. Cash sales only.",
                   checkoutButton = "Checkout",
                   checkoutDataTitle = "Payment data",
                   checkoutReviewSubtitle = "Review and confirm the sale",

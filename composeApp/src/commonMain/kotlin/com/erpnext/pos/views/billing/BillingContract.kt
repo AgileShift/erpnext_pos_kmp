@@ -64,6 +64,7 @@ sealed interface BillingState {
       val deliveryCharges: List<DeliveryChargeBO> = emptyList(),
       val selectedDeliveryCharge: DeliveryChargeBO? = null,
       val total: Double = 0.0,
+      val allowPartialPayment: Boolean = true,
       val isCreditSale: Boolean = false,
       val paymentTerms: List<PaymentTermBO> = emptyList(),
       val selectedPaymentTerm: PaymentTermBO? = null,

@@ -85,6 +85,7 @@ data class POSContext(
     val exchangeRate: Double,
     val allowedCurrencies: List<POSCurrencyOption>,
     val paymentModes: List<POSPaymentModeOption>,
+    val allowPartialPayment: Boolean,
 )
 
 class CashBoxManager(
@@ -119,11 +120,18 @@ class CashBoxManager(
   private val _cashboxState: MutableStateFlow<Boolean> = MutableStateFlow(false)
   val cashboxState = _cashboxState.asStateFlow()
 
+  suspend fun canUseRemoteOperations(): Boolean {
+    val offlineModeEnabled = generalPreferences.offlineMode.firstOrNull() == true
+    if (offlineModeEnabled) return false
+    val isOnline = networkMonitor.isConnected.firstOrNull() == true
+    if (!isOnline) return false
+    return sessionRefresher.ensureValidSession()
+  }
+
   suspend fun initializeContext(): POSContext? =
       withContext(Dispatchers.IO) {
         currencySettingsRepository.loadCached()
-        val isOnline = networkMonitor.isConnected.firstOrNull() == true
-        val canValidateRemoteShift = isOnline && sessionRefresher.ensureValidSession()
+        val canValidateRemoteShift = canUseRemoteOperations()
         val user =
             resolveCurrentUser(canUseRemote = canValidateRemoteShift) ?: return@withContext null
         val serverUser = resolveServerUserId(user)
@@ -142,7 +150,7 @@ class CashBoxManager(
         var bootstrapWithoutOpenShift = false
 
         // Si bootstrap trae open_shift, ese POE remoto manda: se adopta/restaura tal cual.
-        if (canValidateRemoteShift) {
+        if (canValidateRemoteShift && allowRemoteReadsFromUi) {
           val bootstrapShiftResult =
               runCatching { api.getBootstrapShiftSnapshot() }
                   .onFailure {
@@ -435,6 +443,7 @@ class CashBoxManager(
                   exchangeRate = exchangeRate,
                   allowedCurrencies = allowedCurrencies,
                   paymentModes = paymentModes,
+                  allowPartialPayment = profile.allowPartialPayment,
                   cashier = user.toBO(),
                   partyAccountCurrency = company?.defaultCurrency ?: profile.currency,
                   monthlySalesTarget = bootstrapContext.monthlySalesTarget,
@@ -550,6 +559,7 @@ class CashBoxManager(
                 exchangeRate = exchangeRate,
                 allowedCurrencies = allowedCurrencies,
                 paymentModes = paymentModes,
+                allowPartialPayment = profile.allowPartialPayment,
                 cashier = user.toBO(),
                 partyAccountCurrency = profile.currency,
                 monthlySalesTarget = bootstrapContext.monthlySalesTarget,
@@ -1063,6 +1073,7 @@ class CashBoxManager(
         exchangeRate = exchangeRate,
         allowedCurrencies = allowedCurrencies,
         paymentModes = paymentModes,
+        allowPartialPayment = profile.allowPartialPayment,
         partyAccountCurrency = company?.defaultCurrency ?: profile.currency,
         monthlySalesTarget = bootstrapContextPreferences.load().monthlySalesTarget,
         defaultReceivableAccount = company?.defaultReceivableAccount,
@@ -1088,8 +1099,8 @@ class CashBoxManager(
 
   suspend fun closeCashBox(): POSContext? =
       withContext(Dispatchers.IO) {
+        val canUseRemote = canUseRemoteOperations()
         val isOnline = networkMonitor.isConnected.firstOrNull() == true
-        val canUseRemote = isOnline && sessionRefresher.ensureValidSession()
         if (isOnline && !canUseRemote) {
           AppLogger.warn("closeCashBox: invalid session, falling back to local close")
         }
@@ -1110,7 +1121,7 @@ class CashBoxManager(
           remoteOpeningEntryId =
               openingEntryLinkDao.getRemoteOpeningEntryName(entry.cashbox.localId)
         }
-        if (canUseRemote && remoteOpeningEntryId.isNullOrBlank()) {
+        if (canUseRemote && allowRemoteReadsFromUi && remoteOpeningEntryId.isNullOrBlank()) {
           val remoteFromBootstrap =
               runCatching { api.getBootstrapOpenShift()?.name }
                   .onFailure { AppLogger.warn("closeCashBox: bootstrap POE lookup failed", it) }
@@ -1197,13 +1208,6 @@ class CashBoxManager(
                 posCurrency = normalizeCurrency(ctx.currency),
                 rateResolver = { from, to -> exchangeRateRepository.getRate(from, to) },
             )
-        val paidInvoiceNames =
-            paymentRows
-                .asSequence()
-                .filter { (it.enteredAmount > 0.0001) || (it.amount > 0.0001) }
-                .map { it.invoiceName.trim() }
-                .filter { it.isNotBlank() }
-                .toSet()
         val endDate = getTimeMillis().toErpDateTime()
         val dto =
             buildClosingEntryDto(
@@ -1212,8 +1216,8 @@ class CashBoxManager(
                 postingDate = endDate,
                 periodEndDate = endDate,
                 paymentReconciliation = paymentReconciliation,
-                invoices = resolvedInvoices,
-                paidInvoiceNames = paidInvoiceNames,
+                invoices = emptyList(),
+                paidInvoiceNames = emptySet(),
             )
         if (!remoteOpeningEntryId.isNullOrBlank()) {
           val existing = openingDao.getByName(remoteOpeningEntryId)
@@ -1224,7 +1228,10 @@ class CashBoxManager(
         }
         val pce =
             if (canUseRemote && !remoteOpeningEntryId.isNullOrBlank()) {
-              runCatching { api.closeCashbox(dto) }
+              // Idempotencia por cierre de caja: mismo intento => mismo client_request_id.
+              val clientRequestId =
+                  "pce-close-${entry.cashbox.localId}-${openingEntryId.trim()}-${endMillis}"
+              runCatching { api.closeCashbox(clientRequestId = clientRequestId, entry = dto) }
                   .onFailure { AppLogger.warn("closeCashBox: remote close failed", it) }
                   .getOrNull()
             } else {
@@ -1250,7 +1257,15 @@ class CashBoxManager(
             pendingSync = remoteOpeningEntryId.isNullOrBlank(),
         )
         profileDao.updateProfileState(ctx.username, ctx.profileName, false)
-        closingDao.insert(dto.toEntity(closingEntryId, pendingSync = pendingSync))
+        closingDao.insert(
+            dto.toEntity(
+                name = closingEntryId,
+                pendingSync = pendingSync,
+                posProfile = entry.cashbox.posProfile,
+                user = entry.cashbox.user,
+                periodStartDate = entry.cashbox.periodStartDate,
+            )
+        )
         cashboxDao.updateBalanceDetailsClosingEntry(entry.cashbox.localId, closingEntryId)
 
         _cashboxState.update { false }
@@ -1399,6 +1414,7 @@ class CashBoxManager(
                 exchangeRate = exchangeRate,
                 allowedCurrencies = allowedCurrencies,
                 paymentModes = paymentModes,
+                allowPartialPayment = profile.allowPartialPayment,
                 monthlySalesTarget = bootstrapSnapshot.monthlySalesTarget,
                 defaultReceivableAccount = company?.defaultReceivableAccount,
                 defaultReceivableAccountCurrency = company?.defaultReceivableAccountCurrency,

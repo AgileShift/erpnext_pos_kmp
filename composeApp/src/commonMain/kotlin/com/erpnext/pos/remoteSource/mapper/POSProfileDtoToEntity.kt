@@ -30,6 +30,7 @@ fun POSProfileDto.toEntity(): POSProfileEntity {
       applyDiscountOn = this.applyDiscountOn,
       costCenter = this.costCenter,
       sellingPriceList = this.sellingPriceList,
+      allowPartialPayment = this.allowPartialPayment,
   )
 }
 

@@ -135,7 +135,7 @@ class SalesInvoiceRepository(
           }
         }
     check(
-        !((normalizedInvoice.isPos || ctx?.isCashBoxOpen == true) &&
+        !(normalizedInvoice.isPos &&
             (normalizedInvoice.profileId.isNullOrBlank() ||
                 normalizedInvoice.posOpeningEntry.isNullOrBlank()))
     ) {
@@ -209,18 +209,16 @@ class SalesInvoiceRepository(
     val now = Clock.System.now().toEpochMilliseconds()
     val openingEntryId = context.getActiveCashboxWithDetails()?.cashbox?.openingEntryId
     val profileId = dto.posProfile?.takeIf { it.isNotBlank() } ?: context.getContext()?.profileName
+    val isPosInvoice = dto.isPos
 
     entity.invoice.invoiceName = localInvoiceName
     entity.invoice.syncStatus = "Pending"
     entity.invoice.status = dto.status ?: entity.invoice.status
     entity.invoice.modifiedAt = now
-    entity.invoice.profileId = profileId
-    entity.invoice.posOpeningEntry = openingEntryId
-    entity.payments.forEach { it.posOpeningEntry = openingEntryId }
-    check(
-        !(entity.invoice.profileId.isNullOrBlank() ||
-            entity.invoice.posOpeningEntry.isNullOrBlank())
-    ) {
+    entity.invoice.profileId = if (isPosInvoice) profileId else null
+    entity.invoice.posOpeningEntry = if (isPosInvoice) openingEntryId else null
+    entity.payments.forEach { it.posOpeningEntry = if (isPosInvoice) openingEntryId else null }
+    check(!(isPosInvoice && (entity.invoice.profileId.isNullOrBlank() || entity.invoice.posOpeningEntry.isNullOrBlank()))) {
       "Falta POS Profile o apertura de caja activa para crear la factura."
     }
     val providedRate = dto.conversionRate

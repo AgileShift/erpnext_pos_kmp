@@ -21,12 +21,17 @@ import kotlin.time.ExperimentalTime
 
 fun SalesInvoiceWithItemsAndPayments.toDto(): SalesInvoiceDto {
   val invoiceName = invoice.invoiceName?.takeUnless { it.startsWith("LOCAL-") }
-  val resolvedPayments = payments.map { it.toDto() }
+  val rawPayments = payments.map { it.toDto() }
   val resolvedDocType = "Sales Invoice"
-  val resolvedIsPos =
-      invoice.isPos ||
-          !invoice.profileId.isNullOrBlank() ||
-          !invoice.posOpeningEntry.isNullOrBlank()
+  val tolerance = 0.01
+  val total = invoice.grandTotal.coerceAtLeast(0.0)
+  val paid = invoice.paidAmount.coerceAtLeast(0.0)
+  val outstanding = invoice.outstandingAmount.coerceAtLeast(0.0)
+  val looksLikeFullCredit = paid <= tolerance && kotlin.math.abs(outstanding - total) <= tolerance
+  val resolvedIsPos = invoice.isPos && !looksLikeFullCredit
+  val resolvedPayments = if (resolvedIsPos) rawPayments else emptyList()
+  val resolvedPosProfile = if (resolvedIsPos) invoice.profileId else null
+  val resolvedPosOpeningEntry = if (resolvedIsPos) invoice.posOpeningEntry else null
 
   return SalesInvoiceDto(
       name = invoiceName,
@@ -47,13 +52,14 @@ fun SalesInvoiceWithItemsAndPayments.toDto(): SalesInvoiceDto {
       payments = resolvedPayments,
       remarks = invoice.remarks,
       isPos = resolvedIsPos,
+      isCreatedUsingPos = resolvedIsPos,
       doctype = resolvedDocType,
       customerName = invoice.customerName ?: "CST",
       customerPhone = invoice.customerPhone,
       netTotal = invoice.netTotal,
       paidAmount = invoice.paidAmount,
-      posProfile = invoice.profileId,
-      posOpeningEntry = invoice.posOpeningEntry,
+      posProfile = resolvedPosProfile,
+      posOpeningEntry = resolvedPosOpeningEntry,
       docStatus = 0,
   )
 }
@@ -98,7 +104,7 @@ fun List<SalesInvoiceDto>.toEntities(): List<SalesInvoiceWithItemsAndPayments> {
 
 fun SalesInvoiceDto.toEntity(): SalesInvoiceWithItemsAndPayments {
   val now = Clock.System.now().toEpochMilliseconds()
-  val resolvedIsPos = isPos
+  val resolvedIsPos = isCreatedUsingPos ?: isPos
   fun resolveBaseAmount(amount: Double?, baseAmount: Double?): Double? {
     if (amount == null) return baseAmount
     val rate = conversionRate?.takeIf { it > 0.0 && it != 1.0 }
@@ -230,6 +236,7 @@ fun SalesInvoiceEntity.toDto(): SalesInvoiceDto {
       payments = emptyList(),
       remarks = remarks,
       isPos = isPos,
+      isCreatedUsingPos = isPos,
       doctype = "Sales Invoice",
       updateStock = true,
       posProfile = profileId,

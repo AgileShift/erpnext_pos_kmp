@@ -249,6 +249,7 @@ fun POSProfileDto.toBO(): POSProfileBO {
       costCenter = this.costCenter,
       applyDiscountOn = this.applyDiscountOn,
       sellingPriceList = this.sellingPriceList,
+      allowPartialPayment = this.allowPartialPayment,
   )
 }
 
@@ -282,6 +283,7 @@ fun POSProfileEntity.toBO(): POSProfileBO {
       applyDiscountOn = applyDiscountOn,
       branch = branch,
       currency = currency,
+      allowPartialPayment = allowPartialPayment,
       paymentModes = emptyList(),
   )
 }

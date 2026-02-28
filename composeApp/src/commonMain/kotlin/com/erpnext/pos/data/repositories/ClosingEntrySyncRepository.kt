@@ -174,7 +174,15 @@ class ClosingEntrySyncRepository(
           remoteClosingName = remoteClosing.name,
           pendingSync = false,
       )
-      closingDao.insert(dto.toEntity(remoteClosing.name, pendingSync = false))
+      closingDao.insert(
+          dto.toEntity(
+              name = remoteClosing.name,
+              pendingSync = false,
+              posProfile = cashbox.posProfile,
+              user = cashbox.user,
+              periodStartDate = cashbox.periodStartDate,
+          )
+      )
       cashboxDao.updateBalanceDetailsClosingEntry(cashbox.localId, remoteClosing.name)
 
       if (cashbox.closingEntryId?.startsWith("LOCAL-", ignoreCase = true) == true) {
@@ -348,7 +356,15 @@ class ClosingEntrySyncRepository(
             remoteClosingName = remoteClosing.name,
             pendingSync = false,
         )
-        closingDao.insert(dto.toEntity(remoteClosing.name, pendingSync = pendingSync))
+        closingDao.insert(
+            dto.toEntity(
+                name = remoteClosing.name,
+                pendingSync = pendingSync,
+                posProfile = cashbox.posProfile,
+                user = cashbox.user,
+                periodStartDate = cashbox.periodStartDate,
+            )
+        )
         cashboxDao.updateBalanceDetailsClosingEntry(cashbox.localId, remoteClosing.name)
         if (localClosingName?.startsWith("LOCAL-", ignoreCase = true) == true) {
           closingDao.delete(localClosingName)
@@ -363,7 +379,9 @@ class ClosingEntrySyncRepository(
           }
       val response =
           if (existingRemote == null) {
-            runCatching { api.closeCashbox(dto) }
+            val clientRequestId =
+                "pce-sync-${cashbox.localId}-${remoteOpeningName.trim()}-${periodEnd.trim()}"
+            runCatching { api.closeCashbox(clientRequestId = clientRequestId, entry = dto) }
                 .onFailure { AppLogger.warn("ClosingEntrySyncRepository create failed", it) }
                 .getOrNull()
           } else {
@@ -389,7 +407,15 @@ class ClosingEntrySyncRepository(
           remoteClosingName = response.name,
           pendingSync = false,
       )
-      closingDao.insert(dto.toEntity(response.name, pendingSync = pendingSync))
+      closingDao.insert(
+          dto.toEntity(
+              name = response.name,
+              pendingSync = pendingSync,
+              posProfile = cashbox.posProfile,
+              user = cashbox.user,
+              periodStartDate = cashbox.periodStartDate,
+          )
+      )
       cashboxDao.updateBalanceDetailsClosingEntry(cashbox.localId, response.name)
       if (!pendingSync && localClosingName?.startsWith("LOCAL-", ignoreCase = true) == true) {
         closingDao.delete(localClosingName)
