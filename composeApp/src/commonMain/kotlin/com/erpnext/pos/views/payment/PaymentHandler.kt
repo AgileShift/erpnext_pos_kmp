@@ -317,38 +317,42 @@ class PaymentHandler(
                     currencySpecs = currencySpecs,
                 )
 
-            val paymentEntry =
-                buildPaymentEntryDto(
-                    PaymentEntryBuildInput(
-                        api = api,
-                        line = adjustedLine,
-                        context = context,
-                        customer = customer,
-                        postingDate = postingDate,
-                        invoiceId = createdInvoice.name ?: resolvedInvoiceName,
-                        invoiceTotalRc = receivableAmounts.totalRc,
-                        outstandingRc = outstandingForEntry,
-                        paidFromAccount = paidFrom,
-                        partyAccountCurrency = resolvedReceivableCurrency,
-                        invoiceCurrency = resolvedInvoiceCurrency,
-                        invoiceToReceivableRate = rateInvToRcResolved,
-                        currencySpecs = currencySpecs,
-                        paymentModeDetails = paymentModeDetails,
-                        referenceDoctype = "Sales Invoice",
-                    )
-                )
+            val remoteAttempt = runCatching {
+              val paymentEntry =
+                  buildPaymentEntryDto(
+                      PaymentEntryBuildInput(
+                          api = api,
+                          line = adjustedLine,
+                          context = context,
+                          customer = customer,
+                          postingDate = postingDate,
+                          invoiceId = createdInvoice.name ?: resolvedInvoiceName,
+                          invoiceTotalRc = receivableAmounts.totalRc,
+                          outstandingRc = outstandingForEntry,
+                          paidFromAccount = paidFrom,
+                          partyAccountCurrency = resolvedReceivableCurrency,
+                          invoiceCurrency = resolvedInvoiceCurrency,
+                          invoiceToReceivableRate = rateInvToRcResolved,
+                          currencySpecs = currencySpecs,
+                          paymentModeDetails = paymentModeDetails,
+                          referenceDoctype = "Sales Invoice",
+                      )
+                  )
+              val createdPaymentName =
+                  createPaymentEntryUseCase(CreatePaymentEntryInput(paymentEntry))
+              Pair(paymentEntry, createdPaymentName)
+            }
 
-            val paymentResult = runCatching {
-              createPaymentEntryUseCase(CreatePaymentEntryInput(paymentEntry))
-            }
-            if (paymentResult.isFailure) {
+            if (remoteAttempt.isFailure) {
               remotePaymentFailed = true
-            } else {
-              val createdPaymentName = paymentResult.getOrNull()
-              adjustedLine.referenceNumber
-                  ?.takeIf { it.isNotBlank() }
-                  ?.let { ref -> remoteEntryByReference[ref] = createdPaymentName }
+              return@forEach
             }
+
+            val (paymentEntry, createdPaymentName) =
+                remoteAttempt.getOrNull() ?: return@forEach
+            adjustedLine.referenceNumber
+                ?.takeIf { it.isNotBlank() }
+                ?.let { ref -> remoteEntryByReference[ref] = createdPaymentName }
 
             val allocated = paymentEntry.references.firstOrNull()?.allocatedAmount ?: 0.0
             remainingOutstandingRc =

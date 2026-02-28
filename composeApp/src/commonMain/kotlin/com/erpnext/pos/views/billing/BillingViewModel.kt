@@ -46,7 +46,6 @@ import com.erpnext.pos.navigation.NavRoute
 import com.erpnext.pos.navigation.NavigationManager
 import com.erpnext.pos.remoteSource.dto.SalesInvoiceDto
 import com.erpnext.pos.remoteSource.dto.SalesInvoiceItemDto
-import com.erpnext.pos.remoteSource.dto.SalesInvoicePaymentDto
 import com.erpnext.pos.remoteSource.dto.SalesInvoicePaymentScheduleDto
 import com.erpnext.pos.remoteSource.sdk.extractReservedStockItemCode
 import com.erpnext.pos.remoteSource.sdk.toUserMessage
@@ -68,8 +67,6 @@ import com.erpnext.pos.views.payment.PaymentHandler
 import com.erpnext.pos.views.salesflow.SalesFlowContext
 import com.erpnext.pos.views.salesflow.SalesFlowContextStore
 import com.erpnext.pos.views.salesflow.SalesFlowSource
-import kotlin.time.Clock
-import kotlin.time.ExperimentalTime
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -78,6 +75,8 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlin.time.Clock
+import kotlin.time.ExperimentalTime
 
 class BillingViewModel(
     private val customersUseCase: FetchCustomersLocalUseCase,
@@ -898,12 +897,25 @@ class BillingViewModel(
                     dueDate = dueDate,
                     posOpeningEntry = openingEntryId,
                 )
+            val invoiceForSubmission =
+                invoiceDto.copy(
+                    payments = emptyList(),
+                    paidAmount = 0.0,
+                    changeAmount = null,
+                    outstandingAmount = invoiceDto.grandTotal.coerceAtLeast(0.0),
+                    status =
+                        if (invoiceDto.grandTotal.coerceAtLeast(0.0) <= 0.01) "Paid" else "Unpaid",
+                    isPos = false,
+                    isCreatedUsingPos = false,
+                    posProfile = null,
+                    posOpeningEntry = null,
+                )
 
             val localInvoiceName = "LOCAL-${UUIDGenerator().newId()}"
             createSalesInvoiceLocalUseCase(
                 CreateSalesInvoiceLocalInput(
                     localInvoiceName = localInvoiceName,
-                    invoice = invoiceDto,
+                    invoice = invoiceForSubmission,
                 )
             )
 
@@ -915,7 +927,7 @@ class BillingViewModel(
                 if (shouldAttemptRemote) {
                   runCatching {
                     createSalesInvoiceRemoteOnlyUseCase(
-                        CreateSalesInvoiceRemoteOnlyInput(invoiceDto.copy(name = null))
+                        CreateSalesInvoiceRemoteOnlyInput(invoiceForSubmission.copy(name = null))
                     )
                   }
                 } else {
@@ -943,6 +955,38 @@ class BillingViewModel(
             if (created != null) {
               runCatching { markSalesInvoiceSyncedUseCase(invoiceNameForLocal) }
             }
+
+            val paymentRegistration =
+                if (resolvedPaymentLines.isNotEmpty()) {
+                  runCatching {
+                        paymentHandler.registerPayments(
+                            paymentLines = resolvedPaymentLines,
+                            createdInvoice = created,
+                            invoiceNameForLocal = invoiceNameForLocal,
+                            postingDate = postingDate,
+                            context = context,
+                            customer = customer,
+                            exchangeRateByCurrency = currentWithHints.exchangeRateByCurrency,
+                            paymentModeDetails = paymentModeDetails,
+                            posOpeningEntry = openingEntryId,
+                        )
+                      }
+                      .getOrNull()
+                } else {
+                  null
+                }
+            val paymentsRemoteSucceeded = paymentRegistration?.remotePaymentsSucceeded == true
+            val paymentsSyncWarning =
+                if (resolvedPaymentLines.isNotEmpty() && shouldAttemptRemote && !paymentsRemoteSucceeded) {
+                  tr(
+                      spanish =
+                          " No se pudieron enviar todos los pagos en línea; quedaron pendientes de sincronización.",
+                      english =
+                          " Some payments could not be sent online; they were left pending sync.",
+                  )
+                } else {
+                  ""
+                }
 
             runCatching {
                   adjustLocalInventoryUseCase(
@@ -1027,10 +1071,17 @@ class BillingViewModel(
 
                         resolvedPaymentLines.isNotEmpty() -> {
                           val label = created.name ?: localInvoiceName
-                          tr(
-                              spanish = "Factura $label creada. Pagos guardados localmente.",
-                              english = "Invoice $label created. Payments saved locally.",
-                          )
+                          if (paymentsRemoteSucceeded) {
+                            tr(
+                                spanish = "Factura $label creada. Pagos enviados correctamente.",
+                                english = "Invoice $label created. Payments sent successfully.",
+                            )
+                          } else {
+                            tr(
+                                spanish = "Factura $label creada. Pagos guardados localmente.",
+                                english = "Invoice $label created. Payments saved locally.",
+                            ) + paymentsSyncWarning
+                          }
                         }
 
                         else -> {
@@ -1407,12 +1458,6 @@ class BillingViewModel(
     }
 
     val rounded = resolveRoundedTotal(totals.total, invoiceCurrency)
-    val payments =
-        buildInvoicePayments(
-            paymentLines = paymentLines,
-            paidAmount = postingDecision.paidAmount,
-            invoiceCurrency = invoiceCurrency,
-        )
     val resolvedPaid = roundForCurrency(postingDecision.paidAmount, invoiceCurrency)
     val resolvedOutstanding = roundForCurrency(postingDecision.outstandingAmount, invoiceCurrency)
     val resolvedChange = roundForCurrency(postingDecision.changeAmount, invoiceCurrency)
@@ -1458,7 +1503,7 @@ class BillingViewModel(
         additionalDiscountPercentage = resolvedDiscountPercent,
         couponCode = couponCode,
         items = items,
-        payments = payments,
+        payments = emptyList(),
         paymentSchedule = paymentSchedule,
         paymentTerms = if (current.isCreditSale) current.selectedPaymentTerm?.name else null,
         posProfile = if (postingDecision.isPos) context.profileName else null,
@@ -1470,34 +1515,6 @@ class BillingViewModel(
         isPos = postingDecision.isPos,
         doctype = "Sales Invoice",
     )
-  }
-
-  private fun buildInvoicePayments(
-      paymentLines: List<PaymentLine>,
-      paidAmount: Double,
-      invoiceCurrency: String,
-  ): List<SalesInvoicePaymentDto> {
-    if (paidAmount <= 0.0) return emptyList()
-    var remaining = roundForCurrency(paidAmount, invoiceCurrency)
-    val payments = mutableListOf<SalesInvoicePaymentDto>()
-    paymentLines.forEach { line ->
-      if (remaining <= 0.0) return@forEach
-      val mode = line.modeOfPayment.trim()
-      if (mode.isBlank()) return@forEach
-      val baseAmount = roundForCurrency(line.baseAmount.coerceAtLeast(0.0), invoiceCurrency)
-      if (baseAmount <= 0.0) return@forEach
-      val applied = roundForCurrency(minOf(baseAmount, remaining), invoiceCurrency)
-      if (applied <= 0.0) return@forEach
-      payments +=
-          SalesInvoicePaymentDto(
-              modeOfPayment = mode,
-              amount = applied,
-              account = null,
-              paymentReference = line.referenceNumber,
-          )
-      remaining = roundForCurrency((remaining - applied).coerceAtLeast(0.0), invoiceCurrency)
-    }
-    return payments
   }
 
   private fun buildInvoiceItems(

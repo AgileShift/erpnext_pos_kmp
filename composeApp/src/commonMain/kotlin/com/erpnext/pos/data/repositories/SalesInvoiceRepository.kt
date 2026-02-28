@@ -20,7 +20,6 @@ import com.erpnext.pos.localSource.entities.SalesInvoiceItemEntity
 import com.erpnext.pos.localSource.entities.SalesInvoiceWithItemsAndPayments
 import com.erpnext.pos.remoteSource.datasources.SalesInvoiceRemoteSource
 import com.erpnext.pos.remoteSource.dto.SalesInvoiceDto
-import com.erpnext.pos.remoteSource.dto.SalesInvoicePaymentDto
 import com.erpnext.pos.remoteSource.mapper.toDto
 import com.erpnext.pos.remoteSource.mapper.toEntities
 import com.erpnext.pos.remoteSource.mapper.toEntity
@@ -37,11 +36,11 @@ import com.erpnext.pos.utils.roundToCurrency
 import com.erpnext.pos.utils.savePdfFile
 import com.erpnext.pos.utils.view.DateTimeProvider
 import com.erpnext.pos.views.CashBoxManager
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flowOf
 import kotlin.math.abs
 import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.flowOf
 
 @OptIn(ExperimentalTime::class)
 class SalesInvoiceRepository(
@@ -543,11 +542,10 @@ class SalesInvoiceRepository(
     }
     val draft =
         ensureDraftDocStatus(
-            ensurePaymentEntryOnlyInvoice(
-                enrichPaymentsWithAccount(ensurePosOpeningEntry(ensurePosProfile(invoice)))
-            )
+            enrichPaymentsWithAccount(ensurePosOpeningEntry(ensurePosProfile(invoice)))
         )
-    return remoteSource.createInvoice(draft)
+    val invoiceOnly = sanitizeInvoiceForPaymentEntry(draft)
+    return remoteSource.createInvoice(invoiceOnly)
   }
 
   override suspend fun deleteRemoteInvoice(invoiceId: String) {
@@ -678,11 +676,9 @@ class SalesInvoiceRepository(
       }
     }
 
-    val dto =
-        ensureDraftDocStatus(
-            ensurePaymentEntryOnlyInvoice(enrichPaymentsWithAccount(payloadForSync.toDto()))
-        )
-    val created = remoteSource.createInvoice(dto)
+    val dto = ensureDraftDocStatus(enrichPaymentsWithAccount(payloadForSync.toDto()))
+    val invoiceOnly = sanitizeInvoiceForPaymentEntry(dto)
+    val created = remoteSource.createInvoice(invoiceOnly)
     updateLocalInvoiceFromRemote(localName, created)
     check((created.docStatus ?: 0) != 0) {
       val createdName = created.name ?: localName
@@ -874,63 +870,6 @@ class SalesInvoiceRepository(
 
   private fun ensureDraftDocStatus(dto: SalesInvoiceDto): SalesInvoiceDto {
     return if (dto.docStatus == null || dto.docStatus == 0) dto else dto.copy(docStatus = 0)
-  }
-
-  private suspend fun ensurePaymentEntryOnlyInvoice(dto: SalesInvoiceDto): SalesInvoiceDto {
-    if (dto.isReturn == 1) return dto
-    val placeholderMode =
-        resolvePosPlaceholderMode(dto)
-            ?: error("No hay modo de pago POS configurado para crear la factura.")
-    val normalizedOutstanding = roundToCurrency(dto.grandTotal)
-    return dto.copy(
-        payments =
-            listOf(
-                SalesInvoicePaymentDto(
-                    modeOfPayment = placeholderMode,
-                    amount = 0.0,
-                    account = null,
-                    paymentReference = null,
-                )
-            ),
-        paidAmount = 0.0,
-        changeAmount = null,
-        writeOffAmount = null,
-        outstandingAmount = normalizedOutstanding,
-        status = "Unpaid",
-    )
-  }
-
-  private suspend fun resolvePosPlaceholderMode(dto: SalesInvoiceDto): String? {
-    val invoiceCurrency = normalizeCurrency(dto.currency ?: dto.partyAccountCurrency)
-    val definitions =
-        runCatching { modeOfPaymentDao.getAllModes(dto.company) }.getOrElse { emptyList() }
-    val details = buildPaymentModeDetailMap(definitions)
-
-    val payloadModes =
-        dto.payments
-            .mapNotNull { it.modeOfPayment.trim().takeIf { mode -> mode.isNotBlank() } }
-            .distinct()
-
-    payloadModes
-        .firstOrNull { mode ->
-          val modeCurrency = details[mode]?.currency?.let { normalizeCurrency(it) }
-          !modeCurrency.isNullOrBlank() && modeCurrency.equals(invoiceCurrency, ignoreCase = true)
-        }
-        ?.let {
-          return it
-        }
-
-    definitions
-        .firstOrNull { definition ->
-          val modeCurrency = definition.currency?.let { normalizeCurrency(it) }
-          !modeCurrency.isNullOrBlank() && modeCurrency.equals(invoiceCurrency, ignoreCase = true)
-        }
-        ?.modeOfPayment
-        ?.let {
-          return it
-        }
-
-    return payloadModes.firstOrNull() ?: definitions.firstOrNull()?.modeOfPayment
   }
 
   override suspend fun sync(): Flow<Resource<List<SalesInvoiceBO>>> {

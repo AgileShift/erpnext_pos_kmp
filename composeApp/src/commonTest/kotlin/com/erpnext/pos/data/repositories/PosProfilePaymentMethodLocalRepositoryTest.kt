@@ -4,10 +4,10 @@ import com.erpnext.pos.localSource.dao.PosProfilePaymentMethodDao
 import com.erpnext.pos.localSource.dao.ResolvedPaymentMethod
 import com.erpnext.pos.localSource.entities.ModeOfPaymentEntity
 import com.erpnext.pos.localSource.entities.PosProfilePaymentMethodEntity
+import kotlinx.coroutines.runBlocking
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
-import kotlinx.coroutines.runBlocking
 
 class PosProfilePaymentMethodLocalRepositoryTest {
   @Test
@@ -121,7 +121,8 @@ class PosProfilePaymentMethodLocalRepositoryTest {
           )
         }
 
-    dao.deleteStaleForProfile("POS-A", listOf("CASH_NIO"))
+    dao.softDeleteStaleForProfile("POS-A", listOf("CASH_NIO"))
+    dao.hardDeleteDeletedStaleForProfile("POS-A", listOf("CASH_NIO"))
 
     assertEquals(1, dao.countRelationsForProfile("POS-A"))
     assertEquals(1, dao.countRelationsForProfile("POS-B"))
@@ -183,10 +184,11 @@ private class InMemoryPosProfilePaymentMethodDao : PosProfilePaymentMethodDao {
       profileId: String
   ): List<ResolvedPaymentMethod> {
     return relations
-        .filter { it.profileId == profileId }
+        .filter { it.profileId == profileId && !it.isDeleted }
         .sortedBy { it.idx }
         .mapNotNull { relation ->
           val mode = modes[relation.mopName] ?: return@mapNotNull null
+          if (!mode.enabled) return@mapNotNull null
           ResolvedPaymentMethod(
               mopName = relation.mopName,
               type = mode.type,
@@ -206,14 +208,77 @@ private class InMemoryPosProfilePaymentMethodDao : PosProfilePaymentMethodDao {
   }
 
   override suspend fun countRelationsForProfile(profileId: String): Int {
-    return relations.count { it.profileId == profileId }
+    return relations.count { it.profileId == profileId && !it.isDeleted }
   }
 
-  override suspend fun deleteStaleForProfile(profileId: String, activeMops: List<String>) {
-    relations.removeAll { it.profileId == profileId && it.mopName !in activeMops }
+  override suspend fun countAllRelations(): Int {
+    return relations.count { !it.isDeleted }
   }
 
-  override suspend fun deleteAllForProfile(profileId: String) {
-    relations.removeAll { it.profileId == profileId }
+  override suspend fun softDeleteStaleForProfile(profileId: String, activeMops: List<String>) {
+    mutateRelations { relation ->
+      if (
+          relation.profileId == profileId &&
+              !relation.isDeleted &&
+              relation.mopName !in activeMops
+      ) {
+        relation.copy(isDeleted = true)
+      } else {
+        relation
+      }
+    }
+  }
+
+  override suspend fun hardDeleteDeletedStaleForProfile(
+      profileId: String,
+      activeMops: List<String>,
+  ) {
+    relations.removeAll {
+      it.profileId == profileId && it.isDeleted && it.mopName !in activeMops
+    }
+  }
+
+  override suspend fun softDeleteAllForProfile(profileId: String) {
+    mutateRelations { relation ->
+      if (relation.profileId == profileId && !relation.isDeleted) {
+        relation.copy(isDeleted = true)
+      } else {
+        relation
+      }
+    }
+  }
+
+  override suspend fun hardDeleteAllDeletedForProfile(profileId: String) {
+    relations.removeAll { it.profileId == profileId && it.isDeleted }
+  }
+
+  override suspend fun softDeleteForProfilesNotIn(profileIds: List<String>) {
+    mutateRelations { relation ->
+      if (!relation.isDeleted && relation.profileId !in profileIds) {
+        relation.copy(isDeleted = true)
+      } else {
+        relation
+      }
+    }
+  }
+
+  override suspend fun hardDeleteDeletedForProfilesNotIn(profileIds: List<String>) {
+    relations.removeAll { it.isDeleted && it.profileId !in profileIds }
+  }
+
+  override suspend fun softDeleteAllRelations() {
+    mutateRelations { relation ->
+      if (!relation.isDeleted) relation.copy(isDeleted = true) else relation
+    }
+  }
+
+  override suspend fun hardDeleteAllDeletedRelations() {
+    relations.removeAll { it.isDeleted }
+  }
+
+  private fun mutateRelations(transform: (PosProfilePaymentMethodEntity) -> PosProfilePaymentMethodEntity) {
+    val updated = relations.map(transform)
+    relations.clear()
+    relations.addAll(updated)
   }
 }
