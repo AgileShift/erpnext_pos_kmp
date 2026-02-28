@@ -5,7 +5,7 @@ import kotlin.uuid.Uuid
 
 @OptIn(ExperimentalUuidApi::class)
 actual class UUIDGenerator actual constructor() {
-    actual fun newId(): String {
-        return Uuid.random().toString()
-    }
+  actual fun newId(): String {
+    return Uuid.random().toString()
+  }
 }

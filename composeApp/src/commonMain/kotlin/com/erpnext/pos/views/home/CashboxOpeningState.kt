@@ -9,5 +9,5 @@ data class CashboxOpeningProfileState(
     val methods: List<ResolvedPaymentMethod> = emptyList(),
     val cashMethodsByCurrency: Map<String, List<ResolvedPaymentMethod>> = emptyMap(),
     val isLoading: Boolean = false,
-    val error: String? = null
+    val error: String? = null,
 )

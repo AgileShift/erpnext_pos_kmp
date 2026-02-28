@@ -15,25 +15,25 @@ import kotlinx.coroutines.launch
 class SplashViewModel(
     private val navigationManager: NavigationManager,
     private val tokenStore: TokenStore,
-    private val contextProvider: CashBoxManager
+    private val contextProvider: CashBoxManager,
 ) : BaseViewModel() {
 
-    private val _stateFlow: MutableStateFlow<SplashState> = MutableStateFlow(SplashState.Loading)
-    val stateFlow: StateFlow<SplashState> = _stateFlow.asStateFlow()
+  private val _stateFlow: MutableStateFlow<SplashState> = MutableStateFlow(SplashState.Loading)
+  val stateFlow: StateFlow<SplashState> = _stateFlow.asStateFlow()
 
-    suspend fun initializeContext() = contextProvider.initializeContext()
+  suspend fun initializeContext() = contextProvider.initializeContext()
 
-    fun verifyToken() {
-        _stateFlow.update { SplashState.Loading }
-        viewModelScope.launch {
-            if (tokenStore.load() == null) {
-                // No hay sesión previa
-                navigationManager.navigateTo(NavRoute.Login)
-                _stateFlow.update { SplashState.InvalidToken }
-                return@launch
-            }
-            navigationManager.navigateTo(NavRoute.Home)
-            _stateFlow.update { SplashState.Success }
-        }
+  fun verifyToken() {
+    _stateFlow.update { SplashState.Loading }
+    viewModelScope.launch {
+      if (tokenStore.load() == null) {
+        // No hay sesión previa
+        navigationManager.navigateTo(NavRoute.Login)
+        _stateFlow.update { SplashState.InvalidToken }
+        return@launch
+      }
+      navigationManager.navigateTo(NavRoute.Home)
+      _stateFlow.update { SplashState.Success }
     }
+  }
 }

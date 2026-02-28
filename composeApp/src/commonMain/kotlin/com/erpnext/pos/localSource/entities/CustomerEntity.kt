@@ -17,20 +17,16 @@ data class CustomerEntity(
     var customerType: String,
     var creditLimit: Double? = null,
     var currentBalance: Double? = 0.0,
-    var totalPendingAmount: Double? = 0.0,  // Sum outstanding_amount
+    var totalPendingAmount: Double? = 0.0, // Sum outstanding_amount
     var pendingInvoicesCount: Int? = 0,
     var availableCredit: Double? = 0.0,
-    @ColumnInfo(name = "party_account_currency")
-    var partyAccountCurrency: String? = null,
-    @ColumnInfo(name = "receivable_account")
-    var receivableAccount: String? = null,
-    @ColumnInfo(name = "receivable_account_currency")
-    var receivableAccountCurrency: String? = null,
+    @ColumnInfo(name = "party_account_currency") var partyAccountCurrency: String? = null,
+    @ColumnInfo(name = "receivable_account") var receivableAccount: String? = null,
+    @ColumnInfo(name = "receivable_account_currency") var receivableAccountCurrency: String? = null,
     var image: String? = null,
     var address: String? = null,
     var state: String? = null,
-    @ColumnInfo(name = "is_deleted")
-    var isDeleted: Boolean = false,
+    @ColumnInfo(name = "is_deleted") var isDeleted: Boolean = false,
     @ColumnInfo(name = "last_synced_at")
-    override var lastSyncedAt: Long? = Clock.System.now().toEpochMilliseconds() // Formatted
+    override var lastSyncedAt: Long? = Clock.System.now().toEpochMilliseconds(), // Formatted
 ) : SyncableEntity

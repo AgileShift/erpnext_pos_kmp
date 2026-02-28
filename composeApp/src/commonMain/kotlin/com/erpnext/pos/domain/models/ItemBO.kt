@@ -16,5 +16,5 @@ data class ItemBO(
     var isService: Boolean = false,
     var isStocked: Boolean = false,
     var uom: String,
-    var lastSyncedAt: Long? = null
+    var lastSyncedAt: Long? = null,
 )

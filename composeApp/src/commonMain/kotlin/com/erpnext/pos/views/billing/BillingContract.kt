@@ -19,113 +19,117 @@ data class PaymentLine(
     val currency: String,
     val exchangeRate: Double,
     val baseAmount: Double,
-    val referenceNumber: String? = null
+    val referenceNumber: String? = null,
 )
 
 /**
- * Data classes for state and actions, assuming a more robust structure.
- * You should move these to your state and action files accordingly.
+ * Data classes for state and actions, assuming a more robust structure. You should move these to
+ * your state and action files accordingly.
  */
 sealed interface BillingState {
-    object Loading : BillingState
-    data class Success(
-        val paymentModeCurrencyByMode: Map<String, String> = emptyMap(),
+  object Loading : BillingState
 
-        // Customer-related state
-        val customers: List<CustomerBO> = emptyList(),
-        val selectedCustomer: CustomerBO? = null,
-        val customerSearchQuery: String = "",
-        val salesFlowContext: SalesFlowContext? = null,
-        val sourceDocument: SourceDocumentOption? = null,
-        val isSourceDocumentApplied: Boolean = false,
-        val sourceDocuments: List<SourceDocumentOption> = emptyList(),
-        val isLoadingSourceDocuments: Boolean = false,
-        val sourceDocumentsError: String? = null,
+  data class Success(
+      val paymentModeCurrencyByMode: Map<String, String> = emptyMap(),
 
-        // Product-related state
-        val productSearchQuery: String = "",
-        val selectedProductCategory: String = "Todos",
-        val productCategories: List<String> = emptyList(),
+      // Customer-related state
+      val customers: List<CustomerBO> = emptyList(),
+      val selectedCustomer: CustomerBO? = null,
+      val customerSearchQuery: String = "",
+      val salesFlowContext: SalesFlowContext? = null,
+      val sourceDocument: SourceDocumentOption? = null,
+      val isSourceDocumentApplied: Boolean = false,
+      val sourceDocuments: List<SourceDocumentOption> = emptyList(),
+      val isLoadingSourceDocuments: Boolean = false,
+      val sourceDocumentsError: String? = null,
 
-        // Cart-related state
-        val currency: String?,
-        val baseCurrency: String? = null,
-        val exchangeRate: Double?,
-        val cartItems: List<CartItem> = emptyList(),
-        val subtotal: Double = 0.0,
-        val taxes: Double = 0.0,
-        val discount: Double = 0.0,
-        val discountCode: String = "",
-        val manualDiscountAmount: Double = 0.0,
-        val manualDiscountPercent: Double = 0.0,
-        val applyDiscountOn: String = "Grand Total",
-        val shippingAmount: Double = 0.0,
-        val deliveryCharges: List<DeliveryChargeBO> = emptyList(),
-        val selectedDeliveryCharge: DeliveryChargeBO? = null,
-        val total: Double = 0.0,
-        val isCreditSale: Boolean = false,
-        val paymentTerms: List<PaymentTermBO> = emptyList(),
-        val selectedPaymentTerm: PaymentTermBO? = null,
-        val paymentLines: List<PaymentLine> = emptyList(),
-        val paymentModes: List<POSPaymentModeOption> = emptyList(),
-        val allowedCurrencies: List<POSCurrencyOption> = emptyList(),
-        val exchangeRateByCurrency: Map<String, Double> = emptyMap(),
-        val paidAmountBase: Double = 0.0,
-        val balanceDueBase: Double = 0.0,
-        val changeDueBase: Double = 0.0,
-        val creditSaleTooltipMessage: String? = null,
-        val paymentErrorMessage: String? = null,
-        val cartErrorMessage: String? = null,
-        val successMessage: String? = null,
-        val successDialogMessage: String? = null,
-        val successDialogInvoice: String? = null,
-        val successDialogId: Long = 0L,
-        val isFinalizingSale: Boolean = false
-    ) : BillingState {
-        fun recalculatePaymentTotals(): Success {
-            val code = currency
-            val newPaidAmountBase = roundForCurrency(paymentLines.sumOf { it.baseAmount }, code)
-            val invoiceTolerance = resolveMinorUnitTolerance(code)
-            val fxTolerance = paymentLines.maxOfOrNull { line ->
-                val paymentTolerance = resolveMinorUnitTolerance(line.currency)
-                paymentTolerance * line.exchangeRate.coerceAtLeast(0.0)
-            } ?: 0.0
-            val tolerance = max(invoiceTolerance, fxTolerance)
-            val rawBalanceDue = total - newPaidAmountBase
-            val rawChangeDue = newPaidAmountBase - total
-            val newBalanceDueBase = roundForCurrency(
-                when {
-                    rawBalanceDue > 0.0 && rawBalanceDue <= tolerance -> 0.0
-                    else -> rawBalanceDue.coerceAtLeast(0.0)
-                },
-                code
-            )
-            val newChangeDueBase = roundForCurrency(
-                when {
-                    rawChangeDue > 0.0 && rawChangeDue <= tolerance -> 0.0
-                    else -> rawChangeDue.coerceAtLeast(0.0)
-                },
-                code
-            )
-            return copy(
-                paidAmountBase = newPaidAmountBase,
-                balanceDueBase = newBalanceDueBase,
-                changeDueBase = newChangeDueBase
-            )
-        }
+      // Product-related state
+      val productSearchQuery: String = "",
+      val selectedProductCategory: String = "Todos",
+      val productCategories: List<String> = emptyList(),
 
-        fun withPaymentLines(lines: List<PaymentLine>): Success {
-            return copy(paymentLines = lines, paymentErrorMessage = null).recalculatePaymentTotals()
-        }
+      // Cart-related state
+      val currency: String?,
+      val baseCurrency: String? = null,
+      val exchangeRate: Double?,
+      val cartItems: List<CartItem> = emptyList(),
+      val subtotal: Double = 0.0,
+      val taxes: Double = 0.0,
+      val discount: Double = 0.0,
+      val discountCode: String = "",
+      val manualDiscountAmount: Double = 0.0,
+      val manualDiscountPercent: Double = 0.0,
+      val applyDiscountOn: String = "Grand Total",
+      val shippingAmount: Double = 0.0,
+      val deliveryCharges: List<DeliveryChargeBO> = emptyList(),
+      val selectedDeliveryCharge: DeliveryChargeBO? = null,
+      val total: Double = 0.0,
+      val isCreditSale: Boolean = false,
+      val paymentTerms: List<PaymentTermBO> = emptyList(),
+      val selectedPaymentTerm: PaymentTermBO? = null,
+      val paymentLines: List<PaymentLine> = emptyList(),
+      val paymentModes: List<POSPaymentModeOption> = emptyList(),
+      val allowedCurrencies: List<POSCurrencyOption> = emptyList(),
+      val exchangeRateByCurrency: Map<String, Double> = emptyMap(),
+      val paidAmountBase: Double = 0.0,
+      val balanceDueBase: Double = 0.0,
+      val changeDueBase: Double = 0.0,
+      val creditSaleTooltipMessage: String? = null,
+      val paymentErrorMessage: String? = null,
+      val cartErrorMessage: String? = null,
+      val successMessage: String? = null,
+      val successDialogMessage: String? = null,
+      val successDialogInvoice: String? = null,
+      val successDialogId: Long = 0L,
+      val isFinalizingSale: Boolean = false,
+  ) : BillingState {
+    fun recalculatePaymentTotals(): Success {
+      val code = currency
+      val newPaidAmountBase = roundForCurrency(paymentLines.sumOf { it.baseAmount }, code)
+      val invoiceTolerance = resolveMinorUnitTolerance(code)
+      val fxTolerance =
+          paymentLines.maxOfOrNull { line ->
+            val paymentTolerance = resolveMinorUnitTolerance(line.currency)
+            paymentTolerance * line.exchangeRate.coerceAtLeast(0.0)
+          } ?: 0.0
+      val tolerance = max(invoiceTolerance, fxTolerance)
+      val rawBalanceDue = total - newPaidAmountBase
+      val rawChangeDue = newPaidAmountBase - total
+      val newBalanceDueBase =
+          roundForCurrency(
+              when {
+                rawBalanceDue > 0.0 && rawBalanceDue <= tolerance -> 0.0
+                else -> rawBalanceDue.coerceAtLeast(0.0)
+              },
+              code,
+          )
+      val newChangeDueBase =
+          roundForCurrency(
+              when {
+                rawChangeDue > 0.0 && rawChangeDue <= tolerance -> 0.0
+                else -> rawChangeDue.coerceAtLeast(0.0)
+              },
+              code,
+          )
+      return copy(
+          paidAmountBase = newPaidAmountBase,
+          balanceDueBase = newBalanceDueBase,
+          changeDueBase = newChangeDueBase,
+      )
     }
 
-    data class Error(
-        val message: String,
-        val previous: Success? = null,
-        val showSyncRates: Boolean = false
-    ) : BillingState
+    fun withPaymentLines(lines: List<PaymentLine>): Success {
+      return copy(paymentLines = lines, paymentErrorMessage = null).recalculatePaymentTotals()
+    }
+  }
 
-    object Empty : BillingState
+  data class Error(
+      val message: String,
+      val previous: Success? = null,
+      val showSyncRates: Boolean = false,
+  ) : BillingState
+
+  object Empty : BillingState
 }
 
 data class BillingAction(
@@ -152,5 +156,5 @@ data class BillingAction(
     val onLinkSource: (SalesFlowSource, String) -> Unit = { _, _ -> },
     val onClearSource: () -> Unit = {},
     val onLoadSourceDocuments: (SalesFlowSource) -> Unit = {},
-    val onSyncExchangeRates: () -> Unit = {}
+    val onSyncExchangeRates: () -> Unit = {},
 )

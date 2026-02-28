@@ -4,10 +4,10 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 
 class BillingResetController {
-    private val _events = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
-    val events = _events.asSharedFlow()
+  private val _events = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+  val events = _events.asSharedFlow()
 
-    fun reset() {
-        _events.tryEmit(Unit)
-    }
+  fun reset() {
+    _events.tryEmit(Unit)
+  }
 }

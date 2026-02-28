@@ -8,208 +8,209 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
-import org.jetbrains.compose.resources.Font
 import erpnextpos.composeapp.generated.resources.Manrope_VariableFont_wght
 import erpnextpos.composeapp.generated.resources.Res
 import org.jetbrains.compose.resources.ExperimentalResourceApi
+import org.jetbrains.compose.resources.Font
 
 enum class AppColorTheme(val label: String) {
-    Noir("Noir"), Sage("Sage"), Citrus("Citrus"), Ocean("Ocean"), Rose("Rose")
+  Noir("Noir"),
+  Sage("Sage"),
+  Citrus("Citrus"),
+  Ocean("Ocean"),
+  Rose("Rose"),
 }
 
 enum class AppThemeMode(val label: String) {
-    System("Sistema"), Light("Claro"), Dark("Oscuro")
+  System("Sistema"),
+  Light("Claro"),
+  Dark("Oscuro"),
 }
 
-private val NoirLight = lightColorScheme(
-    primary = Color(0xFF111827),
-    onPrimary = Color.White,
-    secondary = Color(0xFF4B5563),
-    background = Color(0xFFF8FAFC),
-    surface = Color.White,
-    surfaceVariant = Color(0xFFF3F4F6),
-    outlineVariant = Color(0xFFE5E7EB)
-)
+private val NoirLight =
+    lightColorScheme(
+        primary = Color(0xFF111827),
+        onPrimary = Color.White,
+        secondary = Color(0xFF4B5563),
+        background = Color(0xFFF8FAFC),
+        surface = Color.White,
+        surfaceVariant = Color(0xFFF3F4F6),
+        outlineVariant = Color(0xFFE5E7EB),
+    )
 
-private val NoirDark = darkColorScheme(
-    primary = Color(0xFFE5E7EB),
-    onPrimary = Color(0xFF0B0F16),
-    secondary = Color(0xFF9CA3AF),
-    background = Color(0xFF0B0F16),
-    surface = Color(0xFF111827),
-    surfaceVariant = Color(0xFF1F2937),
-    outlineVariant = Color(0xFF374151)
-)
+private val NoirDark =
+    darkColorScheme(
+        primary = Color(0xFFE5E7EB),
+        onPrimary = Color(0xFF0B0F16),
+        secondary = Color(0xFF9CA3AF),
+        background = Color(0xFF0B0F16),
+        surface = Color(0xFF111827),
+        surfaceVariant = Color(0xFF1F2937),
+        outlineVariant = Color(0xFF374151),
+    )
 
-private val SageLight = lightColorScheme(
-    primary = Color(0xFF0F766E),
-    onPrimary = Color.White,
-    secondary = Color(0xFF2F855A),
-    background = Color(0xFFF6FAF8),
-    surface = Color.White,
-    surfaceVariant = Color(0xFFEEF7F1),
-    outlineVariant = Color(0xFFD9E8DF)
-)
+private val SageLight =
+    lightColorScheme(
+        primary = Color(0xFF0F766E),
+        onPrimary = Color.White,
+        secondary = Color(0xFF2F855A),
+        background = Color(0xFFF6FAF8),
+        surface = Color.White,
+        surfaceVariant = Color(0xFFEEF7F1),
+        outlineVariant = Color(0xFFD9E8DF),
+    )
 
-private val SageDark = darkColorScheme(
-    primary = Color(0xFF8FE3C9),
-    onPrimary = Color(0xFF083C34),
-    secondary = Color(0xFF7BD3A5),
-    background = Color(0xFF0B1412),
-    surface = Color(0xFF0F1D19),
-    surfaceVariant = Color(0xFF132824),
-    outlineVariant = Color(0xFF25433C)
-)
+private val SageDark =
+    darkColorScheme(
+        primary = Color(0xFF8FE3C9),
+        onPrimary = Color(0xFF083C34),
+        secondary = Color(0xFF7BD3A5),
+        background = Color(0xFF0B1412),
+        surface = Color(0xFF0F1D19),
+        surfaceVariant = Color(0xFF132824),
+        outlineVariant = Color(0xFF25433C),
+    )
 
-private val CitrusLight = lightColorScheme(
-    primary = Color(0xFFB45309),
-    onPrimary = Color.White,
-    secondary = Color(0xFF9A3412),
-    background = Color(0xFFFFFBF5),
-    surface = Color.White,
-    surfaceVariant = Color(0xFFFFF4E5),
-    outlineVariant = Color(0xFFF3E5D0)
-)
+private val CitrusLight =
+    lightColorScheme(
+        primary = Color(0xFFB45309),
+        onPrimary = Color.White,
+        secondary = Color(0xFF9A3412),
+        background = Color(0xFFFFFBF5),
+        surface = Color.White,
+        surfaceVariant = Color(0xFFFFF4E5),
+        outlineVariant = Color(0xFFF3E5D0),
+    )
 
-private val CitrusDark = darkColorScheme(
-    primary = Color(0xFFFED7AA),
-    onPrimary = Color(0xFF3B1E06),
-    secondary = Color(0xFFF9A56A),
-    background = Color(0xFF14100B),
-    surface = Color(0xFF1A1410),
-    surfaceVariant = Color(0xFF2A1F16),
-    outlineVariant = Color(0xFF463628)
-)
+private val CitrusDark =
+    darkColorScheme(
+        primary = Color(0xFFFED7AA),
+        onPrimary = Color(0xFF3B1E06),
+        secondary = Color(0xFFF9A56A),
+        background = Color(0xFF14100B),
+        surface = Color(0xFF1A1410),
+        surfaceVariant = Color(0xFF2A1F16),
+        outlineVariant = Color(0xFF463628),
+    )
 
-private val OceanLight = lightColorScheme(
-    primary = Color(0xFF0369A1),
-    onPrimary = Color.White,
-    secondary = Color(0xFF0E7490),
-    background = Color(0xFFF3F7FB),
-    surface = Color.White,
-    surfaceVariant = Color(0xFFE6F0F7),
-    outlineVariant = Color(0xFFD4E2EE)
-)
+private val OceanLight =
+    lightColorScheme(
+        primary = Color(0xFF0369A1),
+        onPrimary = Color.White,
+        secondary = Color(0xFF0E7490),
+        background = Color(0xFFF3F7FB),
+        surface = Color.White,
+        surfaceVariant = Color(0xFFE6F0F7),
+        outlineVariant = Color(0xFFD4E2EE),
+    )
 
-private val OceanDark = darkColorScheme(
-    primary = Color(0xFF7DD3FC),
-    onPrimary = Color(0xFF0A2A3A),
-    secondary = Color(0xFF67E8F9),
-    background = Color(0xFF071319),
-    surface = Color(0xFF0C1B22),
-    surfaceVariant = Color(0xFF112733),
-    outlineVariant = Color(0xFF214152)
-)
+private val OceanDark =
+    darkColorScheme(
+        primary = Color(0xFF7DD3FC),
+        onPrimary = Color(0xFF0A2A3A),
+        secondary = Color(0xFF67E8F9),
+        background = Color(0xFF071319),
+        surface = Color(0xFF0C1B22),
+        surfaceVariant = Color(0xFF112733),
+        outlineVariant = Color(0xFF214152),
+    )
 
-private val RoseLight = lightColorScheme(
-    primary = Color(0xFFBE123C),
-    onPrimary = Color.White,
-    secondary = Color(0xFF9F1239),
-    background = Color(0xFFFFF5F7),
-    surface = Color.White,
-    surfaceVariant = Color(0xFFFFE4E6),
-    outlineVariant = Color(0xFFFAD0D6)
-)
+private val RoseLight =
+    lightColorScheme(
+        primary = Color(0xFFBE123C),
+        onPrimary = Color.White,
+        secondary = Color(0xFF9F1239),
+        background = Color(0xFFFFF5F7),
+        surface = Color.White,
+        surfaceVariant = Color(0xFFFFE4E6),
+        outlineVariant = Color(0xFFFAD0D6),
+    )
 
-private val RoseDark = darkColorScheme(
-    primary = Color(0xFFF9A8D4),
-    onPrimary = Color(0xFF3A0B1E),
-    secondary = Color(0xFFF472B6),
-    background = Color(0xFF180B12),
-    surface = Color(0xFF211017),
-    surfaceVariant = Color(0xFF321822),
-    outlineVariant = Color(0xFF4B2632)
-)
+private val RoseDark =
+    darkColorScheme(
+        primary = Color(0xFFF9A8D4),
+        onPrimary = Color(0xFF3A0B1E),
+        secondary = Color(0xFFF472B6),
+        background = Color(0xFF180B12),
+        surface = Color(0xFF211017),
+        surfaceVariant = Color(0xFF321822),
+        outlineVariant = Color(0xFF4B2632),
+    )
 
 @OptIn(ExperimentalResourceApi::class)
 @Composable
 fun rememberManropeFamily(): FontFamily {
-    return FontFamily(
-        Font(resource = Res.font.Manrope_VariableFont_wght, weight = FontWeight.Normal),
-        Font(resource = Res.font.Manrope_VariableFont_wght, weight = FontWeight.Medium),
-        Font(resource = Res.font.Manrope_VariableFont_wght, weight = FontWeight.SemiBold),
-        Font(resource = Res.font.Manrope_VariableFont_wght, weight = FontWeight.Bold),
-    )
+  return FontFamily(
+      Font(resource = Res.font.Manrope_VariableFont_wght, weight = FontWeight.Normal),
+      Font(resource = Res.font.Manrope_VariableFont_wght, weight = FontWeight.Medium),
+      Font(resource = Res.font.Manrope_VariableFont_wght, weight = FontWeight.SemiBold),
+      Font(resource = Res.font.Manrope_VariableFont_wght, weight = FontWeight.Bold),
+  )
 }
 
 @Composable
 private fun appTypography(): Typography {
-    val manrope = rememberManropeFamily()
-    val base = Typography()
+  val manrope = rememberManropeFamily()
+  val base = Typography()
 
-    return Typography(
-        displayLarge = base.displayLarge.copy(
-            fontFamily = manrope,
-            fontWeight = FontWeight.SemiBold,
-            letterSpacing = (-0.2).sp
-        ),
-        displayMedium = base.displayMedium.copy(
-            fontFamily = manrope,
-            fontWeight = FontWeight.SemiBold
-        ),
-        displaySmall = base.displaySmall.copy(
-            fontFamily = manrope,
-            fontWeight = FontWeight.SemiBold
-        ),
-
-        headlineLarge = base.headlineLarge.copy(
-            fontFamily = manrope,
-            fontWeight = FontWeight.SemiBold
-        ),
-        headlineMedium = base.headlineMedium.copy(
-            fontFamily = manrope,
-            fontWeight = FontWeight.SemiBold
-        ),
-        headlineSmall = base.headlineSmall.copy(
-            fontFamily = manrope,
-            fontWeight = FontWeight.Medium
-        ),
-
-        titleLarge = base.titleLarge.copy(fontFamily = manrope, fontWeight = FontWeight.SemiBold),
-        titleMedium = base.titleMedium.copy(fontFamily = manrope, fontWeight = FontWeight.Medium),
-        titleSmall = base.titleSmall.copy(fontFamily = manrope, fontWeight = FontWeight.Medium),
-
-        bodyLarge = base.bodyLarge.copy(fontFamily = manrope),
-        bodyMedium = base.bodyMedium.copy(fontFamily = manrope),
-        bodySmall = base.bodySmall.copy(fontFamily = manrope),
-
-        labelLarge = base.labelLarge.copy(fontFamily = manrope, fontWeight = FontWeight.SemiBold),
-        labelMedium = base.labelMedium.copy(fontFamily = manrope, fontWeight = FontWeight.Medium),
-        labelSmall = base.labelSmall.copy(fontFamily = manrope),
-    )
+  return Typography(
+      displayLarge =
+          base.displayLarge.copy(
+              fontFamily = manrope,
+              fontWeight = FontWeight.SemiBold,
+              letterSpacing = (-0.2).sp,
+          ),
+      displayMedium =
+          base.displayMedium.copy(fontFamily = manrope, fontWeight = FontWeight.SemiBold),
+      displaySmall = base.displaySmall.copy(fontFamily = manrope, fontWeight = FontWeight.SemiBold),
+      headlineLarge =
+          base.headlineLarge.copy(fontFamily = manrope, fontWeight = FontWeight.SemiBold),
+      headlineMedium =
+          base.headlineMedium.copy(fontFamily = manrope, fontWeight = FontWeight.SemiBold),
+      headlineSmall = base.headlineSmall.copy(fontFamily = manrope, fontWeight = FontWeight.Medium),
+      titleLarge = base.titleLarge.copy(fontFamily = manrope, fontWeight = FontWeight.SemiBold),
+      titleMedium = base.titleMedium.copy(fontFamily = manrope, fontWeight = FontWeight.Medium),
+      titleSmall = base.titleSmall.copy(fontFamily = manrope, fontWeight = FontWeight.Medium),
+      bodyLarge = base.bodyLarge.copy(fontFamily = manrope),
+      bodyMedium = base.bodyMedium.copy(fontFamily = manrope),
+      bodySmall = base.bodySmall.copy(fontFamily = manrope),
+      labelLarge = base.labelLarge.copy(fontFamily = manrope, fontWeight = FontWeight.SemiBold),
+      labelMedium = base.labelMedium.copy(fontFamily = manrope, fontWeight = FontWeight.Medium),
+      labelSmall = base.labelSmall.copy(fontFamily = manrope),
+  )
 }
 
 @Composable
 fun AppTheme(
     theme: AppColorTheme = AppColorTheme.Noir,
     themeMode: AppThemeMode = AppThemeMode.System,
-    content: @Composable() () -> Unit
+    content: @Composable() () -> Unit,
 ) {
-    val useDarkTheme = when (themeMode) {
+  val useDarkTheme =
+      when (themeMode) {
         AppThemeMode.System -> isSystemInDarkTheme()
         AppThemeMode.Dark -> true
         AppThemeMode.Light -> false
-    }
+      }
 
-    val colorScheme = if (useDarkTheme) {
+  val colorScheme =
+      if (useDarkTheme) {
         when (theme) {
-            AppColorTheme.Noir -> NoirDark
-            AppColorTheme.Sage -> SageDark
-            AppColorTheme.Citrus -> CitrusDark
-            AppColorTheme.Ocean -> OceanDark
-            AppColorTheme.Rose -> RoseDark
+          AppColorTheme.Noir -> NoirDark
+          AppColorTheme.Sage -> SageDark
+          AppColorTheme.Citrus -> CitrusDark
+          AppColorTheme.Ocean -> OceanDark
+          AppColorTheme.Rose -> RoseDark
         }
-    } else {
+      } else {
         when (theme) {
-            AppColorTheme.Noir -> NoirLight
-            AppColorTheme.Sage -> SageLight
-            AppColorTheme.Citrus -> CitrusLight
-            AppColorTheme.Ocean -> OceanLight
-            AppColorTheme.Rose -> RoseLight
+          AppColorTheme.Noir -> NoirLight
+          AppColorTheme.Sage -> SageLight
+          AppColorTheme.Citrus -> CitrusLight
+          AppColorTheme.Ocean -> OceanLight
+          AppColorTheme.Rose -> RoseLight
         }
-    }
+      }
 
-    MaterialTheme(
-        colorScheme = colorScheme, typography = appTypography(), content = content
-    )
+  MaterialTheme(colorScheme = colorScheme, typography = appTypography(), content = content)
 }

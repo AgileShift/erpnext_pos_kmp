@@ -24,128 +24,120 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
 enum class SnackbarType {
-    Info, Success, Error, Loading
+  Info,
+  Success,
+  Error,
+  Loading,
 }
 
 data class UiSnackbar(
     val message: String,
     val type: SnackbarType,
-    val position: SnackbarPosition = SnackbarPosition.Bottom
+    val position: SnackbarPosition = SnackbarPosition.Bottom,
 )
 
 enum class SnackbarPosition {
-    Top, Bottom
+  Top,
+  Bottom,
 }
 
 class SnackbarController {
-    private val _snackbar = MutableStateFlow<UiSnackbar?>(null)
-    val snackbar = _snackbar.asStateFlow()
+  private val _snackbar = MutableStateFlow<UiSnackbar?>(null)
+  val snackbar = _snackbar.asStateFlow()
 
-    fun show(
-        message: String,
-        type: SnackbarType,
-        position: SnackbarPosition = SnackbarPosition.Bottom
-    ) {
-        _snackbar.value = UiSnackbar(message, type, position)
-    }
+  fun show(
+      message: String,
+      type: SnackbarType,
+      position: SnackbarPosition = SnackbarPosition.Bottom,
+  ) {
+    _snackbar.value = UiSnackbar(message, type, position)
+  }
 
-    fun dismiss() {
-        _snackbar.value = null
-    }
+  fun dismiss() {
+    _snackbar.value = null
+  }
 }
 
-
-//TODO: Necesitamos mejorar los efectos de entrada y salida, y la salida tien que ser automatica y/po al usuario hacer click
-//TODO: Agregar la posibilidad de un boton de accion
+// TODO: Necesitamos mejorar los efectos de entrada y salida, y la salida tien que ser automatica
+// y/po al usuario hacer click
+// TODO: Agregar la posibilidad de un boton de accion
 @Composable
-fun SnackbarHost(
-    snackbar: UiSnackbar?,
-    onDismiss: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    LaunchedEffect(snackbar?.message, snackbar?.type, snackbar?.position) {
-        if (snackbar == null) return@LaunchedEffect
-        if (snackbar.type != SnackbarType.Loading) {
-            delay(2500)
-            onDismiss()
-        }
+fun SnackbarHost(snackbar: UiSnackbar?, onDismiss: () -> Unit, modifier: Modifier = Modifier) {
+  LaunchedEffect(snackbar?.message, snackbar?.type, snackbar?.position) {
+    if (snackbar == null) return@LaunchedEffect
+    if (snackbar.type != SnackbarType.Loading) {
+      delay(2500)
+      onDismiss()
     }
+  }
 
-    val alignment = when (snackbar?.position) {
+  val alignment =
+      when (snackbar?.position) {
         SnackbarPosition.Top -> Alignment.TopCenter
         else -> Alignment.BottomCenter
-    }
+      }
 
-    Box(
-        modifier = modifier
-            .fillMaxSize()
-            .padding(14.dp),
-        contentAlignment = alignment
+  Box(modifier = modifier.fillMaxSize().padding(14.dp), contentAlignment = alignment) {
+    AnimatedVisibility(
+        visible = snackbar != null,
+        enter = slideInVertically { if (alignment == Alignment.TopCenter) -it else it } + fadeIn(),
+        exit = slideOutVertically { if (alignment == Alignment.TopCenter) -it else it } + fadeOut(),
     ) {
-        AnimatedVisibility(
-            visible = snackbar != null,
-            enter = slideInVertically { if (alignment == Alignment.TopCenter) -it else it } + fadeIn(),
-            exit = slideOutVertically { if (alignment == Alignment.TopCenter) -it else it } + fadeOut()
-        ) {
-            snackbar?.let {
-                ModernSnackbar(it, onDismiss)
-            }
-        }
+      snackbar?.let { ModernSnackbar(it, onDismiss) }
     }
+  }
 }
 
 @Composable
 fun ModernSnackbar(snackbar: UiSnackbar, onDismiss: () -> Unit) {
-    val colors = when (snackbar.type) {
+  val colors =
+      when (snackbar.type) {
         SnackbarType.Success -> MaterialTheme.colorScheme.primary
         SnackbarType.Error -> MaterialTheme.colorScheme.error
         SnackbarType.Loading -> MaterialTheme.colorScheme.secondary
         SnackbarType.Info -> MaterialTheme.colorScheme.surfaceVariant
-    }
+      }
 
-    val contentColor = when (snackbar.type) {
+  val contentColor =
+      when (snackbar.type) {
         SnackbarType.Success -> MaterialTheme.colorScheme.onPrimary
         SnackbarType.Error -> MaterialTheme.colorScheme.onError
         SnackbarType.Loading -> MaterialTheme.colorScheme.onSecondary
         SnackbarType.Info -> MaterialTheme.colorScheme.onSurfaceVariant
-    }
+      }
 
-    Surface(
-        shape = RoundedCornerShape(24.dp),
-        tonalElevation = 8.dp,
-        color = colors.copy(alpha = 0.92f),
-        modifier = Modifier
-            .fillMaxWidth(0.92f)
-            .clickable { onDismiss() }
+  Surface(
+      shape = RoundedCornerShape(24.dp),
+      tonalElevation = 8.dp,
+      color = colors.copy(alpha = 0.92f),
+      modifier = Modifier.fillMaxWidth(0.92f).clickable { onDismiss() },
+  ) {
+    Row(
+        modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            if (snackbar.type == SnackbarType.Loading) {
-                CircularProgressIndicator(
-                    strokeWidth = 2.dp,
-                    color = contentColor,
-                    modifier = Modifier.size(18.dp),
-                )
-                Spacer(Modifier.width(12.dp))
-            }
+      if (snackbar.type == SnackbarType.Loading) {
+        CircularProgressIndicator(
+            strokeWidth = 2.dp,
+            color = contentColor,
+            modifier = Modifier.size(18.dp),
+        )
+        Spacer(Modifier.width(12.dp))
+      }
 
-            Text(
-                text = snackbar.message,
-                style = MaterialTheme.typography.bodyMedium,
-                color = contentColor
-            )
-        }
+      Text(
+          text = snackbar.message,
+          style = MaterialTheme.typography.bodyMedium,
+          color = contentColor,
+      )
     }
+  }
 }
 
-@Composable
-fun rememberSnackbarController(): SnackbarController = remember { SnackbarController() }
+@Composable fun rememberSnackbarController(): SnackbarController = remember { SnackbarController() }

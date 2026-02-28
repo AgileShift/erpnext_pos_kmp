@@ -8,5 +8,4 @@ class POSProfileViewModel(
     private val navManager: NavigationManager,
     private val fetchPosProfileUseCase: FetchPosProfileUseCase,
     private val fetchUserInfoUseCase: FetchUserInfoUseCase,
-) {
-}
+) {}

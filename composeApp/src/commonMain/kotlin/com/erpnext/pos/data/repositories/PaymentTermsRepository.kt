@@ -10,37 +10,37 @@ import io.ktor.client.plugins.ClientRequestException
 
 class PaymentTermsRepository(
     private val api: APIService,
-    private val localSource: PaymentTermLocalSource
+    private val localSource: PaymentTermLocalSource,
 ) {
-    suspend fun getLocalPaymentTerms(): List<PaymentTermBO> {
-        RepoTrace.breadcrumb("PaymentTermsRepository", "getLocalPaymentTerms")
-        return localSource.getAll().map { it.toBO() }
-    }
+  suspend fun getLocalPaymentTerms(): List<PaymentTermBO> {
+    RepoTrace.breadcrumb("PaymentTermsRepository", "getLocalPaymentTerms")
+    return localSource.getAll().map { it.toBO() }
+  }
 
-    suspend fun fetchPaymentTerms(): List<PaymentTermBO> {
-        RepoTrace.breadcrumb("PaymentTermsRepository", "fetchPaymentTerms")
+  suspend fun fetchPaymentTerms(): List<PaymentTermBO> {
+    RepoTrace.breadcrumb("PaymentTermsRepository", "fetchPaymentTerms")
 
-        val localData = localSource.getAll().map { it.toBO() }
+    val localData = localSource.getAll().map { it.toBO() }
 
-        return runCatching { api.fetchPaymentTerms() }
-            .onSuccess { terms ->
-                val entities = terms.map { it.toEntity() }
-                if (entities.isNotEmpty()) {
-                    localSource.insertAll(entities)
-                }
-                val names = entities.map { it.name }.ifEmpty { listOf("__empty__") }
-                localSource.hardDeleteDeletedMissing(names)
-                localSource.softDeleteMissing(names)
-            }
-            .map { terms -> terms.map { it.toEntity().toBO() } }
-            .getOrElse { error ->
-                if (error is ClientRequestException && error.response.status.value == 404) {
-                    localSource.hardDeleteAllDeleted()
-                    localSource.softDeleteAll()
-                    return emptyList()
-                }
-                RepoTrace.capture("PaymentTermsRepository", "fetchPaymentTerms", error)
-                localData
-            }
-    }
+    return runCatching { api.fetchPaymentTerms() }
+        .onSuccess { terms ->
+          val entities = terms.map { it.toEntity() }
+          if (entities.isNotEmpty()) {
+            localSource.insertAll(entities)
+          }
+          val names = entities.map { it.name }.ifEmpty { listOf("__empty__") }
+          localSource.hardDeleteDeletedMissing(names)
+          localSource.softDeleteMissing(names)
+        }
+        .map { terms -> terms.map { it.toEntity().toBO() } }
+        .getOrElse { error ->
+          if (error is ClientRequestException && error.response.status.value == 404) {
+            localSource.hardDeleteAllDeleted()
+            localSource.softDeleteAll()
+            return emptyList()
+          }
+          RepoTrace.capture("PaymentTermsRepository", "fetchPaymentTerms", error)
+          localData
+        }
+  }
 }

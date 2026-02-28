@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [[ "${SKIP_GIT_HOOKS:-0}" == "1" ]]; then
+  echo "[pre-push] SKIP_GIT_HOOKS=1, skipping checks."
+  exit 0
+fi
+
+echo "[pre-push] Running quality gate (Spotless + Detekt + tests + Android compile)..."
+./gradlew spotlessCheck detekt test :androidApp:compileDebugKotlin

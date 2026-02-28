@@ -7,10 +7,8 @@ import kotlin.time.Clock
 
 @Entity(tableName = "tabCategory")
 data class CategoryEntity(
-    @PrimaryKey(autoGenerate = false)
-    var name: String,
-    @ColumnInfo(name = "is_deleted")
-    var isDeleted: Boolean = false,
+    @PrimaryKey(autoGenerate = false) var name: String,
+    @ColumnInfo(name = "is_deleted") var isDeleted: Boolean = false,
     @ColumnInfo(name = "last_synced_at")
-    var lastSyncedAt: Long = Clock.System.now().toEpochMilliseconds()
+    var lastSyncedAt: Long = Clock.System.now().toEpochMilliseconds(),
 )

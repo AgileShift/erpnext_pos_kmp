@@ -8,23 +8,25 @@ import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 
-class OpeningSessionPreferences(
-    private val store: ConfigurationStore
-) {
-    companion object {
-        private const val draftKey = "opening_session_draft"
-        private val json = Json { ignoreUnknownKeys = true; encodeDefaults = true }
+class OpeningSessionPreferences(private val store: ConfigurationStore) {
+  companion object {
+    private const val draftKey = "opening_session_draft"
+    private val json = Json {
+      ignoreUnknownKeys = true
+      encodeDefaults = true
     }
+  }
 
-    val draft: Flow<OpeningSessionDraft?> = store.observeRaw(draftKey).map { payload ->
+  val draft: Flow<OpeningSessionDraft?> =
+      store.observeRaw(draftKey).map { payload ->
         payload?.let { runCatching { json.decodeFromString<OpeningSessionDraft>(it) }.getOrNull() }
-    }
+      }
 
-    suspend fun saveDraft(draft: OpeningSessionDraft) {
-        store.saveRaw(draftKey, json.encodeToString(draft))
-    }
+  suspend fun saveDraft(draft: OpeningSessionDraft) {
+    store.saveRaw(draftKey, json.encodeToString(draft))
+  }
 
-    suspend fun clearDraft() {
-        store.delete(draftKey)
-    }
+  suspend fun clearDraft() {
+    store.delete(draftKey)
+  }
 }

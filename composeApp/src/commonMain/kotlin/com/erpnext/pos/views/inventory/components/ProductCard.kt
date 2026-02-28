@@ -52,164 +52,156 @@ fun ProductCard(
     product: ItemBO,
     isDesktop: Boolean = false,
     baseCurrency: String,
-    exchangeRate: Double
+    exchangeRate: Double,
 ) {
-    val formattedQty = remember(product.actualQty) {
-        formatDoubleToString(product.actualQty, 0)
-    }
-    val context = LocalPlatformContext.current
-    val strings = LocalAppStrings.current
-    val imageWidth = if (isDesktop) 170.dp else 110.dp
-    val cardHeight = if (isDesktop) 200.dp else 160.dp
-    val posBase = baseCurrency.trim().uppercase()
-    val itemCurrency = product.currency?.trim()?.uppercase().orEmpty()
-    val displayPrice = if (itemCurrency.isBlank() || itemCurrency == posBase) {
+  val formattedQty = remember(product.actualQty) { formatDoubleToString(product.actualQty, 0) }
+  val context = LocalPlatformContext.current
+  val strings = LocalAppStrings.current
+  val imageWidth = if (isDesktop) 170.dp else 110.dp
+  val cardHeight = if (isDesktop) 200.dp else 160.dp
+  val posBase = baseCurrency.trim().uppercase()
+  val itemCurrency = product.currency?.trim()?.uppercase().orEmpty()
+  val displayPrice =
+      if (itemCurrency.isBlank() || itemCurrency == posBase) {
         product.price
-    } else {
+      } else {
         bd(product.price * exchangeRate).toDouble(0)
-    }
-    val displayLabel = formatAmount(baseCurrency.toCurrencySymbol(), displayPrice)
-    val colorLabel = product.brand?.takeIf { it.isNotBlank() } ?: "--"
-    val sizeLabel = "--"
+      }
+  val displayLabel = formatAmount(baseCurrency.toCurrencySymbol(), displayPrice)
+  val colorLabel = product.brand?.takeIf { it.isNotBlank() } ?: "--"
+  val sizeLabel = "--"
 
-    val cardShape = RoundedCornerShape(18.dp)
-    Card(
-        modifier = Modifier
-            .background(MaterialTheme.colorScheme.background)
-            .fillMaxWidth()
-            .height(cardHeight)
-            .clip(cardShape),
-        shape = cardShape,
-        onClick = { actions.onItemClick(product) } // asegúrate de pasar product
+  val cardShape = RoundedCornerShape(18.dp)
+  Card(
+      modifier =
+          Modifier.background(MaterialTheme.colorScheme.background)
+              .fillMaxWidth()
+              .height(cardHeight)
+              .clip(cardShape),
+      shape = cardShape,
+      onClick = { actions.onItemClick(product) }, // asegúrate de pasar product
+  ) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically
+      Box(modifier = Modifier.width(imageWidth).fillMaxHeight().clip(cardShape)) {
+        SubcomposeAsyncImage(
+            model =
+                remember(product.image) {
+                  ImageRequest.Builder(context)
+                      .data(product.image?.ifBlank { "https://placehold.co/600x400" })
+                      .crossfade(true)
+                      .build()
+                },
+            contentDescription = product.name,
+            modifier = Modifier.fillMaxSize(),
+            contentScale = ContentScale.Crop,
+            loading = {
+              Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                CircularProgressIndicator(modifier = Modifier.size(24.dp))
+              }
+            },
+            error = {
+              AsyncImage(
+                  model = "https://placehold.co/600x400",
+                  contentScale = ContentScale.Crop,
+                  contentDescription = "placeholder",
+                  modifier = Modifier.fillMaxSize(),
+              )
+            },
+        )
+      }
+
+      Column(
+          modifier =
+              Modifier.weight(1f)
+                  .padding(end = if (isDesktop) 16.dp else 10.dp, top = 10.dp, bottom = 10.dp),
+          verticalArrangement = Arrangement.spacedBy(8.dp),
+          horizontalAlignment = Alignment.End,
+      ) {
+        Text(
+            product.name,
+            textAlign = TextAlign.End,
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis,
+        )
+
+        Text(
+            text = displayLabel,
+            fontWeight = FontWeight.Black,
+            style = MaterialTheme.typography.titleLarge,
+            color = MaterialTheme.colorScheme.primary,
+        )
+
+        Column(
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+            horizontalAlignment = Alignment.End,
         ) {
-            Box(
-                modifier = Modifier
-                    .width(imageWidth)
-                    .fillMaxHeight()
-                    .clip(cardShape)
-            ) {
-                SubcomposeAsyncImage(
-                    model = remember(product.image) {
-                        ImageRequest.Builder(context)
-                            .data(product.image?.ifBlank { "https://placehold.co/600x400" })
-                            .crossfade(true)
-                            .build()
-                    },
-                    contentDescription = product.name,
-                    modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Crop,
-                    loading = {
-                        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            CircularProgressIndicator(modifier = Modifier.size(24.dp))
-                        }
-                    },
-                    error = {
-                        AsyncImage(
-                            model = "https://placehold.co/600x400",
-                            contentScale = ContentScale.Crop,
-                            contentDescription = "placeholder",
-                            modifier = Modifier.fillMaxSize()
-                        )
-                    }
-                )
-            }
-
-            Column(
-                modifier = Modifier
-                    .weight(1f)
-                    .padding(end = if (isDesktop) 16.dp else 10.dp, top = 10.dp, bottom = 10.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-                horizontalAlignment = Alignment.End
-            ) {
-                Text(
-                    product.name,
-                    textAlign = TextAlign.End,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis
-                )
-
-                Text(
-                    text = displayLabel,
-                    fontWeight = FontWeight.Black,
-                    style = MaterialTheme.typography.titleLarge,
-                    color = MaterialTheme.colorScheme.primary
-                )
-
-                Column(
-                    verticalArrangement = Arrangement.spacedBy(6.dp),
-                    horizontalAlignment = Alignment.End
-                ) {
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(0.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        InfoBadge(
-                            label = "${strings.inventory.productAvailableLabel}: $formattedQty ${product.uom}",
-                            isMuted = false,
-                            bgColor = if (product.actualQty > 0) Color.Green.copy(alpha = .15f) else Color.Red.copy(
-                                alpha = .15f
-                            )
-                        )
-                    }
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        /*InfoBadge(
-                            label = "${strings.inventory.productCodeLabel}: ${product.itemCode}",
-                            isMuted = false
-                        )*/
-                        InfoBadge(label = "Color: $colorLabel", isMuted = false)
-                        InfoBadge(label = "Talla: $sizeLabel", isMuted = false)
-                    }
-                }
-            }
+          Row(
+              horizontalArrangement = Arrangement.spacedBy(0.dp),
+              verticalAlignment = Alignment.CenterVertically,
+          ) {
+            InfoBadge(
+                label = "${strings.inventory.productAvailableLabel}: $formattedQty ${product.uom}",
+                isMuted = false,
+                bgColor =
+                    if (product.actualQty > 0) Color.Green.copy(alpha = .15f)
+                    else Color.Red.copy(alpha = .15f),
+            )
+          }
+          Row(
+              horizontalArrangement = Arrangement.spacedBy(6.dp),
+              verticalAlignment = Alignment.CenterVertically,
+          ) {
+            /*InfoBadge(
+                label = "${strings.inventory.productCodeLabel}: ${product.itemCode}",
+                isMuted = false
+            )*/
+            InfoBadge(label = "Color: $colorLabel", isMuted = false)
+            InfoBadge(label = "Talla: $sizeLabel", isMuted = false)
+          }
         }
+      }
     }
+  }
 }
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun ProductMetadataRow(
-    category: String,
-    uom: String,
-    itemCode: String
-) {
-    FlowRow(
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalArrangement = Arrangement.spacedBy(4.dp)
-    ) {
-        MetadataPill(
-            label = "Category: ${
+fun ProductMetadataRow(category: String, uom: String, itemCode: String) {
+  FlowRow(
+      horizontalArrangement = Arrangement.spacedBy(8.dp),
+      verticalArrangement = Arrangement.spacedBy(4.dp),
+  ) {
+    MetadataPill(
+        label =
+            "Category: ${
                 category.lowercase().replaceFirstChar { it.titlecase() }
             }"
-        )
-        MetadataPill(label = "UOM: ${uom.lowercase().replaceFirstChar { it.titlecase() }}")
-        MetadataPill(label = "Code: $itemCode")
-    }
+    )
+    MetadataPill(label = "UOM: ${uom.lowercase().replaceFirstChar { it.titlecase() }}")
+    MetadataPill(label = "Code: $itemCode")
+  }
 }
 
 @Composable
 fun MetadataPill(label: String) {
-    Surface(
-        shape = RoundedCornerShape(8.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant,
-        tonalElevation = 0.dp
-    ) {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-        )
-    }
+  Surface(
+      shape = RoundedCornerShape(8.dp),
+      color = MaterialTheme.colorScheme.surfaceVariant,
+      tonalElevation = 0.dp,
+  ) {
+    Text(
+        text = label,
+        style = MaterialTheme.typography.labelSmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+    )
+  }
 }
 
 @Composable
@@ -217,50 +209,49 @@ private fun InfoBadge(
     label: String,
     isMuted: Boolean,
     bgColor: Color? = null,
-    textColor: Color? = null
+    textColor: Color? = null,
 ) {
-    val containerColor = if (isMuted) {
+  val containerColor =
+      if (isMuted) {
         bgColor ?: MaterialTheme.colorScheme.surfaceVariant
-    } else {
+      } else {
         bgColor ?: MaterialTheme.colorScheme.secondaryContainer
-    }
-    val textColor = if (isMuted) {
+      }
+  val textColor =
+      if (isMuted) {
         textColor ?: MaterialTheme.colorScheme.onSurfaceVariant
-    } else {
+      } else {
         textColor ?: MaterialTheme.colorScheme.onSecondaryContainer
-    }
-    Surface(
-        shape = RoundedCornerShape(10.dp),
-        color = containerColor,
-        tonalElevation = 0.dp
-    ) {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.labelMedium,
-            color = textColor,
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
-        )
-    }
+      }
+  Surface(shape = RoundedCornerShape(10.dp), color = containerColor, tonalElevation = 0.dp) {
+    Text(
+        text = label,
+        style = MaterialTheme.typography.labelMedium,
+        color = textColor,
+        modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+    )
+  }
 }
 
 @Composable
 @Preview
 fun ProductCardPreview() {
-    ProductCard(
-        actions = InventoryAction(),
-        product = ItemBO(
-            name = "Set de Fajas 272 - NEGRO y CAMEL",
-            price = 217.0,
-            actualQty = 0.0,
-            currency = "NIO",
-            itemGroup = "Grupo de prueba",
-            uom = "Unidad (es)",
-            itemCode = "123456",
-            image = "https://placehold.co/600x400",
-            description = "Descripción del producto de prueba"
-        ),
-        isDesktop = false,
-        baseCurrency = "NIO",
-        exchangeRate = 0.027
-    )
+  ProductCard(
+      actions = InventoryAction(),
+      product =
+          ItemBO(
+              name = "Set de Fajas 272 - NEGRO y CAMEL",
+              price = 217.0,
+              actualQty = 0.0,
+              currency = "NIO",
+              itemGroup = "Grupo de prueba",
+              uom = "Unidad (es)",
+              itemCode = "123456",
+              image = "https://placehold.co/600x400",
+              description = "Descripción del producto de prueba",
+          ),
+      isDesktop = false,
+      baseCurrency = "NIO",
+      exchangeRate = 0.027,
+  )
 }

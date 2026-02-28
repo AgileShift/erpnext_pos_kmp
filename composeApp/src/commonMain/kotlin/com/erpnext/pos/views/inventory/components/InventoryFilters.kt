@@ -26,86 +26,88 @@ fun InventoryFilters(
     categories: List<String>?,
     onQueryChange: (String) -> Unit,
     onCategoryChange: (String) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
-    Column(modifier = modifier) {
-        if (categories != null && categories.isNotEmpty()) {
-            LazyRow(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                contentPadding = PaddingValues(horizontal = 4.dp)
-            ) {
-                item {
-                    val isSelected = selectedCategory == "Todos los grupos de artículos"
-                    FilterChip(
-                        selected = isSelected,
-                        onClick = { onCategoryChange("Todos los grupos de artículos") },
-                        label = { Text("Todos", style = MaterialTheme.typography.labelMedium) },
-                        modifier = Modifier.height(32.dp),
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
-                            selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
-                            labelColor = MaterialTheme.colorScheme.onSurfaceVariant
-                        ),
-                        shape = RoundedCornerShape(12.dp),
-                        elevation = FilterChipDefaults.filterChipElevation(
-                            elevation = 0.dp,
-                            pressedElevation = 0.dp,
-                            focusedElevation = 0.dp,
-                            hoveredElevation = 0.dp,
-                            draggedElevation = 0.dp,
-                            disabledElevation = 0.dp
-                        )
-                    )
-                }
-                items(categories.reversed()) { category ->
-                    val isSelected = category == selectedCategory
-                    FilterChip(
-                        selected = isSelected,
-                        onClick = {
-                            onCategoryChange(category)
-                        },
-                        label = {
-                            Text(
-                                category.lowercase().replaceFirstChar { it.titlecase() },
-                                style = MaterialTheme.typography.labelMedium
-                            )
-                        },
-                        modifier = Modifier.height(32.dp),
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
-                            selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
-                            labelColor = MaterialTheme.colorScheme.onSurfaceVariant
-                        ),
-                        shape = RoundedCornerShape(12.dp),
-                        elevation = FilterChipDefaults.filterChipElevation(
-                            elevation = 0.dp,
-                            pressedElevation = 0.dp,
-                            focusedElevation = 0.dp,
-                            hoveredElevation = 0.dp,
-                            draggedElevation = 0.dp,
-                            disabledElevation = 0.dp
-                        )
-                    )
-                }
-            }
-            Spacer(Modifier.height(10.dp))
+  Column(modifier = modifier) {
+    if (categories != null && categories.isNotEmpty()) {
+      LazyRow(
+          horizontalArrangement = Arrangement.spacedBy(8.dp),
+          contentPadding = PaddingValues(horizontal = 4.dp),
+      ) {
+        item {
+          val isSelected = selectedCategory == "Todos los grupos de artículos"
+          FilterChip(
+              selected = isSelected,
+              onClick = { onCategoryChange("Todos los grupos de artículos") },
+              label = { Text("Todos", style = MaterialTheme.typography.labelMedium) },
+              modifier = Modifier.height(32.dp),
+              colors =
+                  FilterChipDefaults.filterChipColors(
+                      selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                      selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                      containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
+                      labelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                  ),
+              shape = RoundedCornerShape(12.dp),
+              elevation =
+                  FilterChipDefaults.filterChipElevation(
+                      elevation = 0.dp,
+                      pressedElevation = 0.dp,
+                      focusedElevation = 0.dp,
+                      hoveredElevation = 0.dp,
+                      draggedElevation = 0.dp,
+                      disabledElevation = 0.dp,
+                  ),
+          )
         }
-
-        Surface(
-            tonalElevation = 0.dp,
-            shape = RoundedCornerShape(18.dp),
-            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)
-        ) {
-            SearchTextField(
-                searchQuery = searchQuery,
-                onSearchQueryChange = onQueryChange,
-                placeholderText = "Buscar por nombre, código o descripcion...",
-                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
-            )
+        items(categories.reversed()) { category ->
+          val isSelected = category == selectedCategory
+          FilterChip(
+              selected = isSelected,
+              onClick = { onCategoryChange(category) },
+              label = {
+                Text(
+                    category.lowercase().replaceFirstChar { it.titlecase() },
+                    style = MaterialTheme.typography.labelMedium,
+                )
+              },
+              modifier = Modifier.height(32.dp),
+              colors =
+                  FilterChipDefaults.filterChipColors(
+                      selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                      selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                      containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
+                      labelColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                  ),
+              shape = RoundedCornerShape(12.dp),
+              elevation =
+                  FilterChipDefaults.filterChipElevation(
+                      elevation = 0.dp,
+                      pressedElevation = 0.dp,
+                      focusedElevation = 0.dp,
+                      hoveredElevation = 0.dp,
+                      draggedElevation = 0.dp,
+                      disabledElevation = 0.dp,
+                  ),
+          )
         }
+      }
+      Spacer(Modifier.height(10.dp))
     }
+
+    Surface(
+        tonalElevation = 0.dp,
+        shape = RoundedCornerShape(18.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+    ) {
+      SearchTextField(
+          searchQuery = searchQuery,
+          onSearchQueryChange = onQueryChange,
+          placeholderText = "Buscar por nombre, código o descripcion...",
+          modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+      )
+    }
+  }
 }
 
 @Composable
@@ -114,58 +116,59 @@ fun SearchTextField(
     onSearchQueryChange: (String) -> Unit,
     modifier: Modifier = Modifier,
     placeholderText: String = "Buscar...",
-    onSearchAction: (() -> Unit)? = null
+    onSearchAction: (() -> Unit)? = null,
 ) {
-    val keyboardController = LocalSoftwareKeyboardController.current
+  val keyboardController = LocalSoftwareKeyboardController.current
 
-    OutlinedTextField(
-        value = searchQuery,
-        onValueChange = onSearchQueryChange,
-        modifier = modifier
-            .fillMaxWidth()
-            .heightIn(min = 48.dp),
-        placeholder = {
-            Text(
-                placeholderText,
-                style = MaterialTheme.typography.bodyMedium,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-        },
-        leadingIcon = {
+  OutlinedTextField(
+      value = searchQuery,
+      onValueChange = onSearchQueryChange,
+      modifier = modifier.fillMaxWidth().heightIn(min = 48.dp),
+      placeholder = {
+        Text(
+            placeholderText,
+            style = MaterialTheme.typography.bodyMedium,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+      },
+      leadingIcon = {
+        Icon(
+            Icons.Filled.Search,
+            contentDescription = "Buscar",
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+      },
+      trailingIcon = {
+        AnimatedVisibility(searchQuery.isNotEmpty()) {
+          IconButton(onClick = { onSearchQueryChange("") }) {
             Icon(
-                Icons.Filled.Search,
-                contentDescription = "Buscar",
-                tint = MaterialTheme.colorScheme.onSurfaceVariant
+                Icons.Filled.Clear,
+                contentDescription = "Limpiar",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-        },
-        trailingIcon = {
-            AnimatedVisibility(searchQuery.isNotEmpty()) {
-                IconButton(onClick = { onSearchQueryChange("") }) {
-                    Icon(
-                        Icons.Filled.Clear,
-                        contentDescription = "Limpiar",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-        },
-        singleLine = true,
-        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-        keyboardActions = KeyboardActions(
-            onSearch = {
+          }
+        }
+      },
+      singleLine = true,
+      keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+      keyboardActions =
+          KeyboardActions(
+              onSearch = {
                 onSearchAction?.invoke()
                 keyboardController?.hide()
-            }
-        ),
-        colors = TextFieldDefaults.colors(
-            focusedIndicatorColor = Color.Transparent,
-            unfocusedIndicatorColor = Color.Transparent,
-            disabledIndicatorColor = Color.Transparent,
-            focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
-            unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
-            cursorColor = MaterialTheme.colorScheme.primary
-        ),
-        shape = RoundedCornerShape(18.dp)
-    )
+              }
+          ),
+      colors =
+          TextFieldDefaults.colors(
+              focusedIndicatorColor = Color.Transparent,
+              unfocusedIndicatorColor = Color.Transparent,
+              disabledIndicatorColor = Color.Transparent,
+              focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+              unfocusedContainerColor =
+                  MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+              cursorColor = MaterialTheme.colorScheme.primary,
+          ),
+      shape = RoundedCornerShape(18.dp),
+  )
 }

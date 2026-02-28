@@ -4,10 +4,10 @@ import kotlinx.serialization.Serializable
 
 @Serializable
 enum class SyncLogStatus {
-    SUCCESS,
-    PARTIAL,
-    ERROR,
-    CANCELED
+  SUCCESS,
+  PARTIAL,
+  ERROR,
+  CANCELED,
 }
 
 @Serializable
@@ -19,5 +19,5 @@ data class SyncLogEntry(
     val totalSteps: Int,
     val failedSteps: List<String>,
     val status: SyncLogStatus,
-    val message: String
+    val message: String,
 )

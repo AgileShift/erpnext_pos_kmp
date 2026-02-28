@@ -3,233 +3,199 @@ package com.erpnext.pos.remoteSource.sdk
 data class DocTypeFields(val doctype: ERPDocType, val fields: List<String>)
 
 enum class ERPDocType(val path: String) {
-    Item("Item"),
-    PaymentEntry("Payment Entry"),
-    Company("Company"),
-    StockSettings("Stock Settings"),
-    ModeOfPayment("Mode of Payment"),
-    Account("Account"),
-    Category("Item Group"),
-    ItemPrice("Item Price"),
-    User("User"),
-    Bin("Bin"),
-    Customer("Customer"),
-    Address("Address"),
-    CustomerContact("Contact"),
-    SalesInvoice("Sales Invoice"),
-    PurchaseInvoice("Purchase Invoice"),
-    StockEntry("Stock Entry"),
-    POSProfile("POS Profile"),
-    POSProfileDetails("POS Profile Detail"),
-    POSOpeningEntry("POS Opening Entry"),
-    POSClosingEntry("POS Closing Entry"),
-    PaymentTerm("Payment Term"),
-    DeliveryCharges("Delivery Charges"),
-    CustomerGroup("Customer Group"),
-    Territory("Territory")
+  Item("Item"),
+  PaymentEntry("Payment Entry"),
+  Company("Company"),
+  StockSettings("Stock Settings"),
+  ModeOfPayment("Mode of Payment"),
+  Account("Account"),
+  Category("Item Group"),
+  ItemPrice("Item Price"),
+  User("User"),
+  Bin("Bin"),
+  Customer("Customer"),
+  Address("Address"),
+  CustomerContact("Contact"),
+  SalesInvoice("Sales Invoice"),
+  PurchaseInvoice("Purchase Invoice"),
+  StockEntry("Stock Entry"),
+  POSProfile("POS Profile"),
+  POSProfileDetails("POS Profile Detail"),
+  POSOpeningEntry("POS Opening Entry"),
+  POSClosingEntry("POS Closing Entry"),
+  PaymentTerm("Payment Term"),
+  DeliveryCharges("Delivery Charges"),
+  CustomerGroup("Customer Group"),
+  Territory("Territory"),
 }
 
-val fields: List<DocTypeFields> = listOf(
-    DocTypeFields(
-        ERPDocType.Company,
-        listOf("default_currency", "country", "tax_id", "name")
-    ),
-    DocTypeFields(
-        ERPDocType.StockSettings,
-        listOf("allow_negative_stock")
-    ),
-    DocTypeFields(
-        ERPDocType.ModeOfPayment,
-        listOf("name", "mode_of_payment", "enabled")
-    ),
-    DocTypeFields(
-        ERPDocType.Item,
-        listOf(
-            "item_code",
-            "item_name",
-            "item_group",
-            "description",
-            "brand",
-            "image",
-            "disabled",
-            "barcodes",
-            "stock_uom",
-            "standard_rate",
-            "is_stock_item",
-            "is_sales_item"  // Correcciones
-        )
-    ),
-    DocTypeFields(
-        ERPDocType.Category, listOf("name")
-    ),
-    DocTypeFields(
-        ERPDocType.POSProfile, listOf("name", "company", "currency")
-    ),
-    DocTypeFields(
-        doctype = ERPDocType.POSProfileDetails,
-        fields = listOf(
-            "name",
-            "warehouse",
-            "route",
-            "country",
-            "company",
-            "currency",
-            "income_account",
-            "expense_account",
-            "payments",
-            "branch",
-            "applyDiscountOn",
-            "cost_center",
-            "selling_price_list"
-        )
-    ),
-    DocTypeFields(
-        ERPDocType.User,
-        listOf(
-            "name",
-            "first_name",
-            "last_name",
-            "username",
-            "language",
-            "full_name"
-        )
-    ),
-    DocTypeFields(
-        ERPDocType.Bin,
-        listOf(
-            "item_code",
-            "warehouse",
-            "actual_qty",
-            "projected_qty",
-            "stock_uom",
-            "valuation_rate"
-        )
-    ),
-    DocTypeFields(
-        ERPDocType.ItemPrice,
-        listOf("item_code", "uom", "price_list", "price_list_rate", "selling", "currency")
-    ),
-    DocTypeFields(
-        ERPDocType.Customer,
-        listOf(
-            "name",
-            "customer_name",
-            "territory",
-            "mobile_no",
-            "primary_address",
-            "email_id",
-            "image",
-            "customer_type",
-            "disabled",
-            "credit_limits.credit_limit",
-            "credit_limits.company",
-            "credit_limits.bypass_credit_limit_check"
-        )
-    ),
-    DocTypeFields(
-        ERPDocType.SalesInvoice,
-        listOf(
-            "name",
-            "customer",
-            "company",
-            "customer_name",
-            "posting_date",
-            "due_date",
-            "status",
-            "debit_to",
-            "currency",
-            "conversion_rate",
-            "base_grand_total",
-            "base_total",
-            "base_net_total",
-            "base_total_taxes_and_charges",
-            "base_rounding_adjustment",
-            "base_rounded_total",
-            "base_discount_amount",
-            "base_paid_amount",
-            "base_change_amount",
-            "base_write_off_amount",
-            "outstanding_amount",
-            "grand_total",
-            "rounded_total",
-            "rounding_adjustment",
-            "discount_amount",
-            "paid_amount",
-            "net_total",
-            "total",
-            "total_taxes_and_charges",
-            "is_pos",
-            "pos_profile",
-            "docstatus",
-            "contact_display",
-            "contact_mobile",
-            "party_account_currency",
-        )
-    ),
-    DocTypeFields(
-        ERPDocType.CustomerContact,
-        listOf("name", "phone", "mobile_no", "email_id", "links")
-    ),
-    DocTypeFields(
-        ERPDocType.PaymentTerm,
-        listOf(
-            "payment_term_name",
-            "invoice_portion",
-            "mode_of_payment",
-            "due_date_based_on",
-            "credit_days",
-            "credit_months",
-            "discount_type",
-            "discount",
-            "description",
-            "discount_validity",
-            "discount_validity_based_on"
-        )
-    ),
-    DocTypeFields(
-        ERPDocType.DeliveryCharges,
-        listOf(
-            "label",
-            "default_rate"
-        )
-    ),
-    DocTypeFields(
-        ERPDocType.CustomerGroup,
-        listOf(
-            "name",
-            "customer_group_name",
-            "is_group",
-            "parent_customer_group"
-        )
-    ),
-    DocTypeFields(
-        ERPDocType.Territory,
-        listOf(
-            "name",
-            "territory_name",
-            "is_group",
-            "parent_territory"
-        )
-    ),
-    DocTypeFields(
-        ERPDocType.Address,
-        listOf(
-            "name",
-            "address_title",
-            "address_type",
-            "address_line1",
-            "address_line2",
-            "city",
-            "state",
-            "country",
-            "email_id",
-            "phone",
-            "links"
-        )
+val fields: List<DocTypeFields> =
+    listOf(
+        DocTypeFields(ERPDocType.Company, listOf("default_currency", "country", "tax_id", "name")),
+        DocTypeFields(ERPDocType.StockSettings, listOf("allow_negative_stock")),
+        DocTypeFields(ERPDocType.ModeOfPayment, listOf("name", "mode_of_payment", "enabled")),
+        DocTypeFields(
+            ERPDocType.Item,
+            listOf(
+                "item_code",
+                "item_name",
+                "item_group",
+                "description",
+                "brand",
+                "image",
+                "disabled",
+                "barcodes",
+                "stock_uom",
+                "standard_rate",
+                "is_stock_item",
+                "is_sales_item", // Correcciones
+            ),
+        ),
+        DocTypeFields(ERPDocType.Category, listOf("name")),
+        DocTypeFields(ERPDocType.POSProfile, listOf("name", "company", "currency")),
+        DocTypeFields(
+            doctype = ERPDocType.POSProfileDetails,
+            fields =
+                listOf(
+                    "name",
+                    "warehouse",
+                    "route",
+                    "country",
+                    "company",
+                    "currency",
+                    "income_account",
+                    "expense_account",
+                    "payments",
+                    "branch",
+                    "applyDiscountOn",
+                    "cost_center",
+                    "selling_price_list",
+                ),
+        ),
+        DocTypeFields(
+            ERPDocType.User,
+            listOf("name", "first_name", "last_name", "username", "language", "full_name"),
+        ),
+        DocTypeFields(
+            ERPDocType.Bin,
+            listOf(
+                "item_code",
+                "warehouse",
+                "actual_qty",
+                "projected_qty",
+                "stock_uom",
+                "valuation_rate",
+            ),
+        ),
+        DocTypeFields(
+            ERPDocType.ItemPrice,
+            listOf("item_code", "uom", "price_list", "price_list_rate", "selling", "currency"),
+        ),
+        DocTypeFields(
+            ERPDocType.Customer,
+            listOf(
+                "name",
+                "customer_name",
+                "territory",
+                "mobile_no",
+                "primary_address",
+                "email_id",
+                "image",
+                "customer_type",
+                "disabled",
+                "credit_limits.credit_limit",
+                "credit_limits.company",
+                "credit_limits.bypass_credit_limit_check",
+            ),
+        ),
+        DocTypeFields(
+            ERPDocType.SalesInvoice,
+            listOf(
+                "name",
+                "customer",
+                "company",
+                "customer_name",
+                "posting_date",
+                "due_date",
+                "status",
+                "debit_to",
+                "currency",
+                "conversion_rate",
+                "base_grand_total",
+                "base_total",
+                "base_net_total",
+                "base_total_taxes_and_charges",
+                "base_rounding_adjustment",
+                "base_rounded_total",
+                "base_discount_amount",
+                "base_paid_amount",
+                "base_change_amount",
+                "base_write_off_amount",
+                "outstanding_amount",
+                "grand_total",
+                "rounded_total",
+                "rounding_adjustment",
+                "discount_amount",
+                "paid_amount",
+                "net_total",
+                "total",
+                "total_taxes_and_charges",
+                "is_pos",
+                "pos_profile",
+                "docstatus",
+                "contact_display",
+                "contact_mobile",
+                "party_account_currency",
+            ),
+        ),
+        DocTypeFields(
+            ERPDocType.CustomerContact,
+            listOf("name", "phone", "mobile_no", "email_id", "links"),
+        ),
+        DocTypeFields(
+            ERPDocType.PaymentTerm,
+            listOf(
+                "payment_term_name",
+                "invoice_portion",
+                "mode_of_payment",
+                "due_date_based_on",
+                "credit_days",
+                "credit_months",
+                "discount_type",
+                "discount",
+                "description",
+                "discount_validity",
+                "discount_validity_based_on",
+            ),
+        ),
+        DocTypeFields(ERPDocType.DeliveryCharges, listOf("label", "default_rate")),
+        DocTypeFields(
+            ERPDocType.CustomerGroup,
+            listOf("name", "customer_group_name", "is_group", "parent_customer_group"),
+        ),
+        DocTypeFields(
+            ERPDocType.Territory,
+            listOf("name", "territory_name", "is_group", "parent_territory"),
+        ),
+        DocTypeFields(
+            ERPDocType.Address,
+            listOf(
+                "name",
+                "address_title",
+                "address_type",
+                "address_line1",
+                "address_line2",
+                "city",
+                "state",
+                "country",
+                "email_id",
+                "phone",
+                "links",
+            ),
+        ),
     )
-)
 
 fun ERPDocType.getFields(): List<String> {
-    val f = fields.first { it.doctype.path == this.path }
-    return f.fields
+  val f = fields.first { it.doctype.path == this.path }
+  return f.fields
 }

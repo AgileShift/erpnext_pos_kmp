@@ -14,34 +14,44 @@ import com.erpnext.pos.sync.PushQueueReport
 import kotlinx.coroutines.flow.Flow
 
 interface ISaleInvoiceRepository {
-    suspend fun getPendingInvoices(info: PendingInvoiceInput): Flow<PagingData<SalesInvoiceBO>>
-    suspend fun getInvoiceDetail(invoiceId: String): SalesInvoiceBO
+  suspend fun getPendingInvoices(info: PendingInvoiceInput): Flow<PagingData<SalesInvoiceBO>>
 
-    fun getAllLocalInvoicesPaged(): PagingSource<Int, SalesInvoiceWithItemsAndPayments>
-    suspend fun getAllLocalInvoices() : List<SalesInvoiceWithItemsAndPayments>
-    suspend fun getInvoiceByName(invoiceName: String): SalesInvoiceWithItemsAndPayments?
-    suspend fun saveInvoiceLocally(
-        invoice: SalesInvoiceEntity,
-        items: List<SalesInvoiceItemEntity>,
-        payments: List<POSInvoicePaymentEntity> = emptyList()
-    )
-    suspend fun applyLocalPayment(
-        invoice: SalesInvoiceEntity,
-        payments: List<POSInvoicePaymentEntity>
-    )
-    suspend fun cancelInvoice(invoiceName: String, isReturn: Boolean = false)
+  suspend fun getInvoiceDetail(invoiceId: String): SalesInvoiceBO
 
-    suspend fun markAsSynced(invoiceName: String)
-    suspend fun markAsFailed(invoiceName: String)
-    suspend fun getPendingSyncInvoices(): List<SalesInvoiceWithItemsAndPayments>
-    suspend fun fetchRemoteInvoices(): List<SalesInvoiceDto>
+  fun getAllLocalInvoicesPaged(): PagingSource<Int, SalesInvoiceWithItemsAndPayments>
 
-    suspend fun createRemoteInvoice(invoice: SalesInvoiceDto): SalesInvoiceDto
-    suspend fun deleteRemoteInvoice(invoiceId: String)
+  suspend fun getAllLocalInvoices(): List<SalesInvoiceWithItemsAndPayments>
 
-    suspend fun syncPendingInvoices(): PushQueueReport
+  suspend fun getInvoiceByName(invoiceName: String): SalesInvoiceWithItemsAndPayments?
 
-    suspend fun sync(): Flow<Resource<List<SalesInvoiceBO>>>
+  suspend fun saveInvoiceLocally(
+      invoice: SalesInvoiceEntity,
+      items: List<SalesInvoiceItemEntity>,
+      payments: List<POSInvoicePaymentEntity> = emptyList(),
+  )
 
-    suspend fun countPending(): Int
+  suspend fun applyLocalPayment(
+      invoice: SalesInvoiceEntity,
+      payments: List<POSInvoicePaymentEntity>,
+  )
+
+  suspend fun cancelInvoice(invoiceName: String, isReturn: Boolean = false)
+
+  suspend fun markAsSynced(invoiceName: String)
+
+  suspend fun markAsFailed(invoiceName: String)
+
+  suspend fun getPendingSyncInvoices(): List<SalesInvoiceWithItemsAndPayments>
+
+  suspend fun fetchRemoteInvoices(): List<SalesInvoiceDto>
+
+  suspend fun createRemoteInvoice(invoice: SalesInvoiceDto): SalesInvoiceDto
+
+  suspend fun deleteRemoteInvoice(invoiceId: String)
+
+  suspend fun syncPendingInvoices(): PushQueueReport
+
+  suspend fun sync(): Flow<Resource<List<SalesInvoiceBO>>>
+
+  suspend fun countPending(): Int
 }

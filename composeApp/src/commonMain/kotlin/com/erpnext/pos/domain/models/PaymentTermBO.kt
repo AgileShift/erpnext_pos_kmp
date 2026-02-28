@@ -11,5 +11,5 @@ data class PaymentTermBO(
     val discount: Double? = null,
     val description: String? = null,
     val discountValidity: Int? = null,
-    val discountValidityBasedOn: String? = null
+    val discountValidityBasedOn: String? = null,
 )

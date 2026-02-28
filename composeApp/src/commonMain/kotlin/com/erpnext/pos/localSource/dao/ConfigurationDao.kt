@@ -9,15 +9,13 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface ConfigurationDao {
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun upsert(entry: ConfigurationEntity)
+  @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun upsert(entry: ConfigurationEntity)
 
-    @Query("SELECT value FROM tabConfiguration WHERE `key` = :key LIMIT 1")
-    fun observeValue(key: String): Flow<String?>
+  @Query("SELECT value FROM tabConfiguration WHERE `key` = :key LIMIT 1")
+  fun observeValue(key: String): Flow<String?>
 
-    @Query("SELECT * FROM tabConfiguration WHERE `key` = :key LIMIT 1")
-    suspend fun getValue(key: String): ConfigurationEntity?
+  @Query("SELECT * FROM tabConfiguration WHERE `key` = :key LIMIT 1")
+  suspend fun getValue(key: String): ConfigurationEntity?
 
-    @Query("DELETE FROM tabConfiguration WHERE `key` = :key")
-    suspend fun delete(key: String)
+  @Query("DELETE FROM tabConfiguration WHERE `key` = :key") suspend fun delete(key: String)
 }

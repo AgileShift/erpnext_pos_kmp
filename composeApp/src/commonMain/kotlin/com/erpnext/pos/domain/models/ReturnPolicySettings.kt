@@ -4,8 +4,8 @@ import kotlinx.serialization.Serializable
 
 @Serializable
 enum class ReturnDestinationPolicy {
-    REFUND,
-    CREDIT
+  REFUND,
+  CREDIT,
 }
 
 @Serializable
@@ -16,6 +16,5 @@ data class ReturnPolicySettings(
     val allowFullReturns: Boolean = true,
     val allowRefunds: Boolean = true,
     val requirePaidInvoiceForRefund: Boolean = true,
-    val defaultDestination: ReturnDestinationPolicy = ReturnDestinationPolicy.CREDIT
+    val defaultDestination: ReturnDestinationPolicy = ReturnDestinationPolicy.CREDIT,
 )
-

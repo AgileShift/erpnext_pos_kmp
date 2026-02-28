@@ -13,16 +13,14 @@ import com.erpnext.pos.views.salesflow.SalesFlowSource
 import org.koin.compose.koinInject
 
 @Composable
-fun SalesOrderRoute(
-    coordinator: SalesOrderCoordinator = rememberSalesOrderCoordinator()
-) {
-    val uiState by coordinator.screenStateFlow.collectAsState()
-    val navManager: NavigationManager = koinInject()
-    val salesFlowStore: SalesFlowContextStore = koinInject()
-    val salesContext by salesFlowStore.context.collectAsState()
-    val actions = rememberSalesOrderActions(coordinator, navManager, salesFlowStore, salesContext)
+fun SalesOrderRoute(coordinator: SalesOrderCoordinator = rememberSalesOrderCoordinator()) {
+  val uiState by coordinator.screenStateFlow.collectAsState()
+  val navManager: NavigationManager = koinInject()
+  val salesFlowStore: SalesFlowContextStore = koinInject()
+  val salesContext by salesFlowStore.context.collectAsState()
+  val actions = rememberSalesOrderActions(coordinator, navManager, salesFlowStore, salesContext)
 
-    SalesOrderScreen(uiState, actions, salesContext)
+  SalesOrderScreen(uiState, actions, salesContext)
 }
 
 @Composable
@@ -30,30 +28,24 @@ fun rememberSalesOrderActions(
     coordinator: SalesOrderCoordinator,
     navManager: NavigationManager,
     salesFlowStore: SalesFlowContextStore,
-    salesContext: SalesFlowContext?
+    salesContext: SalesFlowContext?,
 ): SalesOrderAction {
-    return remember(coordinator, navManager, salesFlowStore, salesContext) {
-        SalesOrderAction(
-            onBack = coordinator::onBack,
-            onRefresh = coordinator::onRefresh,
-            onCreateDeliveryNote = { sourceId ->
-                salesFlowStore.set(
-                    (salesContext ?: SalesFlowContext()).withSource(
-                        SalesFlowSource.SalesOrder,
-                        sourceId
-                    )
-                )
-                navManager.navigateTo(NavRoute.DeliveryNote)
-            },
-            onCreateInvoice = { sourceId ->
-                salesFlowStore.set(
-                    (salesContext ?: SalesFlowContext()).withSource(
-                        SalesFlowSource.SalesOrder,
-                        sourceId
-                    )
-                )
-                navManager.navigateTo(NavRoute.Billing)
-            }
-        )
-    }
+  return remember(coordinator, navManager, salesFlowStore, salesContext) {
+    SalesOrderAction(
+        onBack = coordinator::onBack,
+        onRefresh = coordinator::onRefresh,
+        onCreateDeliveryNote = { sourceId ->
+          salesFlowStore.set(
+              (salesContext ?: SalesFlowContext()).withSource(SalesFlowSource.SalesOrder, sourceId)
+          )
+          navManager.navigateTo(NavRoute.DeliveryNote)
+        },
+        onCreateInvoice = { sourceId ->
+          salesFlowStore.set(
+              (salesContext ?: SalesFlowContext()).withSource(SalesFlowSource.SalesOrder, sourceId)
+          )
+          navManager.navigateTo(NavRoute.Billing)
+        },
+    )
+  }
 }

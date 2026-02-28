@@ -5,13 +5,12 @@ import com.erpnext.pos.remoteSource.dto.SalesInvoiceDto
 
 data class UpdateLocalInvoiceFromRemoteInput(
     val localInvoiceName: String,
-    val remoteInvoice: SalesInvoiceDto
+    val remoteInvoice: SalesInvoiceDto,
 )
 
-class UpdateLocalInvoiceFromRemoteUseCase(
-    private val repository: SalesInvoiceRepository
-) : UseCase<UpdateLocalInvoiceFromRemoteInput, Unit>() {
-    override suspend fun useCaseFunction(input: UpdateLocalInvoiceFromRemoteInput) {
-        repository.updateLocalInvoiceFromRemote(input.localInvoiceName, input.remoteInvoice)
-    }
+class UpdateLocalInvoiceFromRemoteUseCase(private val repository: SalesInvoiceRepository) :
+    UseCase<UpdateLocalInvoiceFromRemoteInput, Unit>() {
+  override suspend fun useCaseFunction(input: UpdateLocalInvoiceFromRemoteInput) {
+    repository.updateLocalInvoiceFromRemote(input.localInvoiceName, input.remoteInvoice)
+  }
 }

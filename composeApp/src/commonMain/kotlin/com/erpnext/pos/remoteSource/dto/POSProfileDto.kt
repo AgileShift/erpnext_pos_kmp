@@ -12,28 +12,19 @@ data class POSProfileSimpleDto(
 
 @Serializable
 data class POSProfileDto(
-    @SerialName("name")
-    val profileName: String,
-    @SerialName("warehouse")
-    val warehouse: String,
-    @SerialName("route")
-    val route: String? = null,
+    @SerialName("name") val profileName: String,
+    @SerialName("warehouse") val warehouse: String,
+    @SerialName("route") val route: String? = null,
     val country: String,
     val company: String,
     val currency: String,
-    @SerialName("income_account")
-    val incomeAccount: String? = null,
-    @SerialName("expense_account")
-    val expenseAccount: String? = null,
-    @SerialName("payments")
-    val payments: List<PaymentModesDto>,
+    @SerialName("income_account") val incomeAccount: String? = null,
+    @SerialName("expense_account") val expenseAccount: String? = null,
+    @SerialName("payments") val payments: List<PaymentModesDto>,
     val branch: String? = null,
-    @SerialName("apply_discount_on")
-    val applyDiscountOn: String,
-    @SerialName("cost_center")
-    val costCenter: String? = null,
-    @SerialName("selling_price_list")
-    val sellingPriceList: String
+    @SerialName("apply_discount_on") val applyDiscountOn: String,
+    @SerialName("cost_center") val costCenter: String? = null,
+    @SerialName("selling_price_list") val sellingPriceList: String,
 )
 
 @Serializable
@@ -45,13 +36,12 @@ data class PaymentModesDto(
     @Serializable(with = IntAsBooleanSerializer::class)
     val allowInReturns: Boolean,
     val account: String? = null,
-    @SerialName("default_account")
-    val defaultAccount: String? = null,
+    @SerialName("default_account") val defaultAccount: String? = null,
     val currency: String? = null,
     @SerialName("account_currency") val accountCurrency: String? = null,
     @SerialName("account_type") val accountType: String? = null,
     @SerialName("mode_of_payment_type") val modeOfPaymentType: String? = null,
     @Serializable(with = IntAsBooleanSerializer::class) val enabled: Boolean = true,
     val company: String? = null,
-    val accounts: List<ModeOfPaymentAccountDto> = emptyList()
+    val accounts: List<ModeOfPaymentAccountDto> = emptyList(),
 )

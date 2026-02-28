@@ -5,13 +5,10 @@ import kotlinx.serialization.Serializable
 
 @Serializable
 data class CustomerGroupDto(
-    @SerialName("name")
-    val name: String,
-    @SerialName("customer_group_name")
-    val customerGroupName: String? = null,
+    @SerialName("name") val name: String,
+    @SerialName("customer_group_name") val customerGroupName: String? = null,
     @SerialName("is_group")
     @Serializable(with = IntAsBooleanSerializer::class)
     val isGroup: Boolean = false,
-    @SerialName("parent_customer_group")
-    val parentCustomerGroup: String? = null
+    @SerialName("parent_customer_group") val parentCustomerGroup: String? = null,
 )

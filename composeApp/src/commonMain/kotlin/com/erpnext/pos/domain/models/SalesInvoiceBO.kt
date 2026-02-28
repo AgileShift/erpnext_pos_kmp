@@ -30,7 +30,7 @@ data class SalesInvoiceBO(
     val customExchangeRate: Double? = null,
     val items: List<SalesInvoiceItemsBO> = emptyList(),
     val payments: List<SalesInvoicePaymentsBO> = emptyList(),
-    val partyAccountCurrency: String? = null
+    val partyAccountCurrency: String? = null,
 )
 
 data class SalesInvoiceItemsBO(
@@ -42,7 +42,7 @@ data class SalesInvoiceItemsBO(
     var rate: Double = 0.0,
     var amount: Double = 0.0,
     var netRate: Double = 0.0,
-    var netAmount: Double = 0.0
+    var netAmount: Double = 0.0,
 )
 
 data class SalesInvoicePaymentsBO(

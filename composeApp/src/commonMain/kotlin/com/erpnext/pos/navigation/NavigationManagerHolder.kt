@@ -5,6 +5,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 
 object NavigationManagerHolder {
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
-    val instance: NavigationManager = NavigationManager(scope)
+  private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+  val instance: NavigationManager = NavigationManager(scope)
 }

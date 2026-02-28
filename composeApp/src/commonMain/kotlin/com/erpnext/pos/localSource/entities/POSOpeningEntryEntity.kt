@@ -9,33 +9,23 @@ import androidx.room.Relation
 import com.erpnext.pos.remoteSource.dto.IntAsBooleanSerializer
 import kotlinx.serialization.Serializable
 
-@Entity(
-    tableName = "tab_pos_opening_entry",
-    indices = [Index(value = ["pos_profile", "user"])]
-)
+@Entity(tableName = "tab_pos_opening_entry", indices = [Index(value = ["pos_profile", "user"])])
 data class POSOpeningEntryEntity(
-    @PrimaryKey
-    var name: String,
-    @ColumnInfo(name = "pos_profile")
-    var posProfile: String,
+    @PrimaryKey var name: String,
+    @ColumnInfo(name = "pos_profile") var posProfile: String,
     var company: String,
-    @ColumnInfo(name = "period_start_date")
-    var periodStartDate: String,
-    @ColumnInfo("posting_date")
-    var postingDate: String,
+    @ColumnInfo(name = "period_start_date") var periodStartDate: String,
+    @ColumnInfo("posting_date") var postingDate: String,
     var user: String? = null,
     @ColumnInfo(name = "pending_sync")
     @Serializable(with = IntAsBooleanSerializer::class)
-    var pendingSync: Boolean
+    var pendingSync: Boolean,
 )
 
 data class POSOpeningEntryWithDetails(
     @Embedded var openingEntry: POSOpeningEntryEntity,
-    @Relation(
-        parentColumn = "localId",
-        entityColumn = "id"
-    )
-    var balances: List<BalanceDetailsEntity>
+    @Relation(parentColumn = "localId", entityColumn = "id")
+    var balances: List<BalanceDetailsEntity>,
 )
 
 data class POSOpeningWithClosingAndTaxes(
@@ -43,7 +33,7 @@ data class POSOpeningWithClosingAndTaxes(
     @Relation(
         parentColumn = "name",
         entityColumn = "pos_opening_entry",
-        entity = POSClosingEntryEntity::class
+        entity = POSClosingEntryEntity::class,
     )
-    var closingWithTaxes: POSClosingWithTaxes?
+    var closingWithTaxes: POSClosingWithTaxes?,
 )

@@ -6,14 +6,14 @@ import com.erpnext.pos.remoteSource.dto.StockSettingsDto
 
 class StockSettingsRepository(
     private val api: APIService,
-    private val generalPreferences: GeneralPreferences
+    private val generalPreferences: GeneralPreferences,
 ) {
-    suspend fun sync() {
-        val settings = api.getStockSettings().firstOrNull()
-        applyBootstrapStockSettings(settings)
-    }
+  suspend fun sync() {
+    val settings = api.getStockSettings().firstOrNull()
+    applyBootstrapStockSettings(settings)
+  }
 
-    suspend fun applyBootstrapStockSettings(settings: StockSettingsDto?) {
-        generalPreferences.setAllowNegativeStock(settings?.allowNegativeStock == true)
-    }
+  suspend fun applyBootstrapStockSettings(settings: StockSettingsDto?) {
+    generalPreferences.setAllowNegativeStock(settings?.allowNegativeStock == true)
+  }
 }

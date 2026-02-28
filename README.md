@@ -38,3 +38,40 @@ Layers in shared `commonMain`:
 - `docs/api_endpoint_inventory.md`
 - `docs/multi_instance_login_and_session.md`
 - `docs/function_diagram.md`
+
+## Git Hooks (Commit/Push)
+This repository includes versioned hooks in `.githooks/`.
+
+1. Install hooks once per clone:
+```bash
+./scripts/install-git-hooks.sh
+```
+2. What runs automatically:
+- `pre-commit`: `./gradlew spotlessCheck` (only when staged files include `.kt` or `.kts`)
+- `pre-push`: `./gradlew spotlessCheck detekt test :androidApp:compileDebugKotlin`
+
+3. Emergency bypass:
+```bash
+SKIP_GIT_HOOKS=1 git commit -m "..."
+SKIP_GIT_HOOKS=1 git push
+```
+
+## Quality Tooling
+- **Spotless + ktfmt** for code format (`.kt` and `.gradle.kts`).
+- **Detekt** for static analysis with baseline per module:
+  - `composeApp/detekt-baseline.xml`
+  - `androidApp/detekt-baseline.xml`
+  - currently configured as non-blocking (`ignoreFailures=true`) to surface debt without stopping delivery.
+- **Dependabot** for automated dependency update PRs (Gradle + GitHub Actions).
+
+### Local commands
+```bash
+./gradlew spotlessCheck
+./gradlew spotlessApply
+./gradlew detekt
+```
+
+## CI Automation
+GitHub Actions workflows:
+- `Quality Gate`: runs on PR/push and executes `spotlessCheck`, `detekt`, `test`, and `:androidApp:compileDebugKotlin`.
+- Dependabot (`.github/dependabot.yml`): weekly automated dependency PRs for Gradle and GitHub Actions.

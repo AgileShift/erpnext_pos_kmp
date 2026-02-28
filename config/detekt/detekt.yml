@@ -1,0 +1,46 @@
+build:
+  maxIssues: 0
+  excludeCorrectable: false
+
+config:
+  validation: true
+  warningsAsErrors: false
+
+processors:
+  active: true
+
+console-reports:
+  active: true
+  exclude:
+    - ProjectStatisticsReport
+
+naming:
+  FunctionNaming:
+    active: true
+    ignoreAnnotated:
+      - Composable
+      - Preview
+      - Test
+      - BeforeTest
+      - AfterTest
+
+complexity:
+  LongMethod:
+    active: true
+    threshold: 80
+  LongParameterList:
+    active: true
+    functionThreshold: 8
+    constructorThreshold: 9
+    ignoreDefaultParameters: true
+    ignoreDataClasses: true
+    ignoreAnnotated:
+      - Composable
+  CyclomaticComplexMethod:
+    active: true
+    threshold: 20
+
+style:
+  ReturnCount:
+    active: true
+    max: 4

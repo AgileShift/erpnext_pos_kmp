@@ -6,6 +6,5 @@ import kotlinx.serialization.Serializable
 @Serializable
 data class ShippingRuleDto(
     val label: String,
-    @SerialName("shipping_amount")
-    val defaultRate: Double
+    @SerialName("shipping_amount") val defaultRate: Double,
 )

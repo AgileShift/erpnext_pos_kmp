@@ -5,10 +5,9 @@ import com.erpnext.pos.data.repositories.InventoryRepository
 import com.erpnext.pos.domain.models.CategoryBO
 import kotlinx.coroutines.flow.Flow
 
-class FetchCategoriesUseCase(
-    private val repo: InventoryRepository
-) : UseCase<Unit?, Flow<Resource<List<CategoryBO>>>>() {
-    override suspend fun useCaseFunction(input: Unit?): Flow<Resource<List<CategoryBO>>> {
-        return repo.getCategories()
-    }
+class FetchCategoriesUseCase(private val repo: InventoryRepository) :
+    UseCase<Unit?, Flow<Resource<List<CategoryBO>>>>() {
+  override suspend fun useCaseFunction(input: Unit?): Flow<Resource<List<CategoryBO>>> {
+    return repo.getCategories()
+  }
 }

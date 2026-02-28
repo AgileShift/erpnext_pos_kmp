@@ -1,18 +1,18 @@
 package com.erpnext.pos.views.paymententry
 
 enum class PaymentEntryType(val value: String) {
-    Receive("receive"),
-    Pay("pay"),
-    InternalTransfer("internal-transfer");
+  Receive("receive"),
+  Pay("pay"),
+  InternalTransfer("internal-transfer");
 
-    companion object {
-        fun from(value: String?): PaymentEntryType {
-            return when (value) {
-                "invoice-payment" -> Receive
-                else -> entries.firstOrNull { it.value == value } ?: Receive
-            }
-        }
+  companion object {
+    fun from(value: String?): PaymentEntryType {
+      return when (value) {
+        "invoice-payment" -> Receive
+        else -> entries.firstOrNull { it.value == value } ?: Receive
+      }
     }
+  }
 }
 
 data class PaymentEntryState(
@@ -43,7 +43,7 @@ data class PaymentEntryState(
     val referenceNoError: String? = null,
     val referenceDateError: String? = null,
     val errorMessage: String? = null,
-    val successMessage: String? = null
+    val successMessage: String? = null,
 )
 
 data class PaymentEntryAction(
@@ -60,7 +60,7 @@ data class PaymentEntryAction(
     val onReferenceDateChanged: (String) -> Unit = {},
     val onNotesChanged: (String) -> Unit = {},
     val onSubmit: () -> Unit = {},
-    val onBack: () -> Unit = {}
+    val onBack: () -> Unit = {},
 )
 
 data class SupplierPendingInvoiceUi(
@@ -77,5 +77,5 @@ data class SupplierPendingInvoiceUi(
     val allocatedAmountPaymentCurrency: Double = 0.0,
     val allocatedAmountInvoiceCurrency: Double = 0.0,
     val conversionError: Boolean = false,
-    val selected: Boolean = false
+    val selected: Boolean = false,
 )

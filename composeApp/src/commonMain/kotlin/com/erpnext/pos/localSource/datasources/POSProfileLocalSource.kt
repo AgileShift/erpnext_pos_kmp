@@ -7,19 +7,20 @@ import com.erpnext.pos.localSource.entities.POSOpeningEntryEntity
 import kotlinx.coroutines.flow.Flow
 
 interface IPOSProfileLocalSource {
-    suspend fun getClosingEntryPendingSync(): Flow<List<POSClosingEntryEntity>>
-    suspend fun getOpeningEntryPendingSync(): Flow<List<POSOpeningEntryEntity>>
+  suspend fun getClosingEntryPendingSync(): Flow<List<POSClosingEntryEntity>>
+
+  suspend fun getOpeningEntryPendingSync(): Flow<List<POSOpeningEntryEntity>>
 }
 
 class POSProfileLocalSource(
     private val openingDao: POSOpeningEntryDao,
-    private val closingDao: POSClosingEntryDao
+    private val closingDao: POSClosingEntryDao,
 ) : IPOSProfileLocalSource {
-    override suspend fun getClosingEntryPendingSync(): Flow<List<POSClosingEntryEntity>> {
-        return closingDao.getAllPendingSync()
-    }
+  override suspend fun getClosingEntryPendingSync(): Flow<List<POSClosingEntryEntity>> {
+    return closingDao.getAllPendingSync()
+  }
 
-    override suspend fun getOpeningEntryPendingSync(): Flow<List<POSOpeningEntryEntity>> {
-        return openingDao.getAllPendingSync()
-    }
+  override suspend fun getOpeningEntryPendingSync(): Flow<List<POSOpeningEntryEntity>> {
+    return openingDao.getAllPendingSync()
+  }
 }

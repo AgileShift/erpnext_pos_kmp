@@ -27,30 +27,27 @@ data class CreateCustomerInput(
     val country: String? = null,
     val creditLimit: Double? = null,
     val paymentTerms: String? = null,
-    val notes: String? = null
+    val notes: String? = null,
 )
 
-data class CreateCustomerResult(
-    val localId: String
-)
+data class CreateCustomerResult(val localId: String)
 
 @OptIn(ExperimentalTime::class)
 class CreateCustomerUseCase(
     private val syncRepository: CustomerSyncRepository,
-    private val cashBoxManager: CashBoxManager
+    private val cashBoxManager: CashBoxManager,
 ) : UseCase<CreateCustomerInput, CreateCustomerResult>() {
-    override suspend fun useCaseFunction(input: CreateCustomerInput): CreateCustomerResult {
-        val context = cashBoxManager.requireContext()
-        if (input.isInternalCustomer && input.internalCompany.isNullOrBlank()) {
-            error("Selecciona la compañía para el cliente interno.")
-        }
-        val localId = "LOCAL-CUST-${com.erpnext.pos.domain.utils.UUIDGenerator().newId()}"
-        val territory = input.territory?.ifBlank { null }
-            ?: context.territory
-            ?: context.route
-            ?: "All Territories"
-        val customerGroup = input.customerGroup?.ifBlank { null } ?: "All Customer Groups"
-        val payload = CustomerCreatePayload(
+  override suspend fun useCaseFunction(input: CreateCustomerInput): CreateCustomerResult {
+    val context = cashBoxManager.requireContext()
+    if (input.isInternalCustomer && input.internalCompany.isNullOrBlank()) {
+      error("Selecciona la compañía para el cliente interno.")
+    }
+    val localId = "LOCAL-CUST-${com.erpnext.pos.domain.utils.UUIDGenerator().newId()}"
+    val territory =
+        input.territory?.ifBlank { null } ?: context.territory ?: context.route ?: "All Territories"
+    val customerGroup = input.customerGroup?.ifBlank { null } ?: "All Customer Groups"
+    val payload =
+        CustomerCreatePayload(
             customerName = input.customerName.trim(),
             customerType = input.customerType,
             customerGroup = customerGroup,
@@ -67,20 +64,23 @@ class CreateCustomerUseCase(
             creditLimit = input.creditLimit,
             paymentTerms = input.paymentTerms,
             notes = input.notes,
-            address = CustomerCreatePayload.Address(
-                line1 = input.addressLine1,
-                line2 = input.addressLine2,
-                city = input.city,
-                state = input.state,
-                country = input.country
-            ),
-            contact = CustomerCreatePayload.Contact(
-                email = input.email,
-                mobile = input.mobileNo,
-                phone = input.phone
-            )
+            address =
+                CustomerCreatePayload.Address(
+                    line1 = input.addressLine1,
+                    line2 = input.addressLine2,
+                    city = input.city,
+                    state = input.state,
+                    country = input.country,
+                ),
+            contact =
+                CustomerCreatePayload.Contact(
+                    email = input.email,
+                    mobile = input.mobileNo,
+                    phone = input.phone,
+                ),
         )
-        val entity = CustomerEntity(
+    val entity =
+        CustomerEntity(
             name = localId,
             customerName = payload.customerName,
             territory = payload.territory,
@@ -95,9 +95,9 @@ class CreateCustomerUseCase(
             image = null,
             address = payload.address?.line1,
             state = "Sin Pendientes",
-            lastSyncedAt = Clock.System.now().toEpochMilliseconds()
+            lastSyncedAt = Clock.System.now().toEpochMilliseconds(),
         )
-        syncRepository.enqueueCustomer(entity, payload)
-        return CreateCustomerResult(localId = localId)
-    }
+    syncRepository.enqueueCustomer(entity, payload)
+    return CreateCustomerResult(localId = localId)
+  }
 }

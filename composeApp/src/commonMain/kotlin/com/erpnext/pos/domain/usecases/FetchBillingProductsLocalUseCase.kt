@@ -10,21 +10,19 @@ import com.erpnext.pos.localSource.datasources.InventoryLocalSource
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
-data class BillingProductsQueryInput(
-    val query: String? = null,
-    val category: String? = null
-)
+data class BillingProductsQueryInput(val query: String? = null, val category: String? = null)
 
-class FetchBillingProductsLocalUseCase(
-    private val localSource: InventoryLocalSource
-) : UseCase<BillingProductsQueryInput?, Flow<PagingData<ItemBO>>>() {
-    override suspend fun useCaseFunction(input: BillingProductsQueryInput?): Flow<PagingData<ItemBO>> {
-        val query = input?.query?.trim().orEmpty()
-        val category = input?.category?.trim().orEmpty()
-        return Pager(PagingConfig(pageSize = 40, prefetchDistance = 15)) {
-            localSource.getPaged(search = query, category = category)
-        }.flow.map { paging ->
-            paging.map { it.toBO() }
+class FetchBillingProductsLocalUseCase(private val localSource: InventoryLocalSource) :
+    UseCase<BillingProductsQueryInput?, Flow<PagingData<ItemBO>>>() {
+  override suspend fun useCaseFunction(
+      input: BillingProductsQueryInput?
+  ): Flow<PagingData<ItemBO>> {
+    val query = input?.query?.trim().orEmpty()
+    val category = input?.category?.trim().orEmpty()
+    return Pager(PagingConfig(pageSize = 40, prefetchDistance = 15)) {
+          localSource.getPaged(search = query, category = category)
         }
-    }
+        .flow
+        .map { paging -> paging.map { it.toBO() } }
+  }
 }

@@ -14,17 +14,14 @@ data class POSProfileBO(
     val applyDiscountOn: String = "",
     val branch: String? = "",
     val currency: String = "",
-    val paymentModes: List<PaymentModesBO>
+    val paymentModes: List<PaymentModesBO>,
 )
 
 data class POSProfileSimpleBO(
     val name: String = "",
     val company: String = "",
     val currency: String = "",
-    val paymentModes: List<PaymentModesBO>
+    val paymentModes: List<PaymentModesBO>,
 )
 
-data class PaymentModesBO(
-    val name: String,
-    val modeOfPayment: String
-)
+data class PaymentModesBO(val name: String, val modeOfPayment: String)

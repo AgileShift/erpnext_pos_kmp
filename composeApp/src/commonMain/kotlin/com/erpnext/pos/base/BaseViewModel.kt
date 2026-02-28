@@ -10,26 +10,26 @@ import kotlinx.coroutines.launch
 
 abstract class BaseViewModel : ViewModel() {
 
-    protected fun executeUseCase(
-        action: suspend CoroutineScope.() -> Unit,
-        exceptionHandler: suspend (Throwable) -> Unit,
-        finallyHandler: (suspend () -> Unit)? = null,
-        showLoading: Boolean = true,
-        loadingMessage: String = "Procesando..."
-    ): Job {
-        return viewModelScope.launch {
-            if (showLoading) LoadingIndicator.start(message = loadingMessage)
-            try {
-                action.invoke(this)
-            } catch (e: kotlinx.coroutines.CancellationException) {
-                // Cancelaciones por cambio de filtros/navigation no deben tratarse como error.
-            } catch (e: Exception) {
-                AppSentry.capture(e, e.message)
-                exceptionHandler.invoke(e)
-            } finally {
-                finallyHandler?.invoke()
-                if (showLoading) LoadingIndicator.stop()
-            }
-        }
+  protected fun executeUseCase(
+      action: suspend CoroutineScope.() -> Unit,
+      exceptionHandler: suspend (Throwable) -> Unit,
+      finallyHandler: (suspend () -> Unit)? = null,
+      showLoading: Boolean = true,
+      loadingMessage: String = "Procesando...",
+  ): Job {
+    return viewModelScope.launch {
+      if (showLoading) LoadingIndicator.start(message = loadingMessage)
+      try {
+        action.invoke(this)
+      } catch (e: kotlinx.coroutines.CancellationException) {
+        // Cancelaciones por cambio de filtros/navigation no deben tratarse como error.
+      } catch (e: Exception) {
+        AppSentry.capture(e, e.message)
+        exceptionHandler.invoke(e)
+      } finally {
+        finallyHandler?.invoke()
+        if (showLoading) LoadingIndicator.stop()
+      }
     }
+  }
 }

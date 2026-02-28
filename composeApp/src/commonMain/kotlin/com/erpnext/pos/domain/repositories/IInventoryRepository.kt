@@ -7,8 +7,11 @@ import com.erpnext.pos.domain.models.ItemBO
 import kotlinx.coroutines.flow.Flow
 
 interface IInventoryRepository {
-    suspend fun getItemsPaged(query: String?): Flow<PagingData<ItemBO>>
-    suspend fun getItemDetails(itemId: String): ItemBO
-    suspend fun getCategories(): Flow<Resource<List<CategoryBO>>>
-    suspend fun sync(): Flow<Resource<List<ItemBO>>>
+  suspend fun getItemsPaged(query: String?): Flow<PagingData<ItemBO>>
+
+  suspend fun getItemDetails(itemId: String): ItemBO
+
+  suspend fun getCategories(): Flow<Resource<List<CategoryBO>>>
+
+  suspend fun sync(): Flow<Resource<List<ItemBO>>>
 }

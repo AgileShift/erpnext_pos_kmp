@@ -7,60 +7,40 @@ import kotlinx.serialization.Serializable
 
 @Serializable
 data class BalanceDetailsDto(
-    @SerialName("mode_of_payment")
-    val modeOfPayment: String,
-    @SerialName("opening_amount")
-    val openingAmount: Double,
-    @SerialName("closing_amount")
-    val closingAmount: Double? = null
+    @SerialName("mode_of_payment") val modeOfPayment: String,
+    @SerialName("opening_amount") val openingAmount: Double,
+    @SerialName("closing_amount") val closingAmount: Double? = null,
 )
 
 @Serializable
 data class TaxDetailDto(
-    @SerialName("account_head")
-    val accountHead: String,
+    @SerialName("account_head") val accountHead: String,
     val rate: Double,
-    val amount: Double
+    val amount: Double,
 )
 
 @OptIn(ExperimentalSerializationApi::class)
 @Serializable
 data class POSOpeningEntryDto(
-    @SerialName("pos_profile")
-    val posProfile: String,
-    @SerialName("company")
-    val company: String,
+    @SerialName("pos_profile") val posProfile: String,
+    @SerialName("company") val company: String,
     val user: String? = null,
-    @SerialName("period_start_date")
-    val periodStartDate: String,
-    @SerialName("period_end_date")
-    val postingDate: String,
-    @SerialName("balance_details")
-    val balanceDetails: List<BalanceDetailsDto>,
+    @SerialName("period_start_date") val periodStartDate: String,
+    @SerialName("period_end_date") val postingDate: String,
+    @SerialName("balance_details") val balanceDetails: List<BalanceDetailsDto>,
     val taxes: List<TaxDetailDto>? = null,
-    @EncodeDefault(EncodeDefault.Mode.NEVER)
-    @SerialName("docstatus")
-    val docStatus: Int? = null
+    @EncodeDefault(EncodeDefault.Mode.NEVER) @SerialName("docstatus") val docStatus: Int? = null,
 )
 
-@Serializable
-data class POSOpeningEntryResponseDto(
-    @SerialName("name")
-    val name: String
-)
+@Serializable data class POSOpeningEntryResponseDto(@SerialName("name") val name: String)
 
 @Serializable
 data class POSOpeningEntryDetailDto(
-    @SerialName("name")
-    val name: String,
-    @SerialName("pos_profile")
-    val posProfile: String,
+    @SerialName("name") val name: String,
+    @SerialName("pos_profile") val posProfile: String,
     val company: String,
-    @SerialName("period_start_date")
-    val periodStartDate: String,
-    @SerialName("posting_date")
-    val postingDate: String,
+    @SerialName("period_start_date") val periodStartDate: String,
+    @SerialName("posting_date") val postingDate: String,
     val user: String? = null,
-    @SerialName("balance_details")
-    val balanceDetails: List<BalanceDetailsDto> = emptyList()
+    @SerialName("balance_details") val balanceDetails: List<BalanceDetailsDto> = emptyList(),
 )

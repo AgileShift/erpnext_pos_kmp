@@ -6,10 +6,7 @@ data class CashboxBO(
     val periodStartDate: Long,
     val user: String,
     val status: Boolean,
-    val balanceDetails: List<BalanceDetailsBO>
+    val balanceDetails: List<BalanceDetailsBO>,
 )
 
-data class BalanceDetailsBO(
-    val modeOfPayment: String,
-    val openingAmount: Double
-)
+data class BalanceDetailsBO(val modeOfPayment: String, val openingAmount: Double)

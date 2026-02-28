@@ -2,51 +2,47 @@ package com.erpnext.pos.views.home
 
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun HomeRoute(
-    coordinator: HomeCoordinator = rememberHomeCoordinator()
-) {
-    val uiState by coordinator.screenStateFlow.collectAsState(HomeState.Loading)
-    val actions = rememberHomeActions(coordinator)
+fun HomeRoute(coordinator: HomeCoordinator = rememberHomeCoordinator()) {
+  val uiState by coordinator.screenStateFlow.collectAsState(HomeState.Loading)
+  val actions = rememberHomeActions(coordinator)
 
-    LaunchedEffect(Unit) {
-        actions.loadInitialData()
-    }
+  LaunchedEffect(Unit) { actions.loadInitialData() }
 
-    HomeScreen(uiState, actions)
+  HomeScreen(uiState, actions)
 }
 
 @Composable
 fun rememberHomeActions(coordinator: HomeCoordinator): HomeAction {
-    return remember(coordinator) {
-        HomeAction(
-            sync = coordinator::sync,
-            cancelSync = coordinator::cancelSync,
-            syncState = coordinator.syncState,
-            syncSettings = coordinator.syncSettings,
-            homeMetrics = coordinator.homeMetrics,
-            inventoryAlertMessage = coordinator.inventoryAlertMessage,
-            openingState = coordinator.openingState,
-            openingEntryId = coordinator.openingEntryId,
-            initialState = coordinator::initialState,
-            loadInitialData = coordinator::loadInitialData,
-            onOpenSettings = coordinator::openSettings,
-            onOpenReconciliation = coordinator::openReconciliation,
-            onCloseCashbox = coordinator::openCloseCashbox,
-            onLogout = coordinator::logout,
-            onError = coordinator::onError,
-            onPosSelected = coordinator::onPosSelected,
-            onLoadOpeningProfile = coordinator::loadOpeningProfile,
-            onOpenCashbox = coordinator::openCashbox,
-            closeCashbox = coordinator::closeCashbox,
-            isCashboxOpen = coordinator::isCashboxOpen,
-            onInventoryAlertConsumed = coordinator::consumeInventoryAlertMessage,
-        )
-    }
+  return remember(coordinator) {
+    HomeAction(
+        sync = coordinator::sync,
+        cancelSync = coordinator::cancelSync,
+        syncState = coordinator.syncState,
+        syncSettings = coordinator.syncSettings,
+        homeMetrics = coordinator.homeMetrics,
+        inventoryAlertMessage = coordinator.inventoryAlertMessage,
+        openingState = coordinator.openingState,
+        openingEntryId = coordinator.openingEntryId,
+        initialState = coordinator::initialState,
+        loadInitialData = coordinator::loadInitialData,
+        onOpenSettings = coordinator::openSettings,
+        onOpenReconciliation = coordinator::openReconciliation,
+        onCloseCashbox = coordinator::openCloseCashbox,
+        onLogout = coordinator::logout,
+        onError = coordinator::onError,
+        onPosSelected = coordinator::onPosSelected,
+        onLoadOpeningProfile = coordinator::loadOpeningProfile,
+        onOpenCashbox = coordinator::openCashbox,
+        closeCashbox = coordinator::closeCashbox,
+        isCashboxOpen = coordinator::isCashboxOpen,
+        onInventoryAlertConsumed = coordinator::consumeInventoryAlertMessage,
+    )
+  }
 }

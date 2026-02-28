@@ -13,58 +13,54 @@ import com.erpnext.pos.navigation.LocalTopBarController
 fun PaymentEntryRoute(
     invoiceId: String?,
     entryType: String?,
-    coordinator: PaymentEntryCoordinator = rememberPaymentEntryCoordinator()
+    coordinator: PaymentEntryCoordinator = rememberPaymentEntryCoordinator(),
 ) {
-    val uiState by coordinator.state.collectAsState()
-    val topBarController = LocalTopBarController.current
-    DisposableEffect(Unit) {
-        onDispose {
-            coordinator.resetFormState()
-            topBarController.reset()
-        }
+  val uiState by coordinator.state.collectAsState()
+  val topBarController = LocalTopBarController.current
+  DisposableEffect(Unit) {
+    onDispose {
+      coordinator.resetFormState()
+      topBarController.reset()
     }
+  }
 
-    LaunchedEffect(invoiceId, entryType) {
-        coordinator.resetFormState()
-        coordinator.setEntryType(PaymentEntryType.from(entryType))
-        coordinator.setInvoiceId(invoiceId)
-    }
-    LaunchedEffect(uiState.entryType) {
-        val subtitle = when (uiState.entryType) {
-            PaymentEntryType.Pay -> "Gasto"
-            PaymentEntryType.InternalTransfer -> "Transferencia Interna"
-            PaymentEntryType.Receive -> "Cobro de Factura"
+  LaunchedEffect(invoiceId, entryType) {
+    coordinator.resetFormState()
+    coordinator.setEntryType(PaymentEntryType.from(entryType))
+    coordinator.setInvoiceId(invoiceId)
+  }
+  LaunchedEffect(uiState.entryType) {
+    val subtitle =
+        when (uiState.entryType) {
+          PaymentEntryType.Pay -> "Gasto"
+          PaymentEntryType.InternalTransfer -> "Transferencia Interna"
+          PaymentEntryType.Receive -> "Cobro de Factura"
         }
-        topBarController.set(
-            GlobalTopBarState(
-                subtitle = subtitle,
-                showBack = false
-            )
-        )
-    }
-    val actions = rememberPaymentEntryActions(coordinator)
+    topBarController.set(GlobalTopBarState(subtitle = subtitle, showBack = false))
+  }
+  val actions = rememberPaymentEntryActions(coordinator)
 
-    PaymentEntryScreen(uiState, actions)
+  PaymentEntryScreen(uiState, actions)
 }
 
 @Composable
 fun rememberPaymentEntryActions(coordinator: PaymentEntryCoordinator): PaymentEntryAction {
-    return remember(coordinator) {
-        PaymentEntryAction(
-            onInvoiceIdChanged = coordinator::onInvoiceIdChanged,
-            onModeOfPaymentChanged = coordinator::onModeOfPaymentChanged,
-            onTargetModeOfPaymentChanged = coordinator::onTargetModeOfPaymentChanged,
-            onSourceAccountChanged = coordinator::onSourceAccountChanged,
-            onTargetAccountChanged = coordinator::onTargetAccountChanged,
-            onAmountChanged = coordinator::onAmountChanged,
-            onConceptChanged = coordinator::onConceptChanged,
-            onPartyChanged = coordinator::onPartyChanged,
-            onSupplierInvoiceToggled = coordinator::onSupplierInvoiceToggled,
-            onReferenceNoChanged = coordinator::onReferenceNoChanged,
-            onReferenceDateChanged = coordinator::onReferenceDateChanged,
-            onNotesChanged = coordinator::onNotesChanged,
-            onSubmit = coordinator::onSubmit,
-            onBack = coordinator::onBack
-        )
-    }
+  return remember(coordinator) {
+    PaymentEntryAction(
+        onInvoiceIdChanged = coordinator::onInvoiceIdChanged,
+        onModeOfPaymentChanged = coordinator::onModeOfPaymentChanged,
+        onTargetModeOfPaymentChanged = coordinator::onTargetModeOfPaymentChanged,
+        onSourceAccountChanged = coordinator::onSourceAccountChanged,
+        onTargetAccountChanged = coordinator::onTargetAccountChanged,
+        onAmountChanged = coordinator::onAmountChanged,
+        onConceptChanged = coordinator::onConceptChanged,
+        onPartyChanged = coordinator::onPartyChanged,
+        onSupplierInvoiceToggled = coordinator::onSupplierInvoiceToggled,
+        onReferenceNoChanged = coordinator::onReferenceNoChanged,
+        onReferenceDateChanged = coordinator::onReferenceDateChanged,
+        onNotesChanged = coordinator::onNotesChanged,
+        onSubmit = coordinator::onSubmit,
+        onBack = coordinator::onBack,
+    )
+  }
 }

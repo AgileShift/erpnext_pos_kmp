@@ -10,10 +10,11 @@ data class PendingInvoiceInput(
     val date: String? = null,
 )
 
-class FetchPendingInvoiceUseCase(
-    private val repo: SalesInvoiceRepository
-) : UseCase<PendingInvoiceInput, Flow<PagingData<SalesInvoiceBO>>>() {
-    override suspend fun useCaseFunction(input: PendingInvoiceInput): Flow<PagingData<SalesInvoiceBO>> {
-        return repo.getPendingInvoices(input)
-    }
+class FetchPendingInvoiceUseCase(private val repo: SalesInvoiceRepository) :
+    UseCase<PendingInvoiceInput, Flow<PagingData<SalesInvoiceBO>>>() {
+  override suspend fun useCaseFunction(
+      input: PendingInvoiceInput
+  ): Flow<PagingData<SalesInvoiceBO>> {
+    return repo.getPendingInvoices(input)
+  }
 }

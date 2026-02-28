@@ -6,40 +6,38 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 
 @Composable
-fun SettingsRoute(
-    coordinator: SettingsCoordinator = rememberSettingsCoordinator()
-) {
-    val uiState by coordinator.screenStateFlow.collectAsState(POSSettingState.Loading)
-    val actions = rememberSettingsActions(coordinator)
+fun SettingsRoute(coordinator: SettingsCoordinator = rememberSettingsCoordinator()) {
+  val uiState by coordinator.screenStateFlow.collectAsState(POSSettingState.Loading)
+  val actions = rememberSettingsActions(coordinator)
 
-    PosSettingsScreen(uiState, actions)
+  PosSettingsScreen(uiState, actions)
 }
 
 @Composable
 fun rememberSettingsActions(coordinator: SettingsCoordinator): POSSettingAction {
-    return remember(coordinator) {
-        POSSettingAction(
-            loadSettings = coordinator::loadSettings,
-            onTaxesIncludedChanged = coordinator::onTaxesIncludedChanged,
-            onOfflineModeChanged = coordinator::onOfflineModeChanged,
-            onPrinterEnabledChanged = coordinator::onPrinterEnabledChanged,
-            onCashDrawerEnabledChanged = coordinator::onCashDrawerEnabledChanged,
-            onInventoryAlertsEnabledChanged = coordinator::onInventoryAlertsEnabledChanged,
-            onInventoryAlertTimeChanged = coordinator::onInventoryAlertTimeChanged,
-            onSalesTargetChanged = coordinator::onSalesTargetChanged,
-            onReturnPolicyChanged = coordinator::onReturnPolicyChanged,
-            onSyncSalesTarget = coordinator::onSyncSalesTarget,
-            onSelect = coordinator::onSelect,
-            onSyncNow = coordinator::onSyncNow,
-            onCancelSync = coordinator::onCancelSync,
-            onAutoSyncChanged = coordinator::onAutoSyncChanged,
-            onSyncOnStartupChanged = coordinator::onSyncOnStartupChanged,
-            onWifiOnlyChanged = coordinator::onWifiOnlyChanged,
-            onUseTtlChanged = coordinator::onUseTtlChanged,
-            onTtlHoursChanged = coordinator::onTtlHoursChanged,
-            onLanguageSelected = coordinator::onLanguageSelected,
-            onThemeSelected = coordinator::onThemeSelected,
-            onThemeModeSelected = coordinator::onThemeModeSelected
-        )
-    }
+  return remember(coordinator) {
+    POSSettingAction(
+        loadSettings = coordinator::loadSettings,
+        onTaxesIncludedChanged = coordinator::onTaxesIncludedChanged,
+        onOfflineModeChanged = coordinator::onOfflineModeChanged,
+        onPrinterEnabledChanged = coordinator::onPrinterEnabledChanged,
+        onCashDrawerEnabledChanged = coordinator::onCashDrawerEnabledChanged,
+        onInventoryAlertsEnabledChanged = coordinator::onInventoryAlertsEnabledChanged,
+        onInventoryAlertTimeChanged = coordinator::onInventoryAlertTimeChanged,
+        onSalesTargetChanged = coordinator::onSalesTargetChanged,
+        onReturnPolicyChanged = coordinator::onReturnPolicyChanged,
+        onSyncSalesTarget = coordinator::onSyncSalesTarget,
+        onSelect = coordinator::onSelect,
+        onSyncNow = coordinator::onSyncNow,
+        onCancelSync = coordinator::onCancelSync,
+        onAutoSyncChanged = coordinator::onAutoSyncChanged,
+        onSyncOnStartupChanged = coordinator::onSyncOnStartupChanged,
+        onWifiOnlyChanged = coordinator::onWifiOnlyChanged,
+        onUseTtlChanged = coordinator::onUseTtlChanged,
+        onTtlHoursChanged = coordinator::onTtlHoursChanged,
+        onLanguageSelected = coordinator::onLanguageSelected,
+        onThemeSelected = coordinator::onThemeSelected,
+        onThemeModeSelected = coordinator::onThemeModeSelected,
+    )
+  }
 }

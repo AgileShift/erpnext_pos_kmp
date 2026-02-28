@@ -150,12 +150,12 @@ import com.erpnext.pos.utils.view.SnackbarController
 import com.erpnext.pos.utils.view.SnackbarHost
 import com.erpnext.pos.utils.view.SnackbarPosition
 import com.erpnext.pos.utils.view.SnackbarType
+import kotlin.time.Clock
+import kotlin.time.ExperimentalTime
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
-import kotlin.time.Clock
-import kotlin.time.ExperimentalTime
 
 data class CartItem(
     val itemCode: String,
@@ -163,7 +163,7 @@ data class CartItem(
     val currency: String?,
     val quantity: Double,
     val price: Double,
-    val availableQty: Double? = null
+    val availableQty: Double? = null,
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -172,408 +172,397 @@ fun BillingScreen(
     state: BillingState,
     productsPagingFlow: Flow<PagingData<ItemBO>>,
     action: BillingAction,
-    snackbar: SnackbarController
+    snackbar: SnackbarController,
 ) {
-    val strings = LocalAppStrings.current
-    val uiSnackbar = snackbar.snackbar.collectAsState().value
-    val colors = MaterialTheme.colorScheme
-    val loadingState by LoadingIndicator.state.collectAsState(initial = LoadingUiState())
-    val globalBusy = loadingState.isLoading
-    var step by rememberSaveable { mutableStateOf(LabCheckoutStep.Cart) }
-    val successState = when (state) {
+  val strings = LocalAppStrings.current
+  val uiSnackbar = snackbar.snackbar.collectAsState().value
+  val colors = MaterialTheme.colorScheme
+  val loadingState by LoadingIndicator.state.collectAsState(initial = LoadingUiState())
+  val globalBusy = loadingState.isLoading
+  var step by rememberSaveable { mutableStateOf(LabCheckoutStep.Cart) }
+  val successState =
+      when (state) {
         is BillingState.Success -> state
         is BillingState.Error -> state.previous
         else -> null
-    }
-    val successMessage = successState?.successMessage
-    val successDialogMessage = successState?.successDialogMessage
-    val successDialogInvoice = successState?.successDialogInvoice
-    val successDialogId = successState?.successDialogId ?: 0L
-    var popupMessage by rememberSaveable { mutableStateOf<String?>(null) }
-    var popupInvoice by rememberSaveable { mutableStateOf<String?>(null) }
-    val topBarController = LocalTopBarController.current
-    val inactivityTimeoutMs = 5 * 60 * 1000L
-    var lastInteraction by remember { mutableStateOf(Clock.System.now().toEpochMilliseconds()) }
-    val hasActiveSale = state is BillingState.Success &&
-            (state.selectedCustomer != null ||
-                    state.cartItems.isNotEmpty() ||
-                    state.paymentLines.isNotEmpty())
+      }
+  val successMessage = successState?.successMessage
+  val successDialogMessage = successState?.successDialogMessage
+  val successDialogInvoice = successState?.successDialogInvoice
+  val successDialogId = successState?.successDialogId ?: 0L
+  var popupMessage by rememberSaveable { mutableStateOf<String?>(null) }
+  var popupInvoice by rememberSaveable { mutableStateOf<String?>(null) }
+  val topBarController = LocalTopBarController.current
+  val inactivityTimeoutMs = 5 * 60 * 1000L
+  var lastInteraction by remember { mutableStateOf(Clock.System.now().toEpochMilliseconds()) }
+  val hasActiveSale =
+      state is BillingState.Success &&
+          (state.selectedCustomer != null ||
+              state.cartItems.isNotEmpty() ||
+              state.paymentLines.isNotEmpty())
 
-    // Si salimos de Success, regresamos al primer paso.
-    LaunchedEffect(state, successState) {
-        if (successState == null) {
+  // Si salimos de Success, regresamos al primer paso.
+  LaunchedEffect(state, successState) {
+    if (successState == null) {
+      popupMessage = null
+      popupInvoice = null
+      action.onClearSuccessMessage()
+      step = LabCheckoutStep.Cart
+    } else if (
+        successState.selectedCustomer == null &&
+            successState.cartItems.isEmpty() &&
+            step != LabCheckoutStep.Cart
+    ) {
+      step = LabCheckoutStep.Cart
+    }
+  }
+
+  LaunchedEffect(successDialogId, successDialogMessage, successMessage) {
+    if (successDialogId == 0L) return@LaunchedEffect
+    val message =
+        (successDialogMessage ?: successMessage)?.takeIf { it.isNotBlank() }
+            ?: return@LaunchedEffect
+    popupMessage = message
+    popupInvoice = successDialogInvoice
+    delay(3000)
+    popupMessage = null
+    popupInvoice = null
+    action.onClearSuccessMessage()
+    if (step == LabCheckoutStep.Checkout) {
+      step = LabCheckoutStep.Cart
+    }
+  }
+
+  LaunchedEffect(lastInteraction, hasActiveSale) {
+    if (!hasActiveSale) return@LaunchedEffect
+    val now = Clock.System.now().toEpochMilliseconds()
+    val remaining = inactivityTimeoutMs - (now - lastInteraction)
+    if (remaining <= 0) {
+      step = LabCheckoutStep.Cart
+      action.onResetSale()
+      snackbar.show(strings.billing.inactivityResetMessage, SnackbarType.Info, SnackbarPosition.Top)
+      return@LaunchedEffect
+    }
+    delay(remaining)
+    val elapsed = Clock.System.now().toEpochMilliseconds() - lastInteraction
+    if (elapsed >= inactivityTimeoutMs && hasActiveSale) {
+      step = LabCheckoutStep.Cart
+      action.onResetSale()
+      snackbar.show(strings.billing.inactivityResetMessage, SnackbarType.Info, SnackbarPosition.Top)
+    }
+  }
+
+  DisposableEffect(Unit) { onDispose { topBarController.reset() } }
+
+  LaunchedEffect(step, state) {
+    topBarController.set(
+        GlobalTopBarState(
+            subtitle =
+                if (state is BillingState.Success && state.selectedCustomer != null) {
+                  state.selectedCustomer.customerName
+                } else {
+                  null
+                },
+            showBack = step != LabCheckoutStep.Cart,
+            onBack = {
+              if (step == LabCheckoutStep.Checkout) {
+                step = LabCheckoutStep.Cart
+              } else if (step == LabCheckoutStep.Cart) {
+                action.onBack()
+              }
+            },
+        )
+    )
+  }
+
+  Box(
+      Modifier.fillMaxSize().pointerInput(Unit) {
+        awaitPointerEventScope {
+          while (true) {
+            awaitPointerEvent()
+            lastInteraction = Clock.System.now().toEpochMilliseconds()
+          }
+        }
+      }
+  ) {
+    Scaffold(
+        containerColor = colors.background,
+        bottomBar = {
+          if (state is BillingState.Success && step == LabCheckoutStep.Checkout) {
+            // Botón fijo para pagar siempre visible.
+            Box(
+                contentAlignment = Alignment.CenterEnd,
+                modifier =
+                    Modifier.fillMaxWidth()
+                        .background(
+                            Brush.verticalGradient(
+                                colors =
+                                    listOf(colors.background.copy(alpha = 0.0f), colors.background)
+                            )
+                        ),
+            ) {
+              val canFinalize =
+                  state.selectedCustomer != null &&
+                      state.cartItems.isNotEmpty() &&
+                      (state.isCreditSale || state.paidAmountBase + 0.01 >= state.total) &&
+                      (!state.isCreditSale || state.selectedPaymentTerm != null)
+              Button(
+                  onClick = action.onFinalizeSale,
+                  enabled = canFinalize && !globalBusy,
+                  modifier = Modifier.padding(horizontal = 16.dp, vertical = 16.dp),
+                  colors =
+                      ButtonDefaults.buttonColors(
+                          containerColor = colors.primary,
+                          contentColor = colors.onPrimary,
+                      ),
+              ) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                  Text(strings.billing.finalizeSale, fontWeight = FontWeight.Bold)
+                  Icon(
+                      modifier = Modifier.size(14.dp),
+                      imageVector = Icons.Default.ShoppingCartCheckout,
+                      contentDescription = strings.billing.finalizeSale,
+                      tint = Color.White,
+                  )
+                }
+              }
+            }
+          }
+        },
+    ) { paddingValues ->
+      when (state) {
+        BillingState.Loading -> {
+          Box(
+              modifier = Modifier.fillMaxSize().padding(paddingValues),
+              contentAlignment = Alignment.Center,
+          ) {
+            CircularProgressIndicator(
+                trackColor = colors.onSecondary, // Color.Blue,
+                color = colors.onPrimary, // Color.Cyan,
+                strokeWidth = 2.dp,
+            )
+          }
+        }
+
+        is BillingState.Error -> {
+          LaunchedEffect(state.message) {
+            snackbar.show(state.message, SnackbarType.Error, SnackbarPosition.Top)
+          }
+          val previous = state.previous
+          if (previous != null) {
+            AnimatedContent(
+                targetState = step,
+                transitionSpec = {
+                  fadeIn(tween(180)) +
+                      slideInVertically(
+                          animationSpec = tween(180),
+                          initialOffsetY = { it / 6 },
+                      ) togetherWith
+                      fadeOut(tween(160)) +
+                          slideOutVertically(
+                              animationSpec = tween(160),
+                              targetOffsetY = { -it / 8 },
+                          )
+                },
+                label = "billing_step_transition_error_previous",
+            ) { targetStep ->
+              when (targetStep) {
+                LabCheckoutStep.Cart ->
+                    BillingLabContent(
+                        state = previous,
+                        productsPagingFlow = productsPagingFlow,
+                        action = action,
+                        onCheckout = {
+                          if (previous.selectedCustomer == null)
+                              snackbar.show(
+                                  strings.billing.selectCustomerForDocuments,
+                                  SnackbarType.Error,
+                                  SnackbarPosition.Top,
+                              )
+                          else if (previous.cartItems.isEmpty()) {
+                            snackbar.show(
+                                strings.billing.emptyCartSnackbar,
+                                SnackbarType.Error,
+                                SnackbarPosition.Top,
+                            )
+                          } else step = LabCheckoutStep.Checkout
+                        },
+                        modifier =
+                            Modifier.fillMaxSize()
+                                .padding(top = paddingValues.calculateTopPadding()),
+                    )
+
+                LabCheckoutStep.Checkout ->
+                    BillingLabCheckoutStep(
+                        state = previous,
+                        action = action,
+                        modifier =
+                            Modifier.fillMaxSize()
+                                .padding(top = paddingValues.calculateTopPadding()),
+                    )
+              }
+            }
+          } else {
+            Box(
+                modifier = Modifier.fillMaxSize().padding(paddingValues),
+                contentAlignment = Alignment.Center,
+            ) {
+              Card(
+                  shape = RoundedCornerShape(16.dp),
+                  colors = CardDefaults.cardColors(containerColor = colors.surfaceVariant),
+              ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                  Text(
+                      text = strings.billing.noDataAvailable,
+                      style = MaterialTheme.typography.bodyMedium,
+                      color = colors.onSurface,
+                  )
+                  if (state.showSyncRates) {
+                    Button(onClick = action.onSyncExchangeRates) {
+                      Text(strings.billing.syncRatesButton)
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+
+        BillingState.Empty -> {
+          Box(
+              modifier = Modifier.fillMaxSize().padding(paddingValues),
+              contentAlignment = Alignment.Center,
+          ) {
+            snackbar.show(strings.billing.noDataAvailable, SnackbarType.Info, SnackbarPosition.Top)
+          }
+        }
+
+        is BillingState.Success -> {
+          AnimatedContent(
+              targetState = step,
+              transitionSpec = {
+                fadeIn(tween(180)) +
+                    slideInVertically(
+                        animationSpec = tween(180),
+                        initialOffsetY = { it / 6 },
+                    ) togetherWith
+                    fadeOut(tween(160)) +
+                        slideOutVertically(animationSpec = tween(160), targetOffsetY = { -it / 8 })
+              },
+              label = "billing_step_transition",
+          ) { targetStep ->
+            when (targetStep) {
+              LabCheckoutStep.Cart ->
+                  BillingLabContent(
+                      state = state,
+                      productsPagingFlow = productsPagingFlow,
+                      action = action,
+                      onCheckout = {
+                        if (state.selectedCustomer == null)
+                            snackbar.show(
+                                strings.billing.selectCustomerForDocuments,
+                                SnackbarType.Error,
+                                SnackbarPosition.Top,
+                            )
+                        else if (state.cartItems.isEmpty()) {
+                          snackbar.show(
+                              strings.billing.emptyCartSnackbar,
+                              SnackbarType.Error,
+                              SnackbarPosition.Top,
+                          )
+                        } else step = LabCheckoutStep.Checkout
+                      },
+                      modifier =
+                          Modifier.fillMaxSize().padding(top = paddingValues.calculateTopPadding()),
+                  )
+
+              LabCheckoutStep.Checkout ->
+                  BillingLabCheckoutStep(
+                      state = state,
+                      action = action,
+                      modifier =
+                          Modifier.fillMaxSize().padding(top = paddingValues.calculateTopPadding()),
+                  )
+            }
+          }
+        }
+      }
+    }
+
+    if (!popupMessage.isNullOrBlank()) {
+      Dialog(
+          onDismissRequest = {
             popupMessage = null
             popupInvoice = null
             action.onClearSuccessMessage()
-            step = LabCheckoutStep.Cart
-        } else if (successState.selectedCustomer == null && successState.cartItems.isEmpty() && step != LabCheckoutStep.Cart) {
-            step = LabCheckoutStep.Cart
-        }
-    }
-
-    LaunchedEffect(successDialogId, successDialogMessage, successMessage) {
-        if (successDialogId == 0L) return@LaunchedEffect
-        val message = (successDialogMessage ?: successMessage)
-            ?.takeIf { it.isNotBlank() } ?: return@LaunchedEffect
-        popupMessage = message
-        popupInvoice = successDialogInvoice
-        delay(3000)
-        popupMessage = null
-        popupInvoice = null
-        action.onClearSuccessMessage()
-        if (step == LabCheckoutStep.Checkout) {
-            step = LabCheckoutStep.Cart
-        }
-    }
-
-    LaunchedEffect(lastInteraction, hasActiveSale) {
-        if (!hasActiveSale) return@LaunchedEffect
-        val now = Clock.System.now().toEpochMilliseconds()
-        val remaining = inactivityTimeoutMs - (now - lastInteraction)
-        if (remaining <= 0) {
-            step = LabCheckoutStep.Cart
-            action.onResetSale()
-            snackbar.show(
-                strings.billing.inactivityResetMessage,
-                SnackbarType.Info,
-                SnackbarPosition.Top
+          },
+          properties = DialogProperties(dismissOnClickOutside = true, dismissOnBackPress = true),
+      ) {
+        Surface(
+            shape = RoundedCornerShape(20.dp),
+            color = colors.surface,
+            tonalElevation = 8.dp,
+            shadowElevation = 10.dp,
+            modifier = Modifier.widthIn(min = 420.dp),
+        ) {
+          Column(
+              modifier = Modifier.padding(horizontal = 36.dp, vertical = 30.dp),
+              horizontalAlignment = Alignment.CenterHorizontally,
+              verticalArrangement = Arrangement.spacedBy(10.dp),
+          ) {
+            Icon(
+                imageVector = Icons.Default.CheckCircle,
+                contentDescription = null,
+                tint = colors.primary,
+                modifier = Modifier.size(56.dp),
             )
-            return@LaunchedEffect
-        }
-        delay(remaining)
-        val elapsed = Clock.System.now().toEpochMilliseconds() - lastInteraction
-        if (elapsed >= inactivityTimeoutMs && hasActiveSale) {
-            step = LabCheckoutStep.Cart
-            action.onResetSale()
-            snackbar.show(
-                strings.billing.inactivityResetMessage,
-                SnackbarType.Info,
-                SnackbarPosition.Top
+            Text(
+                text = popupMessage ?: strings.billing.finalizeSale,
+                color = colors.onSurface,
+                fontWeight = FontWeight.SemiBold,
+                fontSize = 20.sp,
+                textAlign = TextAlign.Center,
             )
-        }
-    }
-
-    DisposableEffect(Unit) {
-        onDispose { topBarController.reset() }
-    }
-
-    LaunchedEffect(step, state) {
-        topBarController.set(
-            GlobalTopBarState(
-                subtitle = if (state is BillingState.Success && state.selectedCustomer != null) {
-                    state.selectedCustomer.customerName
-                } else {
-                    null
-                },
-                showBack = step != LabCheckoutStep.Cart,
-                onBack = {
-                    if (step == LabCheckoutStep.Checkout) {
-                        step = LabCheckoutStep.Cart
-                    } else if (step == LabCheckoutStep.Cart) {
-                        action.onBack()
-                    }
-                }
-            )
-        )
-    }
-
-    Box(
-        Modifier
-            .fillMaxSize()
-            .pointerInput(Unit) {
-                awaitPointerEventScope {
-                    while (true) {
-                        awaitPointerEvent()
-                        lastInteraction = Clock.System.now().toEpochMilliseconds()
-                    }
-                }
+            popupInvoice?.let { invoice ->
+              Text(
+                  text = "${strings.billing.referenceLabel}: $invoice",
+                  color = colors.onSurface.copy(alpha = 0.75f),
+                  fontSize = 14.sp,
+              )
             }
-    ) {
-        Scaffold(
-            containerColor = colors.background,
-            bottomBar = {
-                if (state is BillingState.Success && step == LabCheckoutStep.Checkout) {
-                    // Botón fijo para pagar siempre visible.
-                    Box(
-                        contentAlignment = Alignment.CenterEnd,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .background(
-                                Brush.verticalGradient(
-                                    colors = listOf(
-                                        colors.background.copy(alpha = 0.0f),
-                                        colors.background
-                                    )
-                                )
-                            )
-                    ) {
-                        val canFinalize = state.selectedCustomer != null &&
-                                state.cartItems.isNotEmpty() &&
-                                (state.isCreditSale || state.paidAmountBase + 0.01 >= state.total) &&
-                                (!state.isCreditSale || state.selectedPaymentTerm != null)
-                        Button(
-                            onClick = action.onFinalizeSale,
-                            enabled = canFinalize && !globalBusy,
-                            modifier = Modifier
-                                .padding(horizontal = 16.dp, vertical = 16.dp),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = colors.primary,
-                                contentColor = colors.onPrimary
-                            )
-                        ) {
-                            Row(
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(strings.billing.finalizeSale, fontWeight = FontWeight.Bold)
-                                Icon(
-                                    modifier = Modifier.size(14.dp),
-                                    imageVector = Icons.Default.ShoppingCartCheckout,
-                                    contentDescription = strings.billing.finalizeSale,
-                                    tint = Color.White
-                                )
-                            }
-                        }
-                    }
+            Spacer(Modifier.height(6.dp))
+            Button(
+                onClick = {
+                  popupMessage = null
+                  popupInvoice = null
+                  action.onClearSuccessMessage()
                 }
-            }
-        ) { paddingValues ->
-            when (state) {
-                BillingState.Loading -> {
-                    Box(
-                        modifier = Modifier.fillMaxSize().padding(paddingValues),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        CircularProgressIndicator(
-                            trackColor = colors.onSecondary, //Color.Blue,
-                            color = colors.onPrimary, //Color.Cyan,
-                            strokeWidth = 2.dp
-                        )
-                    }
-                }
-
-                is BillingState.Error -> {
-                    LaunchedEffect(state.message) {
-                        snackbar.show(
-                            state.message,
-                            SnackbarType.Error,
-                            SnackbarPosition.Top
-                        )
-                    }
-                    val previous = state.previous
-                    if (previous != null) {
-                        AnimatedContent(
-                            targetState = step,
-                            transitionSpec = {
-                                fadeIn(tween(180)) + slideInVertically(
-                                    animationSpec = tween(180),
-                                    initialOffsetY = { it / 6 }
-                                ) togetherWith fadeOut(tween(160)) + slideOutVertically(
-                                    animationSpec = tween(160),
-                                    targetOffsetY = { -it / 8 }
-                                )
-                            },
-                            label = "billing_step_transition_error_previous"
-                        ) { targetStep ->
-                            when (targetStep) {
-                                LabCheckoutStep.Cart -> BillingLabContent(
-                                    state = previous,
-                                    productsPagingFlow = productsPagingFlow,
-                                    action = action,
-                                    onCheckout = {
-                                        if (previous.selectedCustomer == null)
-                                            snackbar.show(
-                                                strings.billing.selectCustomerForDocuments,
-                                                SnackbarType.Error,
-                                                SnackbarPosition.Top
-                                            )
-                                        else if (previous.cartItems.isEmpty()) {
-                                            snackbar.show(
-                                                strings.billing.emptyCartSnackbar,
-                                                SnackbarType.Error,
-                                                SnackbarPosition.Top
-                                            )
-                                        } else
-                                            step = LabCheckoutStep.Checkout
-                                    },
-                                    modifier = Modifier
-                                        .fillMaxSize()
-                                        .padding(top = paddingValues.calculateTopPadding())
-                                )
-
-                                LabCheckoutStep.Checkout -> BillingLabCheckoutStep(
-                                    state = previous,
-                                    action = action,
-                                    modifier = Modifier
-                                        .fillMaxSize()
-                                        .padding(top = paddingValues.calculateTopPadding())
-                                )
-                            }
-                        }
-                    } else {
-                        Box(
-                            modifier = Modifier.fillMaxSize().padding(paddingValues),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Card(
-                                shape = RoundedCornerShape(16.dp),
-                                colors = CardDefaults.cardColors(containerColor = colors.surfaceVariant)
-                            ) {
-                                Column(
-                                    modifier = Modifier.padding(16.dp),
-                                    verticalArrangement = Arrangement.spacedBy(10.dp),
-                                    horizontalAlignment = Alignment.CenterHorizontally
-                                ) {
-                                    Text(
-                                        text = strings.billing.noDataAvailable,
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = colors.onSurface
-                                    )
-                                    if (state.showSyncRates) {
-                                        Button(onClick = action.onSyncExchangeRates) {
-                                            Text(strings.billing.syncRatesButton)
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-
-                BillingState.Empty -> {
-                    Box(
-                        modifier = Modifier.fillMaxSize().padding(paddingValues),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        snackbar.show(
-                            strings.billing.noDataAvailable,
-                            SnackbarType.Info,
-                            SnackbarPosition.Top
-                        )
-                    }
-                }
-
-                is BillingState.Success -> {
-                    AnimatedContent(
-                        targetState = step,
-                        transitionSpec = {
-                            fadeIn(tween(180)) + slideInVertically(
-                                animationSpec = tween(180),
-                                initialOffsetY = { it / 6 }
-                            ) togetherWith fadeOut(tween(160)) + slideOutVertically(
-                                animationSpec = tween(160),
-                                targetOffsetY = { -it / 8 }
-                            )
-                        },
-                        label = "billing_step_transition"
-                    ) { targetStep ->
-                        when (targetStep) {
-                            LabCheckoutStep.Cart -> BillingLabContent(
-                                state = state,
-                                productsPagingFlow = productsPagingFlow,
-                                action = action,
-                                onCheckout = {
-                                    if (state.selectedCustomer == null)
-                                        snackbar.show(
-                                            strings.billing.selectCustomerForDocuments,
-                                            SnackbarType.Error,
-                                            SnackbarPosition.Top
-                                        )
-                                    else if (state.cartItems.isEmpty()) {
-                                        snackbar.show(
-                                            strings.billing.emptyCartSnackbar,
-                                            SnackbarType.Error,
-                                            SnackbarPosition.Top
-                                        )
-                                    } else
-                                        step = LabCheckoutStep.Checkout
-                                },
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .padding(top = paddingValues.calculateTopPadding())
-                            )
-
-                            LabCheckoutStep.Checkout -> BillingLabCheckoutStep(
-                                state = state,
-                                action = action,
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .padding(top = paddingValues.calculateTopPadding())
-                            )
-                        }
-                    }
-                }
-            }
-        }
-
-        if (!popupMessage.isNullOrBlank()) {
-            Dialog(
-                onDismissRequest = {
-                    popupMessage = null
-                    popupInvoice = null
-                    action.onClearSuccessMessage()
-                },
-                properties = DialogProperties(
-                    dismissOnClickOutside = true,
-                    dismissOnBackPress = true
-                )
             ) {
-                Surface(
-                    shape = RoundedCornerShape(20.dp),
-                    color = colors.surface,
-                    tonalElevation = 8.dp,
-                    shadowElevation = 10.dp,
-                    modifier = Modifier.widthIn(min = 420.dp)
-                ) {
-                    Column(
-                        modifier = Modifier.padding(horizontal = 36.dp, vertical = 30.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.CheckCircle,
-                            contentDescription = null,
-                            tint = colors.primary,
-                            modifier = Modifier.size(56.dp)
-                        )
-                        Text(
-                            text = popupMessage ?: strings.billing.finalizeSale,
-                            color = colors.onSurface,
-                            fontWeight = FontWeight.SemiBold,
-                            fontSize = 20.sp,
-                            textAlign = TextAlign.Center
-                        )
-                        popupInvoice?.let { invoice ->
-                            Text(
-                                text = "${strings.billing.referenceLabel}: $invoice",
-                                color = colors.onSurface.copy(alpha = 0.75f),
-                                fontSize = 14.sp
-                            )
-                        }
-                        Spacer(Modifier.height(6.dp))
-                        Button(
-                            onClick = {
-                                popupMessage = null
-                                popupInvoice = null
-                                action.onClearSuccessMessage()
-                            }
-                        ) {
-                            Text(strings.billing.closeButton)
-                        }
-                    }
-                }
+              Text(strings.billing.closeButton)
             }
+          }
         }
+      }
     }
+  }
 
-    SnackbarHost(
-        snackbar = uiSnackbar, onDismiss = snackbar::dismiss, modifier = Modifier.fillMaxSize()
-    )
+  SnackbarHost(
+      snackbar = uiSnackbar,
+      onDismiss = snackbar::dismiss,
+      modifier = Modifier.fillMaxSize(),
+  )
 }
 
 private enum class LabCheckoutStep {
-    Cart,
-    Checkout
+  Cart,
+  Checkout,
 }
 
 @Composable
@@ -582,655 +571,632 @@ private fun BillingLabContent(
     productsPagingFlow: Flow<PagingData<ItemBO>>,
     action: BillingAction,
     onCheckout: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
-    val strings = LocalAppStrings.current
-    val colors = MaterialTheme.colorScheme
-    val scope = rememberCoroutineScope()
-    val accent = colors.primary
-    val background = colors.background
-    val leftPanelBg = colors.surfaceVariant
-    val invoiceCurrency = state.currency?.trim()?.uppercase().orEmpty().ifBlank { "USD" }
-    val baseCurrency = state.baseCurrency?.trim()?.uppercase().orEmpty().ifBlank { invoiceCurrency }
-    val secondaryCurrency = resolveSecondaryCurrency(
-        invoiceCurrency = invoiceCurrency,
-        baseCurrency = baseCurrency,
-        exchangeRateByCurrency = state.exchangeRateByCurrency
+  val strings = LocalAppStrings.current
+  val colors = MaterialTheme.colorScheme
+  val scope = rememberCoroutineScope()
+  val accent = colors.primary
+  val background = colors.background
+  val leftPanelBg = colors.surfaceVariant
+  val invoiceCurrency = state.currency?.trim()?.uppercase().orEmpty().ifBlank { "USD" }
+  val baseCurrency = state.baseCurrency?.trim()?.uppercase().orEmpty().ifBlank { invoiceCurrency }
+  val secondaryCurrency =
+      resolveSecondaryCurrency(
+          invoiceCurrency = invoiceCurrency,
+          baseCurrency = baseCurrency,
+          exchangeRateByCurrency = state.exchangeRateByCurrency,
+      )
+  fun toSecondary(amount: Double): Double? {
+    return convertToSecondary(
+        amount = amount,
+        secondaryCurrency = secondaryCurrency,
+        exchangeRateByCurrency = state.exchangeRateByCurrency,
     )
-    fun toSecondary(amount: Double): Double? {
-        return convertToSecondary(
-            amount = amount,
-            secondaryCurrency = secondaryCurrency,
-            exchangeRateByCurrency = state.exchangeRateByCurrency
-        )
-    }
+  }
 
-    val filteredProductsFlow = remember(productsPagingFlow) {
-        productsPagingFlow.map { paging ->
-            paging.filter { item -> item.actualQty > 0.0 }
-        }
-    }
-    val products = filteredProductsFlow.collectAsLazyPagingItems()
-    val categoriesFromSnapshot = remember(products.itemSnapshotList.items) {
+  val filteredProductsFlow =
+      remember(productsPagingFlow) {
+        productsPagingFlow.map { paging -> paging.filter { item -> item.actualQty > 0.0 } }
+      }
+  val products = filteredProductsFlow.collectAsLazyPagingItems()
+  val categoriesFromSnapshot =
+      remember(products.itemSnapshotList.items) {
         products.itemSnapshotList.items
             .mapNotNull { it.itemGroup.takeIf { g -> g.isNotBlank() } }
             .distinct()
             .sorted()
-    }
-    val categories = remember(state.productCategories, categoriesFromSnapshot) {
+      }
+  val categories =
+      remember(state.productCategories, categoriesFromSnapshot) {
         state.productCategories.ifEmpty { categoriesFromSnapshot }
-    }
-    var selectedCategory by rememberSaveable { mutableStateOf(state.selectedProductCategory) }
+      }
+  var selectedCategory by rememberSaveable { mutableStateOf(state.selectedProductCategory) }
 
-    LaunchedEffect(state.selectedProductCategory) {
-        if (selectedCategory != state.selectedProductCategory) {
-            selectedCategory = state.selectedProductCategory
+  LaunchedEffect(state.selectedProductCategory) {
+    if (selectedCategory != state.selectedProductCategory) {
+      selectedCategory = state.selectedProductCategory
+    }
+  }
+
+  Column(
+      modifier = modifier.background(background).padding(16.dp),
+      verticalArrangement = Arrangement.spacedBy(12.dp),
+  ) {
+    Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+      Column(
+          modifier =
+              Modifier.weight(1f)
+                  .fillMaxHeight()
+                  .background(leftPanelBg, RoundedCornerShape(20.dp))
+                  .padding(16.dp)
+      ) {
+        LabSearchBar(
+            value = state.productSearchQuery,
+            onChange = action.onProductSearchQueryChange,
+            onClear = { action.onProductSearchQueryChange("") },
+        )
+
+        Spacer(Modifier.height(12.dp))
+
+        LabCategoryTabs(
+            categories = categories,
+            selectedCategory = selectedCategory,
+            onSelect = {
+              selectedCategory = it
+              action.onProductCategorySelected(it)
+            },
+        )
+
+        Spacer(Modifier.height(16.dp))
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+          Text(
+              text =
+                  if (selectedCategory == "Todos") strings.customer.allLabel else selectedCategory,
+              style = MaterialTheme.typography.titleSmall,
+              color = colors.onSurfaceVariant,
+          )
+          Text(
+              text = "(${products.itemCount})",
+              style = MaterialTheme.typography.labelMedium,
+              color = colors.onSurfaceVariant.copy(alpha = 0.7f),
+          )
         }
-    }
 
-    Column(
-        modifier = modifier
-            .background(background)
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+        Spacer(Modifier.height(12.dp))
+
+        val gridState = rememberLazyGridState()
+        val showBackToTop by remember { derivedStateOf { gridState.firstVisibleItemIndex > 0 } }
+        Box(modifier = Modifier.fillMaxSize()) {
+          LazyVerticalGrid(
+              state = gridState,
+              columns = GridCells.Adaptive(minSize = 220.dp),
+              verticalArrangement = Arrangement.spacedBy(12.dp),
+              horizontalArrangement = Arrangement.spacedBy(12.dp),
+              modifier = Modifier.fillMaxSize(),
+          ) {
+            items(
+                count = products.itemCount,
+                key = { index -> products[index]?.itemCode ?: "billing_item_$index" },
+            ) { index ->
+              val item = products[index] ?: return@items
+              LabProductCard(
+                  item = item,
+                  baseCurrency = invoiceCurrency,
+                  exchangeRateByCurrency = state.exchangeRateByCurrency,
+                  accent = accent,
+                  onClick = { action.onProductAdded(item) },
+              )
+            }
+            if (products.loadState.append is LoadState.Loading) {
+              item(span = { androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan) }) {
+                Box(
+                    modifier = Modifier.fillMaxWidth().padding(12.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                  CircularProgressIndicator()
+                }
+              }
+            }
+          }
+          if (showBackToTop) {
+            Button(
+                onClick = { scope.launch { gridState.animateScrollToItem(0) } },
+                modifier = Modifier.align(Alignment.BottomEnd).padding(8.dp),
+            ) {
+              Icon(imageVector = Icons.Filled.KeyboardArrowUp, contentDescription = "Back to top")
+            }
+          }
+        }
+      }
+
+      Surface(
+          color = colors.surface,
+          shape = RoundedCornerShape(22.dp),
+          tonalElevation = 2.dp,
+          shadowElevation = 12.dp,
+          modifier = Modifier.widthIn(min = 320.dp, max = 420.dp).fillMaxHeight(),
+      ) {
+        Column(modifier = Modifier.fillMaxHeight().padding(16.dp)) {
+          LabCartHeader(itemCount = state.cartItems.sumOf { it.quantity }.toInt(), accent = accent)
+
+          Spacer(Modifier.height(12.dp))
+
+          Column(
+              verticalArrangement = Arrangement.spacedBy(12.dp),
+              modifier = Modifier.padding(bottom = 8.dp),
+          ) {
+            CustomerSelector(
+                customers = state.customers,
+                query = state.customerSearchQuery,
+                onQueryChange = action.onCustomerSearchQueryChange,
+                onCustomerSelected = action.onCustomerSelected,
+            )
+          }
+          Spacer(Modifier.height(12.dp))
+          Text(
+              text = strings.billing.cartSectionTitle,
+              style = MaterialTheme.typography.titleSmall,
+              color = colors.onSurface,
+          )
+
+          Spacer(Modifier.height(8.dp))
+
+          if (state.cartItems.isEmpty()) {
+            Box(
+                modifier = Modifier.fillMaxWidth().weight(1f),
+                contentAlignment = Alignment.Center,
+            ) {
+              Text(
+                  text = strings.billing.cartEmptyTitle,
+                  style = MaterialTheme.typography.bodySmall,
+                  color = colors.onSurfaceVariant,
+              )
+            }
+          } else {
+            LazyColumn(
+                modifier = Modifier.fillMaxWidth().weight(1f),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+              items(state.cartItems, key = { it.itemCode }) { item ->
+                LabCartItem(
+                    item = item,
+                    baseCurrency = invoiceCurrency,
+                    exchangeRateByCurrency = state.exchangeRateByCurrency,
+                    onUpdateQuantity = { qty -> action.onQuantityChanged(item.itemCode, qty) },
+                    onRemove = { action.onRemoveItem(item.itemCode) },
+                )
+              }
+            }
+          }
+
+          Spacer(Modifier.height(12.dp))
+
+          // Resumen de carrito para contexto rápido.
+          Card(
+              modifier = Modifier.fillMaxWidth(),
+              colors = CardDefaults.cardColors(containerColor = colors.surfaceVariant),
+          ) {
             Column(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxHeight()
-                    .background(leftPanelBg, RoundedCornerShape(20.dp))
-                    .padding(16.dp)
+                modifier = Modifier.padding(12.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
             ) {
-                LabSearchBar(
-                    value = state.productSearchQuery,
-                    onChange = action.onProductSearchQueryChange,
-                    onClear = { action.onProductSearchQueryChange("") }
+              Text(
+                  text = strings.billing.cartSummaryTitle,
+                  style = MaterialTheme.typography.labelLarge,
+                  color = colors.onSurface,
+              )
+              Text(
+                  text =
+                      "${strings.billing.customerSectionTitle}: ${state.selectedCustomer?.customerName ?: "--"}",
+                  style = MaterialTheme.typography.bodySmall,
+                  color = colors.onSurfaceVariant,
+              )
+              Text(
+                  text = "${strings.billing.cartItemsLabel}: ${state.cartItems.size}",
+                  style = MaterialTheme.typography.bodySmall,
+                  color = colors.onSurfaceVariant,
+              )
+              HorizontalDivider(color = colors.outlineVariant, thickness = 1.dp)
+              PaymentTotalsRow(
+                  "Subtotal",
+                  invoiceCurrency,
+                  state.subtotal,
+                  secondaryCurrencyCode = secondaryCurrency,
+                  secondaryAmount = toSecondary(state.subtotal),
+              )
+              if (state.taxes > 0.0) {
+                PaymentTotalsRow(
+                    "Impuestos",
+                    invoiceCurrency,
+                    state.taxes,
+                    secondaryCurrencyCode = secondaryCurrency,
+                    secondaryAmount = toSecondary(state.taxes),
                 )
-
-                Spacer(Modifier.height(12.dp))
-
-                LabCategoryTabs(
-                    categories = categories,
-                    selectedCategory = selectedCategory,
-                    onSelect = {
-                        selectedCategory = it
-                        action.onProductCategorySelected(it)
-                    }
+              }
+              if (state.discount > 0.0) {
+                PaymentTotalsRow(
+                    "Descuento",
+                    invoiceCurrency,
+                    -state.discount,
+                    secondaryCurrencyCode = secondaryCurrency,
+                    secondaryAmount = toSecondary(-state.discount),
                 )
-
-                Spacer(Modifier.height(16.dp))
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = if (selectedCategory == "Todos") strings.customer.allLabel else selectedCategory,
-                        style = MaterialTheme.typography.titleSmall,
-                        color = colors.onSurfaceVariant
-                    )
-                    Text(
-                        text = "(${products.itemCount})",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = colors.onSurfaceVariant.copy(alpha = 0.7f)
-                    )
-                }
-
-                Spacer(Modifier.height(12.dp))
-
-                val gridState = rememberLazyGridState()
-                val showBackToTop by remember {
-                    derivedStateOf { gridState.firstVisibleItemIndex > 0 }
-                }
-                Box(modifier = Modifier.fillMaxSize()) {
-                    LazyVerticalGrid(
-                        state = gridState,
-                        columns = GridCells.Adaptive(minSize = 220.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                        modifier = Modifier.fillMaxSize()
-                    ) {
-                        items(
-                            count = products.itemCount,
-                            key = { index -> products[index]?.itemCode ?: "billing_item_$index" }
-                        ) { index ->
-                            val item = products[index] ?: return@items
-                            LabProductCard(
-                                item = item,
-                                baseCurrency = invoiceCurrency,
-                                exchangeRateByCurrency = state.exchangeRateByCurrency,
-                                accent = accent,
-                                onClick = { action.onProductAdded(item) }
-                            )
-                        }
-                        if (products.loadState.append is LoadState.Loading) {
-                            item(span = { androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan) }) {
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(12.dp),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    CircularProgressIndicator()
-                                }
-                            }
-                        }
-                    }
-                    if (showBackToTop) {
-                        Button(
-                            onClick = { scope.launch { gridState.animateScrollToItem(0) } },
-                            modifier = Modifier.align(Alignment.BottomEnd).padding(8.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Filled.KeyboardArrowUp,
-                                contentDescription = "Back to top"
-                            )
-                        }
-                    }
-                }
+              }
+              if (state.shippingAmount > 0.0) {
+                PaymentTotalsRow(
+                    "Envío",
+                    invoiceCurrency,
+                    state.shippingAmount,
+                    secondaryCurrencyCode = secondaryCurrency,
+                    secondaryAmount = toSecondary(state.shippingAmount),
+                )
+              }
+              PaymentTotalsRow(
+                  "Total",
+                  invoiceCurrency,
+                  state.total,
+                  secondaryCurrencyCode = secondaryCurrency,
+                  secondaryAmount = toSecondary(state.total),
+              )
             }
+          }
 
-            Surface(
-                color = colors.surface,
-                shape = RoundedCornerShape(22.dp),
-                tonalElevation = 2.dp,
-                shadowElevation = 12.dp,
-                modifier = Modifier
-                    .widthIn(min = 320.dp, max = 420.dp)
-                    .fillMaxHeight()
-            ) {
-                Column(
-                    modifier = Modifier.fillMaxHeight().padding(16.dp)
-                ) {
-                    LabCartHeader(
-                        itemCount = state.cartItems.sumOf { it.quantity }.toInt(),
-                        accent = accent
-                    )
+          Spacer(Modifier.height(12.dp))
 
-                    Spacer(Modifier.height(12.dp))
+          // Botón de checkout: pasamos al siguiente paso sin validar pagos.
+          Button(
+              onClick = onCheckout,
+              enabled = state.selectedCustomer != null && state.cartItems.isNotEmpty(),
+              modifier = Modifier.fillMaxWidth(),
+              colors =
+                  ButtonDefaults.buttonColors(
+                      containerColor = colors.primary,
+                      contentColor = colors.onPrimary,
+                  ),
+          ) {
+            Text(strings.billing.checkoutButton)
+          }
 
-                    Column(
-                        verticalArrangement = Arrangement.spacedBy(12.dp),
-                        modifier = Modifier.padding(bottom = 8.dp)
-                    ) {
-                        CustomerSelector(
-                            customers = state.customers,
-                            query = state.customerSearchQuery,
-                            onQueryChange = action.onCustomerSearchQueryChange,
-                            onCustomerSelected = action.onCustomerSelected
-                        )
-                    }
-                    Spacer(Modifier.height(12.dp))
-                    Text(
-                        text = strings.billing.cartSectionTitle,
-                        style = MaterialTheme.typography.titleSmall,
-                        color = colors.onSurface
-                    )
+          Spacer(Modifier.height(6.dp))
 
-                    Spacer(Modifier.height(8.dp))
-
-                    if (state.cartItems.isEmpty()) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .weight(1f),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                text = strings.billing.cartEmptyTitle,
-                                style = MaterialTheme.typography.bodySmall,
-                                color = colors.onSurfaceVariant
-                            )
-                        }
-                    } else {
-                        LazyColumn(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .weight(1f),
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            items(state.cartItems, key = { it.itemCode }) { item ->
-                                LabCartItem(
-                                    item = item,
-                                    baseCurrency = invoiceCurrency,
-                                    exchangeRateByCurrency = state.exchangeRateByCurrency,
-                                    onUpdateQuantity = { qty ->
-                                        action.onQuantityChanged(item.itemCode, qty)
-                                    },
-                                    onRemove = { action.onRemoveItem(item.itemCode) }
-                                )
-                            }
-                        }
-                    }
-
-                    Spacer(Modifier.height(12.dp))
-
-                    // Resumen de carrito para contexto rápido.
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = CardDefaults.cardColors(containerColor = colors.surfaceVariant)
-                    ) {
-                        Column(
-                            modifier = Modifier.padding(12.dp),
-                            verticalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            Text(
-                                text = strings.billing.cartSummaryTitle,
-                                style = MaterialTheme.typography.labelLarge,
-                                color = colors.onSurface
-                            )
-                            Text(
-                                text = "${strings.billing.customerSectionTitle}: ${state.selectedCustomer?.customerName ?: "--"}",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = colors.onSurfaceVariant
-                            )
-                            Text(
-                                text = "${strings.billing.cartItemsLabel}: ${state.cartItems.size}",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = colors.onSurfaceVariant
-                            )
-                            HorizontalDivider(color = colors.outlineVariant, thickness = 1.dp)
-                            PaymentTotalsRow(
-                                "Subtotal",
-                                invoiceCurrency,
-                                state.subtotal,
-                                secondaryCurrencyCode = secondaryCurrency,
-                                secondaryAmount = toSecondary(state.subtotal)
-                            )
-                            if (state.taxes > 0.0) {
-                                PaymentTotalsRow(
-                                    "Impuestos",
-                                    invoiceCurrency,
-                                    state.taxes,
-                                    secondaryCurrencyCode = secondaryCurrency,
-                                    secondaryAmount = toSecondary(state.taxes)
-                                )
-                            }
-                            if (state.discount > 0.0) {
-                                PaymentTotalsRow(
-                                    "Descuento",
-                                    invoiceCurrency,
-                                    -state.discount,
-                                    secondaryCurrencyCode = secondaryCurrency,
-                                    secondaryAmount = toSecondary(-state.discount)
-                                )
-                            }
-                            if (state.shippingAmount > 0.0) {
-                                PaymentTotalsRow(
-                                    "Envío",
-                                    invoiceCurrency,
-                                    state.shippingAmount,
-                                    secondaryCurrencyCode = secondaryCurrency,
-                                    secondaryAmount = toSecondary(state.shippingAmount)
-                                )
-                            }
-                            PaymentTotalsRow(
-                                "Total",
-                                invoiceCurrency,
-                                state.total,
-                                secondaryCurrencyCode = secondaryCurrency,
-                                secondaryAmount = toSecondary(state.total)
-                            )
-                        }
-                    }
-
-                    Spacer(Modifier.height(12.dp))
-
-                    // Botón de checkout: pasamos al siguiente paso sin validar pagos.
-                    Button(
-                        onClick = onCheckout,
-                        enabled = state.selectedCustomer != null && state.cartItems.isNotEmpty(),
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = colors.primary,
-                            contentColor = colors.onPrimary
-                        )
-                    ) {
-                        Text(strings.billing.checkoutButton)
-                    }
-
-                    Spacer(Modifier.height(6.dp))
-
-                    Text(
-                        text = strings.billing.continueToPaymentsHint,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = colors.onSurfaceVariant,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                }
-            }
+          Text(
+              text = strings.billing.continueToPaymentsHint,
+              style = MaterialTheme.typography.labelSmall,
+              color = colors.onSurfaceVariant,
+              textAlign = TextAlign.Center,
+              modifier = Modifier.fillMaxWidth(),
+          )
         }
+      }
     }
+  }
 }
 
 @Composable
 private fun BillingLabCheckoutStep(
     state: BillingState.Success,
     action: BillingAction,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
-    val strings = LocalAppStrings.current
-    val colors = MaterialTheme.colorScheme
-    val panelBg = colors.surfaceVariant.copy(alpha = 0.48f)
-    val panelBorder = colors.outlineVariant.copy(alpha = 0.42f)
-    val invoiceCurrency = state.currency?.trim()?.uppercase().orEmpty().ifBlank { "USD" }
-    val baseCurrency = state.baseCurrency?.trim()?.uppercase().orEmpty().ifBlank { invoiceCurrency }
-    val secondaryCurrency = resolveSecondaryCurrency(
-        invoiceCurrency = invoiceCurrency,
-        baseCurrency = baseCurrency,
-        exchangeRateByCurrency = state.exchangeRateByCurrency
+  val strings = LocalAppStrings.current
+  val colors = MaterialTheme.colorScheme
+  val panelBg = colors.surfaceVariant.copy(alpha = 0.48f)
+  val panelBorder = colors.outlineVariant.copy(alpha = 0.42f)
+  val invoiceCurrency = state.currency?.trim()?.uppercase().orEmpty().ifBlank { "USD" }
+  val baseCurrency = state.baseCurrency?.trim()?.uppercase().orEmpty().ifBlank { invoiceCurrency }
+  val secondaryCurrency =
+      resolveSecondaryCurrency(
+          invoiceCurrency = invoiceCurrency,
+          baseCurrency = baseCurrency,
+          exchangeRateByCurrency = state.exchangeRateByCurrency,
+      )
+  fun toSecondary(amount: Double): Double? {
+    return convertToSecondary(
+        amount = amount,
+        secondaryCurrency = secondaryCurrency,
+        exchangeRateByCurrency = state.exchangeRateByCurrency,
     )
-    fun toSecondary(amount: Double): Double? {
-        return convertToSecondary(
-            amount = amount,
-            secondaryCurrency = secondaryCurrency,
-            exchangeRateByCurrency = state.exchangeRateByCurrency
-        )
+  }
+  Column(
+      modifier =
+          modifier
+              .fillMaxSize()
+              .verticalScroll(rememberScrollState())
+              .padding(horizontal = 16.dp, vertical = 12.dp)
+  ) {
+    // Encabezado principal del checkout.
+    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+      Text(
+          text = strings.billing.checkoutDataTitle,
+          style = MaterialTheme.typography.titleLarge,
+          color = colors.onSurface,
+      )
+      Text(
+          text = strings.billing.checkoutReviewSubtitle,
+          style = MaterialTheme.typography.bodySmall,
+          color = colors.onSurfaceVariant,
+      )
     }
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = 16.dp, vertical = 12.dp)
-    ) {
-        // Encabezado principal del checkout.
-        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Text(
-                text = strings.billing.checkoutDataTitle,
-                style = MaterialTheme.typography.titleLarge,
-                color = colors.onSurface
-            )
-            Text(
-                text = strings.billing.checkoutReviewSubtitle,
-                style = MaterialTheme.typography.bodySmall,
-                color = colors.onSurfaceVariant
-            )
-        }
-        Spacer(Modifier.height(12.dp))
-        BoxWithConstraints(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(bottom = 72.dp)
+    Spacer(Modifier.height(12.dp))
+    BoxWithConstraints(modifier = Modifier.fillMaxWidth().padding(bottom = 72.dp)) {
+      val isWide = maxWidth >= 980.dp
+
+      @Composable
+      fun TotalCard(modifier: Modifier = Modifier) {
+        Card(
+            modifier = modifier,
+            shape = RoundedCornerShape(14.dp),
+            colors = CardDefaults.cardColors(containerColor = panelBg),
+            border = BorderStroke(1.dp, panelBorder),
+            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
         ) {
-            val isWide = maxWidth >= 980.dp
-
-            @Composable
-            fun TotalCard(modifier: Modifier = Modifier) {
-                Card(
-                    modifier = modifier,
-                    shape = RoundedCornerShape(14.dp),
-                    colors = CardDefaults.cardColors(containerColor = panelBg),
-                    border = BorderStroke(1.dp, panelBorder),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
-                ) {
-                    Column(
-                        modifier = Modifier.padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        SectionHeader(title = strings.billing.totalLabel, accent = colors.primary)
-                        Text(
-                            text = formatAmount(invoiceCurrency.toCurrencySymbol(), state.total),
-                            style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.ExtraBold),
-                            color = colors.onSurface
-                        )
-                        HorizontalDivider(color = colors.outlineVariant, thickness = (1.2).dp)
-                        PaymentTotalsRow(
-                            "Pagado",
-                            invoiceCurrency,
-                            state.paidAmountBase,
-                            secondaryCurrencyCode = secondaryCurrency,
-                            secondaryAmount = toSecondary(state.paidAmountBase)
-                        )
-                        PaymentTotalsRow(
-                            "Pendiente",
-                            invoiceCurrency,
-                            state.balanceDueBase,
-                            secondaryCurrencyCode = secondaryCurrency,
-                            secondaryAmount = toSecondary(state.balanceDueBase)
-                        )
-                        PaymentTotalsRow(
-                            "Cambio",
-                            invoiceCurrency,
-                            state.changeDueBase,
-                            secondaryCurrencyCode = secondaryCurrency,
-                            secondaryAmount = toSecondary(state.changeDueBase)
-                        )
-                        HorizontalDivider(color = colors.outlineVariant, thickness = (1.2).dp)
-                        PaymentTotalsRow(
-                            "Subtotal",
-                            invoiceCurrency,
-                            state.subtotal,
-                            secondaryCurrencyCode = secondaryCurrency,
-                            secondaryAmount = toSecondary(state.subtotal)
-                        )
-                        if (state.taxes > 0.0) {
-                            PaymentTotalsRow(
-                                "Impuestos",
-                                invoiceCurrency,
-                                state.taxes,
-                                secondaryCurrencyCode = secondaryCurrency,
-                                secondaryAmount = toSecondary(state.taxes)
-                            )
-                        }
-                        if (state.discount > 0.0) {
-                            PaymentTotalsRow(
-                                "Descuento",
-                                invoiceCurrency,
-                                -state.discount,
-                                secondaryCurrencyCode = secondaryCurrency,
-                                secondaryAmount = toSecondary(-state.discount)
-                            )
-                        }
-                        if (state.shippingAmount > 0.0) {
-                            PaymentTotalsRow(
-                                "Envío",
-                                invoiceCurrency,
-                                state.shippingAmount,
-                                secondaryCurrencyCode = secondaryCurrency,
-                                secondaryAmount = toSecondary(state.shippingAmount)
-                            )
-                        }
-                    }
-                }
+          Column(
+              modifier = Modifier.padding(16.dp),
+              verticalArrangement = Arrangement.spacedBy(10.dp),
+          ) {
+            SectionHeader(title = strings.billing.totalLabel, accent = colors.primary)
+            Text(
+                text = formatAmount(invoiceCurrency.toCurrencySymbol(), state.total),
+                style =
+                    MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.ExtraBold),
+                color = colors.onSurface,
+            )
+            HorizontalDivider(color = colors.outlineVariant, thickness = (1.2).dp)
+            PaymentTotalsRow(
+                "Pagado",
+                invoiceCurrency,
+                state.paidAmountBase,
+                secondaryCurrencyCode = secondaryCurrency,
+                secondaryAmount = toSecondary(state.paidAmountBase),
+            )
+            PaymentTotalsRow(
+                "Pendiente",
+                invoiceCurrency,
+                state.balanceDueBase,
+                secondaryCurrencyCode = secondaryCurrency,
+                secondaryAmount = toSecondary(state.balanceDueBase),
+            )
+            PaymentTotalsRow(
+                "Cambio",
+                invoiceCurrency,
+                state.changeDueBase,
+                secondaryCurrencyCode = secondaryCurrency,
+                secondaryAmount = toSecondary(state.changeDueBase),
+            )
+            HorizontalDivider(color = colors.outlineVariant, thickness = (1.2).dp)
+            PaymentTotalsRow(
+                "Subtotal",
+                invoiceCurrency,
+                state.subtotal,
+                secondaryCurrencyCode = secondaryCurrency,
+                secondaryAmount = toSecondary(state.subtotal),
+            )
+            if (state.taxes > 0.0) {
+              PaymentTotalsRow(
+                  "Impuestos",
+                  invoiceCurrency,
+                  state.taxes,
+                  secondaryCurrencyCode = secondaryCurrency,
+                  secondaryAmount = toSecondary(state.taxes),
+              )
             }
-
-            @Composable
-            fun CreditCard(modifier: Modifier = Modifier) {
-                if (state.paymentTerms.isNotEmpty()) {
-                    Card(
-                        modifier = modifier,
-                        colors = CardDefaults.cardColors(containerColor = panelBg),
-                        border = BorderStroke(1.dp, panelBorder),
-                        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
-                    ) {
-                        Column(
-                            modifier = Modifier
-                                .padding(12.dp)
-                                .animateContentSize(animationSpec = tween(260)),
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            SectionHeader(title = strings.billing.creditSaleLabel, accent = colors.tertiary)
-                            CreditTermsSection(
-                                isCreditSale = state.isCreditSale,
-                                paymentTerms = state.paymentTerms,
-                                selectedPaymentTerm = state.selectedPaymentTerm,
-                                creditSaleTooltipMessage = state.creditSaleTooltipMessage,
-                                onCreditSaleChanged = action.onCreditSaleChanged,
-                                onPaymentTermSelected = action.onPaymentTermSelected
-                            )
-                        }
-                    }
-                }
+            if (state.discount > 0.0) {
+              PaymentTotalsRow(
+                  "Descuento",
+                  invoiceCurrency,
+                  -state.discount,
+                  secondaryCurrencyCode = secondaryCurrency,
+                  secondaryAmount = toSecondary(-state.discount),
+              )
             }
-
-            @Composable
-            fun DiscountCard(modifier: Modifier = Modifier) {
-                Card(
-                    modifier = modifier,
-                    colors = CardDefaults.cardColors(containerColor = panelBg),
-                    border = BorderStroke(1.dp, panelBorder),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
-                ) {
-                    Column(
-                        modifier = Modifier.padding(12.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        SectionHeader(title = strings.billing.totalsDiscountsShippingTitle, accent = colors.secondary)
-                        DiscountShippingInputs(state, action)
-                    }
-                }
+            if (state.shippingAmount > 0.0) {
+              PaymentTotalsRow(
+                  "Envío",
+                  invoiceCurrency,
+                  state.shippingAmount,
+                  secondaryCurrencyCode = secondaryCurrency,
+                  secondaryAmount = toSecondary(state.shippingAmount),
+              )
             }
-
-            @Composable
-            fun PaymentsCard(modifier: Modifier = Modifier, listMaxHeight: Dp) {
-                Card(
-                    modifier = modifier,
-                    colors = CardDefaults.cardColors(containerColor = panelBg),
-                    border = BorderStroke(1.dp, panelBorder),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
-                ) {
-                    Column(
-                        modifier = Modifier.padding(12.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        SectionHeader(title = strings.billing.paymentsTitle, accent = colors.primary)
-                        PaymentSection(
-                            state = state,
-                            baseCurrency = invoiceCurrency,
-                            exchangeRateByCurrency = state.exchangeRateByCurrency,
-                            paymentLines = state.paymentLines,
-                            paymentModes = state.paymentModes,
-                            paidAmountBase = state.paidAmountBase,
-                            totalAmount = state.total,
-                            isCreditSale = state.isCreditSale,
-                            onAddPaymentLine = action.onAddPaymentLine,
-                            onRemovePaymentLine = action.onRemovePaymentLine,
-                            onPaymentCurrencySelected = action.onPaymentCurrencySelected,
-                            paymentListMaxHeight = listMaxHeight
-                        )
-                    }
-                }
-            }
-
-            if (isWide) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    Column(
-                        modifier = Modifier.weight(0.38f),
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        TotalCard(modifier = Modifier.fillMaxWidth())
-                        CreditCard(modifier = Modifier.fillMaxWidth())
-                        DiscountCard(modifier = Modifier.fillMaxWidth())
-                    }
-                    PaymentsCard(modifier = Modifier.weight(0.62f), listMaxHeight = 360.dp)
-                }
-            } else {
-                Column(
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    TotalCard(modifier = Modifier.fillMaxWidth())
-                    CreditCard(modifier = Modifier.fillMaxWidth())
-                    DiscountCard(modifier = Modifier.fillMaxWidth())
-                    PaymentsCard(modifier = Modifier.fillMaxWidth(), listMaxHeight = 180.dp)
-                }
-            }
+          }
         }
-        /*Button(
-            onClick = action.onFinalizeSale,
-            enabled = !globalBusy,
+      }
+
+      @Composable
+      fun CreditCard(modifier: Modifier = Modifier) {
+        if (state.paymentTerms.isNotEmpty()) {
+          Card(
+              modifier = modifier,
+              colors = CardDefaults.cardColors(containerColor = panelBg),
+              border = BorderStroke(1.dp, panelBorder),
+              elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+          ) {
+            Column(
+                modifier = Modifier.padding(12.dp).animateContentSize(animationSpec = tween(260)),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+              SectionHeader(title = strings.billing.creditSaleLabel, accent = colors.tertiary)
+              CreditTermsSection(
+                  isCreditSale = state.isCreditSale,
+                  paymentTerms = state.paymentTerms,
+                  selectedPaymentTerm = state.selectedPaymentTerm,
+                  creditSaleTooltipMessage = state.creditSaleTooltipMessage,
+                  onCreditSaleChanged = action.onCreditSaleChanged,
+                  onPaymentTermSelected = action.onPaymentTermSelected,
+              )
+            }
+          }
+        }
+      }
+
+      @Composable
+      fun DiscountCard(modifier: Modifier = Modifier) {
+        Card(
+            modifier = modifier,
+            colors = CardDefaults.cardColors(containerColor = panelBg),
+            border = BorderStroke(1.dp, panelBorder),
+            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+        ) {
+          Column(
+              modifier = Modifier.padding(12.dp),
+              verticalArrangement = Arrangement.spacedBy(8.dp),
+          ) {
+            SectionHeader(
+                title = strings.billing.totalsDiscountsShippingTitle,
+                accent = colors.secondary,
+            )
+            DiscountShippingInputs(state, action)
+          }
+        }
+      }
+
+      @Composable
+      fun PaymentsCard(modifier: Modifier = Modifier, listMaxHeight: Dp) {
+        Card(
+            modifier = modifier,
+            colors = CardDefaults.cardColors(containerColor = panelBg),
+            border = BorderStroke(1.dp, panelBorder),
+            elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+        ) {
+          Column(
+              modifier = Modifier.padding(12.dp),
+              verticalArrangement = Arrangement.spacedBy(8.dp),
+          ) {
+            SectionHeader(title = strings.billing.paymentsTitle, accent = colors.primary)
+            PaymentSection(
+                state = state,
+                baseCurrency = invoiceCurrency,
+                exchangeRateByCurrency = state.exchangeRateByCurrency,
+                paymentLines = state.paymentLines,
+                paymentModes = state.paymentModes,
+                paidAmountBase = state.paidAmountBase,
+                totalAmount = state.total,
+                isCreditSale = state.isCreditSale,
+                onAddPaymentLine = action.onAddPaymentLine,
+                onRemovePaymentLine = action.onRemovePaymentLine,
+                onPaymentCurrencySelected = action.onPaymentCurrencySelected,
+                paymentListMaxHeight = listMaxHeight,
+            )
+          }
+        }
+      }
+
+      if (isWide) {
+        Row(
             modifier = Modifier.fillMaxWidth(),
-            enabled = state.selectedCustomer != null &&
-                    state.cartItems.isNotEmpty() &&
-                    (state.isCreditSale || state.paidAmountBase + 0.01 >= state.total) &&
-                    (!state.isCreditSale || state.selectedPaymentTerm != null)
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Text(strings.billing.finalizeSale)
-        }*/
+          Column(
+              modifier = Modifier.weight(0.38f),
+              verticalArrangement = Arrangement.spacedBy(12.dp),
+          ) {
+            TotalCard(modifier = Modifier.fillMaxWidth())
+            CreditCard(modifier = Modifier.fillMaxWidth())
+            DiscountCard(modifier = Modifier.fillMaxWidth())
+          }
+          PaymentsCard(modifier = Modifier.weight(0.62f), listMaxHeight = 360.dp)
+        }
+      } else {
+        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+          TotalCard(modifier = Modifier.fillMaxWidth())
+          CreditCard(modifier = Modifier.fillMaxWidth())
+          DiscountCard(modifier = Modifier.fillMaxWidth())
+          PaymentsCard(modifier = Modifier.fillMaxWidth(), listMaxHeight = 180.dp)
+        }
+      }
     }
+    /*Button(
+        onClick = action.onFinalizeSale,
+        enabled = !globalBusy,
+        modifier = Modifier.fillMaxWidth(),
+        enabled = state.selectedCustomer != null &&
+                state.cartItems.isNotEmpty() &&
+                (state.isCreditSale || state.paidAmountBase + 0.01 >= state.total) &&
+                (!state.isCreditSale || state.selectedPaymentTerm != null)
+    ) {
+        Text(strings.billing.finalizeSale)
+    }*/
+  }
 }
 
 @Composable
-private fun LabSearchBar(
-    value: String,
-    onChange: (String) -> Unit,
-    onClear: () -> Unit
-) {
-    val strings = LocalAppStrings.current
-    OutlinedTextField(
-        value = value,
-        onValueChange = onChange,
-        modifier = Modifier.fillMaxWidth(),
-        leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
-        trailingIcon = {
-            if (value.isNotBlank()) {
-                IconButton(onClick = onClear) {
-                    Icon(Icons.Default.Clear, contentDescription = null)
-                }
-            }
-        },
-        placeholder = { Text(strings.billing.productSearchPlaceholder) },
-        singleLine = true,
-        colors = TextFieldDefaults.colors(
-            focusedIndicatorColor = Color.Transparent,
-            unfocusedIndicatorColor = Color.Transparent,
-            disabledIndicatorColor = Color.Transparent,
-            focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
-            unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
-            cursorColor = MaterialTheme.colorScheme.primary
-        ),
-        shape = RoundedCornerShape(18.dp)
-    )
+private fun LabSearchBar(value: String, onChange: (String) -> Unit, onClear: () -> Unit) {
+  val strings = LocalAppStrings.current
+  OutlinedTextField(
+      value = value,
+      onValueChange = onChange,
+      modifier = Modifier.fillMaxWidth(),
+      leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+      trailingIcon = {
+        if (value.isNotBlank()) {
+          IconButton(onClick = onClear) { Icon(Icons.Default.Clear, contentDescription = null) }
+        }
+      },
+      placeholder = { Text(strings.billing.productSearchPlaceholder) },
+      singleLine = true,
+      colors =
+          TextFieldDefaults.colors(
+              focusedIndicatorColor = Color.Transparent,
+              unfocusedIndicatorColor = Color.Transparent,
+              disabledIndicatorColor = Color.Transparent,
+              focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+              unfocusedContainerColor =
+                  MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+              cursorColor = MaterialTheme.colorScheme.primary,
+          ),
+      shape = RoundedCornerShape(18.dp),
+  )
 }
 
 @Composable
 private fun LabCategoryTabs(
     categories: List<String>,
     selectedCategory: String,
-    onSelect: (String) -> Unit
+    onSelect: (String) -> Unit,
 ) {
-    val strings = LocalAppStrings.current
-    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        item {
-            LabCategoryChip(
-                label = strings.customer.allLabel,
-                selected = selectedCategory == "Todos",
-                onClick = { onSelect("Todos") }
-            )
-        }
-        items(categories, key = { it }) { category ->
-            LabCategoryChip(
-                label = category,
-                selected = selectedCategory == category,
-                onClick = { onSelect(category) }
-            )
-        }
+  val strings = LocalAppStrings.current
+  LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+    item {
+      LabCategoryChip(
+          label = strings.customer.allLabel,
+          selected = selectedCategory == "Todos",
+          onClick = { onSelect("Todos") },
+      )
     }
+    items(categories, key = { it }) { category ->
+      LabCategoryChip(
+          label = category,
+          selected = selectedCategory == category,
+          onClick = { onSelect(category) },
+      )
+    }
+  }
 }
 
 @Composable
 private fun LabCategoryChip(label: String, selected: Boolean, onClick: () -> Unit) {
-    val colors = MaterialTheme.colorScheme
-    val background = if (selected) colors.primary else colors.surfaceVariant
-    val textColor = if (selected) colors.onPrimary else colors.onSurfaceVariant
-    Surface(
-        color = background,
-        shape = RoundedCornerShape(999.dp),
-        shadowElevation = if (selected) 3.dp else 0.dp,
-        modifier = Modifier.clickable(onClick = onClick)
-    ) {
-        Text(
-            text = label,
-            color = textColor,
-            style = MaterialTheme.typography.labelLarge,
-            modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp)
-        )
-    }
+  val colors = MaterialTheme.colorScheme
+  val background = if (selected) colors.primary else colors.surfaceVariant
+  val textColor = if (selected) colors.onPrimary else colors.onSurfaceVariant
+  Surface(
+      color = background,
+      shape = RoundedCornerShape(999.dp),
+      shadowElevation = if (selected) 3.dp else 0.dp,
+      modifier = Modifier.clickable(onClick = onClick),
+  ) {
+    Text(
+        text = label,
+        color = textColor,
+        style = MaterialTheme.typography.labelLarge,
+        modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+    )
+  }
 }
 
 @Composable
@@ -1239,178 +1205,167 @@ private fun LabProductCard(
     baseCurrency: String,
     exchangeRateByCurrency: Map<String, Double>,
     accent: Color,
-    onClick: () -> Unit
+    onClick: () -> Unit,
 ) {
-    val colors = MaterialTheme.colorScheme
-    val isDesktop = remember { getPlatformName() == "Desktop" }
-    val imageUrl = item.image?.trim().orEmpty()
+  val colors = MaterialTheme.colorScheme
+  val isDesktop = remember { getPlatformName() == "Desktop" }
+  val imageUrl = item.image?.trim().orEmpty()
 
-    val itemCurrency = item.currency?.trim()?.uppercase().orEmpty()
-    val base = baseCurrency.trim().uppercase()
-    val baseRates = exchangeRateByCurrency.toMutableMap().apply { this[base] = 1.0 }
-    val rate = if (itemCurrency.isBlank() || itemCurrency == base) 1.0
-    else resolveRateBetweenFromBaseRates(
-        fromCurrency = itemCurrency,
-        toCurrency = base,
-        baseCurrency = base,
-        baseRates = baseRates
-    ) ?: 1.0
-    val displayPrice = bd(item.price * rate).moneyScale(0).toDouble(0)
+  val itemCurrency = item.currency?.trim()?.uppercase().orEmpty()
+  val base = baseCurrency.trim().uppercase()
+  val baseRates = exchangeRateByCurrency.toMutableMap().apply { this[base] = 1.0 }
+  val rate =
+      if (itemCurrency.isBlank() || itemCurrency == base) 1.0
+      else
+          resolveRateBetweenFromBaseRates(
+              fromCurrency = itemCurrency,
+              toCurrency = base,
+              baseCurrency = base,
+              baseRates = baseRates,
+          ) ?: 1.0
+  val displayPrice = bd(item.price * rate).moneyScale(0).toDouble(0)
 
-    val interactionSource = remember { MutableInteractionSource() }
-    val hovered by interactionSource.collectIsHoveredAsState()
-    val showAction = !isDesktop || hovered
+  val interactionSource = remember { MutableInteractionSource() }
+  val hovered by interactionSource.collectIsHoveredAsState()
+  val showAction = !isDesktop || hovered
 
-    Surface(
-        color = colors.surface,
-        shape = RoundedCornerShape(18.dp),
-        tonalElevation = 0.dp,
-        shadowElevation = 2.dp,
-        border = BorderStroke(1.dp, colors.outlineVariant),
-        modifier = Modifier
-            .hoverable(interactionSource)
-            .clickable(onClick = onClick)
-    ) {
-        Box {
-            Column {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(106.dp)
-                        .clip(RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp))
-                ) {
-                    if (imageUrl.isNotBlank()) {
-                        SubcomposeAsyncImage(
-                            model = ImageRequest.Builder(LocalPlatformContext.current)
-                                .data(imageUrl)
-                                .crossfade(true)
-                                .build(),
-                            contentDescription = item.name,
-                            contentScale = ContentScale.Crop,
-                            modifier = Modifier.fillMaxSize()
-                        )
-                    } else {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .background(colors.surfaceVariant),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                text = item.name.take(2).uppercase(),
-                                style = MaterialTheme.typography.titleMedium,
-                                color = colors.onSurfaceVariant
-                            )
-                        }
-                    }
-
-                    Surface(
-                        color = colors.primary,
-                        shape = RoundedCornerShape(999.dp),
-                        shadowElevation = 2.dp,
-                        modifier = Modifier
-                            .align(Alignment.TopEnd)
-                            .padding(10.dp)
-                    ) {
-                        Text(
-                            text = "Disp. ${item.actualQty.formatQty()}",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = colors.onPrimary,
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                        )
-                    }
-                }
-
-                Column(
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            text = item.name,
-                            style = MaterialTheme.typography.titleSmall,
-                            color = colors.onSurface,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.weight(1f)
-                        )
-                        Text(
-                            text = "${baseCurrency.toCurrencySymbol()} $displayPrice",
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.Bold,
-                            color = accent,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
-                }
+  Surface(
+      color = colors.surface,
+      shape = RoundedCornerShape(18.dp),
+      tonalElevation = 0.dp,
+      shadowElevation = 2.dp,
+      border = BorderStroke(1.dp, colors.outlineVariant),
+      modifier = Modifier.hoverable(interactionSource).clickable(onClick = onClick),
+  ) {
+    Box {
+      Column {
+        Box(
+            modifier =
+                Modifier.fillMaxWidth()
+                    .height(106.dp)
+                    .clip(RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp))
+        ) {
+          if (imageUrl.isNotBlank()) {
+            SubcomposeAsyncImage(
+                model =
+                    ImageRequest.Builder(LocalPlatformContext.current)
+                        .data(imageUrl)
+                        .crossfade(true)
+                        .build(),
+                contentDescription = item.name,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize(),
+            )
+          } else {
+            Box(
+                modifier = Modifier.fillMaxSize().background(colors.surfaceVariant),
+                contentAlignment = Alignment.Center,
+            ) {
+              Text(
+                  text = item.name.take(2).uppercase(),
+                  style = MaterialTheme.typography.titleMedium,
+                  color = colors.onSurfaceVariant,
+              )
             }
+          }
 
-            if (showAction) {
-                Surface(
-                    color = accent,
-                    shape = RoundedCornerShape(10.dp),
-                    shadowElevation = 4.dp,
-                    modifier = Modifier
-                        .align(Alignment.BottomEnd)
-                        .padding(12.dp)
-                        .clickable(onClick = onClick)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Add,
-                        contentDescription = "Agregar",
-                        tint = colors.onPrimary,
-                        modifier = Modifier.padding(6.dp)
-                    )
-                }
-            }
+          Surface(
+              color = colors.primary,
+              shape = RoundedCornerShape(999.dp),
+              shadowElevation = 2.dp,
+              modifier = Modifier.align(Alignment.TopEnd).padding(10.dp),
+          ) {
+            Text(
+                text = "Disp. ${item.actualQty.formatQty()}",
+                style = MaterialTheme.typography.labelSmall,
+                color = colors.onPrimary,
+                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+            )
+          }
         }
+
+        Column(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+          Row(
+              modifier = Modifier.fillMaxWidth(),
+              horizontalArrangement = Arrangement.SpaceBetween,
+              verticalAlignment = Alignment.CenterVertically,
+          ) {
+            Text(
+                text = item.name,
+                style = MaterialTheme.typography.titleSmall,
+                color = colors.onSurface,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f),
+            )
+            Text(
+                text = "${baseCurrency.toCurrencySymbol()} $displayPrice",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+                color = accent,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+          }
+        }
+      }
+
+      if (showAction) {
+        Surface(
+            color = accent,
+            shape = RoundedCornerShape(10.dp),
+            shadowElevation = 4.dp,
+            modifier =
+                Modifier.align(Alignment.BottomEnd).padding(12.dp).clickable(onClick = onClick),
+        ) {
+          Icon(
+              imageVector = Icons.Default.Add,
+              contentDescription = "Agregar",
+              tint = colors.onPrimary,
+              modifier = Modifier.padding(6.dp),
+          )
+        }
+      }
     }
+  }
 }
 
 @Composable
-private fun LabCartHeader(
-    itemCount: Int,
-    accent: Color
-) {
-    val strings = LocalAppStrings.current
-    val colors = MaterialTheme.colorScheme
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Surface(
-                color = accent,
-                shape = RoundedCornerShape(12.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Money,
-                    contentDescription = null,
-                    tint = Color.White,
-                    modifier = Modifier.padding(8.dp)
-                )
-            }
-            Spacer(Modifier.width(10.dp))
-            Column {
-                Text(
-                    text = strings.billing.currentOrderTitle,
-                    style = MaterialTheme.typography.titleSmall,
-                    color = colors.onSurface
-                )
-                Text(
-                    text = "$itemCount ${strings.billing.cartItemsLabel.lowercase()}",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = colors.onSurfaceVariant
-                )
-            }
-        }
+private fun LabCartHeader(itemCount: Int, accent: Color) {
+  val strings = LocalAppStrings.current
+  val colors = MaterialTheme.colorScheme
+  Row(
+      modifier = Modifier.fillMaxWidth(),
+      horizontalArrangement = Arrangement.SpaceBetween,
+      verticalAlignment = Alignment.CenterVertically,
+  ) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+      Surface(color = accent, shape = RoundedCornerShape(12.dp)) {
+        Icon(
+            imageVector = Icons.Default.Money,
+            contentDescription = null,
+            tint = Color.White,
+            modifier = Modifier.padding(8.dp),
+        )
+      }
+      Spacer(Modifier.width(10.dp))
+      Column {
+        Text(
+            text = strings.billing.currentOrderTitle,
+            style = MaterialTheme.typography.titleSmall,
+            color = colors.onSurface,
+        )
+        Text(
+            text = "$itemCount ${strings.billing.cartItemsLabel.lowercase()}",
+            style = MaterialTheme.typography.labelSmall,
+            color = colors.onSurfaceVariant,
+        )
+      }
     }
+  }
 }
 
 @Composable
@@ -1420,128 +1375,130 @@ private fun LabCartItem(
     exchangeRateByCurrency: Map<String, Double>,
     onUpdateQuantity: (Double) -> Unit,
     onRemove: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
-    val colors = MaterialTheme.colorScheme
-    val isDesktop = remember { getPlatformName() == "Desktop" }
+  val colors = MaterialTheme.colorScheme
+  val isDesktop = remember { getPlatformName() == "Desktop" }
 
-    val interactionSource = remember { MutableInteractionSource() }
-    val hovered by interactionSource.collectIsHoveredAsState()
+  val interactionSource = remember { MutableInteractionSource() }
+  val hovered by interactionSource.collectIsHoveredAsState()
 
-    val showActions = !isDesktop || hovered
-    val actionAlpha by animateFloatAsState(
-        targetValue = if (showActions) 1f else 0f,
-        animationSpec = tween(durationMillis = 150),
-        label = "cartActionsAlpha"
-    )
-    val itemCurrency = item.currency?.trim()?.uppercase().orEmpty()
-    val base = baseCurrency.trim().uppercase()
-    val baseRates = exchangeRateByCurrency.toMutableMap().apply { this[base] = 1.0 }
-    val rate = if (itemCurrency.isBlank() || itemCurrency == base) 1.0
-    else resolveRateBetweenFromBaseRates(
-        fromCurrency = itemCurrency,
-        toCurrency = base,
-        baseCurrency = base,
-        baseRates = baseRates
-    ) ?: 1.0
-    val unitDisplay = bd(item.price * rate).toDouble(0)
-    val lineDisplay = unitDisplay * item.quantity
-    var appeared by remember { mutableStateOf(false) }
-    LaunchedEffect(item.itemCode) { appeared = true }
-    var isRemoving by remember { mutableStateOf(false) }
-    LaunchedEffect(isRemoving) {
-        if (isRemoving) {
-            delay(180)
-            onRemove()
-        }
+  val showActions = !isDesktop || hovered
+  val actionAlpha by
+      animateFloatAsState(
+          targetValue = if (showActions) 1f else 0f,
+          animationSpec = tween(durationMillis = 150),
+          label = "cartActionsAlpha",
+      )
+  val itemCurrency = item.currency?.trim()?.uppercase().orEmpty()
+  val base = baseCurrency.trim().uppercase()
+  val baseRates = exchangeRateByCurrency.toMutableMap().apply { this[base] = 1.0 }
+  val rate =
+      if (itemCurrency.isBlank() || itemCurrency == base) 1.0
+      else
+          resolveRateBetweenFromBaseRates(
+              fromCurrency = itemCurrency,
+              toCurrency = base,
+              baseCurrency = base,
+              baseRates = baseRates,
+          ) ?: 1.0
+  val unitDisplay = bd(item.price * rate).toDouble(0)
+  val lineDisplay = unitDisplay * item.quantity
+  var appeared by remember { mutableStateOf(false) }
+  LaunchedEffect(item.itemCode) { appeared = true }
+  var isRemoving by remember { mutableStateOf(false) }
+  LaunchedEffect(isRemoving) {
+    if (isRemoving) {
+      delay(180)
+      onRemove()
     }
+  }
 
-    val appearAlpha by animateFloatAsState(
-        targetValue = if (appeared && !isRemoving) 1f else 0f,
-        animationSpec = tween(durationMillis = 170),
-        label = "cartAppearAlpha"
-    )
-    val appearScale by animateFloatAsState(
-        targetValue = if (appeared && !isRemoving) 1f else 0.92f,
-        animationSpec = tween(durationMillis = 170),
-        label = "cartAppearScale"
-    )
+  val appearAlpha by
+      animateFloatAsState(
+          targetValue = if (appeared && !isRemoving) 1f else 0f,
+          animationSpec = tween(durationMillis = 170),
+          label = "cartAppearAlpha",
+      )
+  val appearScale by
+      animateFloatAsState(
+          targetValue = if (appeared && !isRemoving) 1f else 0.92f,
+          animationSpec = tween(durationMillis = 170),
+          label = "cartAppearScale",
+      )
 
-    AnimatedVisibility(
-        visible = !isRemoving,
-        exit = fadeOut(tween(160)) + shrinkVertically(tween(160))
-    ) {
-        Surface(
-            color = colors.surfaceVariant,
-            shape = RoundedCornerShape(12.dp),
-            border = BorderStroke(1.dp, colors.outlineVariant),
-            modifier = modifier
+  AnimatedVisibility(
+      visible = !isRemoving,
+      exit = fadeOut(tween(160)) + shrinkVertically(tween(160)),
+  ) {
+    Surface(
+        color = colors.surfaceVariant,
+        shape = RoundedCornerShape(12.dp),
+        border = BorderStroke(1.dp, colors.outlineVariant),
+        modifier =
+            modifier
                 .hoverable(interactionSource)
-                .graphicsLayer(
-                    alpha = appearAlpha,
-                    scaleX = appearScale,
-                    scaleY = appearScale
-                )
-                .animateContentSize()
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(10.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = item.name,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = colors.onSurface,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    Text(
-                        text = formatAmount(baseCurrency.toCurrencySymbol(), unitDisplay),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = colors.onSurfaceVariant
-                    )
-                }
-
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    IconButton(
-                        onClick = { onUpdateQuantity((item.quantity - 1).coerceAtLeast(1.0)) },
-                        modifier = Modifier.graphicsLayer(alpha = actionAlpha),
-                        enabled = showActions
-                    ) {
-                        Icon(Icons.Default.Remove, contentDescription = "Menos")
-                    }
-                    Text(
-                        text = item.quantity.formatQty(),
-                        style = MaterialTheme.typography.labelLarge.copy(fontSize = 14.sp),
-                        color = colors.onSurface
-                    )
-                    IconButton(
-                        onClick = { onUpdateQuantity(item.quantity + 1) },
-                        modifier = Modifier.graphicsLayer(alpha = actionAlpha),
-                        enabled = showActions
-                    ) {
-                        Icon(Icons.Default.Add, contentDescription = "Más")
-                    }
-                    Text(
-                        text = formatAmount(baseCurrency.toCurrencySymbol(), lineDisplay),
-                        style = MaterialTheme.typography.labelLarge,
-                        color = colors.onSurface
-                    )
-                    IconButton(
-                        onClick = { isRemoving = true },
-                        modifier = Modifier.graphicsLayer(alpha = actionAlpha),
-                        enabled = showActions
-                    ) {
-                        Icon(Icons.Default.Delete, contentDescription = "Eliminar")
-                    }
-                }
-            }
+                .graphicsLayer(alpha = appearAlpha, scaleX = appearScale, scaleY = appearScale)
+                .animateContentSize(),
+    ) {
+      Row(
+          modifier = Modifier.fillMaxWidth().padding(10.dp),
+          verticalAlignment = Alignment.CenterVertically,
+      ) {
+        Column(modifier = Modifier.weight(1f)) {
+          Text(
+              text = item.name,
+              style = MaterialTheme.typography.bodyMedium,
+              color = colors.onSurface,
+              maxLines = 1,
+              overflow = TextOverflow.Ellipsis,
+          )
+          Text(
+              text = formatAmount(baseCurrency.toCurrencySymbol(), unitDisplay),
+              style = MaterialTheme.typography.labelSmall,
+              color = colors.onSurfaceVariant,
+          )
         }
+
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+          IconButton(
+              onClick = { onUpdateQuantity((item.quantity - 1).coerceAtLeast(1.0)) },
+              modifier = Modifier.graphicsLayer(alpha = actionAlpha),
+              enabled = showActions,
+          ) {
+            Icon(Icons.Default.Remove, contentDescription = "Menos")
+          }
+          Text(
+              text = item.quantity.formatQty(),
+              style = MaterialTheme.typography.labelLarge.copy(fontSize = 14.sp),
+              color = colors.onSurface,
+          )
+          IconButton(
+              onClick = { onUpdateQuantity(item.quantity + 1) },
+              modifier = Modifier.graphicsLayer(alpha = actionAlpha),
+              enabled = showActions,
+          ) {
+            Icon(Icons.Default.Add, contentDescription = "Más")
+          }
+          Text(
+              text = formatAmount(baseCurrency.toCurrencySymbol(), lineDisplay),
+              style = MaterialTheme.typography.labelLarge,
+              color = colors.onSurface,
+          )
+          IconButton(
+              onClick = { isRemoving = true },
+              modifier = Modifier.graphicsLayer(alpha = actionAlpha),
+              enabled = showActions,
+          ) {
+            Icon(Icons.Default.Delete, contentDescription = "Eliminar")
+          }
+        }
+      }
     }
+  }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -1550,78 +1507,78 @@ private fun CustomerSelector(
     customers: List<CustomerBO>,
     query: String,
     onQueryChange: (String) -> Unit,
-    onCustomerSelected: (CustomerBO) -> Unit
+    onCustomerSelected: (CustomerBO) -> Unit,
 ) {
-    val strings = LocalAppStrings.current
-    var expanded by remember { mutableStateOf(false) }
-    var displayLimit by remember { mutableStateOf(50) }
-    var anchorWidthPx by remember { mutableStateOf(0) }
-    val density = LocalDensity.current
-    val hasCustomers = customers.isNotEmpty()
+  val strings = LocalAppStrings.current
+  var expanded by remember { mutableStateOf(false) }
+  var displayLimit by remember { mutableStateOf(50) }
+  var anchorWidthPx by remember { mutableStateOf(0) }
+  val density = LocalDensity.current
+  val hasCustomers = customers.isNotEmpty()
 
-    ExposedDropdownMenuBox(
-        expanded = expanded && hasCustomers,
-        onExpandedChange = {
-            if (hasCustomers) {
-                expanded = !expanded
-            }
+  ExposedDropdownMenuBox(
+      expanded = expanded && hasCustomers,
+      onExpandedChange = {
+        if (hasCustomers) {
+          expanded = !expanded
         }
-    ) {
-        AppTextField(
-            value = query,
-            onValueChange = {
-                onQueryChange(it)
-                expanded = true
-            },
-            modifier = Modifier
-                .fillMaxWidth()
+      },
+  ) {
+    AppTextField(
+        value = query,
+        onValueChange = {
+          onQueryChange(it)
+          expanded = true
+        },
+        modifier =
+            Modifier.fillMaxWidth()
                 .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryEditable)
                 .onGloballyPositioned { anchorWidthPx = it.size.width }
-                .onFocusChanged { focusState ->
-                    expanded = focusState.isFocused
-                },
-            label = strings.billing.searchCustomerLabel,
-            placeholder = strings.billing.searchCustomerPlaceholder,
-            leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
-            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-        )
-        DropdownMenu(
-            expanded = expanded && hasCustomers,
-            onDismissRequest = { expanded = false },
-            properties = PopupProperties(
+                .onFocusChanged { focusState -> expanded = focusState.isFocused },
+        label = strings.billing.searchCustomerLabel,
+        placeholder = strings.billing.searchCustomerPlaceholder,
+        leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+    )
+    DropdownMenu(
+        expanded = expanded && hasCustomers,
+        onDismissRequest = { expanded = false },
+        properties =
+            PopupProperties(
                 focusable = false,
                 dismissOnBackPress = true,
                 dismissOnClickOutside = true,
-                clippingEnabled = true
-            )
-        ) {
-            val menuWidth = remember(anchorWidthPx) {
-                if (anchorWidthPx > 0) with(density) { anchorWidthPx.toDp() } else 360.dp
-            }
-            Column(
-                modifier = Modifier
-                    .width(menuWidth.coerceIn(280.dp, 520.dp))
-                    .heightIn(max = 320.dp)
-                    .verticalScroll(rememberScrollState())
-            ) {
-                customers.take(displayLimit).forEach { customer ->
-                    DropdownMenuItem(
-                        text = { Text("${customer.name} - ${customer.customerName}") },
-                        onClick = {
-                            onCustomerSelected(customer)
-                            expanded = false
-                        }
-                    )
-                }
-                if (customers.size > displayLimit) {
-                    DropdownMenuItem(
-                        text = { Text(strings.common.showMore) },
-                        onClick = { displayLimit += 50 }
-                    )
-                }
-            }
+                clippingEnabled = true,
+            ),
+    ) {
+      val menuWidth =
+          remember(anchorWidthPx) {
+            if (anchorWidthPx > 0) with(density) { anchorWidthPx.toDp() } else 360.dp
+          }
+      Column(
+          modifier =
+              Modifier.width(menuWidth.coerceIn(280.dp, 520.dp))
+                  .heightIn(max = 320.dp)
+                  .verticalScroll(rememberScrollState())
+      ) {
+        customers.take(displayLimit).forEach { customer ->
+          DropdownMenuItem(
+              text = { Text("${customer.name} - ${customer.customerName}") },
+              onClick = {
+                onCustomerSelected(customer)
+                expanded = false
+              },
+          )
         }
+        if (customers.size > displayLimit) {
+          DropdownMenuItem(
+              text = { Text(strings.common.showMore) },
+              onClick = { displayLimit += 50 },
+          )
+        }
+      }
     }
+  }
 }
 
 @Composable
@@ -1630,92 +1587,84 @@ private fun PaymentTotalsRow(
     currencyCode: String,
     amount: Double,
     secondaryCurrencyCode: String? = null,
-    secondaryAmount: Double? = null
+    secondaryAmount: Double? = null,
 ) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween
-    ) {
+  Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+    Text(
+        text = label,
+        style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+    Column(horizontalAlignment = Alignment.End) {
+      Text(
+          text = formatAmount(currencyCode.toCurrencySymbol(), amount),
+          style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
+          color = MaterialTheme.colorScheme.onSurface,
+      )
+      if (secondaryCurrencyCode != null && secondaryAmount != null) {
         Text(
-            text = label,
-            style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+            text = formatAmount(secondaryCurrencyCode.toCurrencySymbol(), secondaryAmount),
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-        Column(horizontalAlignment = Alignment.End) {
-            Text(
-                text = formatAmount(currencyCode.toCurrencySymbol(), amount),
-                style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
-                color = MaterialTheme.colorScheme.onSurface
-            )
-            if (secondaryCurrencyCode != null && secondaryAmount != null) {
-                Text(
-                    text = formatAmount(secondaryCurrencyCode.toCurrencySymbol(), secondaryAmount),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-        }
+      }
     }
+  }
 }
 
 @Composable
-private fun SectionHeader(
-    title: String,
-    accent: Color
-) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        Box(
-            modifier = Modifier
-                .size(width = 4.dp, height = 16.dp)
+private fun SectionHeader(title: String, accent: Color) {
+  Row(
+      verticalAlignment = Alignment.CenterVertically,
+      horizontalArrangement = Arrangement.spacedBy(8.dp),
+  ) {
+    Box(
+        modifier =
+            Modifier.size(width = 4.dp, height = 16.dp)
                 .clip(RoundedCornerShape(999.dp))
                 .background(accent)
-        )
-        Text(
-            text = title,
-            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
-            color = MaterialTheme.colorScheme.onSurface
-        )
-    }
+    )
+    Text(
+        text = title,
+        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
+        color = MaterialTheme.colorScheme.onSurface,
+    )
+  }
 }
 
 private fun resolveSecondaryCurrency(
     invoiceCurrency: String,
     baseCurrency: String?,
-    exchangeRateByCurrency: Map<String, Double>
+    exchangeRateByCurrency: Map<String, Double>,
 ): String? {
-    val invoice = invoiceCurrency.trim().uppercase()
-    val preferred = when (invoice) {
+  val invoice = invoiceCurrency.trim().uppercase()
+  val preferred =
+      when (invoice) {
         "USD" -> "NIO"
         "NIO" -> "USD"
         else -> baseCurrency?.trim()?.uppercase()
-    }
-    if (preferred.isNullOrBlank() || preferred == invoice) return null
-    return preferred.takeIf { exchangeRateByCurrency[it]?.let { rate -> rate > 0.0 } == true }
+      }
+  if (preferred.isNullOrBlank() || preferred == invoice) return null
+  return preferred.takeIf { exchangeRateByCurrency[it]?.let { rate -> rate > 0.0 } == true }
 }
 
 private fun convertToSecondary(
     amount: Double,
     secondaryCurrency: String?,
-    exchangeRateByCurrency: Map<String, Double>
+    exchangeRateByCurrency: Map<String, Double>,
 ): Double? {
-    if (secondaryCurrency.isNullOrBlank()) return null
-    val rate = exchangeRateByCurrency[secondaryCurrency]?.takeIf { it > 0.0 } ?: return null
-    return amount / rate
+  if (secondaryCurrency.isNullOrBlank()) return null
+  val rate = exchangeRateByCurrency[secondaryCurrency]?.takeIf { it > 0.0 } ?: return null
+  return amount / rate
 }
 
-private fun inferCurrencyFromModeName(
-    modeOfPayment: String,
-    fallback: String
-): String {
-    val upper = modeOfPayment.trim().uppercase()
-    return when {
-        upper.contains("USD") || upper.contains("DOLAR") -> "USD"
-        upper.contains("NIO") || upper.contains("CORDO") -> "NIO"
-        else -> fallback
-    }
+private fun inferCurrencyFromModeName(modeOfPayment: String, fallback: String): String {
+  val upper = modeOfPayment.trim().uppercase()
+  return when {
+    upper.contains("USD") || upper.contains("DOLAR") -> "USD"
+    upper.contains("NIO") || upper.contains("CORDO") -> "NIO"
+    else -> fallback
+  }
 }
 
 @Composable
@@ -1731,489 +1680,503 @@ private fun PaymentSection(
     onAddPaymentLine: (PaymentLine) -> Unit,
     onRemovePaymentLine: (Int) -> Unit,
     onPaymentCurrencySelected: (String) -> Unit,
-    paymentListMaxHeight: Dp = 240.dp
+    paymentListMaxHeight: Dp = 240.dp,
 ) {
-    val strings = LocalAppStrings.current
-    val modeOptions = remember(paymentModes) { paymentModes.map { it.modeOfPayment }.distinct() }
-    var selectedMode by remember(modeOptions) { mutableStateOf("") }
-    val selectedModeOption = paymentModes.firstOrNull { it.modeOfPayment == selectedMode }
-    val requiresReference = remember(selectedModeOption) {
-        requiresReference(selectedModeOption)
-    }
-    val inferredCurrency = remember(selectedMode, baseCurrency) {
-        inferCurrencyFromModeName(selectedMode, baseCurrency)
-    }
-    val modeCurrency = remember(state, selectedMode) {
+  val strings = LocalAppStrings.current
+  val modeOptions = remember(paymentModes) { paymentModes.map { it.modeOfPayment }.distinct() }
+  var selectedMode by remember(modeOptions) { mutableStateOf("") }
+  val selectedModeOption = paymentModes.firstOrNull { it.modeOfPayment == selectedMode }
+  val requiresReference = remember(selectedModeOption) { requiresReference(selectedModeOption) }
+  val inferredCurrency =
+      remember(selectedMode, baseCurrency) { inferCurrencyFromModeName(selectedMode, baseCurrency) }
+  val modeCurrency =
+      remember(state, selectedMode) {
         (state as? BillingState.Success)?.paymentModeCurrencyByMode?.get(selectedMode)
-    }
-    var selectedCurrency by remember(selectedMode, baseCurrency) {
-        mutableStateOf(modeCurrency ?: inferredCurrency)
-    }
-    var amountInput by remember { mutableStateOf("") }
-    var amountValue by remember { mutableStateOf(0.0) }
-    var rateInput by remember { mutableStateOf("1.0") }
-    var referenceInput by remember { mutableStateOf("") }
+      }
+  var selectedCurrency by
+      remember(selectedMode, baseCurrency) { mutableStateOf(modeCurrency ?: inferredCurrency) }
+  var amountInput by remember { mutableStateOf("") }
+  var amountValue by remember { mutableStateOf(0.0) }
+  var rateInput by remember { mutableStateOf("1.0") }
+  var referenceInput by remember { mutableStateOf("") }
 
-    LaunchedEffect(selectedMode, modeCurrency, inferredCurrency) {
-        selectedCurrency = modeCurrency?.trim()?.uppercase() ?: inferredCurrency
-    }
+  LaunchedEffect(selectedMode, modeCurrency, inferredCurrency) {
+    selectedCurrency = modeCurrency?.trim()?.uppercase() ?: inferredCurrency
+  }
 
-    LaunchedEffect(selectedCurrency, exchangeRateByCurrency) {
-        onPaymentCurrencySelected(selectedCurrency)
-        if (selectedCurrency.equals(baseCurrency, ignoreCase = true)) {
-            rateInput = "1.0"
-        } else {
-            exchangeRateByCurrency[selectedCurrency.uppercase()]?.let { rate ->
-                rateInput = rate.toString()
-            }
-        }
+  LaunchedEffect(selectedCurrency, exchangeRateByCurrency) {
+    onPaymentCurrencySelected(selectedCurrency)
+    if (selectedCurrency.equals(baseCurrency, ignoreCase = true)) {
+      rateInput = "1.0"
+    } else {
+      exchangeRateByCurrency[selectedCurrency.uppercase()]?.let { rate ->
+        rateInput = rate.toString()
+      }
     }
+  }
 
-    LaunchedEffect(selectedMode) {
-        referenceInput = ""
-    }
-    Column(
-        modifier = Modifier
-            .padding(end = 12.dp, start = 12.dp, bottom = 8.dp)
+  LaunchedEffect(selectedMode) { referenceInput = "" }
+  Column(modifier = Modifier.padding(end = 12.dp, start = 12.dp, bottom = 8.dp)) {
+    val pendingAmount = (totalAmount - paidAmountBase).coerceAtLeast(0.0)
+
+    AnimatedVisibility(
+        visible = isCreditSale,
+        enter = fadeIn(animationSpec = tween(260)) + expandVertically(animationSpec = tween(260)),
+        exit = fadeOut(animationSpec = tween(180)) + shrinkVertically(animationSpec = tween(180)),
     ) {
-        val pendingAmount = (totalAmount - paidAmountBase).coerceAtLeast(0.0)
-
-        AnimatedVisibility(
-            visible = isCreditSale,
-            enter = fadeIn(animationSpec = tween(260)) + expandVertically(animationSpec = tween(260)),
-            exit = fadeOut(animationSpec = tween(180)) + shrinkVertically(animationSpec = tween(180))
-        ) {
-            Column {
-                Text(
-                    strings.billing.partialPaymentHint,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                Spacer(Modifier.height(8.dp))
-            }
-        }
-
-        Text(strings.billing.paymentModeLabel, style = MaterialTheme.typography.bodyMedium)
-        var modeExpanded by remember { mutableStateOf(false) }
-        ExposedDropdownMenuBox(
-            expanded = modeExpanded, onExpandedChange = { modeExpanded = !modeExpanded }) {
-            AppTextField(
-                value = selectedMode,
-                onValueChange = {},
-                modifier = Modifier.menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable),
-                label = strings.billing.paymentModeLabel,
-                placeholder = strings.billing.paymentModePlaceholder,
-                readOnly = true,
-                leadingIcon = { Icon(Icons.Default.Money, contentDescription = null) },
-                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = modeExpanded) })
-            ExposedDropdownMenu(
-                expanded = modeExpanded, onDismissRequest = { modeExpanded = false }) {
-                modeOptions.forEach { mode ->
-                    DropdownMenuItem(text = { Text(mode) }, onClick = {
-                        selectedMode = mode
-                        modeExpanded = false
-                    })
-                }
-            }
-        }
-
-        Spacer(Modifier.height(12.dp))
-
-        val rateValue = rateInput.toDoubleOrNull() ?: 0.0
-        val canAdd =
-            amountValue > 0.0 && rateValue > 0.0 && selectedMode.isNotBlank() &&
-                    (!requiresReference || referenceInput.isNotBlank())
-
-        MoneyTextField(
-            currencyCode = selectedCurrency,
-            rawValue = amountInput,
-            onRawValueChange = { amountInput = it },
-            label = strings.billing.amountLabel,
-            enabled = true, //!isCreditSale,
-            onAmountChanged = { amountValue = it },
-            supportingText = {
-                if (!selectedCurrency.equals(baseCurrency, ignoreCase = true)) {
-                    val rate = rateInput.toDoubleOrNull() ?: 0.0
-                    val base = amountValue * rate
-                    Text("${strings.billing.baseLabel}: ${formatAmount(baseCurrency.toCurrencySymbol(), base)}")
-                }
-            },
-            trailingIcon = {
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    IconButton(
-                        onClick = {
-                            amountInput = ""
-                            amountValue = 0.0
-                        },
-                        enabled = amountInput.isNotBlank()
-                    ) {
-                        Icon(Icons.Default.Delete, contentDescription = strings.common.clear)
-                    }
-                    IconButton(
-                        onClick = {
-                            val rate = if (selectedCurrency == baseCurrency) 1.0 else rateValue
-                            onAddPaymentLine(
-                                PaymentLine(
-                                    modeOfPayment = selectedMode,
-                                    enteredAmount = amountValue,
-                                    currency = selectedCurrency,
-                                    exchangeRate = rate,
-                                    baseAmount = amountValue * rate,
-                                    referenceNumber = referenceInput.takeIf { it.isNotBlank() })
-                            )
-                            amountInput = ""
-                            amountValue = 0.0
-                            referenceInput = ""
-                            if (selectedCurrency == baseCurrency) {
-                                rateInput = "1.0"
-                            }
-                        },
-                        enabled = canAdd
-                    ) {
-                        Icon(Icons.Default.Add, contentDescription = strings.billing.addPayment)
-                    }
-                }
-            }
-        )
-
-        if (requiresReference) {
-            AppTextField(
-                value = referenceInput,
-                onValueChange = { referenceInput = it },
-                label = strings.billing.referenceNumberLabel,
-                placeholder = "#11231",
-                leadingIcon = { Icon(Icons.Default.ConfirmationNumber, contentDescription = null) },
-                supportingText = {
-                    if (referenceInput.isBlank()) {
-                        Text("${strings.billing.referenceRequiredHint} ${selectedMode}.")
-                    }
-                },
-                isError = referenceInput.isBlank(),
-                modifier = Modifier.fillMaxWidth()
-            )
-
-            Spacer(Modifier.height(12.dp))
-        }
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Card(
-                modifier = Modifier.weight(1f),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
-            ) {
-                Column(modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) {
-                    Text(
-                        text = strings.billing.paidBaseLabel,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Text(
-                        text = formatAmount(baseCurrency.toCurrencySymbol(), paidAmountBase),
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                }
-            }
-            Card(
-                modifier = Modifier.weight(1f),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
-            ) {
-                Column(modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) {
-                    Text(
-                        text = strings.billing.balanceDueLabel,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Text(
-                        text = formatAmount(baseCurrency.toCurrencySymbol(), pendingAmount),
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                }
-            }
-        }
-
-        Spacer(Modifier.height(10.dp))
-
+      Column {
         Text(
-            text = strings.billing.paymentsRegisteredTitle,
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+            strings.billing.partialPaymentHint,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-        Spacer(Modifier.height(6.dp))
+        Spacer(Modifier.height(8.dp))
+      }
+    }
 
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(min = 84.dp, max = paymentListMaxHeight)
-                    .verticalScroll(rememberScrollState())
-                    .padding(horizontal = 12.dp, vertical = 10.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+    Text(strings.billing.paymentModeLabel, style = MaterialTheme.typography.bodyMedium)
+    var modeExpanded by remember { mutableStateOf(false) }
+    ExposedDropdownMenuBox(
+        expanded = modeExpanded,
+        onExpandedChange = { modeExpanded = !modeExpanded },
+    ) {
+      AppTextField(
+          value = selectedMode,
+          onValueChange = {},
+          modifier = Modifier.menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable),
+          label = strings.billing.paymentModeLabel,
+          placeholder = strings.billing.paymentModePlaceholder,
+          readOnly = true,
+          leadingIcon = { Icon(Icons.Default.Money, contentDescription = null) },
+          trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = modeExpanded) },
+      )
+      ExposedDropdownMenu(expanded = modeExpanded, onDismissRequest = { modeExpanded = false }) {
+        modeOptions.forEach { mode ->
+          DropdownMenuItem(
+              text = { Text(mode) },
+              onClick = {
+                selectedMode = mode
+                modeExpanded = false
+              },
+          )
+        }
+      }
+    }
+
+    Spacer(Modifier.height(12.dp))
+
+    val rateValue = rateInput.toDoubleOrNull() ?: 0.0
+    val canAdd =
+        amountValue > 0.0 &&
+            rateValue > 0.0 &&
+            selectedMode.isNotBlank() &&
+            (!requiresReference || referenceInput.isNotBlank())
+
+    MoneyTextField(
+        currencyCode = selectedCurrency,
+        rawValue = amountInput,
+        onRawValueChange = { amountInput = it },
+        label = strings.billing.amountLabel,
+        enabled = true, // !isCreditSale,
+        onAmountChanged = { amountValue = it },
+        supportingText = {
+          if (!selectedCurrency.equals(baseCurrency, ignoreCase = true)) {
+            val rate = rateInput.toDoubleOrNull() ?: 0.0
+            val base = amountValue * rate
+            Text(
+                "${strings.billing.baseLabel}: ${formatAmount(baseCurrency.toCurrencySymbol(), base)}"
+            )
+          }
+        },
+        trailingIcon = {
+          Row(
+              horizontalArrangement = Arrangement.spacedBy(4.dp),
+              verticalAlignment = Alignment.CenterVertically,
+          ) {
+            IconButton(
+                onClick = {
+                  amountInput = ""
+                  amountValue = 0.0
+                },
+                enabled = amountInput.isNotBlank(),
             ) {
-                if (paymentLines.isEmpty()) {
+              Icon(Icons.Default.Delete, contentDescription = strings.common.clear)
+            }
+            IconButton(
+                onClick = {
+                  val rate = if (selectedCurrency == baseCurrency) 1.0 else rateValue
+                  onAddPaymentLine(
+                      PaymentLine(
+                          modeOfPayment = selectedMode,
+                          enteredAmount = amountValue,
+                          currency = selectedCurrency,
+                          exchangeRate = rate,
+                          baseAmount = amountValue * rate,
+                          referenceNumber = referenceInput.takeIf { it.isNotBlank() },
+                      )
+                  )
+                  amountInput = ""
+                  amountValue = 0.0
+                  referenceInput = ""
+                  if (selectedCurrency == baseCurrency) {
+                    rateInput = "1.0"
+                  }
+                },
+                enabled = canAdd,
+            ) {
+              Icon(Icons.Default.Add, contentDescription = strings.billing.addPayment)
+            }
+          }
+        },
+    )
+
+    if (requiresReference) {
+      AppTextField(
+          value = referenceInput,
+          onValueChange = { referenceInput = it },
+          label = strings.billing.referenceNumberLabel,
+          placeholder = "#11231",
+          leadingIcon = { Icon(Icons.Default.ConfirmationNumber, contentDescription = null) },
+          supportingText = {
+            if (referenceInput.isBlank()) {
+              Text("${strings.billing.referenceRequiredHint} ${selectedMode}.")
+            }
+          },
+          isError = referenceInput.isBlank(),
+          modifier = Modifier.fillMaxWidth(),
+      )
+
+      Spacer(Modifier.height(12.dp))
+    }
+
+    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+      Card(
+          modifier = Modifier.weight(1f),
+          colors =
+              CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+      ) {
+        Column(modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) {
+          Text(
+              text = strings.billing.paidBaseLabel,
+              style = MaterialTheme.typography.labelSmall,
+              color = MaterialTheme.colorScheme.onSurfaceVariant,
+          )
+          Text(
+              text = formatAmount(baseCurrency.toCurrencySymbol(), paidAmountBase),
+              style = MaterialTheme.typography.titleSmall,
+              fontWeight = FontWeight.SemiBold,
+          )
+        }
+      }
+      Card(
+          modifier = Modifier.weight(1f),
+          colors =
+              CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+      ) {
+        Column(modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) {
+          Text(
+              text = strings.billing.balanceDueLabel,
+              style = MaterialTheme.typography.labelSmall,
+              color = MaterialTheme.colorScheme.onSurfaceVariant,
+          )
+          Text(
+              text = formatAmount(baseCurrency.toCurrencySymbol(), pendingAmount),
+              style = MaterialTheme.typography.titleSmall,
+              fontWeight = FontWeight.SemiBold,
+          )
+        }
+      }
+    }
+
+    Spacer(Modifier.height(10.dp))
+
+    Text(
+        text = strings.billing.paymentsRegisteredTitle,
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+    Spacer(Modifier.height(6.dp))
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+    ) {
+      Column(
+          modifier =
+              Modifier.fillMaxWidth()
+                  .heightIn(min = 84.dp, max = paymentListMaxHeight)
+                  .verticalScroll(rememberScrollState())
+                  .padding(horizontal = 12.dp, vertical = 10.dp),
+          verticalArrangement = Arrangement.spacedBy(8.dp),
+      ) {
+        if (paymentLines.isEmpty()) {
+          Text(
+              strings.billing.paymentsEmpty,
+              style = MaterialTheme.typography.bodySmall,
+              color = MaterialTheme.colorScheme.onSurfaceVariant,
+          )
+        } else {
+          paymentLines.forEachIndexed { index, line ->
+            AnimatedVisibility(
+                visible = true,
+                enter = fadeIn(animationSpec = tween(360)) + expandVertically(),
+                exit = fadeOut(animationSpec = tween(320)) + shrinkVertically(),
+            ) {
+              Card(
+                  modifier = Modifier.fillMaxWidth().animateContentSize(),
+                  colors =
+                      CardDefaults.cardColors(
+                          containerColor =
+                              MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)
+                      ),
+              ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(12.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                  Column(modifier = Modifier.weight(1f)) {
+                    Text(text = line.modeOfPayment, fontWeight = FontWeight.SemiBold)
                     Text(
-                        strings.billing.paymentsEmpty,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        text = formatAmount(line.currency.toCurrencySymbol(), line.enteredAmount),
+                        style = MaterialTheme.typography.titleSmall,
                     )
-                } else {
-                    paymentLines.forEachIndexed { index, line ->
-                        AnimatedVisibility(
-                            visible = true,
-                            enter = fadeIn(animationSpec = tween(360)) + expandVertically(),
-                            exit = fadeOut(animationSpec = tween(320)) + shrinkVertically()
-                        ) {
-                            Card(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .animateContentSize(),
-                                colors = CardDefaults.cardColors(
-                                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)
-                                )
-                            ) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth().padding(12.dp),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        Text(
-                                            text = line.modeOfPayment,
-                                            fontWeight = FontWeight.SemiBold
-                                        )
-                                        Text(
-                                            text = formatAmount(
-                                                line.currency.toCurrencySymbol(), line.enteredAmount
-                                            ),
-                                            style = MaterialTheme.typography.titleSmall
-                                        )
-                                        Text(
-                                            text = "Base: ${
+                    Text(
+                        text =
+                            "Base: ${
                                                 formatAmount(
-                                                    baseCurrency.toCurrencySymbol(), line.baseAmount
+                                                    baseCurrency.toCurrencySymbol(), line.baseAmount,
                                                 )
                                             }",
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                    }
-                                    IconButton(onClick = { onRemovePaymentLine(index) }) {
-                                        Icon(
-                                            Icons.Default.Delete,
-                                            contentDescription = "Eliminar línea de pago",
-                                            tint = MaterialTheme.colorScheme.error
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    }
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                  }
+                  IconButton(onClick = { onRemovePaymentLine(index) }) {
+                    Icon(
+                        Icons.Default.Delete,
+                        contentDescription = "Eliminar línea de pago",
+                        tint = MaterialTheme.colorScheme.error,
+                    )
+                  }
                 }
+              }
             }
+          }
         }
-
-        Spacer(Modifier.height(8.dp))
-
+      }
     }
+
+    Spacer(Modifier.height(8.dp))
+  }
 }
 
-enum class DiscountInputType { Code, Percent, Amount }
+enum class DiscountInputType {
+  Code,
+  Percent,
+  Amount,
+}
 
 @Composable
-private fun DiscountShippingInputs(
-    state: BillingState.Success, action: BillingAction
-) {
-    val strings = LocalAppStrings.current
-    val baseCurrency = state.currency ?: "USD"
-    val initialType = remember(
-        state.manualDiscountAmount,
-        state.discountCode,
-        state.manualDiscountPercent,
-    ) {
+private fun DiscountShippingInputs(state: BillingState.Success, action: BillingAction) {
+  val strings = LocalAppStrings.current
+  val baseCurrency = state.currency ?: "USD"
+  val initialType =
+      remember(
+          state.manualDiscountAmount,
+          state.discountCode,
+          state.manualDiscountPercent,
+      ) {
         when {
-            state.manualDiscountAmount > 0.0 -> DiscountInputType.Amount
-            state.discountCode.isNotBlank() -> DiscountInputType.Code
-            state.manualDiscountPercent > 0.0 -> DiscountInputType.Percent
-            else -> DiscountInputType.Percent
+          state.manualDiscountAmount > 0.0 -> DiscountInputType.Amount
+          state.discountCode.isNotBlank() -> DiscountInputType.Code
+          state.manualDiscountPercent > 0.0 -> DiscountInputType.Percent
+          else -> DiscountInputType.Percent
         }
+      }
+
+  var discountType by rememberSaveable(initialType) { mutableStateOf(initialType) }
+
+  fun selectDiscountType(type: DiscountInputType) {
+    discountType = type
+    when (type) {
+      DiscountInputType.Amount -> {
+        action.onDiscountCodeChanged("")
+        action.onManualDiscountPercentChanged("")
+      }
+
+      DiscountInputType.Code -> {
+        action.onManualDiscountAmountChanged("")
+        action.onManualDiscountPercentChanged("")
+      }
+
+      DiscountInputType.Percent -> {
+        action.onDiscountCodeChanged("")
+        action.onManualDiscountAmountChanged("")
+      }
     }
+  }
 
-    var discountType by rememberSaveable(initialType) { mutableStateOf(initialType) }
-
-    fun selectDiscountType(type: DiscountInputType) {
-        discountType = type
-        when (type) {
-            DiscountInputType.Amount -> {
-                action.onDiscountCodeChanged("")
-                action.onManualDiscountPercentChanged("")
-
-            }
-
-            DiscountInputType.Code -> {
-                action.onManualDiscountAmountChanged("")
-                action.onManualDiscountPercentChanged("")
-            }
-
-            DiscountInputType.Percent -> {
-                action.onDiscountCodeChanged("")
-                action.onManualDiscountAmountChanged("")
-            }
-        }
-    }
-
-    Column(
-        modifier = Modifier.padding(end = 12.dp, start = 12.dp, bottom = 8.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        Text(strings.billing.discountSectionTitle, style = MaterialTheme.typography.bodyMedium)
-        val chipElevation = FilterChipDefaults.filterChipElevation(
+  Column(
+      modifier = Modifier.padding(end = 12.dp, start = 12.dp, bottom = 8.dp),
+      verticalArrangement = Arrangement.spacedBy(8.dp),
+  ) {
+    Text(strings.billing.discountSectionTitle, style = MaterialTheme.typography.bodyMedium)
+    val chipElevation =
+        FilterChipDefaults.filterChipElevation(
             elevation = 0.dp,
             pressedElevation = 0.dp,
             focusedElevation = 0.dp,
             hoveredElevation = 0.dp,
             draggedElevation = 0.dp,
-            disabledElevation = 0.dp
+            disabledElevation = 0.dp,
         )
-        val chipColors = FilterChipDefaults.filterChipColors(
+    val chipColors =
+        FilterChipDefaults.filterChipColors(
             selectedContainerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f),
             containerColor = MaterialTheme.colorScheme.surface,
             selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
-            labelColor = MaterialTheme.colorScheme.onSurface
+            labelColor = MaterialTheme.colorScheme.onSurface,
         )
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            FilterChip(
-                selected = discountType == DiscountInputType.Amount,
-                onClick = { selectDiscountType(DiscountInputType.Amount) },
-                elevation = chipElevation,
-                colors = chipColors,
-                label = { Text(strings.billing.discountTypeAmount) }
-            )
-            FilterChip(
-                selected = discountType == DiscountInputType.Code,
-                onClick = { selectDiscountType(DiscountInputType.Code) },
-                elevation = chipElevation,
-                colors = chipColors,
-                label = { Text(strings.billing.discountTypeCode) }
-            )
-            FilterChip(
-                selected = discountType == DiscountInputType.Percent,
-                onClick = { selectDiscountType(DiscountInputType.Percent) },
-                elevation = chipElevation,
-                colors = chipColors,
-                label = { Text(strings.billing.discountTypePercent) }
-            )
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+      FilterChip(
+          selected = discountType == DiscountInputType.Amount,
+          onClick = { selectDiscountType(DiscountInputType.Amount) },
+          elevation = chipElevation,
+          colors = chipColors,
+          label = { Text(strings.billing.discountTypeAmount) },
+      )
+      FilterChip(
+          selected = discountType == DiscountInputType.Code,
+          onClick = { selectDiscountType(DiscountInputType.Code) },
+          elevation = chipElevation,
+          colors = chipColors,
+          label = { Text(strings.billing.discountTypeCode) },
+      )
+      FilterChip(
+          selected = discountType == DiscountInputType.Percent,
+          onClick = { selectDiscountType(DiscountInputType.Percent) },
+          elevation = chipElevation,
+          colors = chipColors,
+          label = { Text(strings.billing.discountTypePercent) },
+      )
+    }
+    val paymentModes = state.paymentModes
+    val modeOptions = remember(paymentModes) { paymentModes.map { it.modeOfPayment }.distinct() }
+    var selectedMode by remember(modeOptions) { mutableStateOf("") }
+    val selectedCurrency =
+        remember(state, selectedMode) {
+          state.paymentModeCurrencyByMode[selectedMode] ?: baseCurrency
         }
-        val paymentModes = state.paymentModes
-        val modeOptions =
-            remember(paymentModes) { paymentModes.map { it.modeOfPayment }.distinct() }
-        var selectedMode by remember(modeOptions) { mutableStateOf("") }
-        val selectedCurrency = remember(state, selectedMode) {
-            state.paymentModeCurrencyByMode[selectedMode] ?: baseCurrency
-        }
-        var amountInput by remember { mutableStateOf(state.manualDiscountAmount.toString()) }
-        var amountValue by remember { mutableStateOf(state.manualDiscountAmount) }
-        var rateInput by remember { mutableStateOf("1.0") }
-        when (discountType) {
-            DiscountInputType.Amount -> {
-                MoneyTextField(
-                    currencyCode = selectedCurrency,
-                    rawValue = if (state.manualDiscountAmount > 0.0) amountInput else "",
-                    onRawValueChange = {
-                        amountInput = it
-                        action.onManualDiscountAmountChanged(amountInput)
-                    },
-                    label = "${strings.billing.discountAmountLabel} (${baseCurrency.toCurrencySymbol()})",
-                    enabled = true,
-                    onAmountChanged = {
-                        amountValue = it
-                    },
-                    supportingText = {
-                        if (!selectedCurrency.equals(baseCurrency, ignoreCase = true)) {
-                            val rate = rateInput.toDoubleOrNull() ?: 0.0
-                            val base = amountValue * rate
-                            Text("${strings.billing.baseLabel}: ${formatAmount(baseCurrency.toCurrencySymbol(), base)}")
-                        }
-                    },
-                    trailingIcon = { Icon(Icons.Default.Money, contentDescription = null) },
-                    modifier = Modifier.fillMaxWidth()
+    var amountInput by remember { mutableStateOf(state.manualDiscountAmount.toString()) }
+    var amountValue by remember { mutableStateOf(state.manualDiscountAmount) }
+    var rateInput by remember { mutableStateOf("1.0") }
+    when (discountType) {
+      DiscountInputType.Amount -> {
+        MoneyTextField(
+            currencyCode = selectedCurrency,
+            rawValue = if (state.manualDiscountAmount > 0.0) amountInput else "",
+            onRawValueChange = {
+              amountInput = it
+              action.onManualDiscountAmountChanged(amountInput)
+            },
+            label = "${strings.billing.discountAmountLabel} (${baseCurrency.toCurrencySymbol()})",
+            enabled = true,
+            onAmountChanged = { amountValue = it },
+            supportingText = {
+              if (!selectedCurrency.equals(baseCurrency, ignoreCase = true)) {
+                val rate = rateInput.toDoubleOrNull() ?: 0.0
+                val base = amountValue * rate
+                Text(
+                    "${strings.billing.baseLabel}: ${formatAmount(baseCurrency.toCurrencySymbol(), base)}"
                 )
-            }
+              }
+            },
+            trailingIcon = { Icon(Icons.Default.Money, contentDescription = null) },
+            modifier = Modifier.fillMaxWidth(),
+        )
+      }
 
-            DiscountInputType.Code -> {
-                AppTextField(
-                    value = state.discountCode,
-                    onValueChange = action.onDiscountCodeChanged,
-                    label = strings.billing.discountCodeLabel,
-                    placeholder = strings.billing.discountCodePlaceholder,
-                    trailingIcon = { Icon(Icons.Default.Money, contentDescription = null) },
-                    modifier = Modifier.fillMaxWidth()
-                )
-            }
+      DiscountInputType.Code -> {
+        AppTextField(
+            value = state.discountCode,
+            onValueChange = action.onDiscountCodeChanged,
+            label = strings.billing.discountCodeLabel,
+            placeholder = strings.billing.discountCodePlaceholder,
+            trailingIcon = { Icon(Icons.Default.Money, contentDescription = null) },
+            modifier = Modifier.fillMaxWidth(),
+        )
+      }
 
-            DiscountInputType.Percent -> {
-                AppTextField(
-                    value = if (state.manualDiscountPercent > 0.0) state.manualDiscountPercent.toString() else "",
-                    onValueChange = action.onManualDiscountPercentChanged,
-                    label = strings.billing.discountPercentLabel,
-                    trailingIcon = { Icon(Icons.Default.Percent, contentDescription = null) },
-                    keyboardOptions = KeyboardOptions(
-                        keyboardType = KeyboardType.Number, imeAction = ImeAction.Next
-                    ),
-                    modifier = Modifier.fillMaxWidth()
-                )
-            }
-        }
-        if (state.deliveryCharges.isNotEmpty()) {
-            Text(strings.billing.shippingSectionTitle, style = MaterialTheme.typography.bodyMedium)
-            val deliveryChargeLabel =
-                state.selectedDeliveryCharge?.label ?: strings.billing.deliveryChargePlaceholder
-            var deliveryExpanded by remember { mutableStateOf(false) }
-            ExposedDropdownMenuBox(
-                expanded = deliveryExpanded, onExpandedChange = { deliveryExpanded = !deliveryExpanded }) {
-                AppTextField(
-                    value = deliveryChargeLabel,
-                    onValueChange = {},
-                    label = strings.billing.deliveryChargeLabel,
-                    modifier = Modifier.fillMaxWidth()
-                        .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable),
-                    readOnly = true,
-                    trailingIcon = {
-                        ExposedDropdownMenuDefaults.TrailingIcon(expanded = deliveryExpanded)
-                    })
-                ExposedDropdownMenu(
-                    expanded = deliveryExpanded, onDismissRequest = { deliveryExpanded = false }) {
-                    DropdownMenuItem(text = { Text(strings.billing.noShippingOption) }, onClick = {
-                        action.onDeliveryChargeSelected(null)
-                        deliveryExpanded = false
-                    })
-                    state.deliveryCharges.forEach { charge ->
-                        val chargeLabel = "${
+      DiscountInputType.Percent -> {
+        AppTextField(
+            value =
+                if (state.manualDiscountPercent > 0.0) state.manualDiscountPercent.toString()
+                else "",
+            onValueChange = action.onManualDiscountPercentChanged,
+            label = strings.billing.discountPercentLabel,
+            trailingIcon = { Icon(Icons.Default.Percent, contentDescription = null) },
+            keyboardOptions =
+                KeyboardOptions(keyboardType = KeyboardType.Number, imeAction = ImeAction.Next),
+            modifier = Modifier.fillMaxWidth(),
+        )
+      }
+    }
+    if (state.deliveryCharges.isNotEmpty()) {
+      Text(strings.billing.shippingSectionTitle, style = MaterialTheme.typography.bodyMedium)
+      val deliveryChargeLabel =
+          state.selectedDeliveryCharge?.label ?: strings.billing.deliveryChargePlaceholder
+      var deliveryExpanded by remember { mutableStateOf(false) }
+      ExposedDropdownMenuBox(
+          expanded = deliveryExpanded,
+          onExpandedChange = { deliveryExpanded = !deliveryExpanded },
+      ) {
+        AppTextField(
+            value = deliveryChargeLabel,
+            onValueChange = {},
+            label = strings.billing.deliveryChargeLabel,
+            modifier =
+                Modifier.fillMaxWidth()
+                    .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable),
+            readOnly = true,
+            trailingIcon = {
+              ExposedDropdownMenuDefaults.TrailingIcon(expanded = deliveryExpanded)
+            },
+        )
+        ExposedDropdownMenu(
+            expanded = deliveryExpanded,
+            onDismissRequest = { deliveryExpanded = false },
+        ) {
+          DropdownMenuItem(
+              text = { Text(strings.billing.noShippingOption) },
+              onClick = {
+                action.onDeliveryChargeSelected(null)
+                deliveryExpanded = false
+              },
+          )
+          state.deliveryCharges.forEach { charge ->
+            val chargeLabel =
+                "${
                             charge.label
                         } (${formatAmount(baseCurrency.toCurrencySymbol(), charge.defaultRate)})"
-                        DropdownMenuItem(text = { Text(chargeLabel) }, onClick = {
-                            action.onDeliveryChargeSelected(charge)
-                            deliveryExpanded = false
-                        })
-                    }
-                }
-            }
+            DropdownMenuItem(
+                text = { Text(chargeLabel) },
+                onClick = {
+                  action.onDeliveryChargeSelected(charge)
+                  deliveryExpanded = false
+                },
+            )
+          }
         }
-        Text(
-            strings.billing.discountHint,
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            textAlign = TextAlign.Start
-        )
+      }
     }
+    Text(
+        strings.billing.discountHint,
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        textAlign = TextAlign.Start,
+    )
+  }
 }
 
 @Composable
@@ -2223,140 +2186,163 @@ private fun CreditTermsSection(
     selectedPaymentTerm: PaymentTermBO?,
     creditSaleTooltipMessage: String?,
     onCreditSaleChanged: (Boolean) -> Unit,
-    onPaymentTermSelected: (PaymentTermBO?) -> Unit
+    onPaymentTermSelected: (PaymentTermBO?) -> Unit,
 ) {
-    val strings = LocalAppStrings.current
-    val hasCreditWarning = !creditSaleTooltipMessage.isNullOrBlank()
-    Column(
-        modifier = Modifier
-            .padding(end = 12.dp, start = 12.dp, bottom = 8.dp)
-            .animateContentSize(animationSpec = tween(260)),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        val canEnableCredit = paymentTerms.isNotEmpty()
-        Surface(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(10.dp),
-            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
-            border = BorderStroke(
+  val strings = LocalAppStrings.current
+  val hasCreditWarning = !creditSaleTooltipMessage.isNullOrBlank()
+  Column(
+      modifier =
+          Modifier.padding(end = 12.dp, start = 12.dp, bottom = 8.dp)
+              .animateContentSize(animationSpec = tween(260)),
+      verticalArrangement = Arrangement.spacedBy(8.dp),
+  ) {
+    val canEnableCredit = paymentTerms.isNotEmpty()
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(10.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+        border =
+            BorderStroke(
                 width = if (hasCreditWarning) 1.5.dp else 1.dp,
-                color = if (hasCreditWarning) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.outlineVariant
-            )
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 6.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(strings.billing.creditSaleLabel, style = MaterialTheme.typography.bodyMedium)
-                Switch(
-                    checked = isCreditSale,
-                    onCheckedChange = onCreditSaleChanged,
-                    enabled = canEnableCredit,
-                    colors = SwitchDefaults.colors(
-                        checkedThumbColor = MaterialTheme.colorScheme.primary,
-                        checkedTrackColor = MaterialTheme.colorScheme.primaryContainer,
-                        checkedBorderColor = MaterialTheme.colorScheme.primaryContainer,
-                        uncheckedThumbColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                        uncheckedTrackColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.8f),
-                        uncheckedBorderColor = MaterialTheme.colorScheme.outlineVariant,
-                        disabledCheckedThumbColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f),
-                        disabledCheckedTrackColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f),
-                        disabledUncheckedThumbColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f),
-                        disabledUncheckedTrackColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
-                    )
-                )
-            }
-        }
-
-        AnimatedVisibility(
-            visible = isCreditSale,
-            enter = fadeIn(animationSpec = tween(260)) + expandVertically(animationSpec = tween(260)),
-            exit = fadeOut(animationSpec = tween(180)) + shrinkVertically(animationSpec = tween(180))
-        ) {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(strings.billing.paymentTermsLabel, style = MaterialTheme.typography.bodyMedium)
-                var templateExpanded by remember { mutableStateOf(false) }
-                val templateLabel = selectedPaymentTerm?.name ?: strings.billing.paymentTermPlaceholder
-                ExposedDropdownMenuBox(
-                    expanded = templateExpanded, onExpandedChange = { templateExpanded = !templateExpanded }) {
-                    AppTextField(
-                        value = templateLabel,
-                        onValueChange = {},
-                        label = strings.billing.paymentTermLabel,
-                        placeholder = strings.billing.paymentTermPlaceholder,
-                        modifier = Modifier//.fillMaxWidth()
-                            .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable),
-                        readOnly = true,
-                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = templateExpanded) },
-                        leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) })
-                    ExposedDropdownMenu(
-                        expanded = templateExpanded, onDismissRequest = { templateExpanded = false }) {
-                        paymentTerms.forEach { term ->
-                            DropdownMenuItem(text = { Text(term.name) }, onClick = {
-                                onPaymentTermSelected(term)
-                                templateExpanded = false
-                            })
-                        }
-                    }
-                }
-                selectedPaymentTerm?.let { term ->
-                    val creditDays = term.creditDays ?: 0
-                    val creditMonths = term.creditMonths ?: 0
-                    val termsLabel = buildString {
-                        if (creditMonths > 0) {
-                            append("$creditMonths mes(es)")
-                        }
-                        if (creditDays > 0) {
-                            if (isNotEmpty()) append(" + ")
-                            append("$creditDays dia(s)")
-                        }
-                    }.ifBlank { strings.billing.sameDayLabel }
-                    Text(
-                        text = "${strings.billing.termsLabel}: $termsLabel",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    term.description?.takeIf { it.isNotBlank() }?.let { description ->
-                        Text(
-                            text = description,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-            }
-        }
-
-        AnimatedVisibility(
-            visible = !isCreditSale && !canEnableCredit,
-            enter = fadeIn(animationSpec = tween(220)),
-            exit = fadeOut(animationSpec = tween(180))
-        ) {
-            Text(
-                text = strings.billing.noPaymentTermsAvailable,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
+                color =
+                    if (hasCreditWarning) MaterialTheme.colorScheme.error
+                    else MaterialTheme.colorScheme.outlineVariant,
+            ),
+    ) {
+      Row(
+          modifier = Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 6.dp),
+          horizontalArrangement = Arrangement.SpaceBetween,
+          verticalAlignment = Alignment.CenterVertically,
+      ) {
+        Text(strings.billing.creditSaleLabel, style = MaterialTheme.typography.bodyMedium)
+        Switch(
+            checked = isCreditSale,
+            onCheckedChange = onCreditSaleChanged,
+            enabled = canEnableCredit,
+            colors =
+                SwitchDefaults.colors(
+                    checkedThumbColor = MaterialTheme.colorScheme.primary,
+                    checkedTrackColor = MaterialTheme.colorScheme.primaryContainer,
+                    checkedBorderColor = MaterialTheme.colorScheme.primaryContainer,
+                    uncheckedThumbColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                    uncheckedTrackColor =
+                        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.8f),
+                    uncheckedBorderColor = MaterialTheme.colorScheme.outlineVariant,
+                    disabledCheckedThumbColor =
+                        MaterialTheme.colorScheme.primary.copy(alpha = 0.5f),
+                    disabledCheckedTrackColor =
+                        MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f),
+                    disabledUncheckedThumbColor =
+                        MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.45f),
+                    disabledUncheckedTrackColor =
+                        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+                ),
+        )
+      }
     }
+
+    AnimatedVisibility(
+        visible = isCreditSale,
+        enter = fadeIn(animationSpec = tween(260)) + expandVertically(animationSpec = tween(260)),
+        exit = fadeOut(animationSpec = tween(180)) + shrinkVertically(animationSpec = tween(180)),
+    ) {
+      Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(strings.billing.paymentTermsLabel, style = MaterialTheme.typography.bodyMedium)
+        var templateExpanded by remember { mutableStateOf(false) }
+        val templateLabel = selectedPaymentTerm?.name ?: strings.billing.paymentTermPlaceholder
+        ExposedDropdownMenuBox(
+            expanded = templateExpanded,
+            onExpandedChange = { templateExpanded = !templateExpanded },
+        ) {
+          AppTextField(
+              value = templateLabel,
+              onValueChange = {},
+              label = strings.billing.paymentTermLabel,
+              placeholder = strings.billing.paymentTermPlaceholder,
+              modifier =
+                  Modifier // .fillMaxWidth()
+                      .menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable),
+              readOnly = true,
+              trailingIcon = {
+                ExposedDropdownMenuDefaults.TrailingIcon(expanded = templateExpanded)
+              },
+              leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+          )
+          ExposedDropdownMenu(
+              expanded = templateExpanded,
+              onDismissRequest = { templateExpanded = false },
+          ) {
+            paymentTerms.forEach { term ->
+              DropdownMenuItem(
+                  text = { Text(term.name) },
+                  onClick = {
+                    onPaymentTermSelected(term)
+                    templateExpanded = false
+                  },
+              )
+            }
+          }
+        }
+        selectedPaymentTerm?.let { term ->
+          val creditDays = term.creditDays ?: 0
+          val creditMonths = term.creditMonths ?: 0
+          val termsLabel =
+              buildString {
+                    if (creditMonths > 0) {
+                      append("$creditMonths mes(es)")
+                    }
+                    if (creditDays > 0) {
+                      if (isNotEmpty()) append(" + ")
+                      append("$creditDays dia(s)")
+                    }
+                  }
+                  .ifBlank { strings.billing.sameDayLabel }
+          Text(
+              text = "${strings.billing.termsLabel}: $termsLabel",
+              style = MaterialTheme.typography.bodySmall,
+              color = MaterialTheme.colorScheme.onSurfaceVariant,
+          )
+          term.description
+              ?.takeIf { it.isNotBlank() }
+              ?.let { description ->
+                Text(
+                    text = description,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+              }
+        }
+      }
+    }
+
+    AnimatedVisibility(
+        visible = !isCreditSale && !canEnableCredit,
+        enter = fadeIn(animationSpec = tween(220)),
+        exit = fadeOut(animationSpec = tween(180)),
+    ) {
+      Text(
+          text = strings.billing.noPaymentTermsAvailable,
+          style = MaterialTheme.typography.bodySmall,
+          color = MaterialTheme.colorScheme.onSurfaceVariant,
+      )
+    }
+  }
 }
 
 private fun Double.formatQty(): String {
-    return if (this % 1.0 == 0.0) {
-        this.toInt().toString()
-    } else {
-        this.toString()
-    }
+  return if (this % 1.0 == 0.0) {
+    this.toInt().toString()
+  } else {
+    this.toString()
+  }
 }
 
 private fun requiresReference(option: POSPaymentModeOption?): Boolean {
-    val type = option?.type?.trim().orEmpty()
-    return type.equals("Bank", ignoreCase = true) || type.equals(
-        "Card", ignoreCase = true
-    ) || option?.modeOfPayment?.contains(
-        "bank", ignoreCase = true
-    ) == true || option?.modeOfPayment?.contains("card", ignoreCase = true) == true
+  val type = option?.type?.trim().orEmpty()
+  return type.equals("Bank", ignoreCase = true) ||
+      type.equals("Card", ignoreCase = true) ||
+      option?.modeOfPayment?.contains("bank", ignoreCase = true) == true ||
+      option?.modeOfPayment?.contains("card", ignoreCase = true) == true
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -2377,31 +2363,33 @@ fun AppTextField(
     leadingIcon: (@Composable () -> Unit)? = null,
     trailingIcon: (@Composable () -> Unit)? = null,
 ) {
-    TextField(
-        value = value,
-        onValueChange = onValueChange,
-        modifier = modifier.fillMaxWidth().heightIn(min = 56.dp),
-        label = { Text(label) },
-        placeholder = placeholder?.let { { Text(it) } },
-        singleLine = singleLine,
-        enabled = enabled,
-        readOnly = readOnly,
-        isError = isError,
-        supportingText = supportingText,
-        keyboardOptions = keyboardOptions,
-        keyboardActions = keyboardActions,
-        leadingIcon = leadingIcon,
-        trailingIcon = trailingIcon,
-        shape = RoundedCornerShape(14.dp),
-        colors = TextFieldDefaults.colors(
-            focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
-            unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.22f),
-            disabledContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.12f),
-            focusedIndicatorColor = Color.Transparent,
-            unfocusedIndicatorColor = Color.Transparent,
-            disabledIndicatorColor = Color.Transparent
-        )
-    )
+  TextField(
+      value = value,
+      onValueChange = onValueChange,
+      modifier = modifier.fillMaxWidth().heightIn(min = 56.dp),
+      label = { Text(label) },
+      placeholder = placeholder?.let { { Text(it) } },
+      singleLine = singleLine,
+      enabled = enabled,
+      readOnly = readOnly,
+      isError = isError,
+      supportingText = supportingText,
+      keyboardOptions = keyboardOptions,
+      keyboardActions = keyboardActions,
+      leadingIcon = leadingIcon,
+      trailingIcon = trailingIcon,
+      shape = RoundedCornerShape(14.dp),
+      colors =
+          TextFieldDefaults.colors(
+              focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+              unfocusedContainerColor =
+                  MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.22f),
+              disabledContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.12f),
+              focusedIndicatorColor = Color.Transparent,
+              unfocusedIndicatorColor = Color.Transparent,
+              disabledIndicatorColor = Color.Transparent,
+          ),
+  )
 }
 
 data class MoneyUiSpec(
@@ -2412,166 +2400,166 @@ data class MoneyUiSpec(
 )
 
 private fun moneyUiSpec(currencyCode: String, fallbackDecimals: Int = 2): MoneyUiSpec {
-    return when (val code = currencyCode.trim().uppercase()) {
-        "NIO" -> MoneyUiSpec(code = code, decimals = 2, groupSep = ',', decimalSep = '.')
-        "USD" -> MoneyUiSpec(code = code, decimals = 2, groupSep = ',', decimalSep = '.')
-        "EUR" -> MoneyUiSpec(code = code, decimals = 2, groupSep = '.', decimalSep = ',')
-        else -> MoneyUiSpec(
-            code = code, decimals = fallbackDecimals, groupSep = ',', decimalSep = '.'
-        )
-    }
+  return when (val code = currencyCode.trim().uppercase()) {
+    "NIO" -> MoneyUiSpec(code = code, decimals = 2, groupSep = ',', decimalSep = '.')
+    "USD" -> MoneyUiSpec(code = code, decimals = 2, groupSep = ',', decimalSep = '.')
+    "EUR" -> MoneyUiSpec(code = code, decimals = 2, groupSep = '.', decimalSep = ',')
+    else -> MoneyUiSpec(code = code, decimals = fallbackDecimals, groupSep = ',', decimalSep = '.')
+  }
 }
 
 private fun sanitizeMoneyInput(input: String, maxDecimals: Int): String {
-    val s = input.trim().replace(" ", "")
-    val filtered = s.filter { it.isDigit() || it == '.' || it == ',' }
-    if (filtered.isBlank()) return ""
+  val s = input.trim().replace(" ", "")
+  val filtered = s.filter { it.isDigit() || it == '.' || it == ',' }
+  if (filtered.isBlank()) return ""
 
-    val lastDot = filtered.lastIndexOf('.')
-    val lastComma = filtered.lastIndexOf(',')
-    val decIdx = maxOf(lastDot, lastComma)
+  val lastDot = filtered.lastIndexOf('.')
+  val lastComma = filtered.lastIndexOf(',')
+  val decIdx = maxOf(lastDot, lastComma)
 
-    fun normalizeInt(digits: String): String = digits.trimStart('0').ifBlank { "0" }
+  fun normalizeInt(digits: String): String = digits.trimStart('0').ifBlank { "0" }
 
-    return if (decIdx >= 0) {
-        val intDigits = filtered.take(decIdx).filter { it.isDigit() }
-        val decDigits = filtered.substring(decIdx + 1).filter { it.isDigit() }.take(maxDecimals)
-        normalizeInt(intDigits) + "." + decDigits
-    } else {
-        val intDigits = filtered.filter { it.isDigit() }
-        normalizeInt(intDigits)
-    }
+  return if (decIdx >= 0) {
+    val intDigits = filtered.take(decIdx).filter { it.isDigit() }
+    val decDigits = filtered.substring(decIdx + 1).filter { it.isDigit() }.take(maxDecimals)
+    normalizeInt(intDigits) + "." + decDigits
+  } else {
+    val intDigits = filtered.filter { it.isDigit() }
+    normalizeInt(intDigits)
+  }
 }
 
 private fun parseMoneyToDouble(raw: String): Double =
     raw.trim().let { if (it.endsWith(".")) it.dropLast(1) else it }.toDoubleOrNull() ?: 0.0
 
 private fun normalizeRawMoneyInput(input: String, maxDecimals: Int): String {
-    val s = input.trim().replace(" ", "")
-    if (s.isBlank()) return ""
+  val s = input.trim().replace(" ", "")
+  if (s.isBlank()) return ""
 
-    // Permitimos dígitos y separadores . ,
-    val filtered = s.filter { it.isDigit() || it == '.' || it == ',' }
-    if (filtered.isBlank()) return ""
+  // Permitimos dígitos y separadores . ,
+  val filtered = s.filter { it.isDigit() || it == '.' || it == ',' }
+  if (filtered.isBlank()) return ""
 
-    // Usamos el ÚLTIMO separador como decimal, el resto se considera miles
-    val lastDot = filtered.lastIndexOf('.')
-    val lastComma = filtered.lastIndexOf(',')
-    val decIdx = maxOf(lastDot, lastComma)
+  // Usamos el ÚLTIMO separador como decimal, el resto se considera miles
+  val lastDot = filtered.lastIndexOf('.')
+  val lastComma = filtered.lastIndexOf(',')
+  val decIdx = maxOf(lastDot, lastComma)
 
-    fun cleanIntDigits(d: String): String {
-        val digits = d.filter { it.isDigit() }
-        // Evita "00012" -> "12"
-        val trimmed = digits.trimStart('0')
-        return trimmed.ifBlank { "0" }
-    }
+  fun cleanIntDigits(d: String): String {
+    val digits = d.filter { it.isDigit() }
+    // Evita "00012" -> "12"
+    val trimmed = digits.trimStart('0')
+    return trimmed.ifBlank { "0" }
+  }
 
-    return if (decIdx >= 0) {
-        val intDigits = cleanIntDigits(filtered.take(decIdx))
-        val decDigits = filtered.substring(decIdx + 1).filter { it.isDigit() }.take(maxDecimals)
-        "$intDigits.$decDigits" // raw siempre con '.'
-    } else {
-        cleanIntDigits(filtered)
-    }
+  return if (decIdx >= 0) {
+    val intDigits = cleanIntDigits(filtered.take(decIdx))
+    val decDigits = filtered.substring(decIdx + 1).filter { it.isDigit() }.take(maxDecimals)
+    "$intDigits.$decDigits" // raw siempre con '.'
+  } else {
+    cleanIntDigits(filtered)
+  }
 }
 
 private class MoneyVisualTransformation(
     private val spec: MoneyUiSpec,
 ) : VisualTransformation {
-    override fun filter(text: AnnotatedString): TransformedText {
-        val raw = text.text
-        val normalized = normalizeRawMoneyInput(raw, spec.decimals)
+  override fun filter(text: AnnotatedString): TransformedText {
+    val raw = text.text
+    val normalized = normalizeRawMoneyInput(raw, spec.decimals)
 
-        // Mantén el raw original (lo que el usuario edita) tal cual; el display se basa en normalized.
-        // Para el mapping, usamos el mismo "raw" (porque offsets se miden sobre text.text).
-        // OJO: lo ideal es que tu TextField.value SIEMPRE sea normalized.
-        // (abajo te lo dejo así, para que el mapping sea exacto)
-        val value = normalized
+    // Mantén el raw original (lo que el usuario edita) tal cual; el display se basa en normalized.
+    // Para el mapping, usamos el mismo "raw" (porque offsets se miden sobre text.text).
+    // OJO: lo ideal es que tu TextField.value SIEMPRE sea normalized.
+    // (abajo te lo dejo así, para que el mapping sea exacto)
+    val value = normalized
 
-        val dotIndex = value.indexOf('.')
-        val hasDot = dotIndex >= 0
-        val intPart = if (hasDot) value.take(dotIndex) else value
-        val decRaw = if (hasDot) value.substring(dotIndex + 1) else ""
+    val dotIndex = value.indexOf('.')
+    val hasDot = dotIndex >= 0
+    val intPart = if (hasDot) value.take(dotIndex) else value
+    val decRaw = if (hasDot) value.substring(dotIndex + 1) else ""
 
-        // --- build grouped int + mapping int offsets ---
-        val n = intPart.length
-        val mapIntOffsets = IntArray(n + 1)
-        val groupedInt = StringBuilder()
+    // --- build grouped int + mapping int offsets ---
+    val n = intPart.length
+    val mapIntOffsets = IntArray(n + 1)
+    val groupedInt = StringBuilder()
 
-        var rawIntOffset = 0
-        for (ch in intPart) {
-            mapIntOffsets[rawIntOffset] = groupedInt.length
-            groupedInt.append(ch)
-            rawIntOffset++
+    var rawIntOffset = 0
+    for (ch in intPart) {
+      mapIntOffsets[rawIntOffset] = groupedInt.length
+      groupedInt.append(ch)
+      rawIntOffset++
 
-            val remaining = n - rawIntOffset
-            if (remaining > 0 && remaining % 3 == 0) {
-                groupedInt.append(spec.groupSep)
-            }
-        }
-        mapIntOffsets[n] = groupedInt.length
-
-        val decShown = decRaw.take(spec.decimals).padEnd(spec.decimals, '0')
-        val transformed = buildString {
-            append(groupedInt)
-            append(spec.decimalSep)
-            append(decShown)
-        }
-
-        val intTransLen = groupedInt.length
-        val decStart = intTransLen + 1
-
-        val offsetMapping = object : OffsetMapping {
-            override fun originalToTransformed(offset: Int): Int {
-                val o = offset.coerceIn(0, value.length)
-
-                // offsets dentro del entero
-                val intLen = intPart.length
-                if (!hasDot) {
-                    return if (o <= intLen) mapIntOffsets[o] else intTransLen
-                }
-
-                // has dot
-                return when {
-                    o <= intLen -> mapIntOffsets[o]
-                    o == intLen + 1 -> decStart // cursor “después del punto”
-                    else -> {
-                        val decOffset = (o - (intLen + 1)).coerceAtMost(spec.decimals)
-                        decStart + decOffset
-                    }
-                }
-            }
-
-            override fun transformedToOriginal(offset: Int): Int {
-                val t = offset.coerceIn(0, transformed.length)
-
-                // dentro del entero (incluye comas)
-                if (t <= intTransLen) {
-                    // busca el mayor rawIntOffset cuyo mapped <= t
-                    var i = 0
-                    while (i < mapIntOffsets.size && mapIntOffsets[i] <= t) i++
-                    return (i - 1).coerceAtLeast(0)
-                }
-
-                // en la parte decimal (siempre existe visualmente)
-                if (!hasDot) {
-                    // si no hay punto en raw, no permitimos que el cursor se meta en los decimales “falsos”
-                    return intPart.length
-                }
-
-                // hay punto en raw: permitimos editar decimales
-                if (t == intTransLen) return intPart.length
-                if (t == decStart) return intPart.length + 1
-
-                val decOffset = (t - decStart).coerceIn(0, spec.decimals)
-                val rawDecLen = decRaw.length.coerceAtMost(spec.decimals)
-                val clamped = decOffset.coerceAtMost(rawDecLen)
-                return (intPart.length + 1 + clamped)
-            }
-        }
-
-        return TransformedText(AnnotatedString(transformed), offsetMapping)
+      val remaining = n - rawIntOffset
+      if (remaining > 0 && remaining % 3 == 0) {
+        groupedInt.append(spec.groupSep)
+      }
     }
+    mapIntOffsets[n] = groupedInt.length
+
+    val decShown = decRaw.take(spec.decimals).padEnd(spec.decimals, '0')
+    val transformed = buildString {
+      append(groupedInt)
+      append(spec.decimalSep)
+      append(decShown)
+    }
+
+    val intTransLen = groupedInt.length
+    val decStart = intTransLen + 1
+
+    val offsetMapping =
+        object : OffsetMapping {
+          override fun originalToTransformed(offset: Int): Int {
+            val o = offset.coerceIn(0, value.length)
+
+            // offsets dentro del entero
+            val intLen = intPart.length
+            if (!hasDot) {
+              return if (o <= intLen) mapIntOffsets[o] else intTransLen
+            }
+
+            // has dot
+            return when {
+              o <= intLen -> mapIntOffsets[o]
+              o == intLen + 1 -> decStart // cursor “después del punto”
+              else -> {
+                val decOffset = (o - (intLen + 1)).coerceAtMost(spec.decimals)
+                decStart + decOffset
+              }
+            }
+          }
+
+          override fun transformedToOriginal(offset: Int): Int {
+            val t = offset.coerceIn(0, transformed.length)
+
+            // dentro del entero (incluye comas)
+            if (t <= intTransLen) {
+              // busca el mayor rawIntOffset cuyo mapped <= t
+              var i = 0
+              while (i < mapIntOffsets.size && mapIntOffsets[i] <= t) i++
+              return (i - 1).coerceAtLeast(0)
+            }
+
+            // en la parte decimal (siempre existe visualmente)
+            if (!hasDot) {
+              // si no hay punto en raw, no permitimos que el cursor se meta en los decimales
+              // “falsos”
+              return intPart.length
+            }
+
+            // hay punto en raw: permitimos editar decimales
+            if (t == intTransLen) return intPart.length
+            if (t == decStart) return intPart.length + 1
+
+            val decOffset = (t - decStart).coerceIn(0, spec.decimals)
+            val rawDecLen = decRaw.length.coerceAtMost(spec.decimals)
+            val clamped = decOffset.coerceAtMost(rawDecLen)
+            return (intPart.length + 1 + clamped)
+          }
+        }
+
+    return TransformedText(AnnotatedString(transformed), offsetMapping)
+  }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -2587,78 +2575,69 @@ fun MoneyTextField(
     trailingIcon: (@Composable () -> Unit)? = null,
     supportingText: (@Composable () -> Unit)? = null,
     imeAction: ImeAction = ImeAction.Next,
-    onAmountChanged: (Double) -> Unit = {}
+    onAmountChanged: (Double) -> Unit = {},
 ) {
-    val spec = remember(currencyCode) { moneyUiSpec(currencyCode) }
-    val symbol = remember(currencyCode) {
+  val spec = remember(currencyCode) { moneyUiSpec(currencyCode) }
+  val symbol =
+      remember(currencyCode) {
         val s = currencyCode.toCurrencySymbol()
         s.ifBlank { currencyCode }
-    }
-    val transformation = remember(spec) { MoneyVisualTransformation(spec) }
+      }
+  val transformation = remember(spec) { MoneyVisualTransformation(spec) }
 
-    var tfv by remember(spec.decimals) {
+  var tfv by
+      remember(spec.decimals) {
         val sanitized = sanitizeMoneyInput(rawValue, spec.decimals)
         mutableStateOf(TextFieldValue(sanitized, selection = TextRange(sanitized.length)))
-    }
+      }
 
-    LaunchedEffect(rawValue, spec.decimals) {
-        val sanitized = sanitizeMoneyInput(rawValue, spec.decimals)
-        if (sanitized != tfv.text) {
-            val nextCursor = tfv.selection.start.coerceIn(0, sanitized.length)
-            tfv = TextFieldValue(text = sanitized, selection = TextRange(nextCursor))
-        }
+  LaunchedEffect(rawValue, spec.decimals) {
+    val sanitized = sanitizeMoneyInput(rawValue, spec.decimals)
+    if (sanitized != tfv.text) {
+      val nextCursor = tfv.selection.start.coerceIn(0, sanitized.length)
+      tfv = TextFieldValue(text = sanitized, selection = TextRange(nextCursor))
     }
+  }
 
-    LaunchedEffect(tfv.text) {
-        onAmountChanged(parseMoneyToDouble(tfv.text))
-    }
+  LaunchedEffect(tfv.text) { onAmountChanged(parseMoneyToDouble(tfv.text)) }
 
-    TextField(
-        value = tfv,
-        onValueChange = { typed ->
-            val sanitized = sanitizeMoneyInput(typed.text, spec.decimals)
-            val typedCursor = typed.selection.end.coerceIn(0, typed.text.length)
-            val sanitizedPrefix = sanitizeMoneyInput(
-                typed.text.take(typedCursor),
-                spec.decimals
-            )
-            val nextCursor = sanitizedPrefix.length.coerceIn(0, sanitized.length)
-            tfv = typed.copy(
-                text = sanitized,
-                selection = TextRange(nextCursor)
-            )
-            onRawValueChange(sanitized)
-        },
-        modifier = modifier
-            .fillMaxWidth()
-            .heightIn(min = 56.dp),
-        label = { Text(label) },
-        prefix = {
-            Text(
-                text = symbol.ifBlank { symbol },
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Spacer(Modifier.width(8.dp))
-        },
-        trailingIcon = trailingIcon,
-        singleLine = true,
-        enabled = enabled,
-        isError = isError,
-        supportingText = supportingText,
-        keyboardOptions = KeyboardOptions(
-            keyboardType = KeyboardType.Decimal,
-            imeAction = imeAction
-        ),
-        visualTransformation = transformation,
-        shape = RoundedCornerShape(14.dp),
-        colors = TextFieldDefaults.colors(
-            focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
-            unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.22f),
-            disabledContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.12f),
-            focusedIndicatorColor = Color.Transparent,
-            unfocusedIndicatorColor = Color.Transparent,
-            disabledIndicatorColor = Color.Transparent
+  TextField(
+      value = tfv,
+      onValueChange = { typed ->
+        val sanitized = sanitizeMoneyInput(typed.text, spec.decimals)
+        val typedCursor = typed.selection.end.coerceIn(0, typed.text.length)
+        val sanitizedPrefix = sanitizeMoneyInput(typed.text.take(typedCursor), spec.decimals)
+        val nextCursor = sanitizedPrefix.length.coerceIn(0, sanitized.length)
+        tfv = typed.copy(text = sanitized, selection = TextRange(nextCursor))
+        onRawValueChange(sanitized)
+      },
+      modifier = modifier.fillMaxWidth().heightIn(min = 56.dp),
+      label = { Text(label) },
+      prefix = {
+        Text(
+            text = symbol.ifBlank { symbol },
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
-    )
+        Spacer(Modifier.width(8.dp))
+      },
+      trailingIcon = trailingIcon,
+      singleLine = true,
+      enabled = enabled,
+      isError = isError,
+      supportingText = supportingText,
+      keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal, imeAction = imeAction),
+      visualTransformation = transformation,
+      shape = RoundedCornerShape(14.dp),
+      colors =
+          TextFieldDefaults.colors(
+              focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+              unfocusedContainerColor =
+                  MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.22f),
+              disabledContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.12f),
+              focusedIndicatorColor = Color.Transparent,
+              unfocusedIndicatorColor = Color.Transparent,
+              disabledIndicatorColor = Color.Transparent,
+          ),
+  )
 }

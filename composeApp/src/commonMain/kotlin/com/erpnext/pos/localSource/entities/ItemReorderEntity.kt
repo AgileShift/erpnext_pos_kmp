@@ -8,7 +8,7 @@ import kotlin.time.ExperimentalTime
 @OptIn(ExperimentalTime::class)
 @Entity(
     tableName = "item_reorders",
-    primaryKeys = ["instanceId", "companyId", "itemId", "warehouseId"]
+    primaryKeys = ["instanceId", "companyId", "itemId", "warehouseId"],
 )
 data class ItemReorderEntity(
     val itemId: String,
@@ -16,13 +16,10 @@ data class ItemReorderEntity(
     val reorderLevel: Double? = null,
     val reorderQty: Double? = null,
     val id: Long = 0L,
-    @ColumnInfo(name = "created_at")
-    val createdAt: Long = Clock.System.now().toEpochMilliseconds(),
-    @ColumnInfo(name = "updated_at")
-    val updatedAt: Long? = null,
-    @ColumnInfo(name = "is_deleted")
-    val isDeleted: Boolean = false,
+    @ColumnInfo(name = "created_at") val createdAt: Long = Clock.System.now().toEpochMilliseconds(),
+    @ColumnInfo(name = "updated_at") val updatedAt: Long? = null,
+    @ColumnInfo(name = "is_deleted") val isDeleted: Boolean = false,
     val companyId: String,
     val instanceId: String,
-    val lastSyncedAt: Long? = null
+    val lastSyncedAt: Long? = null,
 )

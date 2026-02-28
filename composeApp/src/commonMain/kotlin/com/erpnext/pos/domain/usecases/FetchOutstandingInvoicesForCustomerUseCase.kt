@@ -6,7 +6,7 @@ import com.erpnext.pos.domain.models.SalesInvoiceBO
 class FetchOutstandingInvoicesForCustomerUseCase(
     private val salesInvoiceRepository: SalesInvoiceRepository
 ) : UseCase<String, List<SalesInvoiceBO>>() {
-    override suspend fun useCaseFunction(input: String): List<SalesInvoiceBO> {
-        return salesInvoiceRepository.getOutstandingInvoicesForCustomer(input)
-    }
+  override suspend fun useCaseFunction(input: String): List<SalesInvoiceBO> {
+    return salesInvoiceRepository.getOutstandingInvoicesForCustomer(input)
+  }
 }

@@ -7,19 +7,19 @@ import com.erpnext.pos.localSource.entities.ModeOfPaymentEntity
 import com.erpnext.pos.localSource.entities.SalesInvoiceEntity
 import com.erpnext.pos.localSource.entities.SalesInvoiceItemEntity
 import com.erpnext.pos.localSource.entities.SalesInvoiceWithItemsAndPayments
-import com.erpnext.pos.remoteSource.dto.SalesInvoiceDto
-import com.erpnext.pos.remoteSource.dto.SalesInvoiceItemDto
+import com.erpnext.pos.localSource.preferences.ReturnLedgerPreferences
 import com.erpnext.pos.remoteSource.dto.PaymentEntryCreateDto
 import com.erpnext.pos.remoteSource.dto.PaymentEntryReferenceCreateDto
+import com.erpnext.pos.remoteSource.dto.SalesInvoiceDto
+import com.erpnext.pos.remoteSource.dto.SalesInvoiceItemDto
 import com.erpnext.pos.remoteSource.mapper.toDto
 import com.erpnext.pos.remoteSource.mapper.toEntity
-import com.erpnext.pos.localSource.preferences.ReturnLedgerPreferences
 import com.erpnext.pos.utils.NetworkMonitor
 import com.erpnext.pos.utils.toErpDate
 import com.erpnext.pos.utils.toErpDateTime
-import kotlinx.coroutines.flow.firstOrNull
 import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
+import kotlinx.coroutines.flow.firstOrNull
 
 data class PartialReturnInput(
     val invoiceName: String,
@@ -27,13 +27,10 @@ data class PartialReturnInput(
     val reason: String? = null,
     val refundModeOfPayment: String? = null,
     val refundReferenceNo: String? = null,
-    val applyRefund: Boolean = false
+    val applyRefund: Boolean = false,
 )
 
-data class PartialReturnResult(
-    val creditNoteName: String?,
-    val refundCreated: Boolean = false
-)
+data class PartialReturnResult(val creditNoteName: String?, val refundCreated: Boolean = false)
 
 @OptIn(ExperimentalTime::class)
 class PartialReturnUseCase(
@@ -42,215 +39,218 @@ class PartialReturnUseCase(
     private val modeOfPaymentDao: ModeOfPaymentDao,
     private val posProfilePaymentMethodDao: PosProfilePaymentMethodDao,
     private val networkMonitor: NetworkMonitor,
-    private val returnLedgerPreferences: ReturnLedgerPreferences
+    private val returnLedgerPreferences: ReturnLedgerPreferences,
 ) : UseCase<PartialReturnInput, PartialReturnResult>() {
-    override suspend fun useCaseFunction(input: PartialReturnInput): PartialReturnResult {
-        val invoice = repository.getInvoiceByName(input.invoiceName)
+  override suspend fun useCaseFunction(input: PartialReturnInput): PartialReturnResult {
+    val invoice =
+        repository.getInvoiceByName(input.invoiceName)
             ?: throw IllegalArgumentException("Factura no encontrada: ${input.invoiceName}")
-        if (invoice.items.isEmpty()) {
-            throw IllegalStateException("La factura no tiene items cargados para devolución.")
+    if (invoice.items.isEmpty()) {
+      throw IllegalStateException("La factura no tiene items cargados para devolución.")
+    }
+    val originalOutstanding = invoice.invoice.outstandingAmount
+    val originalGrandTotal = invoice.invoice.grandTotal
+    val isOnline = networkMonitor.isConnected.firstOrNull() == true
+
+    val returnItems = buildReturnItems(invoice, input.itemsToReturnByCode)
+    if (returnItems.isEmpty()) {
+      throw IllegalArgumentException(
+          "No hay cantidades pendientes por devolver para los artículos seleccionados."
+      )
+    }
+
+    if (isOnline) {
+      val creditNoteDto = buildCreditNoteDto(invoice, returnItems, input.reason)
+      val created = repository.createRemoteInvoice(creditNoteDto)
+      val entity = created.toEntity()
+      repository.saveInvoiceLocally(
+          invoice = entity.invoice,
+          items = entity.items,
+          payments = entity.payments,
+      )
+
+      val returnTotal = kotlin.math.abs(created.grandTotal)
+      invoice.invoice.invoiceName?.let { name ->
+        repository.refreshInvoiceFromRemote(name)
+        val refreshed = repository.getInvoiceByName(name)?.invoice
+        val expectedOutstanding = (originalOutstanding - returnTotal).coerceAtLeast(0.0)
+        val expectedGrandTotal = (originalGrandTotal - returnTotal).coerceAtLeast(0.0)
+        if (
+            refreshed != null &&
+                (refreshed.outstandingAmount > expectedOutstanding + 0.01 ||
+                    refreshed.grandTotal > expectedGrandTotal + 0.01)
+        ) {
+          repository.applyLocalReturnAdjustment(name, returnTotal)
         }
-        val originalOutstanding = invoice.invoice.outstandingAmount
-        val originalGrandTotal = invoice.invoice.grandTotal
-        val isOnline = networkMonitor.isConnected.firstOrNull() == true
+      }
+      invoice.invoice.invoiceName?.let { originalName ->
+        returnLedgerPreferences.recordReturn(
+            originalName,
+            returnItems.associate { it.itemCode to kotlin.math.abs(it.qty) },
+        )
+      }
 
-        val returnItems = buildReturnItems(invoice, input.itemsToReturnByCode)
-        if (returnItems.isEmpty()) {
-            throw IllegalArgumentException(
-                "No hay cantidades pendientes por devolver para los artículos seleccionados."
-            )
-        }
-
-        if (isOnline) {
-            val creditNoteDto = buildCreditNoteDto(invoice, returnItems, input.reason)
-            val created = repository.createRemoteInvoice(creditNoteDto)
-            val entity = created.toEntity()
-            repository.saveInvoiceLocally(
-                invoice = entity.invoice,
-                items = entity.items,
-                payments = entity.payments
-            )
-
-            val returnTotal = kotlin.math.abs(created.grandTotal)
-            invoice.invoice.invoiceName?.let { name ->
-                repository.refreshInvoiceFromRemote(name)
-                val refreshed = repository.getInvoiceByName(name)?.invoice
-                val expectedOutstanding = (originalOutstanding - returnTotal).coerceAtLeast(0.0)
-                val expectedGrandTotal = (originalGrandTotal - returnTotal).coerceAtLeast(0.0)
-                if (refreshed != null &&
-                    (refreshed.outstandingAmount > expectedOutstanding + 0.01 ||
-                        refreshed.grandTotal > expectedGrandTotal + 0.01)
-                ) {
-                    repository.applyLocalReturnAdjustment(name, returnTotal)
-                }
-            }
-            invoice.invoice.invoiceName?.let { originalName ->
-                returnLedgerPreferences.recordReturn(
-                    originalName,
-                    returnItems.associate { it.itemCode to kotlin.math.abs(it.qty) }
-                )
-            }
-
-            val refundCreated = if (input.applyRefund) {
-                input.refundModeOfPayment?.takeIf { it.isNotBlank() }?.let { mode ->
-                    createRefundPayment(
-                        invoice = invoice,
-                        creditNote = created,
-                        refundModeOfPayment = mode,
-                        refundReferenceNo = input.refundReferenceNo
-                    )
+      val refundCreated =
+          if (input.applyRefund) {
+            input.refundModeOfPayment
+                ?.takeIf { it.isNotBlank() }
+                ?.let { mode ->
+                  createRefundPayment(
+                      invoice = invoice,
+                      creditNote = created,
+                      refundModeOfPayment = mode,
+                      refundReferenceNo = input.refundReferenceNo,
+                  )
                 } ?: false
-            } else {
-                false
-            }
+          } else {
+            false
+          }
 
-            return PartialReturnResult(
-                creditNoteName = created.name,
-                refundCreated = refundCreated
-            )
-        }
-
-        val returnTotal = returnItems.sumOf { kotlin.math.abs(it.amount) }
-        invoice.invoice.invoiceName?.let { name ->
-            repository.applyLocalReturnAdjustment(name, returnTotal)
-            returnLedgerPreferences.recordReturn(
-                name,
-                returnItems.associate { it.itemCode to kotlin.math.abs(it.qty) }
-            )
-        }
-        return PartialReturnResult(
-            creditNoteName = null,
-            refundCreated = false
-        )
+      return PartialReturnResult(creditNoteName = created.name, refundCreated = refundCreated)
     }
 
-    private suspend fun buildReturnItems(
-        invoice: SalesInvoiceWithItemsAndPayments,
-        requested: Map<String, Double>
-    ): List<SalesInvoiceItemDto> {
-        val parent = invoice.invoice
-        val returnAgainst = parent.invoiceName?.trim().orEmpty()
-        val returnedFromLocal = if (returnAgainst.isNotBlank()) {
-            returnLedgerPreferences.returnedByItem(returnAgainst)
+    val returnTotal = returnItems.sumOf { kotlin.math.abs(it.amount) }
+    invoice.invoice.invoiceName?.let { name ->
+      repository.applyLocalReturnAdjustment(name, returnTotal)
+      returnLedgerPreferences.recordReturn(
+          name,
+          returnItems.associate { it.itemCode to kotlin.math.abs(it.qty) },
+      )
+    }
+    return PartialReturnResult(creditNoteName = null, refundCreated = false)
+  }
+
+  private suspend fun buildReturnItems(
+      invoice: SalesInvoiceWithItemsAndPayments,
+      requested: Map<String, Double>,
+  ): List<SalesInvoiceItemDto> {
+    val parent = invoice.invoice
+    val returnAgainst = parent.invoiceName?.trim().orEmpty()
+    val returnedFromLocal =
+        if (returnAgainst.isNotBlank()) {
+          returnLedgerPreferences.returnedByItem(returnAgainst)
         } else {
-            emptyMap()
+          emptyMap()
         }
-        val returnedFromRemote = if (returnAgainst.isNotBlank() && networkMonitor.isConnected.firstOrNull() == true) {
-            repository.fetchRemoteReturnInvoices(returnAgainst)
-                .flatMap { it.items }
-                .groupBy { it.itemCode }
-                .mapValues { (_, items) -> items.sumOf { kotlin.math.abs(it.qty) } }
+    val returnedFromRemote =
+        if (returnAgainst.isNotBlank() && networkMonitor.isConnected.firstOrNull() == true) {
+          repository
+              .fetchRemoteReturnInvoices(returnAgainst)
+              .flatMap { it.items }
+              .groupBy { it.itemCode }
+              .mapValues { (_, items) -> items.sumOf { kotlin.math.abs(it.qty) } }
         } else {
-            emptyMap()
+          emptyMap()
         }
-        val returnedByItem = (returnedFromLocal.keys + returnedFromRemote.keys).associateWith { itemCode ->
-            maxOf(returnedFromLocal[itemCode] ?: 0.0, returnedFromRemote[itemCode] ?: 0.0)
+    val returnedByItem =
+        (returnedFromLocal.keys + returnedFromRemote.keys).associateWith { itemCode ->
+          maxOf(returnedFromLocal[itemCode] ?: 0.0, returnedFromRemote[itemCode] ?: 0.0)
         }
-        val requestedQty = requested.mapValues { it.value.coerceAtLeast(0.0) }
-        return invoice.items.mapNotNull { item ->
-            val originalQty = kotlin.math.abs(item.qty)
-            val alreadyReturned = returnedByItem[item.itemCode] ?: 0.0
-            val remaining = (originalQty - alreadyReturned).coerceAtLeast(0.0)
-            if (remaining <= 0.0) return@mapNotNull null
-            val desired = requestedQty[item.itemCode] ?: 0.0
-            if (desired <= 0.0) return@mapNotNull null
-            val qtyToReturn = desired.coerceAtMost(remaining)
-            if (qtyToReturn <= 0.0) return@mapNotNull null
-            createReturnItem(item, parent, qtyToReturn)
-        }.filter { it.qty != 0.0 }
-    }
-
-    private fun createReturnItem(
-        entity: SalesInvoiceItemEntity,
-        parent: SalesInvoiceEntity,
-        qtyToReturn: Double
-    ): SalesInvoiceItemDto {
-        val dto = entity.toDto(parent)
-        val perUnit =
-            if (entity.qty != 0.0) entity.amount / entity.qty else dto.rate.takeIf { it != 0.0 }
-                ?: 0.0
-        val absAmount = perUnit * qtyToReturn
-        return dto.copy(
-            qty = -qtyToReturn,
-            amount = -absAmount
-        )
-    }
-
-    private fun buildCreditNoteDto(
-        invoice: SalesInvoiceWithItemsAndPayments,
-        items: List<SalesInvoiceItemDto>,
-        reason: String?
-    ): SalesInvoiceDto {
-        val parent = invoice.invoice
-        val now = Clock.System.now()
-        val isPos = parent.isPos
-        val totalAmount = items.sumOf { -it.amount }
-        return SalesInvoiceDto(
-            customer = parent.customer,
-            customerName = parent.customerName ?: "",
-            customerPhone = parent.customerPhone,
-            company = parent.company,
-            postingDate = now.toEpochMilliseconds().toErpDateTime(),
-            dueDate = now.toEpochMilliseconds().toErpDate(),
-            status = "Draft",
-            grandTotal = totalAmount,
-            outstandingAmount = totalAmount,
-            totalTaxesAndCharges = 0.0,
-            netTotal = totalAmount,
-            paidAmount = 0.0,
-            items = items,
-            payments = emptyList(),
-            remarks = reason ?: parent.remarks,
-            updateStock = true,
-            posProfile = parent.profileId,
-            currency = parent.currency,
-            conversionRate = parent.conversionRate,
-            partyAccountCurrency = parent.partyAccountCurrency,
-            returnAgainst = parent.invoiceName,
-            posOpeningEntry = parent.posOpeningEntry,
-            debitTo = parent.debitTo,
-            docStatus = 0,
-            isReturn = 1,
-            isPos = isPos,
-            doctype = "Sales Invoice"
-        )
-    }
-
-    private suspend fun createRefundPayment(
-        invoice: SalesInvoiceWithItemsAndPayments,
-        creditNote: SalesInvoiceDto,
-        refundModeOfPayment: String,
-        refundReferenceNo: String?
-    ): Boolean {
-        val company = invoice.invoice.company
-        val profileId = invoice.invoice.profileId
-        val originalInvoiceName = invoice.invoice.invoiceName?.takeIf { it.isNotBlank() }
-            ?: return false
-        val totalReturn = creditNote.grandTotal
-        if (totalReturn <= 0.0) return false
-
-        val refundModes = modeOfPaymentDao.getAllModes(company)
-        if (!isRefundModeAllowed(profileId, refundModeOfPayment)) {
-            throw IllegalStateException("El modo de reembolso no está habilitado para retornos.")
+    val requestedQty = requested.mapValues { it.value.coerceAtLeast(0.0) }
+    return invoice.items
+        .mapNotNull { item ->
+          val originalQty = kotlin.math.abs(item.qty)
+          val alreadyReturned = returnedByItem[item.itemCode] ?: 0.0
+          val remaining = (originalQty - alreadyReturned).coerceAtLeast(0.0)
+          if (remaining <= 0.0) return@mapNotNull null
+          val desired = requestedQty[item.itemCode] ?: 0.0
+          if (desired <= 0.0) return@mapNotNull null
+          val qtyToReturn = desired.coerceAtMost(remaining)
+          if (qtyToReturn <= 0.0) return@mapNotNull null
+          createReturnItem(item, parent, qtyToReturn)
         }
-        val originalOutstanding = invoice.invoice.outstandingAmount.coerceAtLeast(0.0)
-        val allocated = minOf(totalReturn, originalOutstanding)
-        val references = if (allocated > 0.0) {
-            listOf(
-                PaymentEntryReferenceCreateDto(
-                    referenceDoctype = "Sales Invoice",
-                    referenceName = originalInvoiceName,
-                    totalAmount = invoice.invoice.grandTotal,
-                    outstandingAmount = originalOutstanding,
-                    allocatedAmount = allocated
-                )
-            )
+        .filter { it.qty != 0.0 }
+  }
+
+  private fun createReturnItem(
+      entity: SalesInvoiceItemEntity,
+      parent: SalesInvoiceEntity,
+      qtyToReturn: Double,
+  ): SalesInvoiceItemDto {
+    val dto = entity.toDto(parent)
+    val perUnit =
+        if (entity.qty != 0.0) entity.amount / entity.qty else dto.rate.takeIf { it != 0.0 } ?: 0.0
+    val absAmount = perUnit * qtyToReturn
+    return dto.copy(qty = -qtyToReturn, amount = -absAmount)
+  }
+
+  private fun buildCreditNoteDto(
+      invoice: SalesInvoiceWithItemsAndPayments,
+      items: List<SalesInvoiceItemDto>,
+      reason: String?,
+  ): SalesInvoiceDto {
+    val parent = invoice.invoice
+    val now = Clock.System.now()
+    val isPos = parent.isPos
+    val totalAmount = items.sumOf { -it.amount }
+    return SalesInvoiceDto(
+        customer = parent.customer,
+        customerName = parent.customerName ?: "",
+        customerPhone = parent.customerPhone,
+        company = parent.company,
+        postingDate = now.toEpochMilliseconds().toErpDateTime(),
+        dueDate = now.toEpochMilliseconds().toErpDate(),
+        status = "Draft",
+        grandTotal = totalAmount,
+        outstandingAmount = totalAmount,
+        totalTaxesAndCharges = 0.0,
+        netTotal = totalAmount,
+        paidAmount = 0.0,
+        items = items,
+        payments = emptyList(),
+        remarks = reason ?: parent.remarks,
+        updateStock = true,
+        posProfile = parent.profileId,
+        currency = parent.currency,
+        conversionRate = parent.conversionRate,
+        partyAccountCurrency = parent.partyAccountCurrency,
+        returnAgainst = parent.invoiceName,
+        posOpeningEntry = parent.posOpeningEntry,
+        debitTo = parent.debitTo,
+        docStatus = 0,
+        isReturn = 1,
+        isPos = isPos,
+        doctype = "Sales Invoice",
+    )
+  }
+
+  private suspend fun createRefundPayment(
+      invoice: SalesInvoiceWithItemsAndPayments,
+      creditNote: SalesInvoiceDto,
+      refundModeOfPayment: String,
+      refundReferenceNo: String?,
+  ): Boolean {
+    val company = invoice.invoice.company
+    val profileId = invoice.invoice.profileId
+    val originalInvoiceName =
+        invoice.invoice.invoiceName?.takeIf { it.isNotBlank() } ?: return false
+    val totalReturn = creditNote.grandTotal
+    if (totalReturn <= 0.0) return false
+
+    val refundModes = modeOfPaymentDao.getAllModes(company)
+    if (!isRefundModeAllowed(profileId, refundModeOfPayment)) {
+      throw IllegalStateException("El modo de reembolso no está habilitado para retornos.")
+    }
+    val originalOutstanding = invoice.invoice.outstandingAmount.coerceAtLeast(0.0)
+    val allocated = minOf(totalReturn, originalOutstanding)
+    val references =
+        if (allocated > 0.0) {
+          listOf(
+              PaymentEntryReferenceCreateDto(
+                  referenceDoctype = "Sales Invoice",
+                  referenceName = originalInvoiceName,
+                  totalAmount = invoice.invoice.grandTotal,
+                  outstandingAmount = originalOutstanding,
+                  allocatedAmount = allocated,
+              )
+          )
         } else {
-            emptyList()
+          emptyList()
         }
-        val postingDate = Clock.System.now().toEpochMilliseconds().toErpDateTime()
+    val postingDate = Clock.System.now().toEpochMilliseconds().toErpDateTime()
 
-        val entry = PaymentEntryCreateDto(
+    val entry =
+        PaymentEntryCreateDto(
             company = company,
             postingDate = postingDate,
             paymentType = "Pay",
@@ -265,32 +265,31 @@ class PartialReturnUseCase(
             referenceNo = refundReferenceNo,
             referenceDate = postingDate,
             references = references,
-            docStatus = 0
+            docStatus = 0,
         )
 
-        paymentEntryUseCase(CreatePaymentEntryInput(entry))
-        return true
-    }
+    paymentEntryUseCase(CreatePaymentEntryInput(entry))
+    return true
+  }
 
-    private fun resolveAccount(
-        mode: String?,
-        cachedModes: List<ModeOfPaymentEntity>,
-        fallback: String?
-    ): String? {
-        if (mode.isNullOrBlank()) return fallback
-        return cachedModes.firstOrNull {
-            it.modeOfPayment.equals(mode, ignoreCase = true) ||
-                    it.name.equals(mode, ignoreCase = true)
-        }?.account ?: fallback
-    }
+  private fun resolveAccount(
+      mode: String?,
+      cachedModes: List<ModeOfPaymentEntity>,
+      fallback: String?,
+  ): String? {
+    if (mode.isNullOrBlank()) return fallback
+    return cachedModes
+        .firstOrNull {
+          it.modeOfPayment.equals(mode, ignoreCase = true) ||
+              it.name.equals(mode, ignoreCase = true)
+        }
+        ?.account ?: fallback
+  }
 
-    private suspend fun isRefundModeAllowed(
-        profileId: String?,
-        mode: String?
-    ): Boolean {
-        if (profileId.isNullOrBlank() || mode.isNullOrBlank()) return false
-        val resolved = posProfilePaymentMethodDao.getResolvedMethodsForProfile(profileId)
-        val matched = resolved.firstOrNull { it.mopName.equals(mode, ignoreCase = true) }
-        return matched?.allowInReturns == true && matched.enabledInProfile
-    }
+  private suspend fun isRefundModeAllowed(profileId: String?, mode: String?): Boolean {
+    if (profileId.isNullOrBlank() || mode.isNullOrBlank()) return false
+    val resolved = posProfilePaymentMethodDao.getResolvedMethodsForProfile(profileId)
+    val matched = resolved.firstOrNull { it.mopName.equals(mode, ignoreCase = true) }
+    return matched?.allowInReturns == true && matched.enabledInProfile
+  }
 }

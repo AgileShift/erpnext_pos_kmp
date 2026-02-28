@@ -16,78 +16,82 @@ import kotlinx.coroutines.flow.Flow
 @Dao
 interface SalesInvoiceDao {
 
-    // 🔹 Inserciones
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertInvoice(invoice: SalesInvoiceEntity)
+  // 🔹 Inserciones
+  @Insert(onConflict = OnConflictStrategy.REPLACE)
+  suspend fun insertInvoice(invoice: SalesInvoiceEntity)
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertItems(items: List<SalesInvoiceItemEntity>)
+  @Insert(onConflict = OnConflictStrategy.REPLACE)
+  suspend fun insertItems(items: List<SalesInvoiceItemEntity>)
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertPayments(payments: List<POSInvoicePaymentEntity>)
+  @Insert(onConflict = OnConflictStrategy.REPLACE)
+  suspend fun insertPayments(payments: List<POSInvoicePaymentEntity>)
 
-    @Query("DELETE FROM tabSalesInvoicePayment WHERE remote_payment_entry IN (:remotePaymentEntries)")
-    suspend fun deleteByRemotePaymentEntries(remotePaymentEntries: List<String>)
+  @Query("DELETE FROM tabSalesInvoicePayment WHERE remote_payment_entry IN (:remotePaymentEntries)")
+  suspend fun deleteByRemotePaymentEntries(remotePaymentEntries: List<String>)
 
-    @Query("SELECT * FROM tabSalesInvoicePayment WHERE parent_invoice = :invoiceName")
-    suspend fun getPaymentsForInvoice(invoiceName: String): List<POSInvoicePaymentEntity>
+  @Query("SELECT * FROM tabSalesInvoicePayment WHERE parent_invoice = :invoiceName")
+  suspend fun getPaymentsForInvoice(invoiceName: String): List<POSInvoicePaymentEntity>
 
-    @Transaction
-    suspend fun insertFullInvoices(invoices: List<SalesInvoiceWithItemsAndPayments>) {
-        invoices.map { payload ->
-            val existingPayments = if (payload.payments.isEmpty()) {
-                getPaymentsForInvoice(payload.invoice.invoiceName.orEmpty())
-            } else {
-                emptyList()
-            }
-            insertInvoice(payload.invoice)
-            insertItems(payload.items)
-            when {
-                payload.payments.isNotEmpty() -> insertPayments(payload.payments)
-                existingPayments.isNotEmpty() -> insertPayments(existingPayments)
-            }
-        }
-    }
-
-    // 🔹 Inserción transaccional completa
-    @Transaction
-    suspend fun insertFullInvoice(
-        invoice: SalesInvoiceEntity,
-        items: List<SalesInvoiceItemEntity>,
-        payments: List<POSInvoicePaymentEntity> = emptyList()
-    ) {
-        val existingPayments = if (payments.isEmpty()) {
-            getPaymentsForInvoice(invoice.invoiceName.orEmpty())
-        } else {
+  @Transaction
+  suspend fun insertFullInvoices(invoices: List<SalesInvoiceWithItemsAndPayments>) {
+    invoices.map { payload ->
+      val existingPayments =
+          if (payload.payments.isEmpty()) {
+            getPaymentsForInvoice(payload.invoice.invoiceName.orEmpty())
+          } else {
             emptyList()
-        }
-        insertInvoice(invoice)
-        insertItems(items)
-        when {
-            payments.isNotEmpty() -> insertPayments(payments)
-            existingPayments.isNotEmpty() -> insertPayments(existingPayments)
-        }
+          }
+      insertInvoice(payload.invoice)
+      insertItems(payload.items)
+      when {
+        payload.payments.isNotEmpty() -> insertPayments(payload.payments)
+        existingPayments.isNotEmpty() -> insertPayments(existingPayments)
+      }
     }
+  }
 
-    // 🔹 Consultas
-    @Transaction
-    @Query("SELECT * FROM tabSalesInvoice WHERE is_deleted = 0 ORDER BY posting_date DESC")
-    fun getAllInvoicesPaged(): PagingSource<Int, SalesInvoiceWithItemsAndPayments>
+  // 🔹 Inserción transaccional completa
+  @Transaction
+  suspend fun insertFullInvoice(
+      invoice: SalesInvoiceEntity,
+      items: List<SalesInvoiceItemEntity>,
+      payments: List<POSInvoicePaymentEntity> = emptyList(),
+  ) {
+    val existingPayments =
+        if (payments.isEmpty()) {
+          getPaymentsForInvoice(invoice.invoiceName.orEmpty())
+        } else {
+          emptyList()
+        }
+    insertInvoice(invoice)
+    insertItems(items)
+    when {
+      payments.isNotEmpty() -> insertPayments(payments)
+      existingPayments.isNotEmpty() -> insertPayments(existingPayments)
+    }
+  }
 
-    @Transaction
-    @Query("SELECT * FROM tabSalesInvoice WHERE is_deleted = 0 ORDER BY posting_date DESC")
-    suspend fun getAllInvoices(): List<SalesInvoiceWithItemsAndPayments>
+  // 🔹 Consultas
+  @Transaction
+  @Query("SELECT * FROM tabSalesInvoice WHERE is_deleted = 0 ORDER BY posting_date DESC")
+  fun getAllInvoicesPaged(): PagingSource<Int, SalesInvoiceWithItemsAndPayments>
 
-    @Transaction
-    @Query("SELECT * FROM tabSalesInvoice WHERE is_deleted = 0 AND invoice_name = :invoiceName LIMIT 1")
-    suspend fun getInvoiceByName(invoiceName: String): SalesInvoiceWithItemsAndPayments?
+  @Transaction
+  @Query("SELECT * FROM tabSalesInvoice WHERE is_deleted = 0 ORDER BY posting_date DESC")
+  suspend fun getAllInvoices(): List<SalesInvoiceWithItemsAndPayments>
 
-    @Transaction
-    @Query("SELECT * FROM tabSalesInvoice WHERE invoice_name = :invoiceName LIMIT 1")
-    suspend fun getInvoiceByNameAny(invoiceName: String): SalesInvoiceWithItemsAndPayments?
+  @Transaction
+  @Query(
+      "SELECT * FROM tabSalesInvoice WHERE is_deleted = 0 AND invoice_name = :invoiceName LIMIT 1"
+  )
+  suspend fun getInvoiceByName(invoiceName: String): SalesInvoiceWithItemsAndPayments?
 
-    @Query(
-        """
+  @Transaction
+  @Query("SELECT * FROM tabSalesInvoice WHERE invoice_name = :invoiceName LIMIT 1")
+  suspend fun getInvoiceByNameAny(invoiceName: String): SalesInvoiceWithItemsAndPayments?
+
+  @Query(
+      """
         SELECT debit_to
         FROM tabSalesInvoice
         WHERE is_deleted = 0
@@ -102,15 +106,15 @@ interface SalesInvoiceDao {
         ORDER BY modified_at DESC, created_at DESC
         LIMIT 1
         """
-    )
-    suspend fun findLatestDebitTo(
-        company: String,
-        customer: String?,
-        partyAccountCurrency: String?
-    ): String?
+  )
+  suspend fun findLatestDebitTo(
+      company: String,
+      customer: String?,
+      partyAccountCurrency: String?,
+  ): String?
 
-    @Query(
-        """
+  @Query(
+      """
         SELECT i.invoice_name
         FROM tabSalesInvoice i
         LEFT JOIN tabSalesInvoiceItem it
@@ -121,19 +125,23 @@ interface SalesInvoiceDao {
         HAVING COUNT(it.id) = 0
         LIMIT :limit
         """
-    )
-    suspend fun getInvoiceNamesMissingItems(profileId: String, limit: Int = 50): List<String>
+  )
+  suspend fun getInvoiceNamesMissingItems(profileId: String, limit: Int = 50): List<String>
 
-    @Transaction
-    @Query("SELECT * FROM tabSalesInvoice WHERE is_deleted = 0 AND sync_status IN ('Pending','Failed')")
-    suspend fun getPendingSyncInvoices(): List<SalesInvoiceWithItemsAndPayments>
+  @Transaction
+  @Query(
+      "SELECT * FROM tabSalesInvoice WHERE is_deleted = 0 AND sync_status IN ('Pending','Failed')"
+  )
+  suspend fun getPendingSyncInvoices(): List<SalesInvoiceWithItemsAndPayments>
 
-    @Query("UPDATE tabSalesInvoice SET sync_status = :status WHERE invoice_name = :invoiceName AND is_deleted = 0")
-    suspend fun updateSyncStatus(invoiceName: String, status: String)
+  @Query(
+      "UPDATE tabSalesInvoice SET sync_status = :status WHERE invoice_name = :invoiceName AND is_deleted = 0"
+  )
+  suspend fun updateSyncStatus(invoiceName: String, status: String)
 
-    // 🔹 Métricas financieras
-    @Query(
-        """
+  // 🔹 Métricas financieras
+  @Query(
+      """
         SELECT SUM(
             CASE
                 WHEN is_return = 1 THEN -ABS(grand_total)
@@ -146,11 +154,11 @@ interface SalesInvoiceDao {
           AND is_deleted = 0
           AND (:openingEntryId IS NULL OR pos_opening_entry = :openingEntryId)
         """
-    )
-    suspend fun getTotalSalesForDate(date: String, openingEntryId: String? = null): Double?
+  )
+  suspend fun getTotalSalesForDate(date: String, openingEntryId: String? = null): Double?
 
-    @Query(
-        """
+  @Query(
+      """
         SELECT
             COALESCE(SUM(
                 CASE
@@ -170,14 +178,11 @@ interface SalesInvoiceDao {
           AND docstatus != 2
           AND is_deleted = 0
         """
-    )
-    fun observeShiftTodaySummary(
-        date: String,
-        openingEntryId: String
-    ): Flow<ShiftTodaySummaryRow>
+  )
+  fun observeShiftTodaySummary(date: String, openingEntryId: String): Flow<ShiftTodaySummaryRow>
 
-    @Query(
-        """
+  @Query(
+      """
         SELECT
             COALESCE(SUM(
                 CASE
@@ -197,14 +202,11 @@ interface SalesInvoiceDao {
           AND docstatus != 2
           AND is_deleted = 0
         """
-    )
-    suspend fun getShiftTodaySummary(
-        date: String,
-        openingEntryId: String
-    ): ShiftTodaySummaryRow
+  )
+  suspend fun getShiftTodaySummary(date: String, openingEntryId: String): ShiftTodaySummaryRow
 
-    @Query(
-        """
+  @Query(
+      """
         SELECT
             COALESCE(NULLIF(TRIM(currency), ''), 'NIO') AS currency,
             COALESCE(SUM(
@@ -226,14 +228,14 @@ interface SalesInvoiceDao {
           AND is_deleted = 0
         GROUP BY COALESCE(NULLIF(TRIM(currency), ''), 'NIO')
         """
-    )
-    fun observeShiftTodaySummaryByCurrency(
-        date: String,
-        openingEntryId: String
-    ): Flow<List<ShiftTodayCurrencySummaryRow>>
+  )
+  fun observeShiftTodaySummaryByCurrency(
+      date: String,
+      openingEntryId: String,
+  ): Flow<List<ShiftTodayCurrencySummaryRow>>
 
-    @Query(
-        """
+  @Query(
+      """
         SELECT
             COALESCE(NULLIF(TRIM(currency), ''), 'NIO') AS currency,
             COALESCE(SUM(
@@ -255,24 +257,24 @@ interface SalesInvoiceDao {
           AND is_deleted = 0
         GROUP BY COALESCE(NULLIF(TRIM(currency), ''), 'NIO')
         """
-    )
-    suspend fun getShiftTodaySummaryByCurrency(
-        date: String,
-        openingEntryId: String
-    ): List<ShiftTodayCurrencySummaryRow>
+  )
+  suspend fun getShiftTodaySummaryByCurrency(
+      date: String,
+      openingEntryId: String,
+  ): List<ShiftTodayCurrencySummaryRow>
 
-    @Query(
-        """
+  @Query(
+      """
         SELECT DISTINCT COALESCE(NULLIF(UPPER(TRIM(currency)), ''), 'NIO') AS currency
         FROM tabSalesInvoice
         WHERE is_deleted = 0
           AND (:openingEntryId IS NULL OR pos_opening_entry = :openingEntryId)
         """
-    )
-    suspend fun getAvailableCurrencies(openingEntryId: String? = null): List<String>
+  )
+  suspend fun getAvailableCurrencies(openingEntryId: String? = null): List<String>
 
-    @Query(
-        """
+  @Query(
+      """
         SELECT COALESCE(NULLIF(UPPER(TRIM(currency)), ''), 'NIO') AS currency,
                SUM(
                     CASE
@@ -293,14 +295,14 @@ interface SalesInvoiceDao {
           AND (:openingEntryId IS NULL OR pos_opening_entry = :openingEntryId)
         GROUP BY COALESCE(NULLIF(UPPER(TRIM(currency)), ''), 'NIO')
         """
-    )
-    suspend fun getSalesSummaryForDateByCurrency(
-        date: String,
-        openingEntryId: String? = null
-    ): List<CurrencySalesSummary>
+  )
+  suspend fun getSalesSummaryForDateByCurrency(
+      date: String,
+      openingEntryId: String? = null,
+  ): List<CurrencySalesSummary>
 
-    @Query(
-        """
+  @Query(
+      """
         SELECT COUNT(*)
         FROM tabSalesInvoice
         WHERE posting_date = :date
@@ -309,11 +311,11 @@ interface SalesInvoiceDao {
           AND is_deleted = 0
           AND (:openingEntryId IS NULL OR pos_opening_entry = :openingEntryId)
         """
-    )
-    suspend fun getSalesCountForDate(date: String, openingEntryId: String? = null): Int
+  )
+  suspend fun getSalesCountForDate(date: String, openingEntryId: String? = null): Int
 
-    @Query(
-        """
+  @Query(
+      """
         SELECT COUNT(DISTINCT customer)
         FROM tabSalesInvoice
         WHERE posting_date = :date
@@ -322,11 +324,11 @@ interface SalesInvoiceDao {
           AND is_deleted = 0
           AND (:openingEntryId IS NULL OR pos_opening_entry = :openingEntryId)
         """
-    )
-    suspend fun getDistinctCustomersForDate(date: String, openingEntryId: String? = null): Int
+  )
+  suspend fun getDistinctCustomersForDate(date: String, openingEntryId: String? = null): Int
 
-    @Query(
-        """
+  @Query(
+      """
         SELECT posting_date AS date,
                SUM(
                     CASE
@@ -345,15 +347,15 @@ interface SalesInvoiceDao {
         GROUP BY posting_date
         ORDER BY posting_date ASC
         """
-    )
-    suspend fun getDailySalesTotals(
-        startDate: String,
-        endDate: String,
-        openingEntryId: String? = null
-    ): List<DailySalesTotal>
+  )
+  suspend fun getDailySalesTotals(
+      startDate: String,
+      endDate: String,
+      openingEntryId: String? = null,
+  ): List<DailySalesTotal>
 
-    @Query(
-        """
+  @Query(
+      """
         SELECT posting_date AS date,
                COALESCE(NULLIF(UPPER(TRIM(currency)), ''), 'NIO') AS currency,
                SUM(
@@ -373,15 +375,15 @@ interface SalesInvoiceDao {
         GROUP BY posting_date, COALESCE(NULLIF(UPPER(TRIM(currency)), ''), 'NIO')
         ORDER BY posting_date ASC
         """
-    )
-    suspend fun getDailySalesTotalsByCurrency(
-        startDate: String,
-        endDate: String,
-        openingEntryId: String? = null
-    ): List<CurrencyDailySalesTotal>
+  )
+  suspend fun getDailySalesTotalsByCurrency(
+      startDate: String,
+      endDate: String,
+      openingEntryId: String? = null,
+  ): List<CurrencyDailySalesTotal>
 
-    @Query(
-        """
+  @Query(
+      """
         SELECT i.item_code AS itemCode,
                i.item_name AS itemName,
                SUM(i.qty) AS qty,
@@ -396,16 +398,16 @@ interface SalesInvoiceDao {
         ORDER BY total DESC
         LIMIT :limit
         """
-    )
-    suspend fun getTopProductsBySales(
-        startDate: String,
-        endDate: String,
-        limit: Int,
-        openingEntryId: String? = null
-    ): List<TopProductSales>
+  )
+  suspend fun getTopProductsBySales(
+      startDate: String,
+      endDate: String,
+      limit: Int,
+      openingEntryId: String? = null,
+  ): List<TopProductSales>
 
-    @Query(
-        """
+  @Query(
+      """
         SELECT SUM(
             (CASE WHEN i.net_amount > 0 THEN i.net_amount ELSE i.amount END)
             - (IFNULL(t.valuation_rate, 0) * i.qty)
@@ -418,15 +420,15 @@ interface SalesInvoiceDao {
           AND s.is_deleted = 0
           AND (:openingEntryId IS NULL OR s.pos_opening_entry = :openingEntryId)
         """
-    )
-    suspend fun getEstimatedMarginTotal(
-        startDate: String,
-        endDate: String,
-        openingEntryId: String? = null
-    ): Double?
+  )
+  suspend fun getEstimatedMarginTotal(
+      startDate: String,
+      endDate: String,
+      openingEntryId: String? = null,
+  ): Double?
 
-    @Query(
-        """
+  @Query(
+      """
         SELECT COALESCE(NULLIF(UPPER(TRIM(s.currency)), ''), 'NIO') AS currency,
                SUM(
                     (CASE WHEN i.net_amount > 0 THEN i.net_amount ELSE i.amount END)
@@ -441,15 +443,15 @@ interface SalesInvoiceDao {
           AND (:openingEntryId IS NULL OR s.pos_opening_entry = :openingEntryId)
         GROUP BY COALESCE(NULLIF(UPPER(TRIM(s.currency)), ''), 'NIO')
         """
-    )
-    suspend fun getEstimatedMarginTotalByCurrency(
-        startDate: String,
-        endDate: String,
-        openingEntryId: String? = null
-    ): List<CurrencyMarginTotal>
+  )
+  suspend fun getEstimatedMarginTotalByCurrency(
+      startDate: String,
+      endDate: String,
+      openingEntryId: String? = null,
+  ): List<CurrencyMarginTotal>
 
-    @Query(
-        """
+  @Query(
+      """
         SELECT COUNT(*)
         FROM tabSalesInvoiceItem i
         INNER JOIN tabSalesInvoice s ON s.invoice_name = i.parent_invoice
@@ -460,15 +462,15 @@ interface SalesInvoiceDao {
           AND IFNULL(t.valuation_rate, 0) > 0
           AND (:openingEntryId IS NULL OR s.pos_opening_entry = :openingEntryId)
         """
-    )
-    suspend fun countItemsWithCost(
-        startDate: String,
-        endDate: String,
-        openingEntryId: String? = null
-    ): Int
+  )
+  suspend fun countItemsWithCost(
+      startDate: String,
+      endDate: String,
+      openingEntryId: String? = null,
+  ): Int
 
-    @Query(
-        """
+  @Query(
+      """
         SELECT COALESCE(NULLIF(UPPER(TRIM(s.currency)), ''), 'NIO') AS currency, COUNT(*) AS count
         FROM tabSalesInvoiceItem i
         INNER JOIN tabSalesInvoice s ON s.invoice_name = i.parent_invoice
@@ -480,15 +482,15 @@ interface SalesInvoiceDao {
           AND (:openingEntryId IS NULL OR s.pos_opening_entry = :openingEntryId)
         GROUP BY COALESCE(NULLIF(UPPER(TRIM(s.currency)), ''), 'NIO')
         """
-    )
-    suspend fun countItemsWithCostByCurrency(
-        startDate: String,
-        endDate: String,
-        openingEntryId: String? = null
-    ): List<CurrencyItemCount>
+  )
+  suspend fun countItemsWithCostByCurrency(
+      startDate: String,
+      endDate: String,
+      openingEntryId: String? = null,
+  ): List<CurrencyItemCount>
 
-    @Query(
-        """
+  @Query(
+      """
         SELECT COUNT(*)
         FROM tabSalesInvoiceItem i
         INNER JOIN tabSalesInvoice s ON s.invoice_name = i.parent_invoice
@@ -497,15 +499,15 @@ interface SalesInvoiceDao {
           AND s.is_deleted = 0
           AND (:openingEntryId IS NULL OR s.pos_opening_entry = :openingEntryId)
         """
-    )
-    suspend fun countItemsInRange(
-        startDate: String,
-        endDate: String,
-        openingEntryId: String? = null
-    ): Int
+  )
+  suspend fun countItemsInRange(
+      startDate: String,
+      endDate: String,
+      openingEntryId: String? = null,
+  ): Int
 
-    @Query(
-        """
+  @Query(
+      """
         SELECT COALESCE(NULLIF(UPPER(TRIM(s.currency)), ''), 'NIO') AS currency, COUNT(*) AS count
         FROM tabSalesInvoiceItem i
         INNER JOIN tabSalesInvoice s ON s.invoice_name = i.parent_invoice
@@ -515,15 +517,15 @@ interface SalesInvoiceDao {
           AND (:openingEntryId IS NULL OR s.pos_opening_entry = :openingEntryId)
         GROUP BY COALESCE(NULLIF(UPPER(TRIM(s.currency)), ''), 'NIO')
         """
-    )
-    suspend fun countItemsInRangeByCurrency(
-        startDate: String,
-        endDate: String,
-        openingEntryId: String? = null
-    ): List<CurrencyItemCount>
+  )
+  suspend fun countItemsInRangeByCurrency(
+      startDate: String,
+      endDate: String,
+      openingEntryId: String? = null,
+  ): List<CurrencyItemCount>
 
-    @Query(
-        """
+  @Query(
+      """
         SELECT i.item_code AS itemCode,
                i.item_name AS itemName,
                SUM(i.qty) AS qty,
@@ -544,27 +546,27 @@ interface SalesInvoiceDao {
         ORDER BY margin DESC
         LIMIT :limit
         """
-    )
-    suspend fun getTopProductsByMargin(
-        startDate: String,
-        endDate: String,
-        limit: Int,
-        openingEntryId: String? = null
-    ): List<TopProductMargin>
+  )
+  suspend fun getTopProductsByMargin(
+      startDate: String,
+      endDate: String,
+      limit: Int,
+      openingEntryId: String? = null,
+  ): List<TopProductMargin>
 
-    @Query(
-        """
+  @Query(
+      """
         SELECT SUM(outstanding_amount)
         FROM tabSalesInvoice
         WHERE status IN ('Draft','Submitted')
           AND is_deleted = 0
           AND (:openingEntryId IS NULL OR pos_opening_entry = :openingEntryId)
         """
-    )
-    suspend fun getTotalOutstanding(openingEntryId: String? = null): Double?
+  )
+  suspend fun getTotalOutstanding(openingEntryId: String? = null): Double?
 
-    @Query(
-        """
+  @Query(
+      """
         SELECT COALESCE(NULLIF(UPPER(TRIM(currency)), ''), 'NIO') AS currency,
                SUM(outstanding_amount) AS total
         FROM tabSalesInvoice
@@ -573,20 +575,24 @@ interface SalesInvoiceDao {
           AND (:openingEntryId IS NULL OR pos_opening_entry = :openingEntryId)
         GROUP BY COALESCE(NULLIF(UPPER(TRIM(currency)), ''), 'NIO')
         """
-    )
-    suspend fun getOutstandingTotalsByCurrency(openingEntryId: String? = null): List<CurrencyOutstandingTotal>
+  )
+  suspend fun getOutstandingTotalsByCurrency(
+      openingEntryId: String? = null
+  ): List<CurrencyOutstandingTotal>
 
-    // 🔹 Limpieza / control
-    @Query("DELETE FROM tabSalesInvoice WHERE docstatus = 2") // Cancelled
-    suspend fun deleteCancelledInvoices()
+  // 🔹 Limpieza / control
+  @Query("DELETE FROM tabSalesInvoice WHERE docstatus = 2") // Cancelled
+  suspend fun deleteCancelledInvoices()
 
-    @Transaction
-    @Query("SELECT * FROM tabSalesInvoice WHERE is_deleted = 0 AND customer_name LIKE '%' || :search || '%' ORDER BY customer_name ASC")
-    fun getAllFiltered(search: String): PagingSource<Int, SalesInvoiceWithItemsAndPayments>
+  @Transaction
+  @Query(
+      "SELECT * FROM tabSalesInvoice WHERE is_deleted = 0 AND customer_name LIKE '%' || :search || '%' ORDER BY customer_name ASC"
+  )
+  fun getAllFiltered(search: String): PagingSource<Int, SalesInvoiceWithItemsAndPayments>
 
-    @Transaction
-    @Query(
-        """
+  @Transaction
+  @Query(
+      """
         SELECT * FROM tabSalesInvoice
         WHERE customer = :customerName
           AND outstanding_amount > 0
@@ -595,14 +601,14 @@ interface SalesInvoiceDao {
           AND is_deleted = 0
         ORDER BY posting_date DESC
         """
-    )
-    suspend fun getOutstandingInvoicesForCustomer(
-        customerName: String
-    ): List<SalesInvoiceWithItemsAndPayments>
+  )
+  suspend fun getOutstandingInvoicesForCustomer(
+      customerName: String
+  ): List<SalesInvoiceWithItemsAndPayments>
 
-    @Transaction
-    @Query(
-        """
+  @Transaction
+  @Query(
+      """
         SELECT * FROM tabSalesInvoice
         WHERE customer = :customerName
           AND outstanding_amount > 0
@@ -611,14 +617,14 @@ interface SalesInvoiceDao {
           AND is_deleted = 0
         ORDER BY posting_date DESC
         """
-    )
-    fun getOutstandingInvoicesForCustomerPaged(
-        customerName: String
-    ): PagingSource<Int, SalesInvoiceWithItemsAndPayments>
+  )
+  fun getOutstandingInvoicesForCustomerPaged(
+      customerName: String
+  ): PagingSource<Int, SalesInvoiceWithItemsAndPayments>
 
-    @Transaction
-    @Query(
-        """
+  @Transaction
+  @Query(
+      """
         SELECT * FROM tabSalesInvoice
         WHERE customer = :customerName
           AND posting_date BETWEEN :startDate AND :endDate
@@ -626,16 +632,16 @@ interface SalesInvoiceDao {
           AND is_deleted = 0
         ORDER BY posting_date DESC
         """
-    )
-    suspend fun getInvoicesForCustomerInRange(
-        customerName: String,
-        startDate: String,
-        endDate: String
-    ): List<SalesInvoiceWithItemsAndPayments>
+  )
+  suspend fun getInvoicesForCustomerInRange(
+      customerName: String,
+      startDate: String,
+      endDate: String,
+  ): List<SalesInvoiceWithItemsAndPayments>
 
-    @Transaction
-    @Query(
-        """
+  @Transaction
+  @Query(
+      """
         SELECT * FROM tabSalesInvoice
         WHERE customer = :customerName
           AND posting_date BETWEEN :startDate AND :endDate
@@ -643,44 +649,52 @@ interface SalesInvoiceDao {
           AND is_deleted = 0
         ORDER BY posting_date DESC
         """
-    )
-    fun getInvoicesForCustomerInRangePaged(
-        customerName: String,
-        startDate: String,
-        endDate: String
-    ): PagingSource<Int, SalesInvoiceWithItemsAndPayments>
+  )
+  fun getInvoicesForCustomerInRangePaged(
+      customerName: String,
+      startDate: String,
+      endDate: String,
+  ): PagingSource<Int, SalesInvoiceWithItemsAndPayments>
 
-    @Transaction
-    @Query("SELECT * FROM tabSalesInvoice WHERE is_deleted = 0 AND posting_date BETWEEN :startDate AND :endDate ORDER BY posting_date DESC")
-    fun getInvoicesByDateRange(
-        startDate: String,
-        endDate: String
-    ): PagingSource<Int, SalesInvoiceWithItemsAndPayments>
+  @Transaction
+  @Query(
+      "SELECT * FROM tabSalesInvoice WHERE is_deleted = 0 AND posting_date BETWEEN :startDate AND :endDate ORDER BY posting_date DESC"
+  )
+  fun getInvoicesByDateRange(
+      startDate: String,
+      endDate: String,
+  ): PagingSource<Int, SalesInvoiceWithItemsAndPayments>
 
-    @Query(
-        """
+  @Query(
+      """
         UPDATE tabSalesInvoice
         SET customer = :newId,
             customer_name = :customerName
         WHERE customer = :oldId
           AND is_deleted = 0
         """
-    )
-    suspend fun updateCustomerId(oldId: String, newId: String, customerName: String)
+  )
+  suspend fun updateCustomerId(oldId: String, newId: String, customerName: String)
 
-    @Transaction
-    @Query("SELECT * FROM tabSalesInvoice WHERE is_deleted = 0 AND due_date < :today AND outstanding_amount > 0 AND status IN ('Overdue', 'Unpaid', 'Partly Paid') ORDER BY due_date ASC")
-    fun getOverdueInvoices(today: String): PagingSource<Int, SalesInvoiceWithItemsAndPayments>
+  @Transaction
+  @Query(
+      "SELECT * FROM tabSalesInvoice WHERE is_deleted = 0 AND due_date < :today AND outstanding_amount > 0 AND status IN ('Overdue', 'Unpaid', 'Partly Paid') ORDER BY due_date ASC"
+  )
+  fun getOverdueInvoices(today: String): PagingSource<Int, SalesInvoiceWithItemsAndPayments>
 
-    @Transaction
-    @Query("SELECT * FROM tabSalesInvoice WHERE is_deleted = 0 AND posting_date BETWEEN :startDate AND :endDate AND due_date < :today AND outstanding_amount > 0 ORDER BY due_date ASC")
-    fun getOverdueInvoicesInRange(
-        startDate: String, endDate: String, today: String
-    ): PagingSource<Int, SalesInvoiceWithItemsAndPayments>
+  @Transaction
+  @Query(
+      "SELECT * FROM tabSalesInvoice WHERE is_deleted = 0 AND posting_date BETWEEN :startDate AND :endDate AND due_date < :today AND outstanding_amount > 0 ORDER BY due_date ASC"
+  )
+  fun getOverdueInvoicesInRange(
+      startDate: String,
+      endDate: String,
+      today: String,
+  ): PagingSource<Int, SalesInvoiceWithItemsAndPayments>
 
-    @Transaction
-    @Query(
-        """
+  @Transaction
+  @Query(
+      """
         SELECT * FROM tabSalesInvoice 
         WHERE (:query IS NULL OR customer_name LIKE '%' || :query || '%' OR invoice_name LIKE '%' || :query || '%')
         AND ((:date IS NULL OR posting_date == :date)) 
@@ -689,135 +703,115 @@ interface SalesInvoiceDao {
         AND is_deleted = 0
         ORDER BY posting_date DESC 
     """
-    )
-    fun getFilteredInvoices(
-        query: String?,
-        date: String?,
-    ): PagingSource<Int, SalesInvoiceWithItemsAndPayments>
+  )
+  fun getFilteredInvoices(
+      query: String?,
+      date: String?,
+  ): PagingSource<Int, SalesInvoiceWithItemsAndPayments>
 
-    @Update
-    suspend fun updateInvoice(invoice: SalesInvoiceEntity)
+  @Update suspend fun updateInvoice(invoice: SalesInvoiceEntity)
 
-    @Query("""
+  @Query(
+      """
        UPDATE tabSalesInvoice SET status = :status WHERE invoice_name = :invoiceId AND is_deleted = 0
-    """)
-    suspend fun updatePaymentStatus(invoiceId: String, status: String)
+    """
+  )
+  suspend fun updatePaymentStatus(invoiceId: String, status: String)
 
-    @Transaction
-    suspend fun applyPayments(
-        invoice: SalesInvoiceEntity,
-        payments: List<POSInvoicePaymentEntity>
-    ) {
-        updateInvoice(invoice)
-        insertPayments(payments)
-    }
+  @Transaction
+  suspend fun applyPayments(invoice: SalesInvoiceEntity, payments: List<POSInvoicePaymentEntity>) {
+    updateInvoice(invoice)
+    insertPayments(payments)
+  }
 
-    @Query("SELECT * FROM tabSalesInvoicePayment WHERE sync_status != 'Synced'")
-    suspend fun getPendingPayments(): List<POSInvoicePaymentEntity>
+  @Query("SELECT * FROM tabSalesInvoicePayment WHERE sync_status != 'Synced'")
+  suspend fun getPendingPayments(): List<POSInvoicePaymentEntity>
 
-    @Query(
-        """
+  @Query(
+      """
         UPDATE tabSalesInvoicePayment
         SET sync_status = :status,
             last_synced_at = :syncedAt,
             remote_payment_entry = :remotePaymentEntry
         WHERE id = :paymentId
         """
-    )
-    suspend fun updatePaymentSyncStatus(
-        paymentId: Int,
-        status: String,
-        syncedAt: Long,
-        remotePaymentEntry: String? = null
-    )
+  )
+  suspend fun updatePaymentSyncStatus(
+      paymentId: Int,
+      status: String,
+      syncedAt: Long,
+      remotePaymentEntry: String? = null,
+  )
 
-    @Query(
-        """
+  @Query(
+      """
         UPDATE tabSalesInvoice
         SET pos_opening_entry = :remoteOpeningEntry
         WHERE pos_opening_entry = :localOpeningEntry
         """
-    )
-    suspend fun updateInvoicesOpeningEntry(
-        localOpeningEntry: String,
-        remoteOpeningEntry: String
-    )
+  )
+  suspend fun updateInvoicesOpeningEntry(localOpeningEntry: String, remoteOpeningEntry: String)
 
-    @Query(
-        """
+  @Query(
+      """
         UPDATE tabSalesInvoicePayment
         SET pos_opening_entry = :remoteOpeningEntry
         WHERE pos_opening_entry = :localOpeningEntry
         """
-    )
-    suspend fun updatePaymentsOpeningEntry(
-        localOpeningEntry: String,
-        remoteOpeningEntry: String
-    )
+  )
+  suspend fun updatePaymentsOpeningEntry(localOpeningEntry: String, remoteOpeningEntry: String)
 
-    @Query(
-        """
+  @Query(
+      """
         UPDATE tabSalesInvoice
         SET pos_opening_entry = :posOpeningEntry,
             profile_id = :profileId
         WHERE invoice_name = :invoiceName
           AND is_deleted = 0
         """
-    )
-    suspend fun updateInvoiceOpeningAndProfile(
-        invoiceName: String,
-        posOpeningEntry: String,
-        profileId: String
-    )
+  )
+  suspend fun updateInvoiceOpeningAndProfile(
+      invoiceName: String,
+      posOpeningEntry: String,
+      profileId: String,
+  )
 
-    @Query(
-        """
+  @Query(
+      """
         UPDATE tabSalesInvoicePayment
         SET pos_opening_entry = :posOpeningEntry
         WHERE parent_invoice = :invoiceName
         """
-    )
-    suspend fun updatePaymentsOpeningForInvoice(
-        invoiceName: String,
-        posOpeningEntry: String
-    )
+  )
+  suspend fun updatePaymentsOpeningForInvoice(invoiceName: String, posOpeningEntry: String)
 
-    @Query(
-        """
+  @Query(
+      """
         UPDATE tabSalesInvoiceItem
         SET parent_invoice = :newInvoiceName
         WHERE parent_invoice = :oldInvoiceName
         """
-    )
-    suspend fun updateItemsParentInvoice(
-        oldInvoiceName: String,
-        newInvoiceName: String
-    )
+  )
+  suspend fun updateItemsParentInvoice(oldInvoiceName: String, newInvoiceName: String)
 
-    @Query(
-        """
+  @Query(
+      """
         UPDATE tabSalesInvoicePayment
         SET parent_invoice = :newInvoiceName
         WHERE parent_invoice = :oldInvoiceName
         """
-    )
-    suspend fun updatePaymentsParentInvoice(
-        oldInvoiceName: String,
-        newInvoiceName: String
-    )
+  )
+  suspend fun updatePaymentsParentInvoice(oldInvoiceName: String, newInvoiceName: String)
 
-    @Transaction
-    suspend fun rebindChildrenToInvoice(
-        oldInvoiceName: String,
-        newInvoiceName: String
-    ) {
-        if (oldInvoiceName == newInvoiceName) return
-        updateItemsParentInvoice(oldInvoiceName, newInvoiceName)
-        updatePaymentsParentInvoice(oldInvoiceName, newInvoiceName)
-    }
+  @Transaction
+  suspend fun rebindChildrenToInvoice(oldInvoiceName: String, newInvoiceName: String) {
+    if (oldInvoiceName == newInvoiceName) return
+    updateItemsParentInvoice(oldInvoiceName, newInvoiceName)
+    updatePaymentsParentInvoice(oldInvoiceName, newInvoiceName)
+  }
 
-    @Query(
-        """
+  @Query(
+      """
         UPDATE customers
         SET totalPendingAmount = COALESCE(
                 (SELECT SUM(outstanding_amount)
@@ -867,17 +861,18 @@ interface SalesInvoiceDao {
             END
         WHERE id = :customerId
         """
-    )
-    suspend fun refreshCustomerSummary(customerId: String)
+  )
+  suspend fun refreshCustomerSummary(customerId: String)
 
-    @Query("SELECT COUNT(*) FROM tabSalesInvoice WHERE is_deleted = 0")
-    suspend fun countAll(): Int
+  @Query("SELECT COUNT(*) FROM tabSalesInvoice WHERE is_deleted = 0") suspend fun countAll(): Int
 
-    @Query("SELECT COUNT(*) FROM tabSalesInvoice WHERE is_deleted = 0 AND sync_status IN ('Pending','Failed')")
-    suspend fun countAllSyncPending(): Int
+  @Query(
+      "SELECT COUNT(*) FROM tabSalesInvoice WHERE is_deleted = 0 AND sync_status IN ('Pending','Failed')"
+  )
+  suspend fun countAllSyncPending(): Int
 
-    @Query(
-        """
+  @Query(
+      """
         SELECT * FROM tabSalesInvoice
         WHERE profile_id = :profileId
           AND created_at BETWEEN :startMillis AND :endMillis
@@ -886,15 +881,15 @@ interface SalesInvoiceDao {
           AND is_deleted = 0
         ORDER BY created_at DESC
         """
-    )
-    suspend fun getInvoicesForShift(
-        profileId: String,
-        startMillis: Long,
-        endMillis: Long
-    ): List<SalesInvoiceEntity>
+  )
+  suspend fun getInvoicesForShift(
+      profileId: String,
+      startMillis: Long,
+      endMillis: Long,
+  ): List<SalesInvoiceEntity>
 
-    @Query(
-        """
+  @Query(
+      """
         SELECT * FROM tabSalesInvoice
         WHERE pos_opening_entry = :openingEntryId
           AND docstatus != 2
@@ -902,11 +897,11 @@ interface SalesInvoiceDao {
           AND is_deleted = 0
         ORDER BY created_at DESC
         """
-    )
-    suspend fun getInvoicesForOpeningEntry(openingEntryId: String): List<SalesInvoiceEntity>
+  )
+  suspend fun getInvoicesForOpeningEntry(openingEntryId: String): List<SalesInvoiceEntity>
 
-    @Query(
-        """
+  @Query(
+      """
         SELECT p.parent_invoice AS invoiceName,
                p.mode_of_payment AS modeOfPayment,
                p.amount AS amount,
@@ -924,15 +919,15 @@ interface SalesInvoiceDao {
           AND i.is_deleted = 0
           AND p.sync_status != 'Failed'
         """
-    )
-    suspend fun getShiftPayments(
-        profileId: String,
-        startMillis: Long,
-        endMillis: Long
-    ): List<ShiftPaymentRow>
+  )
+  suspend fun getShiftPayments(
+      profileId: String,
+      startMillis: Long,
+      endMillis: Long,
+  ): List<ShiftPaymentRow>
 
-    @Query(
-        """
+  @Query(
+      """
         SELECT p.parent_invoice AS invoiceName,
                p.mode_of_payment AS modeOfPayment,
                p.amount AS amount,
@@ -949,11 +944,11 @@ interface SalesInvoiceDao {
           AND i.is_deleted = 0
           AND p.sync_status != 'Failed'
         """
-    )
-    suspend fun getPaymentsForOpeningEntry(openingEntryId: String): List<ShiftPaymentRow>
+  )
+  suspend fun getPaymentsForOpeningEntry(openingEntryId: String): List<ShiftPaymentRow>
 
-    @Query(
-        """
+  @Query(
+      """
         SELECT invoice_name
         FROM tabSalesInvoice
         WHERE profile_id = :profileId
@@ -964,11 +959,11 @@ interface SalesInvoiceDao {
           AND invoice_name IS NOT NULL
           AND invoice_name NOT LIKE 'LOCAL-%'
         """
-    )
-    suspend fun getOutstandingInvoiceNamesForProfile(profileId: String): List<String>
+  )
+  suspend fun getOutstandingInvoiceNamesForProfile(profileId: String): List<String>
 
-    @Query(
-        """
+  @Query(
+      """
         SELECT invoice_name
         FROM tabSalesInvoice
         WHERE outstanding_amount > 0
@@ -978,75 +973,84 @@ interface SalesInvoiceDao {
           AND invoice_name IS NOT NULL
           AND invoice_name NOT LIKE 'LOCAL-%'
         """
-    )
-    suspend fun getOutstandingInvoiceNames(): List<String>
+  )
+  suspend fun getOutstandingInvoiceNames(): List<String>
 
-    @Query("UPDATE tabSalesInvoice SET is_deleted = 1 WHERE is_deleted = 0 AND invoice_name = :invoiceId")
-    suspend fun softDeleteByInvoiceId(invoiceId: String)
+  @Query(
+      "UPDATE tabSalesInvoice SET is_deleted = 1 WHERE is_deleted = 0 AND invoice_name = :invoiceId"
+  )
+  suspend fun softDeleteByInvoiceId(invoiceId: String)
 
-    @Query("DELETE FROM tabSalesInvoice WHERE is_deleted = 1 AND invoice_name = :invoiceId")
-    suspend fun hardDeleteDeletedByInvoiceId(invoiceId: String)
+  @Query("DELETE FROM tabSalesInvoice WHERE is_deleted = 1 AND invoice_name = :invoiceId")
+  suspend fun hardDeleteDeletedByInvoiceId(invoiceId: String)
 
-    @Query("DELETE FROM tabSalesInvoice WHERE invoice_name = :invoiceId")
-    suspend fun hardDeleteByInvoiceId(invoiceId: String)
+  @Query("DELETE FROM tabSalesInvoice WHERE invoice_name = :invoiceId")
+  suspend fun hardDeleteByInvoiceId(invoiceId: String)
 
-    @Query("UPDATE tabSalesInvoice SET is_deleted = 1 WHERE is_deleted = 0")
-    suspend fun softDeleteAll()
+  @Query("UPDATE tabSalesInvoice SET is_deleted = 1 WHERE is_deleted = 0")
+  suspend fun softDeleteAll()
 
-    @Query("DELETE FROM tabSalesInvoice WHERE is_deleted = 1")
-    suspend fun hardDeleteAllDeleted()
+  @Query("DELETE FROM tabSalesInvoice WHERE is_deleted = 1") suspend fun hardDeleteAllDeleted()
 
-    @Query("""
+  @Query(
+      """
         UPDATE tabSalesInvoice
         SET is_deleted = 1
         WHERE is_deleted = 0
           AND profile_id = :profileId
           AND invoice_name NOT IN (:invoiceNames)
-    """)
-    suspend fun softDeleteNotInForProfile(profileId: String, invoiceNames: List<String>)
+    """
+  )
+  suspend fun softDeleteNotInForProfile(profileId: String, invoiceNames: List<String>)
 
-    @Query("""
+  @Query(
+      """
         DELETE FROM tabSalesInvoice
         WHERE is_deleted = 1
           AND profile_id = :profileId
           AND invoice_name NOT IN (:invoiceNames)
-    """)
-    suspend fun hardDeleteDeletedNotInForProfile(profileId: String, invoiceNames: List<String>)
+    """
+  )
+  suspend fun hardDeleteDeletedNotInForProfile(profileId: String, invoiceNames: List<String>)
 
-    @Query("""
+  @Query(
+      """
         UPDATE tabSalesInvoice
         SET is_deleted = 1
         WHERE is_deleted = 0
           AND invoice_name NOT IN (:invoiceNames)
           AND invoice_name NOT LIKE 'LOCAL-%'
-    """)
-    suspend fun softDeleteNotInRemote(invoiceNames: List<String>)
+    """
+  )
+  suspend fun softDeleteNotInRemote(invoiceNames: List<String>)
 
-    @Query("""
+  @Query(
+      """
         DELETE FROM tabSalesInvoice
         WHERE is_deleted = 1
           AND invoice_name NOT IN (:invoiceNames)
           AND invoice_name NOT LIKE 'LOCAL-%'
-    """)
-    suspend fun hardDeleteDeletedNotInRemote(invoiceNames: List<String>)
+    """
+  )
+  suspend fun hardDeleteDeletedNotInRemote(invoiceNames: List<String>)
 
-    @Transaction
-    suspend fun deleteInvoiceWithChildren(invoiceId: String) {
-        deleteItemsForInvoice(invoiceId)
-        deletePaymentsForInvoice(invoiceId)
-        hardDeleteByInvoiceId(invoiceId)
-    }
+  @Transaction
+  suspend fun deleteInvoiceWithChildren(invoiceId: String) {
+    deleteItemsForInvoice(invoiceId)
+    deletePaymentsForInvoice(invoiceId)
+    hardDeleteByInvoiceId(invoiceId)
+  }
 
-    @Transaction
-    suspend fun deleteAllWithChildren() {
-        deleteAllItems()
-        deleteAllPayments()
-        hardDeleteAllDeleted()
-        softDeleteAll()
-    }
+  @Transaction
+  suspend fun deleteAllWithChildren() {
+    deleteAllItems()
+    deleteAllPayments()
+    hardDeleteAllDeleted()
+    softDeleteAll()
+  }
 
-    @Query(
-        """
+  @Query(
+      """
         UPDATE tabSalesInvoice
         SET invoice_name = :newName,
             customer_name = :customerName,
@@ -1086,72 +1090,67 @@ interface SalesInvoiceDao {
             is_deleted = 0
         WHERE invoice_name = :oldName
         """
-    )
-    suspend fun updateFromRemote(
-        oldName: String,
-        newName: String,
-        customerName: String?,
-        customerPhone: String?,
-        postingDate: String,
-        dueDate: String?,
-        currency: String,
-        partyAccountCurrency: String?,
-        conversionRate: Double?,
-        customExchangeRate: Double?,
-        netTotal: Double,
-        taxTotal: Double,
-        discountAmount: Double,
-        grandTotal: Double,
-        paidAmount: Double,
-        outstandingAmount: Double,
-        baseTotal: Double?,
-        baseNetTotal: Double?,
-        baseTotalTaxesAndCharges: Double?,
-        baseGrandTotal: Double?,
-        baseRoundingAdjustment: Double?,
-        baseRoundedTotal: Double?,
-        baseDiscountAmount: Double?,
-        basePaidAmount: Double?,
-        baseChangeAmount: Double?,
-        baseWriteOffAmount: Double?,
-        status: String,
-        docstatus: Int,
-        modeOfPayment: String?,
-        debitTo: String?,
-        remarks: String?,
-        posOpeningEntry: String?,
-        isReturn: Boolean,
-        isPos: Boolean,
-        syncStatus: String,
-        modifiedAt: Long
-    )
+  )
+  suspend fun updateFromRemote(
+      oldName: String,
+      newName: String,
+      customerName: String?,
+      customerPhone: String?,
+      postingDate: String,
+      dueDate: String?,
+      currency: String,
+      partyAccountCurrency: String?,
+      conversionRate: Double?,
+      customExchangeRate: Double?,
+      netTotal: Double,
+      taxTotal: Double,
+      discountAmount: Double,
+      grandTotal: Double,
+      paidAmount: Double,
+      outstandingAmount: Double,
+      baseTotal: Double?,
+      baseNetTotal: Double?,
+      baseTotalTaxesAndCharges: Double?,
+      baseGrandTotal: Double?,
+      baseRoundingAdjustment: Double?,
+      baseRoundedTotal: Double?,
+      baseDiscountAmount: Double?,
+      basePaidAmount: Double?,
+      baseChangeAmount: Double?,
+      baseWriteOffAmount: Double?,
+      status: String,
+      docstatus: Int,
+      modeOfPayment: String?,
+      debitTo: String?,
+      remarks: String?,
+      posOpeningEntry: String?,
+      isReturn: Boolean,
+      isPos: Boolean,
+      syncStatus: String,
+      modifiedAt: Long,
+  )
 
-    @Query("SELECT * FROM tabSalesInvoice WHERE is_deleted = 0 ORDER BY last_synced_at ASC LIMIT 1")
-    suspend fun getOldestItem(): SalesInvoiceEntity?
+  @Query("SELECT * FROM tabSalesInvoice WHERE is_deleted = 0 ORDER BY last_synced_at ASC LIMIT 1")
+  suspend fun getOldestItem(): SalesInvoiceEntity?
 
-    @Query("DELETE FROM tabSalesInvoiceItem WHERE parent_invoice = :invoiceId")
-    suspend fun deleteItemsForInvoice(invoiceId: String)
+  @Query("DELETE FROM tabSalesInvoiceItem WHERE parent_invoice = :invoiceId")
+  suspend fun deleteItemsForInvoice(invoiceId: String)
 
-    @Query("DELETE FROM tabSalesInvoicePayment WHERE parent_invoice = :invoiceId")
-    suspend fun deletePaymentsForInvoice(invoiceId: String)
+  @Query("DELETE FROM tabSalesInvoicePayment WHERE parent_invoice = :invoiceId")
+  suspend fun deletePaymentsForInvoice(invoiceId: String)
 
-    @Query("DELETE FROM tabSalesInvoiceItem")
-    suspend fun deleteAllItems()
+  @Query("DELETE FROM tabSalesInvoiceItem") suspend fun deleteAllItems()
 
-    @Query("DELETE FROM tabSalesInvoicePayment")
-    suspend fun deleteAllPayments()
+  @Query("DELETE FROM tabSalesInvoicePayment") suspend fun deleteAllPayments()
 }
 
-data class DailySalesTotal(
-    val date: String,
-    val total: Double
-)
+data class DailySalesTotal(val date: String, val total: Double)
 
 data class CurrencySalesSummary(
     val currency: String,
     val total: Double,
     val invoices: Int,
-    val customers: Int
+    val customers: Int,
 )
 
 data class ShiftPaymentRow(
@@ -1162,48 +1161,35 @@ data class ShiftPaymentRow(
     val paymentCurrency: String?,
     val exchangeRate: Double,
     val invoiceCurrency: String?,
-    val partyAccountCurrency: String?
+    val partyAccountCurrency: String?,
 )
 
-data class CurrencyDailySalesTotal(
-    val date: String,
-    val currency: String,
-    val total: Double
-)
+data class CurrencyDailySalesTotal(val date: String, val currency: String, val total: Double)
 
-data class CurrencyMarginTotal(
-    val currency: String,
-    val margin: Double
-)
+data class CurrencyMarginTotal(val currency: String, val margin: Double)
 
-data class CurrencyItemCount(
-    val currency: String,
-    val count: Int
-)
+data class CurrencyItemCount(val currency: String, val count: Int)
 
-data class CurrencyOutstandingTotal(
-    val currency: String,
-    val total: Double
-)
+data class CurrencyOutstandingTotal(val currency: String, val total: Double)
 
 data class ShiftTodaySummaryRow(
     val totalSalesToday: Double,
     val invoicesToday: Int,
-    val customersToday: Int
+    val customersToday: Int,
 )
 
 data class ShiftTodayCurrencySummaryRow(
     val currency: String,
     val totalSalesToday: Double,
     val invoicesToday: Int,
-    val customersToday: Int
+    val customersToday: Int,
 )
 
 data class TopProductSales(
     val itemCode: String,
     val itemName: String?,
     val qty: Double,
-    val total: Double
+    val total: Double,
 )
 
 data class TopProductMargin(
@@ -1211,5 +1197,5 @@ data class TopProductMargin(
     val itemName: String?,
     val qty: Double,
     val total: Double,
-    val margin: Double
+    val margin: Double,
 )

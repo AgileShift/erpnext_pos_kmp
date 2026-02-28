@@ -9,14 +9,10 @@ import com.erpnext.pos.localSource.preferences.LanguagePreferences
 import org.koin.compose.koinInject
 
 @Composable
-fun ProvideAppStrings(
-    content: @Composable () -> Unit
-) {
-    val languagePreferences = koinInject<LanguagePreferences>()
-    val language by languagePreferences.language.collectAsState(AppLanguage.Spanish)
-    val strings = remember(language) { AppStringsFactory.forLanguage(language) }
+fun ProvideAppStrings(content: @Composable () -> Unit) {
+  val languagePreferences = koinInject<LanguagePreferences>()
+  val language by languagePreferences.language.collectAsState(AppLanguage.Spanish)
+  val strings = remember(language) { AppStringsFactory.forLanguage(language) }
 
-    CompositionLocalProvider(LocalAppStrings provides strings) {
-        content()
-    }
+  CompositionLocalProvider(LocalAppStrings provides strings) { content() }
 }

@@ -3,8 +3,8 @@
 package com.erpnext.pos.di
 
 import com.erpnext.pos.auth.AppLifecycleObserver
-import com.erpnext.pos.auth.SessionRefresher
 import com.erpnext.pos.auth.AuthFlowState
+import com.erpnext.pos.auth.SessionRefresher
 import com.erpnext.pos.auth.TokenHeartbeat
 import com.erpnext.pos.data.AppDatabase
 import com.erpnext.pos.data.DatabaseBuilder
@@ -83,8 +83,8 @@ import com.erpnext.pos.domain.usecases.LoadHomeMetricsUseCase
 import com.erpnext.pos.domain.usecases.LoadInventoryAlertsUseCase
 import com.erpnext.pos.domain.usecases.LoadSourceDocumentsUseCase
 import com.erpnext.pos.domain.usecases.LogoutUseCase
-import com.erpnext.pos.domain.usecases.ObserveHomeLiveShiftMetricsUseCase
 import com.erpnext.pos.domain.usecases.MarkSalesInvoiceSyncedUseCase
+import com.erpnext.pos.domain.usecases.ObserveHomeLiveShiftMetricsUseCase
 import com.erpnext.pos.domain.usecases.PartialReturnUseCase
 import com.erpnext.pos.domain.usecases.PushPendingCustomersUseCase
 import com.erpnext.pos.domain.usecases.RebuildCustomerSummariesUseCase
@@ -176,6 +176,8 @@ import io.ktor.client.plugins.logging.LogLevel
 import io.ktor.client.plugins.logging.Logger
 import io.ktor.client.plugins.logging.Logging
 import io.ktor.serialization.kotlinx.json.json
+import kotlin.time.Clock
+import kotlin.time.ExperimentalTime
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.IO
@@ -187,593 +189,600 @@ import org.koin.core.parameter.parametersOf
 import org.koin.core.qualifier.named
 import org.koin.dsl.KoinAppDeclaration
 import org.koin.dsl.module
-import kotlin.time.Clock
-import kotlin.time.ExperimentalTime
 
 val appModule = module {
 
-    //region Core DI
-    single(named("tokenHttpClient")) {
-        HttpClient(defaultEngine()) {
-            expectSuccess = true
-            install(ContentNegotiation) {
-                json(Json {
-                    ignoreUnknownKeys = true
-                    isLenient = true
-                    prettyPrint = false
-                })
+  // region Core DI
+  single(named("tokenHttpClient")) {
+    HttpClient(defaultEngine()) {
+      expectSuccess = true
+      install(ContentNegotiation) {
+        json(
+            Json {
+              ignoreUnknownKeys = true
+              isLenient = true
+              prettyPrint = false
             }
-        }
-    }
-
-    single {
-        val tokenStore: TokenStore = get()
-        val authStore: AuthInfoStore? = getOrNull()
-        val tokenRefreshClient: HttpClient = get(named("tokenHttpClient"))
-
-        HttpClient(defaultEngine()) {
-            install(ContentNegotiation) {
-                json(Json {
-                    ignoreUnknownKeys = true
-                    isLenient = true
-                    prettyPrint = false
-                })
-            }
-            install(Logging) {
-                logger = object : Logger {
-                    override fun log(message: String) {
-                        if (
-                            message.contains("CancellationException") &&
-                            message.contains("coroutine scope left the composition")
-                        ) return
-                        print("KtorClient -> $message")
-                    }
-                }
-                level = LogLevel.ALL
-            }
-            install(HttpTimeout) {
-                requestTimeoutMillis = 60_000
-                connectTimeoutMillis = 30_000
-                socketTimeoutMillis = 60_000
-            }
-            expectSuccess = true
-
-            authStore?.let { authInfoStore ->
-                install(Auth) {
-                    bearer {
-                        loadTokens {
-                            val currentTokens = tokenStore.load() ?: return@loadTokens null
-                            val shouldRefresh = shouldRefreshToken(currentTokens.id_token)
-                            if (!shouldRefresh) {
-                                return@loadTokens currentTokens.toBearerToken()
-                            }
-                            val refreshToken =
-                                currentTokens.refresh_token?.takeIf { it.isNotBlank() }
-                                    ?: return@loadTokens if (TokenUtils.isValid(currentTokens.id_token)) {
-                                        currentTokens.toBearerToken()
-                                    } else {
-                                        tokenStore.clear()
-                                        null
-                                    }
-                            val refreshed = runCatching {
-                                refreshAuthToken(tokenRefreshClient, authInfoStore, refreshToken)
-                            }.getOrElse { throwable ->
-                                AppSentry.capture(throwable, "loadTokens refresh failed")
-                                AppLogger.warn("loadTokens refresh failed", throwable)
-                                if (isRefreshTokenRejected(throwable)) {
-                                    tokenStore.clear()
-                                    return@loadTokens null
-                                }
-                                return@loadTokens if (TokenUtils.isValid(currentTokens.id_token)) {
-                                    currentTokens.toBearerToken()
-                                } else {
-                                    tokenStore.clear()
-                                    null
-                                }
-                            }
-                            tokenStore.save(refreshed)
-                            BearerTokens(
-                                refreshed.access_token,
-                                refreshed.refresh_token ?: currentTokens.refresh_token
-                            )
-                        }
-                        refreshTokens {
-                            val currentTokens = tokenStore.load() ?: return@refreshTokens null
-                            val refreshToken =
-                                currentTokens.refresh_token?.takeIf { it.isNotBlank() }
-                                    ?: return@refreshTokens null
-                            val refreshed = runCatching {
-                                refreshAuthToken(tokenRefreshClient, authInfoStore, refreshToken)
-                            }.getOrElse { throwable ->
-                                AppSentry.capture(throwable, "refreshTokens failed")
-                                AppLogger.warn("refreshTokens failed", throwable)
-                                if (isRefreshTokenRejected(throwable)) {
-                                    tokenStore.clear()
-                                    return@refreshTokens null
-                                }
-                                return@refreshTokens if (TokenUtils.isValid(currentTokens.id_token)) {
-                                    currentTokens.toBearerToken()
-                                } else {
-                                    tokenStore.clear()
-                                    null
-                                }
-                            }
-                            tokenStore.save(refreshed)
-                            BearerTokens(
-                                refreshed.access_token,
-                                refreshed.refresh_token ?: currentTokens.refresh_token
-                            )
-                        }
-                        sendWithoutRequest { true }
-                    }
-                }
-            }
-        }
-    }
-
-    single {
-        APIService(
-            client = get(),
-            store = get(),
-            authStore = get(),
-            tokenClient = get(named("tokenHttpClient")),
-            bootstrapContextPreferences = get()
         )
+      }
     }
+  }
 
-    single { SnackbarController() }
-    single { SalesFlowContextStore() }
-    single { HomeRefreshController() }
-    single { BillingResetController() }
-    single { AuthFlowState() }
+  single {
+    val tokenStore: TokenStore = get()
+    val authStore: AuthInfoStore? = getOrNull()
+    val tokenRefreshClient: HttpClient = get(named("tokenHttpClient"))
 
-    single<CoroutineScope> { CoroutineScope(SupervisorJob() + Dispatchers.IO) }
-    single { com.erpnext.pos.navigation.NavigationManagerHolder.instance }
-    single {
-        SessionRefresher(
-            tokenStore = get(),
-            apiService = get(),
-            navigationManager = get(),
-            networkMonitor = get(),
-            cashBoxManager = lazy { get<CashBoxManager>() },
-            authFlowState = get()
+    HttpClient(defaultEngine()) {
+      install(ContentNegotiation) {
+        json(
+            Json {
+              ignoreUnknownKeys = true
+              isLenient = true
+              prettyPrint = false
+            }
         )
+      }
+      install(Logging) {
+        logger =
+            object : Logger {
+              override fun log(message: String) {
+                if (
+                    message.contains("CancellationException") &&
+                        message.contains("coroutine scope left the composition")
+                )
+                    return
+                print("KtorClient -> $message")
+              }
+            }
+        level = LogLevel.ALL
+      }
+      install(HttpTimeout) {
+        requestTimeoutMillis = 60_000
+        connectTimeoutMillis = 30_000
+        socketTimeoutMillis = 60_000
+      }
+      expectSuccess = true
+
+      authStore?.let { authInfoStore ->
+        install(Auth) {
+          bearer {
+            loadTokens {
+              val currentTokens = tokenStore.load() ?: return@loadTokens null
+              val shouldRefresh = shouldRefreshToken(currentTokens.id_token)
+              if (!shouldRefresh) {
+                return@loadTokens currentTokens.toBearerToken()
+              }
+              val refreshToken =
+                  currentTokens.refresh_token?.takeIf { it.isNotBlank() }
+                      ?: return@loadTokens if (TokenUtils.isValid(currentTokens.id_token)) {
+                        currentTokens.toBearerToken()
+                      } else {
+                        tokenStore.clear()
+                        null
+                      }
+              val refreshed =
+                  runCatching { refreshAuthToken(tokenRefreshClient, authInfoStore, refreshToken) }
+                      .getOrElse { throwable ->
+                        AppSentry.capture(throwable, "loadTokens refresh failed")
+                        AppLogger.warn("loadTokens refresh failed", throwable)
+                        if (isRefreshTokenRejected(throwable)) {
+                          tokenStore.clear()
+                          return@loadTokens null
+                        }
+                        return@loadTokens if (TokenUtils.isValid(currentTokens.id_token)) {
+                          currentTokens.toBearerToken()
+                        } else {
+                          tokenStore.clear()
+                          null
+                        }
+                      }
+              tokenStore.save(refreshed)
+              BearerTokens(
+                  refreshed.access_token,
+                  refreshed.refresh_token ?: currentTokens.refresh_token,
+              )
+            }
+            refreshTokens {
+              val currentTokens = tokenStore.load() ?: return@refreshTokens null
+              val refreshToken =
+                  currentTokens.refresh_token?.takeIf { it.isNotBlank() }
+                      ?: return@refreshTokens null
+              val refreshed =
+                  runCatching { refreshAuthToken(tokenRefreshClient, authInfoStore, refreshToken) }
+                      .getOrElse { throwable ->
+                        AppSentry.capture(throwable, "refreshTokens failed")
+                        AppLogger.warn("refreshTokens failed", throwable)
+                        if (isRefreshTokenRejected(throwable)) {
+                          tokenStore.clear()
+                          return@refreshTokens null
+                        }
+                        return@refreshTokens if (TokenUtils.isValid(currentTokens.id_token)) {
+                          currentTokens.toBearerToken()
+                        } else {
+                          tokenStore.clear()
+                          null
+                        }
+                      }
+              tokenStore.save(refreshed)
+              BearerTokens(
+                  refreshed.access_token,
+                  refreshed.refresh_token ?: currentTokens.refresh_token,
+              )
+            }
+            sendWithoutRequest { true }
+          }
+        }
+      }
     }
-    single { AppLifecycleObserver() }
-    single(createdAtStart = true) {
-        TokenHeartbeat(
+  }
+
+  single {
+    APIService(
+        client = get(),
+        store = get(),
+        authStore = get(),
+        tokenClient = get(named("tokenHttpClient")),
+        bootstrapContextPreferences = get(),
+    )
+  }
+
+  single { SnackbarController() }
+  single { SalesFlowContextStore() }
+  single { HomeRefreshController() }
+  single { BillingResetController() }
+  single { AuthFlowState() }
+
+  single<CoroutineScope> { CoroutineScope(SupervisorJob() + Dispatchers.IO) }
+  single { com.erpnext.pos.navigation.NavigationManagerHolder.instance }
+  single {
+    SessionRefresher(
+        tokenStore = get(),
+        apiService = get(),
+        navigationManager = get(),
+        networkMonitor = get(),
+        cashBoxManager = lazy { get<CashBoxManager>() },
+        authFlowState = get(),
+    )
+  }
+  single { AppLifecycleObserver() }
+  single(createdAtStart = true) {
+    TokenHeartbeat(
             scope = get(),
             sessionRefresher = get(),
             networkMonitor = get(),
             generalPreferences = get(),
-            lifecycleObserver = get()
-        ).apply { start(intervalMinutes = 1) }
-    }
-    single {
-        PaymentHandler(
-            api = get(),
-            createPaymentEntryUseCase = get(),
-            saveInvoicePaymentsUseCase = get(),
-            exchangeRateRepository = get(),
-            invoiceLocalSource = get(),
-            networkMonitor = get(),
-            generalPreferences = get()
+            lifecycleObserver = get(),
         )
-    }
-    single { get<AppDatabase>().configurationDao() }
-    single { ConfigurationStore(get(), get()) }
-    single { ExchangeRatePreferences(get()) }
-    single { LanguagePreferences(get()) }
-    single { OpeningSessionPreferences(get()) }
-    single { BootstrapContextPreferences(get()) }
-    single { ReturnLedgerPreferences(get()) }
-    single { SyncLogPreferences(get()) }
-    single { SyncPreferences(get()) }
-    single { ThemePreferences(get()) }
-    single { StockSettingsRepository(get(), get()) }
-    single { CurrencySettingsPreferences(get()) }
-    single { CurrencySettingsRepository(get(), get()) }
-    single<DatePolicy> { DefaultPolicy(PolicyInput()) }
-    single<CashBoxManager> {
-        CashBoxManager(
-            api = get(),
-            profileDao = get(),
-            openingDao = get(),
-            openingEntryLinkDao = get(),
-            closingDao = get(),
-            companyDao = get(),
-            cashboxDao = get(),
-            userDao = get(),
-            exchangeRatePreferences = get(),
-            exchangeRateRepository = get(),
-            openingEntrySyncRepository = get(),
-            closingEntrySyncRepository = get(),
-            posOpeningRepository = get(),
-            paymentMethodLocalRepository = get(),
-            salesInvoiceDao = get(),
-            generalPreferences = get(),
-            currencySettingsRepository = get(),
-            sessionRefresher = get(),
-            networkMonitor = get(),
-            bootstrapContextPreferences = get()
-        )
-    }
-    single<PushSyncRunner> {
-        PushSyncManager(
-            invoiceRepository = get(),
-            invoiceLocalSource = get(),
-            modeOfPaymentDao = get(),
-            paymentEntryUseCase = get(),
-            exchangeRateRepository = get(),
-            openingEntrySyncRepository = get(),
-            closingEntrySyncRepository = get(),
-            customerSyncRepository = get(),
-            cashBoxManager = get()
-        )
-    }
+        .apply { start(intervalMinutes = 1) }
+  }
+  single {
+    PaymentHandler(
+        api = get(),
+        createPaymentEntryUseCase = get(),
+        saveInvoicePaymentsUseCase = get(),
+        exchangeRateRepository = get(),
+        invoiceLocalSource = get(),
+        networkMonitor = get(),
+        generalPreferences = get(),
+    )
+  }
+  single { get<AppDatabase>().configurationDao() }
+  single { ConfigurationStore(get(), get()) }
+  single { ExchangeRatePreferences(get()) }
+  single { LanguagePreferences(get()) }
+  single { OpeningSessionPreferences(get()) }
+  single { BootstrapContextPreferences(get()) }
+  single { ReturnLedgerPreferences(get()) }
+  single { SyncLogPreferences(get()) }
+  single { SyncPreferences(get()) }
+  single { ThemePreferences(get()) }
+  single { StockSettingsRepository(get(), get()) }
+  single { CurrencySettingsPreferences(get()) }
+  single { CurrencySettingsRepository(get(), get()) }
+  single<DatePolicy> { DefaultPolicy(PolicyInput()) }
+  single<CashBoxManager> {
+    CashBoxManager(
+        api = get(),
+        profileDao = get(),
+        openingDao = get(),
+        openingEntryLinkDao = get(),
+        closingDao = get(),
+        companyDao = get(),
+        cashboxDao = get(),
+        userDao = get(),
+        exchangeRatePreferences = get(),
+        exchangeRateRepository = get(),
+        openingEntrySyncRepository = get(),
+        closingEntrySyncRepository = get(),
+        posOpeningRepository = get(),
+        paymentMethodLocalRepository = get(),
+        salesInvoiceDao = get(),
+        generalPreferences = get(),
+        currencySettingsRepository = get(),
+        sessionRefresher = get(),
+        networkMonitor = get(),
+        bootstrapContextPreferences = get(),
+    )
+  }
+  single<PushSyncRunner> {
+    PushSyncManager(
+        invoiceRepository = get(),
+        invoiceLocalSource = get(),
+        modeOfPaymentDao = get(),
+        paymentEntryUseCase = get(),
+        exchangeRateRepository = get(),
+        openingEntrySyncRepository = get(),
+        closingEntrySyncRepository = get(),
+        customerSyncRepository = get(),
+        cashBoxManager = get(),
+    )
+  }
 
-    //region Reconciliation
-    single { ReconciliationViewModel(get(), get(), get(), get(), get(), get(), get()) }
-    //endregion
+  // region Reconciliation
+  single { ReconciliationViewModel(get(), get(), get(), get(), get(), get(), get()) }
+  // endregion
 
-    single { SyncContextProvider(get(), get()) }
-    single {
-        BootstrapSyncRepository(
-            api = get(),
-            configurationStore = get(),
-            posProfilePaymentMethodSyncRepository = get(),
-            companyDao = get(),
-            stockSettingsRepository = get(),
-            exchangeRateLocalSource = get(),
-            paymentTermLocalSource = get(),
-            deliveryChargeLocalSource = get(),
-            supplierLocalSource = get(),
-            companyAccountLocalSource = get(),
-            customerGroupLocalSource = get(),
-            territoryLocalSource = get(),
-            inventoryLocalSource = get(),
-            customerLocalSource = get(),
-            customerOutboxLocalSource = get(),
-            invoiceLocalSource = get()
-        )
-    }
-    single<SyncManager> {
-        SyncManager(
-            bootstrapSyncRepository = get(),
-            syncPreferences = get(),
-            syncLogPreferences = get(),
-            generalPreferences = get(),
-            cashBoxManager = get(),
-            networkMonitor = get(),
-            sessionRefresher = get(),
-            syncContextProvider = get(),
-            pushSyncManager = get(),
-            bootstrapContextPreferences = get()
-        )
-    }
-    //endregion
+  single { SyncContextProvider(get(), get()) }
+  single {
+    BootstrapSyncRepository(
+        api = get(),
+        configurationStore = get(),
+        posProfilePaymentMethodSyncRepository = get(),
+        companyDao = get(),
+        stockSettingsRepository = get(),
+        exchangeRateLocalSource = get(),
+        paymentTermLocalSource = get(),
+        deliveryChargeLocalSource = get(),
+        supplierLocalSource = get(),
+        companyAccountLocalSource = get(),
+        customerGroupLocalSource = get(),
+        territoryLocalSource = get(),
+        inventoryLocalSource = get(),
+        customerLocalSource = get(),
+        customerOutboxLocalSource = get(),
+        invoiceLocalSource = get(),
+    )
+  }
+  single<SyncManager> {
+    SyncManager(
+        bootstrapSyncRepository = get(),
+        syncPreferences = get(),
+        syncLogPreferences = get(),
+        generalPreferences = get(),
+        cashBoxManager = get(),
+        networkMonitor = get(),
+        sessionRefresher = get(),
+        syncContextProvider = get(),
+        pushSyncManager = get(),
+        bootstrapContextPreferences = get(),
+    )
+  }
+  // endregion
 
-    //region Login DI
-    single { LoginViewModel(get(), get(), get(), get(), get(), get(), get(), get(), get()) }
-    //endregion
+  // region Login DI
+  single { LoginViewModel(get(), get(), get(), get(), get(), get(), get(), get(), get()) }
+  // endregion
 
-    //region Splash DI
-    single { SplashViewModel(get(), get(), get()) }
-    //endregion
+  // region Splash DI
+  single { SplashViewModel(get(), get(), get()) }
+  // endregion
 
-    //region Company
-    single { CompanyRepository(get(), get()) }
-    //endregion
+  // region Company
+  single { CompanyRepository(get(), get()) }
+  // endregion
 
-    //region Inventory
-    single { InventoryRemoteSource(get()) }
-    single { InventoryLocalSource(get(), get()) }
-    single { InventoryRepository(get(), get(), get()) }
-    single { InventoryRefreshController() }
-    single { InventoryViewModel(get(), get(), get(), get()) }
-    //endregion
+  // region Inventory
+  single { InventoryRemoteSource(get()) }
+  single { InventoryLocalSource(get(), get()) }
+  single { InventoryRepository(get(), get(), get()) }
+  single { InventoryRefreshController() }
+  single { InventoryViewModel(get(), get(), get(), get()) }
+  // endregion
 
-    //region Mode of Payment
-    single { ModeOfPaymentRemoteSource(get()) }
-    single { ModeOfPaymentLocalSource(get()) }
-    single { ModeOfPaymentRepository(get(), get()) }
-    single { PosProfilePaymentMethodLocalRepository(get()) }
-    single {
-        PosProfilePaymentMethodSyncRepository(
-            apiService = get(),
-            posProfileDao = get(),
-            posProfileLocalDao = get(),
-            posProfilePaymentMethodDao = get(),
-            modeOfPaymentDao = get()
-        )
-    }
-    single {
-        SyncOrchestrator(
-            networkMonitor = get(),
-            sessionRefresher = get(),
-            posProfilePaymentMethodSyncRepository = get()
-        )
-    }
-    single { OpeningGate(get(), get()) }
-    single { PosProfileGate(get(), get(), get(), get()) }
-    single {
-        OpeningEntrySyncRepository(
-            posOpeningRepository = get(),
-            openingEntryDao = get(),
-            openingEntryLinkDao = get(),
-            cashboxDao = get(),
-            salesInvoiceDao = get()
-        )
-    }
-    single {
-        ClosingEntrySyncRepository(
-            api = get(),
-            cashboxDao = get(),
-            openingEntryLinkDao = get(),
-            openingEntryDao = get(),
-            closingDao = get(),
-            salesInvoiceDao = get(),
-            posProfileDao = get(),
-            paymentMethodLocalRepository = get(),
-            exchangeRateRepository = get()
-        )
-    }
-    //endregion
+  // region Mode of Payment
+  single { ModeOfPaymentRemoteSource(get()) }
+  single { ModeOfPaymentLocalSource(get()) }
+  single { ModeOfPaymentRepository(get(), get()) }
+  single { PosProfilePaymentMethodLocalRepository(get()) }
+  single {
+    PosProfilePaymentMethodSyncRepository(
+        apiService = get(),
+        posProfileDao = get(),
+        posProfileLocalDao = get(),
+        posProfilePaymentMethodDao = get(),
+        modeOfPaymentDao = get(),
+    )
+  }
+  single {
+    SyncOrchestrator(
+        networkMonitor = get(),
+        sessionRefresher = get(),
+        posProfilePaymentMethodSyncRepository = get(),
+    )
+  }
+  single { OpeningGate(get(), get()) }
+  single { PosProfileGate(get(), get(), get(), get()) }
+  single {
+    OpeningEntrySyncRepository(
+        posOpeningRepository = get(),
+        openingEntryDao = get(),
+        openingEntryLinkDao = get(),
+        cashboxDao = get(),
+        salesInvoiceDao = get(),
+    )
+  }
+  single {
+    ClosingEntrySyncRepository(
+        api = get(),
+        cashboxDao = get(),
+        openingEntryLinkDao = get(),
+        openingEntryDao = get(),
+        closingDao = get(),
+        salesInvoiceDao = get(),
+        posProfileDao = get(),
+        paymentMethodLocalRepository = get(),
+        exchangeRateRepository = get(),
+    )
+  }
+  // endregion
 
-    //region POS Profile
-    single { POSProfileLocalSource(get(), get()) }
-    single { POSProfileRemoteSource(get(), get()) }
-    single<IPOSRepository> { POSProfileRepository(get(), get()) }
-    single { POSProfileViewModel(get(), get(), get()) }
-    //endregion
+  // region POS Profile
+  single { POSProfileLocalSource(get(), get()) }
+  single { POSProfileRemoteSource(get(), get()) }
+  single<IPOSRepository> { POSProfileRepository(get(), get()) }
+  single { POSProfileViewModel(get(), get(), get()) }
+  // endregion
 
-    //region Customer
-    single { CustomerRemoteSource(get()) }
-    single { CustomerLocalSource(get(), get()) }
-    single { CustomerOutboxLocalSource(get()) }
-    single { CustomerRepository(get(), get(), get(), get(), get()) }
-    single { CustomerSyncRepository(get(), get(), get(), get(), get()) }
-    single { FetchCustomerInvoicesLocalForPeriodUseCase(get()) }
-    single { CreateCustomerUseCase(get(), get()) }
-    single { PushPendingCustomersUseCase(get()) }
-    single { CustomerGroupLocalSource(get()) }
-    single { TerritoryLocalSource(get()) }
-    single { CustomerGroupRepository(get()) }
-    single { TerritoryRepository(get()) }
-    single { ContactLocalSource(get()) }
-    single { AddressLocalSource(get()) }
-    single {
-        CustomerViewModel(
-            cashboxManager = get(),
-            fetchCustomersUseCase = get(),
-            checkCustomerCreditUseCase = get(),
-            rebuildCustomerSummariesUseCase = get(),
-            fetchCustomerDetailUseCase = get(),
-            fetchOutstandingInvoicesUseCase = get(),
-            fetchCustomerInvoicesForPeriodUseCase = get(),
-            fetchSalesInvoiceLocalUseCase = get(),
-            downloadSalesInvoicePdfUseCase = get(),
-            fetchSalesInvoiceWithItemsUseCase = get(),
-            modeOfPaymentDao = get(),
-            posProfilePaymentMethodDao = get(),
-            paymentHandler = get(),
-            createCustomerUseCase = get(),
-            pushPendingCustomersUseCase = get(),
-            fetchCustomerGroupsUseCase = get(),
-            fetchTerritoriesUseCase = get(),
-            fetchPaymentTermsUseCase = get(),
-            companyDao = get(),
-            cancelSalesInvoiceUseCase = get(),
-            partialReturnUseCase = get(),
-            networkMonitor = get(),
-            returnPolicyPreferences = get()
-        )
-    }
-    //endregion
+  // region Customer
+  single { CustomerRemoteSource(get()) }
+  single { CustomerLocalSource(get(), get()) }
+  single { CustomerOutboxLocalSource(get()) }
+  single { CustomerRepository(get(), get(), get(), get(), get()) }
+  single { CustomerSyncRepository(get(), get(), get(), get(), get()) }
+  single { FetchCustomerInvoicesLocalForPeriodUseCase(get()) }
+  single { CreateCustomerUseCase(get(), get()) }
+  single { PushPendingCustomersUseCase(get()) }
+  single { CustomerGroupLocalSource(get()) }
+  single { TerritoryLocalSource(get()) }
+  single { CustomerGroupRepository(get()) }
+  single { TerritoryRepository(get()) }
+  single { ContactLocalSource(get()) }
+  single { AddressLocalSource(get()) }
+  single {
+    CustomerViewModel(
+        cashboxManager = get(),
+        fetchCustomersUseCase = get(),
+        checkCustomerCreditUseCase = get(),
+        rebuildCustomerSummariesUseCase = get(),
+        fetchCustomerDetailUseCase = get(),
+        fetchOutstandingInvoicesUseCase = get(),
+        fetchCustomerInvoicesForPeriodUseCase = get(),
+        fetchSalesInvoiceLocalUseCase = get(),
+        downloadSalesInvoicePdfUseCase = get(),
+        fetchSalesInvoiceWithItemsUseCase = get(),
+        modeOfPaymentDao = get(),
+        posProfilePaymentMethodDao = get(),
+        paymentHandler = get(),
+        createCustomerUseCase = get(),
+        pushPendingCustomersUseCase = get(),
+        fetchCustomerGroupsUseCase = get(),
+        fetchTerritoriesUseCase = get(),
+        fetchPaymentTermsUseCase = get(),
+        companyDao = get(),
+        cancelSalesInvoiceUseCase = get(),
+        partialReturnUseCase = get(),
+        networkMonitor = get(),
+        returnPolicyPreferences = get(),
+    )
+  }
+  // endregion
 
-    //region Home
-    single { UserRemoteSource(get(), get()) }
-    single { FetchPosProfileInfoUseCase(get()) }
-    single { FetchPosProfileInfoLocalUseCase(get()) }
-    single {
-        HomeViewModel(
-            fetchUserInfoUseCase = get(),
-            fetchPosProfileUseCase = get(),
-            logoutUseCase = get(),
-            fetchPosProfileInfoLocalUseCase = get(),
-            contextManager = get(),
-            posProfileDao = get(),
-            paymentMethodLocalRepository = get(),
-            syncManager = get(),
-            syncPreferences = get(),
-            navManager = get(),
-            loadHomeMetricsUseCase = get(),
-            loadInventoryAlertsUseCase = get(),
-            observeHomeLiveShiftMetricsUseCase = get(),
-            posProfileGate = get(),
-            openingGate = get(),
-            homeRefreshController = get(),
-            sessionRefresher = get(),
-            syncContextProvider = get(),
-            generalPreferences = get(),
-            exchangeRateLocalSource = get(),
-            bootstrapContextPreferences = get()
-        )
-    }
-    single<IUserRepository> { UserRepository(get()) }
-    //endregion
+  // region Home
+  single { UserRemoteSource(get(), get()) }
+  single { FetchPosProfileInfoUseCase(get()) }
+  single { FetchPosProfileInfoLocalUseCase(get()) }
+  single {
+    HomeViewModel(
+        fetchUserInfoUseCase = get(),
+        fetchPosProfileUseCase = get(),
+        logoutUseCase = get(),
+        fetchPosProfileInfoLocalUseCase = get(),
+        contextManager = get(),
+        posProfileDao = get(),
+        paymentMethodLocalRepository = get(),
+        syncManager = get(),
+        syncPreferences = get(),
+        navManager = get(),
+        loadHomeMetricsUseCase = get(),
+        loadInventoryAlertsUseCase = get(),
+        observeHomeLiveShiftMetricsUseCase = get(),
+        posProfileGate = get(),
+        openingGate = get(),
+        homeRefreshController = get(),
+        sessionRefresher = get(),
+        syncContextProvider = get(),
+        generalPreferences = get(),
+        exchangeRateLocalSource = get(),
+        bootstrapContextPreferences = get(),
+    )
+  }
+  single<IUserRepository> { UserRepository(get()) }
+  // endregion
 
-    //region Invoices
-    single { SalesInvoiceRemoteSource(get(), get()) }
-    single { InvoiceViewModel(get(), get(), get(), get(), get()) }
-    single { SalesInvoiceRepository(get(), get(), get(), get(), get()) }
-    single { CreateSalesInvoiceUseCase(get()) }
-    single { CancelSalesInvoiceUseCase(get(), get(), get(), get(), get(), get()) }
-    //endregion
+  // region Invoices
+  single { SalesInvoiceRemoteSource(get(), get()) }
+  single { InvoiceViewModel(get(), get(), get(), get(), get()) }
+  single { SalesInvoiceRepository(get(), get(), get(), get(), get()) }
+  single { CreateSalesInvoiceUseCase(get()) }
+  single { CancelSalesInvoiceUseCase(get(), get(), get(), get(), get(), get()) }
+  // endregion
 
-    //region Payment Terms
-    single { PaymentTermLocalSource(get()) }
-    single { DeliveryChargeLocalSource(get()) }
-    single { ExchangeRateLocalSource(get()) }
-    single { SupplierLocalSource(get()) }
-    single { CompanyAccountLocalSource(get()) }
-    single { PaymentTermsRepository(get(), get()) }
-    single { DeliveryChargesRepository(get(), get()) }
-    single { ExchangeRateRepository(get(), get()) }
-    single { PosOpeningRepository(get()) }
-    //endregion
+  // region Payment Terms
+  single { PaymentTermLocalSource(get()) }
+  single { DeliveryChargeLocalSource(get()) }
+  single { ExchangeRateLocalSource(get()) }
+  single { SupplierLocalSource(get()) }
+  single { CompanyAccountLocalSource(get()) }
+  single { PaymentTermsRepository(get(), get()) }
+  single { DeliveryChargesRepository(get(), get()) }
+  single { ExchangeRateRepository(get(), get()) }
+  single { PosOpeningRepository(get()) }
+  // endregion
 
-    //region Quotation/Sales Order/Delivery Note
-    single { QuotationViewModel(get()) }
-    single { SalesOrderViewModel(get()) }
-    single { DeliveryNoteViewModel(get()) }
-    single {
-        PaymentEntryViewModel(
-            get(),
-            get(),
-            get(),
-            get(),
-            get(),
-            get(),
-            get(),
-            get(),
-            get(),
-            get(),
-            get()
-        )
-    }
-    //endregion
+  // region Quotation/Sales Order/Delivery Note
+  single { QuotationViewModel(get()) }
+  single { SalesOrderViewModel(get()) }
+  single { DeliveryNoteViewModel(get()) }
+  single {
+    PaymentEntryViewModel(
+        get(),
+        get(),
+        get(),
+        get(),
+        get(),
+        get(),
+        get(),
+        get(),
+        get(),
+        get(),
+        get(),
+    )
+  }
+  // endregion
 
-    //region Checkout
-    single { LoadSourceDocumentsUseCase() }
+  // region Checkout
+  single { LoadSourceDocumentsUseCase() }
 
-    single { AdjustLocalInventoryUseCase(get()) }
-    single { PaymentEntryRepository(get()) }
-    single { PaymentOutRepository(get()) }
-    single { InternalTransferRepository(get()) }
-    single { SupplierRepository(get()) }
-    single { CompanyAccountRepository(get()) }
-    single {
-        BillingViewModel(
-            customersUseCase = get<FetchCustomersLocalUseCase>(),
-            itemsUseCase = get<FetchBillingProductsLocalUseCase>(),
-            categoriesUseCase = get<FetchCategoriesUseCase>(),
-            adjustLocalInventoryUseCase = get(),
-            contextProvider = get(),
-            modeOfPaymentDao = get(),
-            paymentTermsUseCase = get(),
-            deliveryChargesUseCase = get(),
-            navManager = get(),
-            salesFlowStore = get(),
-            loadSourceDocumentsUseCase = get(),
-            createSalesInvoiceLocalUseCase = get(),
-            createSalesInvoiceRemoteOnlyUseCase = get(),
-            updateLocalInvoiceFromRemoteUseCase = get(),
-            markSalesInvoiceSyncedUseCase = get(),
-            paymentHandler = get(),
-            billingResetController = get(),
-            languagePreferences = get(),
-            generalPreferences = get(),
-            networkMonitor = get()
-        )
-    }
-    single { SalesInvoiceRemoteSource(get(), get()) }
-    single { InvoiceLocalSource(get()) }
-    //endregion
+  single { AdjustLocalInventoryUseCase(get()) }
+  single { PaymentEntryRepository(get()) }
+  single { PaymentOutRepository(get()) }
+  single { InternalTransferRepository(get()) }
+  single { SupplierRepository(get()) }
+  single { CompanyAccountRepository(get()) }
+  single {
+    BillingViewModel(
+        customersUseCase = get<FetchCustomersLocalUseCase>(),
+        itemsUseCase = get<FetchBillingProductsLocalUseCase>(),
+        categoriesUseCase = get<FetchCategoriesUseCase>(),
+        adjustLocalInventoryUseCase = get(),
+        contextProvider = get(),
+        modeOfPaymentDao = get(),
+        paymentTermsUseCase = get(),
+        deliveryChargesUseCase = get(),
+        navManager = get(),
+        salesFlowStore = get(),
+        loadSourceDocumentsUseCase = get(),
+        createSalesInvoiceLocalUseCase = get(),
+        createSalesInvoiceRemoteOnlyUseCase = get(),
+        updateLocalInvoiceFromRemoteUseCase = get(),
+        markSalesInvoiceSyncedUseCase = get(),
+        paymentHandler = get(),
+        billingResetController = get(),
+        languagePreferences = get(),
+        generalPreferences = get(),
+        networkMonitor = get(),
+    )
+  }
+  single { SalesInvoiceRemoteSource(get(), get()) }
+  single { InvoiceLocalSource(get()) }
+  // endregion
 
-    //region Settings
-    single { GeneralPreferences(get()) }
-    single { ActivityPreferences(get()) }
-    single { ActivityCenter(get()) }
-    single { ActivityViewModel(get(), get()) }
-    single { ReturnPolicyPreferences(get()) }
-    single {
-        SettingsViewModel(
-            get(),
-            get(),
-            get(),
-            get(),
-            get(),
-            get(),
-            get(),
-            get(),
-            get(),
-            get(),
-        )
-    }
-    //endregion
+  // region Settings
+  single { GeneralPreferences(get()) }
+  single { ActivityPreferences(get()) }
+  single { ActivityCenter(get()) }
+  single { ActivityViewModel(get(), get()) }
+  single { ReturnPolicyPreferences(get()) }
+  single {
+    SettingsViewModel(
+        get(),
+        get(),
+        get(),
+        get(),
+        get(),
+        get(),
+        get(),
+        get(),
+        get(),
+        get(),
+    )
+  }
+  // endregion
 
-    //region UseCases DI
-    single { LogoutUseCase(get()) }
-    single { FetchBillingProductsWithPriceUseCase(get()) }
-    single { FetchBillingProductsLocalUseCase(get()) }
-    single { CheckCustomerCreditUseCase(get()) }
-    single { FetchPendingInvoiceUseCase(get()) }
-    single { FetchOutstandingInvoicesForCustomerUseCase(get()) }
-    single { FetchOutstandingInvoicesLocalForCustomerUseCase(get()) }
-    single { FetchSalesInvoiceRemoteUseCase(get()) }
-    single { FetchSalesInvoiceLocalUseCase(get()) }
-    single { DownloadSalesInvoicePdfUseCase(get()) }
-    single { FetchSalesInvoiceWithItemsUseCase(get()) }
-    single { SyncSalesInvoiceFromRemoteUseCase(get()) }
-    single { CreateSalesInvoiceLocalUseCase(get()) }
-    single { CreateSalesInvoiceRemoteOnlyUseCase(get()) }
-    single { UpdateLocalInvoiceFromRemoteUseCase(get()) }
-    single { SaveInvoicePaymentsUseCase(get()) }
-    single { MarkSalesInvoiceSyncedUseCase(get()) }
-    single { FetchCustomersUseCase(get()) }
-    single { FetchCustomersLocalUseCase(get()) }
-    single { FetchCustomersLocalWithStateUseCase(get()) }
-    single { FetchSuppliersLocalUseCase(get()) }
-    single { FetchSupplierOutstandingPurchaseInvoicesUseCase(get()) }
-    single { FetchCompanyAccountsLocalUseCase(get()) }
-    single { RebuildCustomerSummariesUseCase(get()) }
-    single { FetchPaymentTermsLocalUseCase(get()) }
-    single { FetchDeliveryChargesLocalUseCase(get()) }
-    single { FetchCustomerGroupsLocalUseCase(get()) }
-    single { FetchTerritoriesLocalUseCase(get()) }
-    single { FetchCustomerDetailUseCase(get()) }
-    single { FetchInventoryItemUseCase(get()) }
-    single { FetchCategoriesUseCase(get()) }
-    single { FetchClosingEntriesUseCase(get()) }
-    single { FetchPosProfileUseCase(get()) }
-    single { FetchUserInfoUseCase(get()) }
-    single { RegisterInvoicePaymentUseCase(get()) }
-    single { CreatePaymentOutUseCase(get()) }
-    single { CreateInternalTransferUseCase(get()) }
-    single { CreatePaymentEntryUseCase(get()) }
-    single { PartialReturnUseCase(get(), get(), get(), get(), get(), get()) }
-    single { LoadHomeMetricsUseCase(get()) }
-    single { ObserveHomeLiveShiftMetricsUseCase(get()) }
-    single { InventoryAlertRepository(get(), get(), get(), get(), get()) }
-    single { LoadInventoryAlertsUseCase(get()) }
-    single { GetCompanyInfoUseCase(get()) }
-    //endregion
+  // region UseCases DI
+  single { LogoutUseCase(get()) }
+  single { FetchBillingProductsWithPriceUseCase(get()) }
+  single { FetchBillingProductsLocalUseCase(get()) }
+  single { CheckCustomerCreditUseCase(get()) }
+  single { FetchPendingInvoiceUseCase(get()) }
+  single { FetchOutstandingInvoicesForCustomerUseCase(get()) }
+  single { FetchOutstandingInvoicesLocalForCustomerUseCase(get()) }
+  single { FetchSalesInvoiceRemoteUseCase(get()) }
+  single { FetchSalesInvoiceLocalUseCase(get()) }
+  single { DownloadSalesInvoicePdfUseCase(get()) }
+  single { FetchSalesInvoiceWithItemsUseCase(get()) }
+  single { SyncSalesInvoiceFromRemoteUseCase(get()) }
+  single { CreateSalesInvoiceLocalUseCase(get()) }
+  single { CreateSalesInvoiceRemoteOnlyUseCase(get()) }
+  single { UpdateLocalInvoiceFromRemoteUseCase(get()) }
+  single { SaveInvoicePaymentsUseCase(get()) }
+  single { MarkSalesInvoiceSyncedUseCase(get()) }
+  single { FetchCustomersUseCase(get()) }
+  single { FetchCustomersLocalUseCase(get()) }
+  single { FetchCustomersLocalWithStateUseCase(get()) }
+  single { FetchSuppliersLocalUseCase(get()) }
+  single { FetchSupplierOutstandingPurchaseInvoicesUseCase(get()) }
+  single { FetchCompanyAccountsLocalUseCase(get()) }
+  single { RebuildCustomerSummariesUseCase(get()) }
+  single { FetchPaymentTermsLocalUseCase(get()) }
+  single { FetchDeliveryChargesLocalUseCase(get()) }
+  single { FetchCustomerGroupsLocalUseCase(get()) }
+  single { FetchTerritoriesLocalUseCase(get()) }
+  single { FetchCustomerDetailUseCase(get()) }
+  single { FetchInventoryItemUseCase(get()) }
+  single { FetchCategoriesUseCase(get()) }
+  single { FetchClosingEntriesUseCase(get()) }
+  single { FetchPosProfileUseCase(get()) }
+  single { FetchUserInfoUseCase(get()) }
+  single { RegisterInvoicePaymentUseCase(get()) }
+  single { CreatePaymentOutUseCase(get()) }
+  single { CreateInternalTransferUseCase(get()) }
+  single { CreatePaymentEntryUseCase(get()) }
+  single { PartialReturnUseCase(get(), get(), get(), get(), get(), get()) }
+  single { LoadHomeMetricsUseCase(get()) }
+  single { ObserveHomeLiveShiftMetricsUseCase(get()) }
+  single { InventoryAlertRepository(get(), get(), get(), get(), get()) }
+  single { LoadInventoryAlertsUseCase(get()) }
+  single { GetCompanyInfoUseCase(get()) }
+  // endregion
 }
 
 private const val refreshThresholdSeconds = 10 * 60L
 
 private fun shouldRefreshToken(idToken: String?): Boolean {
-    if (idToken.isNullOrBlank()) return false
-    if (!TokenUtils.isValid(idToken)) return true
-    val secondsLeft = secondsToExpiry(idToken)
-    return secondsLeft != null && secondsLeft <= refreshThresholdSeconds
+  if (idToken.isNullOrBlank()) return false
+  if (!TokenUtils.isValid(idToken)) return true
+  val secondsLeft = secondsToExpiry(idToken)
+  return secondsLeft != null && secondsLeft <= refreshThresholdSeconds
 }
 
 private fun secondsToExpiry(idToken: String?): Long? {
-    if (idToken == null) return null
-    val claims = TokenUtils.decodePayload(idToken) ?: return null
-    val exp = claims["exp"]?.toString()?.toLongOrNull() ?: return null
-    val now = Clock.System.now().epochSeconds
-    return exp - now
+  if (idToken == null) return null
+  val claims = TokenUtils.decodePayload(idToken) ?: return null
+  val exp = claims["exp"]?.toString()?.toLongOrNull() ?: return null
+  val now = Clock.System.now().epochSeconds
+  return exp - now
 }
 
 fun initKoin(
-    config: KoinAppDeclaration? = null, modules: List<Module> = listOf(), builder: DatabaseBuilder
+    config: KoinAppDeclaration? = null,
+    modules: List<Module> = listOf(),
+    builder: DatabaseBuilder,
 ) {
-    startKoin {
-        config?.invoke(this)
-        modules(appModule + modules)
-        koin.get<AppDatabase> { parametersOf(builder) }
-    }
+  startKoin {
+    config?.invoke(this)
+    modules(appModule + modules)
+    koin.get<AppDatabase> { parametersOf(builder) }
+  }
 }

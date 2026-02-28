@@ -24,84 +24,89 @@ import com.erpnext.pos.views.reconciliation.ReconciliationMode
 val strings = AppStringsFactory.forLanguage(AppLanguage.Spanish)
 val menuStrings = strings.navigation
 
-sealed class NavRoute(
-    val path: String,
-    val title: String,
-    val icon: ImageVector
-) {
+sealed class NavRoute(val path: String, val title: String, val icon: ImageVector) {
 
-    object Splash : NavRoute("splash", "", Icons.Filled.Home)
-    object Login : NavRoute("login", "", Icons.Filled.Home)
+  object Splash : NavRoute("splash", "", Icons.Filled.Home)
 
-    object Home : NavRoute("home", menuStrings.home, Icons.Filled.Home)
-    object Inventory : NavRoute("inventory", menuStrings.inventory, Icons.Filled.Inventory2)
-    object Billing : NavRoute("sale-lab", menuStrings.billing, Icons.Filled.PointOfSale)
-    object Customer : NavRoute("customer", menuStrings.customer, Icons.Filled.People)
-    object Credits : NavRoute("credits", menuStrings.credits, Icons.Filled.Receipt)
-    object Quotation : NavRoute("quotation", menuStrings.quotations, Icons.Filled.Description)
-    object SalesOrder : NavRoute("sales-order", menuStrings.salesOrder, Icons.Filled.ShoppingCart)
-    object DeliveryNote :
-        NavRoute("delivery-note", menuStrings.deliveryNote, Icons.Filled.LocalShipping)
+  object Login : NavRoute("login", "", Icons.Filled.Home)
 
-    object Activity : NavRoute("activity", "", Icons.Filled.Notifications)
-    data class Reconciliation(
-        val mode: ReconciliationMode = ReconciliationMode.Close
-    ) : NavRoute(
-        path = "reconciliation?mode=${mode.value}",
-        title = strings.navigation.reconciliation,
-        icon = Icons.Filled.AccountBalance
-    ) {
-        companion object {
-            const val ROUTE = "reconciliation?mode={mode}"
-        }
+  object Home : NavRoute("home", menuStrings.home, Icons.Filled.Home)
+
+  object Inventory : NavRoute("inventory", menuStrings.inventory, Icons.Filled.Inventory2)
+
+  object Billing : NavRoute("sale-lab", menuStrings.billing, Icons.Filled.PointOfSale)
+
+  object Customer : NavRoute("customer", menuStrings.customer, Icons.Filled.People)
+
+  object Credits : NavRoute("credits", menuStrings.credits, Icons.Filled.Receipt)
+
+  object Quotation : NavRoute("quotation", menuStrings.quotations, Icons.Filled.Description)
+
+  object SalesOrder : NavRoute("sales-order", menuStrings.salesOrder, Icons.Filled.ShoppingCart)
+
+  object DeliveryNote :
+      NavRoute("delivery-note", menuStrings.deliveryNote, Icons.Filled.LocalShipping)
+
+  object Activity : NavRoute("activity", "", Icons.Filled.Notifications)
+
+  data class Reconciliation(val mode: ReconciliationMode = ReconciliationMode.Close) :
+      NavRoute(
+          path = "reconciliation?mode=${mode.value}",
+          title = strings.navigation.reconciliation,
+          icon = Icons.Filled.AccountBalance,
+      ) {
+    companion object {
+      const val ROUTE = "reconciliation?mode={mode}"
     }
+  }
 
-    object Settings : NavRoute("settings", "", Icons.Filled.Settings)
-    object Expenses : NavRoute(
-        path = "expenses",
-        title = strings.navigation.expenses,
-        icon = Icons.Filled.Payments
-    )
+  object Settings : NavRoute("settings", "", Icons.Filled.Settings)
 
-    data class PaymentEntry(val invoiceId: String? = null) : NavRoute(
-        path = if (invoiceId.isNullOrBlank()) {
-            "payment-entry?invoiceId=&entryType=pay"
-        } else {
-            "payment-entry?invoiceId=$invoiceId&entryType=receive"
-        },
-        title = strings.navigation.paymentEntry,
-        icon = Icons.Filled.Payments
-    )
+  object Expenses :
+      NavRoute(path = "expenses", title = strings.navigation.expenses, icon = Icons.Filled.Payments)
 
-    object InternalTransfer : NavRoute(
-        path = "payment-entry?invoiceId=&entryType=internal-transfer",
-        title = "Transferencia interna",
-        icon = Icons.Filled.SwapHoriz
-    )
+  data class PaymentEntry(val invoiceId: String? = null) :
+      NavRoute(
+          path =
+              if (invoiceId.isNullOrBlank()) {
+                "payment-entry?invoiceId=&entryType=pay"
+              } else {
+                "payment-entry?invoiceId=$invoiceId&entryType=receive"
+              },
+          title = strings.navigation.paymentEntry,
+          icon = Icons.Filled.Payments,
+      )
 
-    object NavigateUp : NavRoute("navigate-up", "", Icons.Filled.Home)
+  object InternalTransfer :
+      NavRoute(
+          path = "payment-entry?invoiceId=&entryType=internal-transfer",
+          title = "Transferencia interna",
+          icon = Icons.Filled.SwapHoriz,
+      )
+
+  object NavigateUp : NavRoute("navigate-up", "", Icons.Filled.Home)
 }
 
 @Composable
 fun NavRoute.localizedTitle(): String {
-    val strings = LocalAppStrings.current.navigation
-    return when (this) {
-        NavRoute.Home -> strings.home
-        NavRoute.Inventory -> strings.inventory
-        NavRoute.Billing -> strings.billing
-        NavRoute.Customer -> strings.customer
-        NavRoute.Credits -> strings.credits
-        NavRoute.Quotation -> strings.quotations
-        NavRoute.SalesOrder -> strings.salesOrder
-        NavRoute.DeliveryNote -> strings.deliveryNote
-        NavRoute.Activity -> "" // strings.activity
-        NavRoute.Settings -> "" //strings.settings
-        NavRoute.Expenses -> strings.expenses
-        is NavRoute.Reconciliation -> strings.reconciliation
-        is NavRoute.PaymentEntry -> strings.expenses
-        NavRoute.InternalTransfer -> "Transferencia interna"
-        NavRoute.Splash -> ""
-        NavRoute.Login -> ""
-        NavRoute.NavigateUp -> ""
-    }
+  val strings = LocalAppStrings.current.navigation
+  return when (this) {
+    NavRoute.Home -> strings.home
+    NavRoute.Inventory -> strings.inventory
+    NavRoute.Billing -> strings.billing
+    NavRoute.Customer -> strings.customer
+    NavRoute.Credits -> strings.credits
+    NavRoute.Quotation -> strings.quotations
+    NavRoute.SalesOrder -> strings.salesOrder
+    NavRoute.DeliveryNote -> strings.deliveryNote
+    NavRoute.Activity -> "" // strings.activity
+    NavRoute.Settings -> "" // strings.settings
+    NavRoute.Expenses -> strings.expenses
+    is NavRoute.Reconciliation -> strings.reconciliation
+    is NavRoute.PaymentEntry -> strings.expenses
+    NavRoute.InternalTransfer -> "Transferencia interna"
+    NavRoute.Splash -> ""
+    NavRoute.Login -> ""
+    NavRoute.NavigateUp -> ""
+  }
 }

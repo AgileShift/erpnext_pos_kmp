@@ -62,315 +62,287 @@ import org.koin.compose.koinInject
 
 @Composable
 fun InvoiceListScreen(action: InvoiceAction) {
-    var searchQuery by rememberSaveable { mutableStateOf("") }
-    val lazyPagingItems = action.getInvoices().collectAsLazyPagingItems()
-    val feedback by action.feedbackMessage.collectAsState("")
-    var pendingDialog by remember { mutableStateOf<InvoiceCancelDialogState?>(null) }
-    var dialogReason by remember { mutableStateOf("") }
-    val returnPolicyPreferences: ReturnPolicyPreferences = koinInject()
-    val returnPolicy by returnPolicyPreferences.settings.collectAsState(ReturnPolicySettings())
+  var searchQuery by rememberSaveable { mutableStateOf("") }
+  val lazyPagingItems = action.getInvoices().collectAsLazyPagingItems()
+  val feedback by action.feedbackMessage.collectAsState("")
+  var pendingDialog by remember { mutableStateOf<InvoiceCancelDialogState?>(null) }
+  var dialogReason by remember { mutableStateOf("") }
+  val returnPolicyPreferences: ReturnPolicyPreferences = koinInject()
+  val returnPolicy by returnPolicyPreferences.settings.collectAsState(ReturnPolicySettings())
 
-    Scaffold(
-        floatingActionButton = {
-            FloatingActionButton(onClick = { action.goToBilling() }) {
-                Icon(Icons.Default.Add, contentDescription = "Nueva factura")
-            }
+  Scaffold(
+      floatingActionButton = {
+        FloatingActionButton(onClick = { action.goToBilling() }) {
+          Icon(Icons.Default.Add, contentDescription = "Nueva factura")
         }
-    ) { paddingValues ->
-        Column(modifier = Modifier.padding(paddingValues).fillMaxSize()) {
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                OutlinedTextField(
-                    value = searchQuery,
-                    onValueChange = {
-                        searchQuery = it
-                    },
-                    modifier = Modifier.weight(1f),
-                    placeholder = { Text("Buscar por ID, cliente o teléfono...") },
-                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
-                    trailingIcon = {
-                        if (searchQuery.isNotEmpty()) {
-                            IconButton(onClick = {
-                                searchQuery = ""
-                            }) {
-                                Icon(Icons.Default.Clear, contentDescription = "Limpiar")
-                            }
-                        }
-                    },
-                    singleLine = true,
-                    colors = TextFieldDefaults.colors(
-                        focusedIndicatorColor = Color.Transparent,
-                        unfocusedIndicatorColor = Color.Transparent,
-                        disabledIndicatorColor = Color.Transparent,
-                        focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
-                        unfocusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
-                        cursorColor = MaterialTheme.colorScheme.primary
-                    ),
-                    shape = RoundedCornerShape(18.dp)
-                )
-                IconButton(onClick = { /* TODO: Show date picker */ }) {
-                    Icon(Icons.Default.ArrowDropDown, contentDescription = "Filtrar por fecha")
+      }
+  ) { paddingValues ->
+    Column(modifier = Modifier.padding(paddingValues).fillMaxSize()) {
+      Row(
+          modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+          verticalAlignment = Alignment.CenterVertically,
+          horizontalArrangement = Arrangement.spacedBy(8.dp),
+      ) {
+        OutlinedTextField(
+            value = searchQuery,
+            onValueChange = { searchQuery = it },
+            modifier = Modifier.weight(1f),
+            placeholder = { Text("Buscar por ID, cliente o teléfono...") },
+            leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+            trailingIcon = {
+              if (searchQuery.isNotEmpty()) {
+                IconButton(onClick = { searchQuery = "" }) {
+                  Icon(Icons.Default.Clear, contentDescription = "Limpiar")
                 }
+              }
+            },
+            singleLine = true,
+            colors =
+                TextFieldDefaults.colors(
+                    focusedIndicatorColor = Color.Transparent,
+                    unfocusedIndicatorColor = Color.Transparent,
+                    disabledIndicatorColor = Color.Transparent,
+                    focusedContainerColor =
+                        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f),
+                    unfocusedContainerColor =
+                        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+                    cursorColor = MaterialTheme.colorScheme.primary,
+                ),
+            shape = RoundedCornerShape(18.dp),
+        )
+        IconButton(onClick = { /* TODO: Show date picker */ }) {
+          Icon(Icons.Default.ArrowDropDown, contentDescription = "Filtrar por fecha")
+        }
+      }
+
+      HorizontalDivider()
+
+      if (!feedback.isNullOrBlank()) {
+        LaunchedEffect(feedback) { action.onFeedbackCleared() }
+        Text(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+            text = feedback!!,
+            color = MaterialTheme.colorScheme.primary,
+        )
+      }
+
+      LazyColumn(
+          modifier = Modifier.fillMaxSize(),
+          horizontalAlignment = Alignment.CenterHorizontally,
+      ) {
+        // Muestra los estados de carga, error y vacío de la carga inicial
+        when (val loadState = lazyPagingItems.loadState.refresh) {
+          is LoadState.Loading -> {
+            item { LoadingState(modifier = Modifier.fillParentMaxSize()) }
+          }
+
+          is LoadState.Error -> {
+            val error = loadState.error
+            item {
+              ErrorState(
+                  modifier = Modifier.fillParentMaxSize(),
+                  message = "Error al cargar facturas: ${error.message}",
+                  onRetry = { lazyPagingItems.retry() },
+              )
             }
+          }
 
-            HorizontalDivider()
-
-            if (!feedback.isNullOrBlank()) {
-                LaunchedEffect(feedback) {
-                    action.onFeedbackCleared()
-                }
-                Text(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 8.dp),
-                    text = feedback!!,
-                    color = MaterialTheme.colorScheme.primary
-                )
+          is LoadState.NotLoading -> {
+            if (lazyPagingItems.itemCount == 0) {
+              item { EmptyState(modifier = Modifier.fillParentMaxSize()) }
             }
-
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                // Muestra los estados de carga, error y vacío de la carga inicial
-                when (val loadState = lazyPagingItems.loadState.refresh) {
-                    is LoadState.Loading -> {
-                        item { LoadingState(modifier = Modifier.fillParentMaxSize()) }
-                    }
-
-                    is LoadState.Error -> {
-                        val error = loadState.error
-                        item {
-                            ErrorState(
-                                modifier = Modifier.fillParentMaxSize(),
-                                message = "Error al cargar facturas: ${error.message}",
-                                onRetry = { lazyPagingItems.retry() }
-                            )
-                        }
-                    }
-
-                    is LoadState.NotLoading -> {
-                        if (lazyPagingItems.itemCount == 0) {
-                            item { EmptyState(modifier = Modifier.fillParentMaxSize()) }
-                        }
-                    }
-                }
-
-                // Muestra la lista de items
-                items(
-                    count = lazyPagingItems.itemCount,
-                    key = { index ->
-                        lazyPagingItems[index]?.invoiceId ?: "invoice_$index"
-                    }
-                ) { index ->
-                    val item = lazyPagingItems[index] ?: return@items
-                    InvoiceItem(
-                        invoice = item,
-                        returnPolicy = returnPolicy,
-                        onClick = { action.onItemClick(it.invoiceId) },
-                        onCancelClick = { invoiceId, actionType ->
-                            pendingDialog = InvoiceCancelDialogState(
-                                invoiceId = invoiceId,
-                                action = actionType
-                            )
-                            dialogReason = ""
-                        }
-                    )
-                }
-
-                // Muestra el indicador de carga para la paginación
-                if (lazyPagingItems.loadState.append is LoadState.Loading) {
-                    item {
-                        CircularProgressIndicator(modifier = Modifier.padding(16.dp))
-                    }
-                }
-            }
+          }
         }
 
-        pendingDialog?.let { dialogState ->
-            AlertDialog(
-                onDismissRequest = {
-                    pendingDialog = null
-                    dialogReason = ""
-                },
-                title = {
-                    Text(
-                        text = if (dialogState.action == InvoiceCancellationAction.RETURN)
-                            "Registrar retorno"
-                        else
-                            "Cancelar factura"
-                    )
-                },
-                text = {
-                    Column {
-                        Text(
-                            text = if (dialogState.action == InvoiceCancellationAction.RETURN)
-                                "Se creará una nota de crédito vinculada a esta factura."
-                            else
-                                "La factura quedará cancelada y se excluye del cierre."
-                        )
-                        if (dialogState.action == InvoiceCancellationAction.RETURN) {
-                            Spacer(Modifier.height(8.dp))
-                            Text(
-                                text = "Los reembolsos se gestionan desde el historial del cliente.",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                            if (returnPolicy.requireReason) {
-                                OutlinedTextField(
-                                    value = dialogReason,
-                                    onValueChange = { dialogReason = it },
-                                    label = { Text("Motivo (requerido)") },
-                                    modifier = Modifier.fillMaxWidth()
-                                )
-                            }
-                        }
-                    }
-                },
-                confirmButton = {
-                    TextButton(
-                        onClick = {
-                            action.onInvoiceCancelRequested(
-                                dialogState.invoiceId,
-                                dialogState.action,
-                                dialogReason.takeIf { it.isNotBlank() }
-                            )
-                            pendingDialog = null
-                            dialogReason = ""
-                        },
-                        enabled = dialogState.action != InvoiceCancellationAction.RETURN ||
-                                !returnPolicy.requireReason ||
-                                dialogReason.isNotBlank()
-                    ) {
-                        Text("Confirmar")
-                    }
-                },
-                dismissButton = {
-                    TextButton(
-                        onClick = {
-                            pendingDialog = null
-                            dialogReason = ""
-                        }
-                    ) {
-                        Text("Cancelar")
-                    }
-                }
-            )
+        // Muestra la lista de items
+        items(
+            count = lazyPagingItems.itemCount,
+            key = { index -> lazyPagingItems[index]?.invoiceId ?: "invoice_$index" },
+        ) { index ->
+          val item = lazyPagingItems[index] ?: return@items
+          InvoiceItem(
+              invoice = item,
+              returnPolicy = returnPolicy,
+              onClick = { action.onItemClick(it.invoiceId) },
+              onCancelClick = { invoiceId, actionType ->
+                pendingDialog = InvoiceCancelDialogState(invoiceId = invoiceId, action = actionType)
+                dialogReason = ""
+              },
+          )
         }
+
+        // Muestra el indicador de carga para la paginación
+        if (lazyPagingItems.loadState.append is LoadState.Loading) {
+          item { CircularProgressIndicator(modifier = Modifier.padding(16.dp)) }
+        }
+      }
     }
+
+    pendingDialog?.let { dialogState ->
+      AlertDialog(
+          onDismissRequest = {
+            pendingDialog = null
+            dialogReason = ""
+          },
+          title = {
+            Text(
+                text =
+                    if (dialogState.action == InvoiceCancellationAction.RETURN) "Registrar retorno"
+                    else "Cancelar factura"
+            )
+          },
+          text = {
+            Column {
+              Text(
+                  text =
+                      if (dialogState.action == InvoiceCancellationAction.RETURN)
+                          "Se creará una nota de crédito vinculada a esta factura."
+                      else "La factura quedará cancelada y se excluye del cierre."
+              )
+              if (dialogState.action == InvoiceCancellationAction.RETURN) {
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    text = "Los reembolsos se gestionan desde el historial del cliente.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                if (returnPolicy.requireReason) {
+                  OutlinedTextField(
+                      value = dialogReason,
+                      onValueChange = { dialogReason = it },
+                      label = { Text("Motivo (requerido)") },
+                      modifier = Modifier.fillMaxWidth(),
+                  )
+                }
+              }
+            }
+          },
+          confirmButton = {
+            TextButton(
+                onClick = {
+                  action.onInvoiceCancelRequested(
+                      dialogState.invoiceId,
+                      dialogState.action,
+                      dialogReason.takeIf { it.isNotBlank() },
+                  )
+                  pendingDialog = null
+                  dialogReason = ""
+                },
+                enabled =
+                    dialogState.action != InvoiceCancellationAction.RETURN ||
+                        !returnPolicy.requireReason ||
+                        dialogReason.isNotBlank(),
+            ) {
+              Text("Confirmar")
+            }
+          },
+          dismissButton = {
+            TextButton(
+                onClick = {
+                  pendingDialog = null
+                  dialogReason = ""
+                }
+            ) {
+              Text("Cancelar")
+            }
+          },
+      )
+    }
+  }
 }
 
 @Composable
- fun InvoiceItem(
-     invoice: SalesInvoiceBO,
-     returnPolicy: ReturnPolicySettings,
-     onClick: (SalesInvoiceBO) -> Unit,
-     onCancelClick: (String, InvoiceCancellationAction) -> Unit
- ) {
-    val cashboxManager: CashBoxManager = koinInject()
-    val companyCurrency = normalizeCurrency(cashboxManager.getContext()?.companyCurrency)
-    val display = resolveInvoiceDisplayAmounts(
-        invoice = invoice,
-        companyCurrency = companyCurrency
-    )
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 4.dp) // Añadido padding vertical
-            .clickable { onClick(invoice) },
-        shape = RoundedCornerShape(8.dp),
-        elevation = CardDefaults.cardElevation(2.dp),
-        colors = CardDefaults.cardColors(MaterialTheme.colorScheme.surface)
-    ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Text(invoice.invoiceId, fontWeight = FontWeight.Bold)
-                Text(invoice.status ?: "Draft", color = MaterialTheme.colorScheme.secondary)
-            }
-            Spacer(Modifier.height(8.dp))
-            Text(invoice.customer ?: "Cliente no especificado")
-            Spacer(Modifier.height(4.dp))
-            Text(invoice.postingDate, style = MaterialTheme.typography.bodySmall)
-            Spacer(Modifier.height(8.dp))
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                Column(horizontalAlignment = Alignment.End) {
-                    Text(
-                        "Total: ${formatCurrency(display.companyCurrency, display.totalCompany)}",
-                        fontWeight = FontWeight.Medium
-                    )
-                    if (!display.invoiceCurrency.equals(display.companyCurrency, ignoreCase = true)) {
-                        Text(
-                            formatCurrency(display.invoiceCurrency, display.totalInvoice),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-                Spacer(Modifier.width(12.dp))
-                Column(horizontalAlignment = Alignment.End) {
-                    Text(
-                        "Pendiente: ${formatCurrency(display.companyCurrency, display.outstandingCompany)}",
-                        fontWeight = FontWeight.Medium
-                    )
-                    if (!display.invoiceCurrency.equals(display.companyCurrency, ignoreCase = true)) {
-                        Text(
-                            formatCurrency(display.invoiceCurrency, display.outstandingInvoice),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-                Spacer(Modifier.width(8.dp))
-                val normalizedStatus = invoice.status?.trim()?.lowercase()
-                val hasPayments = invoice.paidAmount > 0.0 || invoice.payments.any { it.amount > 0.0 }
-                val unpaidStatuses = setOf(
-                    "draft",
-                    "unpaid",
-                    "overdue",
-                    "overdue and discounted",
-                    "unpaid and discounted"
-                )
-                val paidStatuses = setOf(
-                    "paid",
-                    "partly paid",
-                    "partly paid and discounted"
-                )
-                val isDraftOrUnpaid = normalizedStatus in unpaidStatuses
-                val isPaidOrPartly = normalizedStatus in paidStatuses
-                val canCancel = (isDraftOrUnpaid || (invoice.outstandingAmount > 0.0 && invoice.paidAmount <= 0.0001)) &&
-                    !hasPayments
-                val canReturn = (isPaidOrPartly || hasPayments) && returnPolicy.allowFullReturns
-                if (canCancel || canReturn) {
-                    val actionType =
-                        if (canReturn) InvoiceCancellationAction.RETURN else InvoiceCancellationAction.CANCEL
-                    TextButton(
-                        onClick = {
-                            onCancelClick(invoice.invoiceId, actionType)
-                        },
-                        colors = ButtonDefaults.textButtonColors(
-                            contentColor = MaterialTheme.colorScheme.secondary
-                        )
-                    ) {
-                        Text(
-                            text = if (actionType == InvoiceCancellationAction.CANCEL)
-                                "Cancelar"
-                            else
-                                "Registrar retorno"
-                        )
-                    }
-                }
-            }
+fun InvoiceItem(
+    invoice: SalesInvoiceBO,
+    returnPolicy: ReturnPolicySettings,
+    onClick: (SalesInvoiceBO) -> Unit,
+    onCancelClick: (String, InvoiceCancellationAction) -> Unit,
+) {
+  val cashboxManager: CashBoxManager = koinInject()
+  val companyCurrency = normalizeCurrency(cashboxManager.getContext()?.companyCurrency)
+  val display = resolveInvoiceDisplayAmounts(invoice = invoice, companyCurrency = companyCurrency)
+  Card(
+      modifier =
+          Modifier.fillMaxWidth()
+              .padding(horizontal = 16.dp, vertical = 4.dp) // Añadido padding vertical
+              .clickable { onClick(invoice) },
+      shape = RoundedCornerShape(8.dp),
+      elevation = CardDefaults.cardElevation(2.dp),
+      colors = CardDefaults.cardColors(MaterialTheme.colorScheme.surface),
+  ) {
+    Column(modifier = Modifier.padding(16.dp)) {
+      Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+        Text(invoice.invoiceId, fontWeight = FontWeight.Bold)
+        Text(invoice.status ?: "Draft", color = MaterialTheme.colorScheme.secondary)
+      }
+      Spacer(Modifier.height(8.dp))
+      Text(invoice.customer ?: "Cliente no especificado")
+      Spacer(Modifier.height(4.dp))
+      Text(invoice.postingDate, style = MaterialTheme.typography.bodySmall)
+      Spacer(Modifier.height(8.dp))
+      Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+        Column(horizontalAlignment = Alignment.End) {
+          Text(
+              "Total: ${formatCurrency(display.companyCurrency, display.totalCompany)}",
+              fontWeight = FontWeight.Medium,
+          )
+          if (!display.invoiceCurrency.equals(display.companyCurrency, ignoreCase = true)) {
+            Text(
+                formatCurrency(display.invoiceCurrency, display.totalInvoice),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+          }
         }
+        Spacer(Modifier.width(12.dp))
+        Column(horizontalAlignment = Alignment.End) {
+          Text(
+              "Pendiente: ${formatCurrency(display.companyCurrency, display.outstandingCompany)}",
+              fontWeight = FontWeight.Medium,
+          )
+          if (!display.invoiceCurrency.equals(display.companyCurrency, ignoreCase = true)) {
+            Text(
+                formatCurrency(display.invoiceCurrency, display.outstandingInvoice),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+          }
+        }
+        Spacer(Modifier.width(8.dp))
+        val normalizedStatus = invoice.status?.trim()?.lowercase()
+        val hasPayments = invoice.paidAmount > 0.0 || invoice.payments.any { it.amount > 0.0 }
+        val unpaidStatuses =
+            setOf("draft", "unpaid", "overdue", "overdue and discounted", "unpaid and discounted")
+        val paidStatuses = setOf("paid", "partly paid", "partly paid and discounted")
+        val isDraftOrUnpaid = normalizedStatus in unpaidStatuses
+        val isPaidOrPartly = normalizedStatus in paidStatuses
+        val canCancel =
+            (isDraftOrUnpaid ||
+                (invoice.outstandingAmount > 0.0 && invoice.paidAmount <= 0.0001)) && !hasPayments
+        val canReturn = (isPaidOrPartly || hasPayments) && returnPolicy.allowFullReturns
+        if (canCancel || canReturn) {
+          val actionType =
+              if (canReturn) InvoiceCancellationAction.RETURN else InvoiceCancellationAction.CANCEL
+          TextButton(
+              onClick = { onCancelClick(invoice.invoiceId, actionType) },
+              colors =
+                  ButtonDefaults.textButtonColors(
+                      contentColor = MaterialTheme.colorScheme.secondary
+                  ),
+          ) {
+            Text(
+                text =
+                    if (actionType == InvoiceCancellationAction.CANCEL) "Cancelar"
+                    else "Registrar retorno"
+            )
+          }
+        }
+      }
     }
+  }
 }
 
 private data class InvoiceCancelDialogState(
     val invoiceId: String,
-    val action: InvoiceCancellationAction
+    val action: InvoiceCancellationAction,
 )

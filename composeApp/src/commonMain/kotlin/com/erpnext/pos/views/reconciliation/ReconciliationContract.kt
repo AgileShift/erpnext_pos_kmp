@@ -1,15 +1,15 @@
 package com.erpnext.pos.views.reconciliation
 
-data class OpeningBalanceDetailUi(
-    val modeOfPayment: String,
-    val openingAmount: Double
-)
+data class OpeningBalanceDetailUi(val modeOfPayment: String, val openingAmount: Double)
 
 sealed class ReconciliationState {
-    object Loading : ReconciliationState()
-    object Empty : ReconciliationState()
-    data class Success(val summary: ReconciliationSummaryUi) : ReconciliationState()
-    data class Error(val message: String) : ReconciliationState()
+  object Loading : ReconciliationState()
+
+  object Empty : ReconciliationState()
+
+  data class Success(val summary: ReconciliationSummaryUi) : ReconciliationState()
+
+  data class Error(val message: String) : ReconciliationState()
 }
 
 data class ReconciliationSummaryUi(
@@ -47,20 +47,20 @@ data class ReconciliationSummaryUi(
     val creditPendingByCurrency: Map<String, Double> = emptyMap(),
     val expensesByCurrency: Map<String, Double> = emptyMap(),
     val cashCurrencies: List<String> = emptyList(),
-    val cashModeCurrency: Map<String, String> = emptyMap()
+    val cashModeCurrency: Map<String, String> = emptyMap(),
 )
 
 const val UNASSIGNED_PAYMENT_MODE = "__UNASSIGNED__"
 
 enum class ReconciliationMode(val value: String) {
-    Review("review"),
-    Close("close");
+  Review("review"),
+  Close("close");
 
-    companion object {
-        fun from(value: String?): ReconciliationMode {
-            return entries.firstOrNull { it.value == value } ?: Review
-        }
+  companion object {
+    fun from(value: String?): ReconciliationMode {
+      return entries.firstOrNull { it.value == value } ?: Review
     }
+  }
 }
 
 data class CloseCashboxState(
@@ -68,12 +68,12 @@ data class CloseCashboxState(
     val isClosed: Boolean = false,
     val isSyncing: Boolean = false,
     val syncMessage: String? = null,
-    val errorMessage: String? = null
+    val errorMessage: String? = null,
 )
 
 data class ReconciliationAction(
     val onBack: () -> Unit = {},
     val onConfirmClose: (Map<String, Double>) -> Unit = {},
     val onSaveDraft: () -> Unit = {},
-    val onReload: () -> Unit = {}
+    val onReload: () -> Unit = {},
 )

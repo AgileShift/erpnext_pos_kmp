@@ -11,25 +11,25 @@ import androidx.compose.runtime.remember
 fun LoginRoute(
     coordinator: LoginCoordinator = rememberLoginCoordinator(),
 ) {
-    val uiState by coordinator.screenStateFlow.collectAsState(LoginState.Loading)
-    val actions = rememberLoginActions(coordinator)
+  val uiState by coordinator.screenStateFlow.collectAsState(LoginState.Loading)
+  val actions = rememberLoginActions(coordinator)
 
-    LoginScreen(uiState, actions)
+  LoginScreen(uiState, actions)
 }
 
 @Composable
 fun rememberLoginActions(coordinator: LoginCoordinator): LoginAction {
-    return remember(coordinator) {
-        LoginAction(
-            existingSites = coordinator::existingSites,
-            onSiteSelected = coordinator::onSiteSelected,
-            onToggleFavorite = coordinator::onToggleFavorite,
-            onDeleteSite = coordinator::onDeleteSite,
-            onAddSite = coordinator::onAddSite,
-            onError = coordinator::onError,
-            clear = coordinator::clear,
-            onReset = coordinator::onReset,
-            isAuthenticated = coordinator::isAuthenticated
-        )
-    }
+  return remember(coordinator) {
+    LoginAction(
+        existingSites = coordinator::existingSites,
+        onSiteSelected = coordinator::onSiteSelected,
+        onToggleFavorite = coordinator::onToggleFavorite,
+        onDeleteSite = coordinator::onDeleteSite,
+        onAddSite = coordinator::onAddSite,
+        onError = coordinator::onError,
+        clear = coordinator::clear,
+        onReset = coordinator::onReset,
+        isAuthenticated = coordinator::isAuthenticated,
+    )
+  }
 }

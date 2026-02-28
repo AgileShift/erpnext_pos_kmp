@@ -4,5 +4,5 @@ data class CustomerGroupBO(
     val name: String,
     val displayName: String? = null,
     val isGroup: Boolean = false,
-    val parent: String? = null
+    val parent: String? = null,
 )

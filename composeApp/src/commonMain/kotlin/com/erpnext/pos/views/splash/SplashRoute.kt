@@ -9,18 +9,18 @@ import androidx.compose.runtime.remember
 fun SplashRoute(
     coordinator: SplashCoordinator = rememberSplashCoordinator(),
 ) {
-    val uiState by coordinator.screenStateFlow.collectAsState(SplashState.Loading)
-    val actions = rememberSplashActions(coordinator)
+  val uiState by coordinator.screenStateFlow.collectAsState(SplashState.Loading)
+  val actions = rememberSplashActions(coordinator)
 
-    SplashScreen(uiState, actions)
+  SplashScreen(uiState, actions)
 }
 
 @Composable
 fun rememberSplashActions(coordinator: SplashCoordinator): SplashActions {
-    return remember(coordinator) {
-        SplashActions(
-            isAuth = coordinator::isLoggedIn,
-            initializeContext = coordinator::initializeContext,
-        )
-    }
+  return remember(coordinator) {
+    SplashActions(
+        isAuth = coordinator::isLoggedIn,
+        initializeContext = coordinator::initializeContext,
+    )
+  }
 }

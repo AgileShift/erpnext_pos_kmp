@@ -11,16 +11,18 @@ import kotlinx.coroutines.flow.asSharedFlow
 
 @RequiresApi(Build.VERSION_CODES.O)
 actual class AppLifecycleObserver actual constructor() {
-    private val events = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
-    actual val onResume: Flow<Unit> = events.asSharedFlow()
+  private val events = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+  actual val onResume: Flow<Unit> = events.asSharedFlow()
 
-    init {
-        ProcessLifecycleOwner.get().lifecycle.addObserver(
+  init {
+    ProcessLifecycleOwner.get()
+        .lifecycle
+        .addObserver(
             LifecycleEventObserver { _, event ->
-                if (event == Lifecycle.Event.ON_RESUME) {
-                    events.tryEmit(Unit)
-                }
+              if (event == Lifecycle.Event.ON_RESUME) {
+                events.tryEmit(Unit)
+              }
             }
         )
-    }
+  }
 }

@@ -9,15 +9,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 
 @Composable
-fun ErrorState(modifier: Modifier, message: String, onRetry: () -> Unit ) {
-    Box(
-        modifier = modifier.fillMaxSize(),
-        contentAlignment = Alignment.Center
-    ) {
-        Text(
-            text = message,
-            color = MaterialTheme.colorScheme.error,
-            style = MaterialTheme.typography.titleMedium
-        )
-    }
+fun ErrorState(modifier: Modifier, message: String, onRetry: () -> Unit) {
+  Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+    Text(
+        text = message,
+        color = MaterialTheme.colorScheme.error,
+        style = MaterialTheme.typography.titleMedium,
+    )
+  }
 }

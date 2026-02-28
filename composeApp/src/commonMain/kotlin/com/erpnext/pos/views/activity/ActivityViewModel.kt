@@ -12,77 +12,69 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 enum class ActivityFilter {
-    Unread,
-    All,
-    HighPriority
+  Unread,
+  All,
+  HighPriority,
 }
 
 data class ActivityUiState(
     val entries: List<ActivityEntry> = emptyList(),
     val unreadCount: Int = 0,
     val filter: ActivityFilter = ActivityFilter.Unread,
-    val syncState: SyncState = SyncState.IDLE
+    val syncState: SyncState = SyncState.IDLE,
 )
 
 class ActivityViewModel(
     private val activityCenter: ActivityCenter,
-    private val syncManager: SyncManager
+    private val syncManager: SyncManager,
 ) : BaseViewModel() {
 
-    private val _filter = MutableStateFlow(ActivityFilter.Unread)
-    private val _uiState = MutableStateFlow(ActivityUiState())
-    val uiState: StateFlow<ActivityUiState> = _uiState.asStateFlow()
+  private val _filter = MutableStateFlow(ActivityFilter.Unread)
+  private val _uiState = MutableStateFlow(ActivityUiState())
+  val uiState: StateFlow<ActivityUiState> = _uiState.asStateFlow()
 
-    init {
-        viewModelScope.launch {
-            combine(
-                activityCenter.entries,
-                _filter,
-                syncManager.state
-            ) { entries, filter, syncState ->
-                val filtered = when (filter) {
-                    ActivityFilter.Unread -> entries.filter { !it.isRead }
-                    ActivityFilter.All -> entries
-                    ActivityFilter.HighPriority -> entries.filter { it.priority == ActivityPriority.HIGH }
+  init {
+    viewModelScope.launch {
+      combine(activityCenter.entries, _filter, syncManager.state) { entries, filter, syncState ->
+            val filtered =
+                when (filter) {
+                  ActivityFilter.Unread -> entries.filter { !it.isRead }
+                  ActivityFilter.All -> entries
+                  ActivityFilter.HighPriority ->
+                      entries.filter { it.priority == ActivityPriority.HIGH }
                 }
-                ActivityUiState(
-                    entries = filtered,
-                    unreadCount = entries.count { !it.isRead },
-                    filter = filter,
-                    syncState = syncState
-                )
-            }.collect { state ->
-                _uiState.value = state
-            }
-        }
+            ActivityUiState(
+                entries = filtered,
+                unreadCount = entries.count { !it.isRead },
+                filter = filter,
+                syncState = syncState,
+            )
+          }
+          .collect { state -> _uiState.value = state }
     }
+  }
 
-    fun setFilter(filter: ActivityFilter) {
-        _filter.value = filter
-    }
+  fun setFilter(filter: ActivityFilter) {
+    _filter.value = filter
+  }
 
-    fun markRead(id: String) {
-        viewModelScope.launch {
-            activityCenter.markRead(id)
-        }
-    }
+  fun markRead(id: String) {
+    viewModelScope.launch { activityCenter.markRead(id) }
+  }
 
-    fun markAllRead() {
-        viewModelScope.launch {
-            activityCenter.markAllRead()
-        }
-    }
+  fun markAllRead() {
+    viewModelScope.launch { activityCenter.markAllRead() }
+  }
 
-    fun syncNow() {
-        syncManager.fullSync(force = true)
-    }
+  fun syncNow() {
+    syncManager.fullSync(force = true)
+  }
 
-    fun markViewed() {
-        if (_uiState.value.unreadCount <= 0) return
-        viewModelScope.launch {
-            activityCenter.markAllRead()
-            _uiState.update { it.copy(filter = ActivityFilter.All) }
-        }
+  fun markViewed() {
+    if (_uiState.value.unreadCount <= 0) return
+    viewModelScope.launch {
+      activityCenter.markAllRead()
+      _uiState.update { it.copy(filter = ActivityFilter.All) }
     }
+  }
 }
-

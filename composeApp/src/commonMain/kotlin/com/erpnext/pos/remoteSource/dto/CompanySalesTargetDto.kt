@@ -5,8 +5,6 @@ import kotlinx.serialization.Serializable
 
 @Serializable
 data class CompanySalesTargetDto(
-    @SerialName("name")
-    val company: String,
-    @SerialName("monthly_sales_target")
-    val monthlySalesTarget: Double? = null
+    @SerialName("name") val company: String,
+    @SerialName("monthly_sales_target") val monthlySalesTarget: Double? = null,
 )

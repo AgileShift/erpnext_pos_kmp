@@ -6,5 +6,5 @@ data class ItemHeader(
     val price: Double,
     val image: String?,
     val stockUom: String,
-    val actualQty: Double
+    val actualQty: Double,
 )

@@ -62,76 +62,102 @@ import com.erpnext.pos.localSource.entities.TerritoryEntity
 import com.erpnext.pos.localSource.entities.UserEntity
 
 @Database(
-    entities = [
-        UserEntity::class,
-        ItemEntity::class,
-        ItemReorderEntity::class,
-        POSProfileEntity::class,
-        PosProfileLocalEntity::class,
-        PosProfilePaymentMethodEntity::class,
-        PaymentTermEntity::class,
-        DeliveryChargeEntity::class,
-        ExchangeRateEntity::class,
-        ModeOfPaymentEntity::class,
-        POSInvoicePaymentEntity::class,
-        CashboxEntity::class,
-        BalanceDetailsEntity::class,
-        CustomerEntity::class,
-        ContactEntity::class,
-        AddressEntity::class,
-        CustomerGroupEntity::class,
-        ConfigurationEntity::class,
-        CategoryEntity::class,
-        SalesInvoiceEntity::class,
-        SalesInvoiceItemEntity::class,
-        POSOpeningEntryEntity::class,
-        POSOpeningEntryLinkEntity::class,
-        POSClosingEntryEntity::class,
-        TaxDetailsEntity::class,
-        CompanyEntity::class,
-        TerritoryEntity::class,
-        CustomerOutboxEntity::class,
-        SupplierEntity::class,
-        CompanyAccountEntity::class,
-    ],
+    entities =
+        [
+            UserEntity::class,
+            ItemEntity::class,
+            ItemReorderEntity::class,
+            POSProfileEntity::class,
+            PosProfileLocalEntity::class,
+            PosProfilePaymentMethodEntity::class,
+            PaymentTermEntity::class,
+            DeliveryChargeEntity::class,
+            ExchangeRateEntity::class,
+            ModeOfPaymentEntity::class,
+            POSInvoicePaymentEntity::class,
+            CashboxEntity::class,
+            BalanceDetailsEntity::class,
+            CustomerEntity::class,
+            ContactEntity::class,
+            AddressEntity::class,
+            CustomerGroupEntity::class,
+            ConfigurationEntity::class,
+            CategoryEntity::class,
+            SalesInvoiceEntity::class,
+            SalesInvoiceItemEntity::class,
+            POSOpeningEntryEntity::class,
+            POSOpeningEntryLinkEntity::class,
+            POSClosingEntryEntity::class,
+            TaxDetailsEntity::class,
+            CompanyEntity::class,
+            TerritoryEntity::class,
+            CustomerOutboxEntity::class,
+            SupplierEntity::class,
+            CompanyAccountEntity::class,
+        ],
     version = 14,
-    exportSchema = true
+    exportSchema = true,
 )
 @ConstructedBy(AppDatabaseConstructor::class)
 abstract class AppDatabase : RoomDatabase() {
-    abstract fun userDao(): UserDao
-    abstract fun itemDao(): ItemDao
-    abstract fun itemReorderDao(): ItemReorderDao
-    abstract fun posProfileDao(): POSProfileDao
-    abstract fun posProfileLocalDao(): PosProfileLocalDao
-    abstract fun posProfilePaymentMethodDao(): PosProfilePaymentMethodDao
-    abstract fun modeOfPaymentDao(): ModeOfPaymentDao
-    abstract fun cashboxDao(): CashboxDao
-    abstract fun customerDao(): CustomerDao
-    abstract fun categoryDao(): CategoryDao
-    abstract fun saleInvoiceDao(): SalesInvoiceDao
-    abstract fun posOpeningDao(): POSOpeningEntryDao
-    abstract fun posOpeningEntryLinkDao(): POSOpeningEntryLinkDao
-    abstract fun posClosingDao(): POSClosingEntryDao
-    abstract fun exchangeRateDao(): ExchangeRateDao
-    abstract fun configurationDao(): ConfigurationDao
-    abstract fun paymentTermDao(): PaymentTermDao
-    abstract fun deliveryChargeDao(): DeliveryChargeDao
-    abstract fun companyDao(): CompanyDao
-    abstract fun customerOutboxDao(): CustomerOutboxDao
-    abstract fun customerGroupDao(): CustomerGroupDao
-    abstract fun territoryDao(): TerritoryDao
-    abstract fun contactDao(): ContactDao
-    abstract fun addressDao(): AddressDao
-    abstract fun supplierDao(): SupplierDao
-    abstract fun companyAccountDao(): CompanyAccountDao
+  abstract fun userDao(): UserDao
+
+  abstract fun itemDao(): ItemDao
+
+  abstract fun itemReorderDao(): ItemReorderDao
+
+  abstract fun posProfileDao(): POSProfileDao
+
+  abstract fun posProfileLocalDao(): PosProfileLocalDao
+
+  abstract fun posProfilePaymentMethodDao(): PosProfilePaymentMethodDao
+
+  abstract fun modeOfPaymentDao(): ModeOfPaymentDao
+
+  abstract fun cashboxDao(): CashboxDao
+
+  abstract fun customerDao(): CustomerDao
+
+  abstract fun categoryDao(): CategoryDao
+
+  abstract fun saleInvoiceDao(): SalesInvoiceDao
+
+  abstract fun posOpeningDao(): POSOpeningEntryDao
+
+  abstract fun posOpeningEntryLinkDao(): POSOpeningEntryLinkDao
+
+  abstract fun posClosingDao(): POSClosingEntryDao
+
+  abstract fun exchangeRateDao(): ExchangeRateDao
+
+  abstract fun configurationDao(): ConfigurationDao
+
+  abstract fun paymentTermDao(): PaymentTermDao
+
+  abstract fun deliveryChargeDao(): DeliveryChargeDao
+
+  abstract fun companyDao(): CompanyDao
+
+  abstract fun customerOutboxDao(): CustomerOutboxDao
+
+  abstract fun customerGroupDao(): CustomerGroupDao
+
+  abstract fun territoryDao(): TerritoryDao
+
+  abstract fun contactDao(): ContactDao
+
+  abstract fun addressDao(): AddressDao
+
+  abstract fun supplierDao(): SupplierDao
+
+  abstract fun companyAccountDao(): CompanyAccountDao
 }
 
 @Suppress("KotlinNoActualForExpect")
 expect object AppDatabaseConstructor : RoomDatabaseConstructor<AppDatabase> {
-    override fun initialize(): AppDatabase
+  override fun initialize(): AppDatabase
 }
 
 expect class DatabaseBuilder {
-    fun build(): AppDatabase
+  fun build(): AppDatabase
 }

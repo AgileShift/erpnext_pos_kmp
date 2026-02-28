@@ -5,5 +5,5 @@ data class BillingTotals(
     val taxes: Double,
     val discount: Double,
     val shipping: Double,
-    val total: Double
+    val total: Double,
 )

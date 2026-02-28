@@ -9,40 +9,33 @@ import com.erpnext.pos.localSource.entities.ItemReorderEntity
 @Dao
 interface ItemReorderDao {
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun upsertAll(rows: List<ItemReorderEntity>)
+  @Insert(onConflict = OnConflictStrategy.REPLACE)
+  suspend fun upsertAll(rows: List<ItemReorderEntity>)
 
-    @Query(
-        """
+  @Query(
+      """
         SELECT * FROM item_reorders
         WHERE warehouseId = :warehouseId
           AND is_deleted = 0
     """
-    )
-    suspend fun getByWarehouse(
-        warehouseId: String
-    ): List<ItemReorderEntity>
+  )
+  suspend fun getByWarehouse(warehouseId: String): List<ItemReorderEntity>
 
-    @Query(
-        """
+  @Query(
+      """
         SELECT * FROM item_reorders
         WHERE warehouseId = :warehouseId
           AND itemId IN (:itemIds)
           AND is_deleted = 0
     """
-    )
-    suspend fun getByItems(
-        warehouseId: String,
-        itemIds: List<String>
-    ): List<ItemReorderEntity>
+  )
+  suspend fun getByItems(warehouseId: String, itemIds: List<String>): List<ItemReorderEntity>
 
-    @Query(
-        """
+  @Query(
+      """
         DELETE FROM item_reorders
         WHERE warehouseId = :warehouseId
     """
-    )
-    suspend fun deleteByWarehouse(
-        warehouseId: String
-    )
+  )
+  suspend fun deleteByWarehouse(warehouseId: String)
 }

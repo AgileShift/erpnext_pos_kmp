@@ -9,21 +9,21 @@ data class SourceDocumentItem(
     val uom: String,
     val rate: Double,
     val amount: Double,
-    val warehouse: String?
+    val warehouse: String?,
 )
 
 data class SourceDocumentTax(
     val chargeType: String,
     val accountHead: String,
     val rate: Double,
-    val taxAmount: Double
+    val taxAmount: Double,
 )
 
 data class SourceDocumentTotals(
     val netTotal: Double?,
     val grandTotal: Double?,
     val taxTotal: Double?,
-    val currency: String?
+    val currency: String?,
 )
 
 data class SourceDocumentOption(
@@ -35,5 +35,5 @@ data class SourceDocumentOption(
     val status: String?,
     val items: List<SourceDocumentItem> = emptyList(),
     val taxes: List<SourceDocumentTax> = emptyList(),
-    val totals: SourceDocumentTotals? = null
+    val totals: SourceDocumentTotals? = null,
 )

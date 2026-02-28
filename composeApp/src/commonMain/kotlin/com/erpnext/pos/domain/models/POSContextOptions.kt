@@ -4,7 +4,7 @@ data class POSCurrencyOption(
     val code: String,
     val name: String,
     val symbol: String? = null,
-    val numberFormat: String? = null
+    val numberFormat: String? = null,
 )
 
 data class POSPaymentModeOption(

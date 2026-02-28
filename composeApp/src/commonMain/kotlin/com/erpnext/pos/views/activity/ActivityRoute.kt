@@ -7,18 +7,13 @@ import androidx.compose.runtime.getValue
 import org.koin.compose.koinInject
 
 @Composable
-fun ActivityRoute(
-    viewModel: ActivityViewModel = koinInject()
-) {
-    val state by viewModel.uiState.collectAsState()
-    LaunchedEffect(Unit) {
-        viewModel.markViewed()
-    }
-    ActivityScreen(
-        state = state,
-        onFilterChange = viewModel::setFilter,
-        onMarkRead = viewModel::markRead,
-        onMarkAllRead = viewModel::markAllRead,
-    )
+fun ActivityRoute(viewModel: ActivityViewModel = koinInject()) {
+  val state by viewModel.uiState.collectAsState()
+  LaunchedEffect(Unit) { viewModel.markViewed() }
+  ActivityScreen(
+      state = state,
+      onFilterChange = viewModel::setFilter,
+      onMarkRead = viewModel::markRead,
+      onMarkAllRead = viewModel::markAllRead,
+  )
 }
-

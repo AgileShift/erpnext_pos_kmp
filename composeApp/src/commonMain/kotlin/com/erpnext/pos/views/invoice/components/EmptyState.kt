@@ -10,13 +10,7 @@ import androidx.compose.ui.Modifier
 
 @Composable
 fun EmptyState(modifier: Modifier) {
-    Box(
-        modifier = modifier.fillMaxSize(),
-        contentAlignment = Alignment.Center
-    ) {
-        Text(
-            "No hay facturas registradas",
-            style = MaterialTheme.typography.bodyLarge
-        )
-    }
+  Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+    Text("No hay facturas registradas", style = MaterialTheme.typography.bodyLarge)
+  }
 }

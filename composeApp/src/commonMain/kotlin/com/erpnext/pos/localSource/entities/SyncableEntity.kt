@@ -4,5 +4,5 @@ import kotlin.time.ExperimentalTime
 
 @OptIn(ExperimentalTime::class)
 interface SyncableEntity {
-    var lastSyncedAt: Long?
+  var lastSyncedAt: Long?
 }

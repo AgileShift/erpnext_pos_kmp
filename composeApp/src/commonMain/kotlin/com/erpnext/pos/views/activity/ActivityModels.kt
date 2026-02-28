@@ -4,16 +4,16 @@ import kotlinx.serialization.Serializable
 
 @Serializable
 enum class ActivityPriority {
-    LOW,
-    MEDIUM,
-    HIGH
+  LOW,
+  MEDIUM,
+  HIGH,
 }
 
 @Serializable
 enum class ActivityChangeType {
-    NONE,
-    CREATED,
-    UPDATED
+  NONE,
+  CREATED,
+  UPDATED,
 }
 
 @Serializable
@@ -24,9 +24,10 @@ data class ActivityEntry(
     val priority: ActivityPriority = ActivityPriority.MEDIUM,
     val changeType: ActivityChangeType = ActivityChangeType.NONE,
     val createdAt: Long,
-    val readAt: Long? = null
+    val readAt: Long? = null,
 ) {
-    val isRead: Boolean get() = readAt != null
+  val isRead: Boolean
+    get() = readAt != null
 }
 
 data class ActivityEvent(
@@ -36,6 +37,5 @@ data class ActivityEvent(
     val priority: ActivityPriority = ActivityPriority.MEDIUM,
     val changeType: ActivityChangeType = ActivityChangeType.NONE,
     val triggerSync: Boolean = false,
-    val showSnackbar: Boolean? = null
+    val showSnackbar: Boolean? = null,
 )
-

@@ -8,14 +8,13 @@ import com.erpnext.pos.localSource.entities.CustomerOutboxEntity
 
 @Dao
 interface CustomerOutboxDao {
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insert(entity: CustomerOutboxEntity)
+  @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun insert(entity: CustomerOutboxEntity)
 
-    @Query("SELECT * FROM customer_outbox WHERE status != 'Synced' ORDER BY created_at ASC")
-    suspend fun getPending(): List<CustomerOutboxEntity>
+  @Query("SELECT * FROM customer_outbox WHERE status != 'Synced' ORDER BY created_at ASC")
+  suspend fun getPending(): List<CustomerOutboxEntity>
 
-    @Query(
-        """
+  @Query(
+      """
         UPDATE customer_outbox
         SET status = :status,
             last_error = :error,
@@ -23,24 +22,24 @@ interface CustomerOutboxDao {
             last_attempt_at = :attemptAt
         WHERE local_id = :localId
         """
-    )
-    suspend fun updateStatus(
-        localId: String,
-        status: String,
-        error: String?,
-        attemptIncrement: Int,
-        attemptAt: Long
-    )
+  )
+  suspend fun updateStatus(
+      localId: String,
+      status: String,
+      error: String?,
+      attemptIncrement: Int,
+      attemptAt: Long,
+  )
 
-    @Query(
-        """
+  @Query(
+      """
         UPDATE customer_outbox
         SET remote_id = :remoteId
         WHERE local_id = :localId
         """
-    )
-    suspend fun updateRemoteId(localId: String, remoteId: String)
+  )
+  suspend fun updateRemoteId(localId: String, remoteId: String)
 
-    @Query("DELETE FROM customer_outbox WHERE customer_local_id NOT IN (:ids)")
-    suspend fun deleteByCustomerIdsNotIn(ids: List<String>)
+  @Query("DELETE FROM customer_outbox WHERE customer_local_id NOT IN (:ids)")
+  suspend fun deleteByCustomerIdsNotIn(ids: List<String>)
 }

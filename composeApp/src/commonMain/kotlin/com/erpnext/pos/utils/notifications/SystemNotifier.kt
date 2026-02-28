@@ -7,11 +7,7 @@ expect fun scheduleDailyInventoryReminder(
     title: String,
     message: String,
     hour: Int,
-    minute: Int
+    minute: Int,
 )
 
-expect fun configureInventoryAlertWorker(
-    enabled: Boolean,
-    hour: Int,
-    minute: Int
-)
+expect fun configureInventoryAlertWorker(enabled: Boolean, hour: Int, minute: Int)

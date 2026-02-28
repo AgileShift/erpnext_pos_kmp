@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Inventory2
-import androidx.compose.material.icons.filled.Print
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -32,133 +31,112 @@ fun InventoryScreen(
     state: InventoryState,
     actions: InventoryAction,
 ) {
-    val listState = rememberLazyListState()
-    val itemsLazy = (state as? InventoryState.Success)?.items?.collectAsLazyPagingItems()
-    val baseCurrencyState = (state as? InventoryState.Success)?.baseCurrency ?: "USD"
-    val exchangeRateState = (state as? InventoryState.Success)?.exchangeRate ?: 1.0
+  val listState = rememberLazyListState()
+  val itemsLazy = (state as? InventoryState.Success)?.items?.collectAsLazyPagingItems()
+  val baseCurrencyState = (state as? InventoryState.Success)?.baseCurrency ?: "USD"
+  val exchangeRateState = (state as? InventoryState.Success)?.exchangeRate ?: 1.0
 
-    val pullRefreshState = rememberPullRefreshState(
-        refreshing = state is InventoryState.Loading,
-        onRefresh = { actions.onRefresh() }
-    )
+  val pullRefreshState =
+      rememberPullRefreshState(
+          refreshing = state is InventoryState.Loading,
+          onRefresh = { actions.onRefresh() },
+      )
 
-    var searchQuery by rememberSaveable { mutableStateOf("") }
-    var selectedCategory by rememberSaveable { mutableStateOf("Todos los grupos de artículos") }
+  var searchQuery by rememberSaveable { mutableStateOf("") }
+  var selectedCategory by rememberSaveable { mutableStateOf("Todos los grupos de artículos") }
 
-    Scaffold(
-    ) { innerPadding ->
-        BoxWithConstraints(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding)
-                .pullRefresh(pullRefreshState)
-        ) {
-            val isDesktop = getPlatformName() == "Desktop"
-            val isWideLayout = maxWidth >= 840.dp || isDesktop
+  Scaffold() { innerPadding ->
+    BoxWithConstraints(
+        modifier = Modifier.fillMaxSize().padding(innerPadding).pullRefresh(pullRefreshState)
+    ) {
+      val isDesktop = getPlatformName() == "Desktop"
+      val isWideLayout = maxWidth >= 840.dp || isDesktop
 
-            /**
-             * 1️⃣ Animación localizada — sin destruir SearchBar ni filtros
-             * */
-            AnimatedContent(
-                targetState = state,
-                transitionSpec = {
-                    fadeIn(tween(250, easing = LinearOutSlowInEasing)) togetherWith
-                            fadeOut(tween(200))
-                },
-                label = "InventoryContentTransition"
-            ) { currentState ->
-
-                when (currentState) {
-                    is InventoryState.Loading -> {
-                        // Mantiene el shimmer detrás si ya había datos cargados
-                        if (itemsLazy?.itemCount.orZero() > 0) {
-                            InventoryContent(
-                                state = InventoryState.Success(
-                                    items = flowOf(PagingData.empty()),
-                                    categories = emptyList(),
-                                    baseCurrency = baseCurrencyState,
-                                    exchangeRate = exchangeRateState
-                                ),
-                                itemsLazy = itemsLazy!!,
-                                listState = listState,
-                                actions = actions,
-                                searchQuery = searchQuery,
-                                selectedCategory = selectedCategory,
-                                onQueryChanged = { query ->
-                                    searchQuery = query
-                                },
-                                onCategorySelected = { category ->
-                                    selectedCategory = category
-                                    actions.onCategorySelected(category)
-                                },
-                                isWideLayout = isWideLayout,
-                                isDesktop = isDesktop
-                            )
-                            Box(
-                                Modifier
-                                    .fillMaxSize()
-                                    .align(Alignment.Center)
-                            ) {
-                                FullScreenShimmerLoadingOverlay()
-                            }
-                        } else {
-                            FullScreenShimmerLoading()
-                        }
-                    }
-
-                    is InventoryState.Error -> {
-                        FullScreenErrorMessage(currentState.message) { actions.onRefresh() }
-                    }
-
-                    InventoryState.Empty -> {
-                        EmptyStateMessage(
-                            "Inventario vacío",
-                            Icons.Default.Inventory2
-                        )
-                    }
-
-                    is InventoryState.Success -> {
-                        InventoryContent(
-                            state = currentState,
-                            itemsLazy = currentState.items.collectAsLazyPagingItems(),
-                            listState = listState,
-                            actions = actions,
-                            searchQuery = searchQuery,
-                            selectedCategory = selectedCategory,
-                            onQueryChanged = { query ->
-                                searchQuery = query
-                            },
-                            onCategorySelected = { category ->
-                                selectedCategory = category
-                                actions.onCategorySelected(category)
-                            },
-                            isDesktop = isDesktop,
-                            isWideLayout = isWideLayout
-                        )
-                    }
-                }
+      /** 1️⃣ Animación localizada — sin destruir SearchBar ni filtros */
+      AnimatedContent(
+          targetState = state,
+          transitionSpec = {
+            fadeIn(tween(250, easing = LinearOutSlowInEasing)) togetherWith fadeOut(tween(200))
+          },
+          label = "InventoryContentTransition",
+      ) { currentState ->
+        when (currentState) {
+          is InventoryState.Loading -> {
+            // Mantiene el shimmer detrás si ya había datos cargados
+            if (itemsLazy?.itemCount.orZero() > 0) {
+              InventoryContent(
+                  state =
+                      InventoryState.Success(
+                          items = flowOf(PagingData.empty()),
+                          categories = emptyList(),
+                          baseCurrency = baseCurrencyState,
+                          exchangeRate = exchangeRateState,
+                      ),
+                  itemsLazy = itemsLazy!!,
+                  listState = listState,
+                  actions = actions,
+                  searchQuery = searchQuery,
+                  selectedCategory = selectedCategory,
+                  onQueryChanged = { query -> searchQuery = query },
+                  onCategorySelected = { category ->
+                    selectedCategory = category
+                    actions.onCategorySelected(category)
+                  },
+                  isWideLayout = isWideLayout,
+                  isDesktop = isDesktop,
+              )
+              Box(Modifier.fillMaxSize().align(Alignment.Center)) {
+                FullScreenShimmerLoadingOverlay()
+              }
+            } else {
+              FullScreenShimmerLoading()
             }
+          }
 
-            PullRefreshIndicator(
-                refreshing = state is InventoryState.Loading,
-                state = pullRefreshState,
-                modifier = Modifier.align(Alignment.TopCenter)
+          is InventoryState.Error -> {
+            FullScreenErrorMessage(currentState.message) { actions.onRefresh() }
+          }
+
+          InventoryState.Empty -> {
+            EmptyStateMessage("Inventario vacío", Icons.Default.Inventory2)
+          }
+
+          is InventoryState.Success -> {
+            InventoryContent(
+                state = currentState,
+                itemsLazy = currentState.items.collectAsLazyPagingItems(),
+                listState = listState,
+                actions = actions,
+                searchQuery = searchQuery,
+                selectedCategory = selectedCategory,
+                onQueryChanged = { query -> searchQuery = query },
+                onCategorySelected = { category ->
+                  selectedCategory = category
+                  actions.onCategorySelected(category)
+                },
+                isDesktop = isDesktop,
+                isWideLayout = isWideLayout,
             )
+          }
         }
+      }
+
+      PullRefreshIndicator(
+          refreshing = state is InventoryState.Loading,
+          state = pullRefreshState,
+          modifier = Modifier.align(Alignment.TopCenter),
+      )
     }
+  }
 }
 
 @Composable
 fun FullScreenShimmerLoadingOverlay() {
-    Box(
-        Modifier
-            .fillMaxSize()
-            .padding(horizontal = 16.dp)
-    ) {
-        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            repeat(5) { ShimmerProductPlaceholder(modifier = Modifier.fillMaxWidth()) }
-        }
+  Box(Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+      repeat(5) { ShimmerProductPlaceholder(modifier = Modifier.fillMaxWidth()) }
     }
+  }
 }
 
 private fun Int?.orZero() = this ?: 0
@@ -166,39 +144,38 @@ private fun Int?.orZero() = this ?: 0
 @Preview
 @Composable
 fun InventoryScreenPreview() {
-    InventoryScreen(
-        state = InventoryState.Success(
-            items = flowOf(
-                PagingData.from(
-                    listOf(
-                        ItemBO(
-                            "Producto de prueba",
-                            "Producto de prueba con una descripcion",
-                            "Pollo Frito congelado",
-                            "",
-                            image = null,
-                            currency = "NIO",
-                            itemGroup = "POLLO",
-                            brand = "TIPTOP",
-                            price = 1000.0,
-                            actualQty = 10.0,
-                            discount = 0.0,
-                            isService = false,
-                            isStocked = true,
-                            uom = "Unidad",
-                            lastSyncedAt = null,
-                        )
-                    )
-                )
-            ),
-            categories = listOf(
-                CategoryBO("Carne"),
-                CategoryBO("Embutidos"),
-                CategoryBO("Pollo")
-            ),
-            baseCurrency = "USD",
-            exchangeRate = 0.027
-        ),
-        actions = InventoryAction(),
-    )
+  InventoryScreen(
+      state =
+          InventoryState.Success(
+              items =
+                  flowOf(
+                      PagingData.from(
+                          listOf(
+                              ItemBO(
+                                  "Producto de prueba",
+                                  "Producto de prueba con una descripcion",
+                                  "Pollo Frito congelado",
+                                  "",
+                                  image = null,
+                                  currency = "NIO",
+                                  itemGroup = "POLLO",
+                                  brand = "TIPTOP",
+                                  price = 1000.0,
+                                  actualQty = 10.0,
+                                  discount = 0.0,
+                                  isService = false,
+                                  isStocked = true,
+                                  uom = "Unidad",
+                                  lastSyncedAt = null,
+                              )
+                          )
+                      )
+                  ),
+              categories =
+                  listOf(CategoryBO("Carne"), CategoryBO("Embutidos"), CategoryBO("Pollo")),
+              baseCurrency = "USD",
+              exchangeRate = 0.027,
+          ),
+      actions = InventoryAction(),
+  )
 }

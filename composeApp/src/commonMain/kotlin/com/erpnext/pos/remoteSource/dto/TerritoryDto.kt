@@ -5,13 +5,10 @@ import kotlinx.serialization.Serializable
 
 @Serializable
 data class TerritoryDto(
-    @SerialName("name")
-    val name: String,
-    @SerialName("territory_name")
-    val territoryName: String? = null,
+    @SerialName("name") val name: String,
+    @SerialName("territory_name") val territoryName: String? = null,
     @SerialName("is_group")
     @Serializable(with = IntAsBooleanSerializer::class)
     val isGroup: Boolean = false,
-    @SerialName("parent_territory")
-    val parentTerritory: String? = null
+    @SerialName("parent_territory") val parentTerritory: String? = null,
 )

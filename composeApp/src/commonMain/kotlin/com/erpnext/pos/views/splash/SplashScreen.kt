@@ -14,25 +14,15 @@ import kotlinx.coroutines.delay
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SplashScreen(
-    state: SplashState,
-    actions: SplashActions
-) {
-    LaunchedEffect(Unit) {
-        delay(1000)
-        actions.isAuth()
-    }
+fun SplashScreen(state: SplashState, actions: SplashActions) {
+  LaunchedEffect(Unit) {
+    delay(1000)
+    actions.isAuth()
+  }
 
-    if (state == SplashState.Loading) {
-        Box(
-            modifier = Modifier.fillMaxSize(),
-            contentAlignment = Alignment.Center
-        ) {
-            CircularProgressIndicator(
-                trackColor = Color.Blue,
-                color = Color.Cyan,
-                strokeWidth = 2.dp
-            )
-        }
+  if (state == SplashState.Loading) {
+    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+      CircularProgressIndicator(trackColor = Color.Blue, color = Color.Cyan, strokeWidth = 2.dp)
     }
+  }
 }

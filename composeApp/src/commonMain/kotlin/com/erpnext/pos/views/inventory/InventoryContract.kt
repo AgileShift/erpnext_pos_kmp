@@ -6,16 +6,18 @@ import com.erpnext.pos.domain.models.ItemBO
 import kotlinx.coroutines.flow.Flow
 
 sealed class InventoryState {
-    object Loading : InventoryState()
-    object Empty : InventoryState()
-data class Success(
-        val items: Flow<PagingData<ItemBO>>,
-        val categories: List<CategoryBO>? = emptyList(),
-        val baseCurrency: String = "USD",
-        val exchangeRate: Double = 1.0
-    ) : InventoryState()
+  object Loading : InventoryState()
 
-    data class Error(val message: String) : InventoryState()
+  object Empty : InventoryState()
+
+  data class Success(
+      val items: Flow<PagingData<ItemBO>>,
+      val categories: List<CategoryBO>? = emptyList(),
+      val baseCurrency: String = "USD",
+      val exchangeRate: Double = 1.0,
+  ) : InventoryState()
+
+  data class Error(val message: String) : InventoryState()
 }
 
 data class InventoryAction(
@@ -26,5 +28,5 @@ data class InventoryAction(
     val onItemClick: (ItemBO) -> Unit = {},
     val isCashboxOpen: () -> Unit = {},
     val onClearSearch: () -> Unit = {},
-    val getDetails: (String) -> Unit = { },
+    val getDetails: (String) -> Unit = {},
 )

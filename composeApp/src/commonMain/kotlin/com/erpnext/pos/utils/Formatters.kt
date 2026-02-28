@@ -5,16 +5,18 @@ import kotlin.math.abs
 expect fun formatAmount(symbol: String, amount: Double): String
 
 fun formatCurrency(code: String, amount: Double): String {
-    val symbol = code.toCurrencySymbol().ifBlank { code }
-    val normalized = normalizeCurrency(code).uppercase()
-    val display = roundForCurrency(amount, normalized)
-    val rounded2 = roundToCurrency(display, 2)
-    val rounded0 = roundToCurrency(display, 0)
-    val isWhole = abs(rounded2 - rounded0) < 0.005
-    val decimals = when (normalized) {
-        "USD", "NIO" -> 2
+  val symbol = code.toCurrencySymbol().ifBlank { code }
+  val normalized = normalizeCurrency(code).uppercase()
+  val display = roundForCurrency(amount, normalized)
+  val rounded2 = roundToCurrency(display, 2)
+  val rounded0 = roundToCurrency(display, 0)
+  val isWhole = abs(rounded2 - rounded0) < 0.005
+  val decimals =
+      when (normalized) {
+        "USD",
+        "NIO" -> 2
         else -> 2
-    }
-    val formatted = formatAmount(symbol, display)
-    return if (decimals == 2) formatted else formatAmount(symbol, roundToCurrency(display, decimals))
+      }
+  val formatted = formatAmount(symbol, display)
+  return if (decimals == 2) formatted else formatAmount(symbol, roundToCurrency(display, decimals))
 }

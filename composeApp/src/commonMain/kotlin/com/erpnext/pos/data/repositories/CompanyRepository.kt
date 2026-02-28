@@ -8,24 +8,24 @@ import com.erpnext.pos.remoteSource.api.APIService
 import com.erpnext.pos.remoteSource.dto.CompanyDto
 
 private fun CompanyDto.toBO(): CompanyBO {
-    return CompanyBO(
-        company = company,
-        defaultCurrency = defaultCurrency,
-        country = country,
-        ruc = taxId,
-    )
+  return CompanyBO(
+      company = company,
+      defaultCurrency = defaultCurrency,
+      country = country,
+      ruc = taxId,
+  )
 }
 
 private fun CompanyDto.toEntity(): CompanyEntity {
-    return CompanyEntity(
-        companyName = company,
-        defaultCurrency = defaultCurrency,
-        country = country,
-        taxId = taxId,
-        defaultReceivableAccount = defaultReceivableAccount,
-        defaultReceivableAccountCurrency = defaultReceivableAccountCurrency,
-        isDeleted = false,
-    )
+  return CompanyEntity(
+      companyName = company,
+      defaultCurrency = defaultCurrency,
+      country = country,
+      taxId = taxId,
+      defaultReceivableAccount = defaultReceivableAccount,
+      defaultReceivableAccountCurrency = defaultReceivableAccountCurrency,
+      isDeleted = false,
+  )
 }
 
 class CompanyRepository(
@@ -33,29 +33,30 @@ class CompanyRepository(
     private val companyDao: CompanyDao,
 ) : ICompanyRepository {
 
-    override suspend fun getCompanyInfo(): CompanyBO {
-        val companies = api.getCompanyInfo()
-        companies.forEach { companyDao.insert(it.toEntity()) }
-        val names = companies.map { it.company }
-        val ids = names.ifEmpty { listOf("__empty__") }
-        companyDao.hardDeleteDeletedNotIn(ids)
-        companyDao.softDeleteNotIn(ids)
-        val first = companies.firstOrNull()
+  override suspend fun getCompanyInfo(): CompanyBO {
+    val companies = api.getCompanyInfo()
+    companies.forEach { companyDao.insert(it.toEntity()) }
+    val names = companies.map { it.company }
+    val ids = names.ifEmpty { listOf("__empty__") }
+    companyDao.hardDeleteDeletedNotIn(ids)
+    companyDao.softDeleteNotIn(ids)
+    val first =
+        companies.firstOrNull()
             ?: companyDao.getCompanyInfo()?.let { local ->
-                CompanyDto(
-                    company = local.companyName,
-                    defaultCurrency = local.defaultCurrency,
-                    country = local.country,
-                    taxId = local.taxId,
-                    defaultReceivableAccount = local.defaultReceivableAccount,
-                    defaultReceivableAccountCurrency = local.defaultReceivableAccountCurrency
-                )
+              CompanyDto(
+                  company = local.companyName,
+                  defaultCurrency = local.defaultCurrency,
+                  country = local.country,
+                  taxId = local.taxId,
+                  defaultReceivableAccount = local.defaultReceivableAccount,
+                  defaultReceivableAccountCurrency = local.defaultReceivableAccountCurrency,
+              )
             }
             ?: throw IllegalStateException("Company info not available")
-        return first.toBO()
-    }
+    return first.toBO()
+  }
 
-    override suspend fun sync(): CompanyBO {
-        return getCompanyInfo()
-    }
+  override suspend fun sync(): CompanyBO {
+    return getCompanyInfo()
+  }
 }

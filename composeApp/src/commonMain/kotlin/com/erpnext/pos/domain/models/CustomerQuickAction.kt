@@ -5,5 +5,5 @@ import androidx.compose.ui.graphics.vector.ImageVector
 data class CustomerQuickAction(
     val type: CustomerQuickActionType,
     val label: String,
-    val icon: ImageVector
+    val icon: ImageVector,
 )

@@ -15,16 +15,16 @@ data class ResolvedPaymentMethod(
     val account: String?,
     val allowInReturns: Boolean,
     val idx: Int,
-    val enabledInProfile: Boolean
+    val enabledInProfile: Boolean,
 )
 
 @Dao
 interface PosProfilePaymentMethodDao {
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun upsertAll(items: List<PosProfilePaymentMethodEntity>)
+  @Insert(onConflict = OnConflictStrategy.REPLACE)
+  suspend fun upsertAll(items: List<PosProfilePaymentMethodEntity>)
 
-    @Query(
-        """
+  @Query(
+      """
         SELECT
             pm.mop_name AS mopName,
             mop.type AS type,
@@ -43,11 +43,11 @@ interface PosProfilePaymentMethodDao {
           AND mop.is_deleted = 0
         ORDER BY pm.idx ASC
         """
-    )
-    suspend fun getResolvedMethodsForProfile(profileId: String): List<ResolvedPaymentMethod>
+  )
+  suspend fun getResolvedMethodsForProfile(profileId: String): List<ResolvedPaymentMethod>
 
-    @Query(
-        """
+  @Query(
+      """
         SELECT COUNT(*) FROM tabPOSProfilePaymentMethod pm
         INNER JOIN tabModeOfPayment mop
             ON mop.name = pm.mop_name
@@ -55,51 +55,59 @@ interface PosProfilePaymentMethodDao {
           AND pm.is_deleted = 0
           AND mop.is_deleted = 0
         """
-    )
-    suspend fun countResolvedForProfile(profileId: String): Int
+  )
+  suspend fun countResolvedForProfile(profileId: String): Int
 
-    @Query("SELECT COUNT(*) FROM tabPOSProfilePaymentMethod WHERE profile_id = :profileId AND is_deleted = 0")
-    suspend fun countRelationsForProfile(profileId: String): Int
+  @Query(
+      "SELECT COUNT(*) FROM tabPOSProfilePaymentMethod WHERE profile_id = :profileId AND is_deleted = 0"
+  )
+  suspend fun countRelationsForProfile(profileId: String): Int
 
-    @Query("SELECT COUNT(*) FROM tabPOSProfilePaymentMethod WHERE is_deleted = 0")
-    suspend fun countAllRelations(): Int
+  @Query("SELECT COUNT(*) FROM tabPOSProfilePaymentMethod WHERE is_deleted = 0")
+  suspend fun countAllRelations(): Int
 
-    @Query(
-        """
+  @Query(
+      """
         UPDATE tabPOSProfilePaymentMethod
         SET is_deleted = 1
         WHERE is_deleted = 0
           AND profile_id = :profileId
           AND mop_name NOT IN (:activeMops)
         """
-    )
-    suspend fun softDeleteStaleForProfile(profileId: String, activeMops: List<String>)
+  )
+  suspend fun softDeleteStaleForProfile(profileId: String, activeMops: List<String>)
 
-    @Query(
-        """
+  @Query(
+      """
         DELETE FROM tabPOSProfilePaymentMethod
         WHERE is_deleted = 1
           AND profile_id = :profileId
           AND mop_name NOT IN (:activeMops)
         """
-    )
-    suspend fun hardDeleteDeletedStaleForProfile(profileId: String, activeMops: List<String>)
+  )
+  suspend fun hardDeleteDeletedStaleForProfile(profileId: String, activeMops: List<String>)
 
-    @Query("UPDATE tabPOSProfilePaymentMethod SET is_deleted = 1 WHERE is_deleted = 0 AND profile_id = :profileId")
-    suspend fun softDeleteAllForProfile(profileId: String)
+  @Query(
+      "UPDATE tabPOSProfilePaymentMethod SET is_deleted = 1 WHERE is_deleted = 0 AND profile_id = :profileId"
+  )
+  suspend fun softDeleteAllForProfile(profileId: String)
 
-    @Query("DELETE FROM tabPOSProfilePaymentMethod WHERE is_deleted = 1 AND profile_id = :profileId")
-    suspend fun hardDeleteAllDeletedForProfile(profileId: String)
+  @Query("DELETE FROM tabPOSProfilePaymentMethod WHERE is_deleted = 1 AND profile_id = :profileId")
+  suspend fun hardDeleteAllDeletedForProfile(profileId: String)
 
-    @Query("UPDATE tabPOSProfilePaymentMethod SET is_deleted = 1 WHERE is_deleted = 0 AND profile_id NOT IN (:profileIds)")
-    suspend fun softDeleteForProfilesNotIn(profileIds: List<String>)
+  @Query(
+      "UPDATE tabPOSProfilePaymentMethod SET is_deleted = 1 WHERE is_deleted = 0 AND profile_id NOT IN (:profileIds)"
+  )
+  suspend fun softDeleteForProfilesNotIn(profileIds: List<String>)
 
-    @Query("DELETE FROM tabPOSProfilePaymentMethod WHERE is_deleted = 1 AND profile_id NOT IN (:profileIds)")
-    suspend fun hardDeleteDeletedForProfilesNotIn(profileIds: List<String>)
+  @Query(
+      "DELETE FROM tabPOSProfilePaymentMethod WHERE is_deleted = 1 AND profile_id NOT IN (:profileIds)"
+  )
+  suspend fun hardDeleteDeletedForProfilesNotIn(profileIds: List<String>)
 
-    @Query("UPDATE tabPOSProfilePaymentMethod SET is_deleted = 1 WHERE is_deleted = 0")
-    suspend fun softDeleteAllRelations()
+  @Query("UPDATE tabPOSProfilePaymentMethod SET is_deleted = 1 WHERE is_deleted = 0")
+  suspend fun softDeleteAllRelations()
 
-    @Query("DELETE FROM tabPOSProfilePaymentMethod WHERE is_deleted = 1")
-    suspend fun hardDeleteAllDeletedRelations()
+  @Query("DELETE FROM tabPOSProfilePaymentMethod WHERE is_deleted = 1")
+  suspend fun hardDeleteAllDeletedRelations()
 }

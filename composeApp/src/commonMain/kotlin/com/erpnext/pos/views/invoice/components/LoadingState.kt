@@ -11,12 +11,10 @@ import androidx.compose.ui.unit.dp
 
 @Composable
 fun LoadingState(modifier: Modifier) {
-    Box(
-        modifier = modifier
-            .fillMaxSize()
-            .padding(top = 80.dp),
-        contentAlignment = Alignment.TopCenter
-    ) {
-        CircularProgressIndicator()
-    }
+  Box(
+      modifier = modifier.fillMaxSize().padding(top = 80.dp),
+      contentAlignment = Alignment.TopCenter,
+  ) {
+    CircularProgressIndicator()
+  }
 }

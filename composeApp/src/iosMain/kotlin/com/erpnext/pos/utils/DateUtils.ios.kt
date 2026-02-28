@@ -8,27 +8,29 @@ import platform.Foundation.NSLocale
 import platform.Foundation.currentLocale
 
 actual fun formatMonthName(date: LocalDate): String {
-    val formatter = NSDateFormatter().apply {
+  val formatter =
+      NSDateFormatter().apply {
         dateFormat = "LLLL"
         locale = NSLocale.currentLocale
-    }
+      }
 
-    val components = date.toNSDateComponents()
-    val calendar = NSCalendar.currentCalendar
-    val nsDate = calendar.dateFromComponents(components)!!
+  val components = date.toNSDateComponents()
+  val calendar = NSCalendar.currentCalendar
+  val nsDate = calendar.dateFromComponents(components)!!
 
-    return formatter.stringFromDate(nsDate)
+  return formatter.stringFromDate(nsDate)
 }
 
 actual fun formatWeekdayName(date: LocalDate): String {
-    val formatter = NSDateFormatter().apply {
+  val formatter =
+      NSDateFormatter().apply {
         dateFormat = "EEEE"
         locale = NSLocale.currentLocale
-    }
+      }
 
-    val components = date.toNSDateComponents()
-    val calendar = NSCalendar.currentCalendar
-    val nsDate = calendar.dateFromComponents(components)!!
+  val components = date.toNSDateComponents()
+  val calendar = NSCalendar.currentCalendar
+  val nsDate = calendar.dateFromComponents(components)!!
 
-    return formatter.stringFromDate(nsDate)
+  return formatter.stringFromDate(nsDate)
 }

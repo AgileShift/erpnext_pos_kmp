@@ -3,50 +3,43 @@ agp = "9.0.1"
 android-compileSdk = "36"
 android-minSdk = "24"
 android-targetSdk = "36"
-androidx-activity = "1.12.2"
-androidx-appcompat = "1.7.1"
-androidx-constraintlayout = "2.2.1"
+androidx-activity = "1.12.4"
 androidx-core = "1.17.0"
-androidx-espresso = "3.7.0"
 androidx-lifecycle = "2.9.6"
-androidx-testExt = "1.3.0"
 androidx-datastore = "1.2.0"
 bignum = "0.3.10"
-coilCompose = "2.7.0"
-coilKt = "2.4.0"
 javaKeyring = "1.0.4"
-junit = "4.13.2"
 
-firebase-bom = "34.7.0"
+firebase-bom = "34.10.0"
 firebase-analytics = "23.0.0"
 google-services = "4.4.4"
 
 composeHotReload = "1.0.0"
 composeMultiplatform = "1.9.3"
-composeNagivation = "2.9.1"
+composeNagivation = "2.9.2"
 
 kotlinxDatetime = "0.7.1"
-logbackClassic = "1.5.23"
-materialIconsExtended = "1.7.3"
+logbackClassic = "1.5.32"
 
 kotlin = "2.3.0"
 kotlinx-coroutines = "1.10.2"
-kotlinx-serialization = "1.9.0"
+kotlinx-serialization = "1.10.0"
 
 ksp = "2.3.4"
-ktor = "3.3.3"
+ktor = "3.4.0"
 koin = "4.1.1"
-pagingVersion = "3.4.0-beta01"
+pagingVersion = "3.4.1"
 pullrefresh = "1.3.0"
-sentry-sdk = "7.11.0"
+sentry-sdk = "8.33.0"
 room = "2.8.4"
 securityCryptoVersion = "1.1.0"
 sqlite = "2.6.2"
 konfig = "0.17.1"
 sqldelight = "2.2.1"
+spotless = "8.2.1"
+detekt = "1.23.8"
 
-coil3 = "3.3.0"
-workRuntimeKtx = "2.11.0"
+coil3 = "3.4.0"
 
 androidGradlePlugin = "9.0.1"
 material3 = "1.4.0"
@@ -61,19 +54,13 @@ firebase-bom = { group = "com.google.firebase", name = "firebase-bom", version.r
 firebase-analytics = { group = "com.google.firebase", name = "firebase-analytics", version.ref = "firebase-analytics" }
 
 androidx-core-ktx = { module = "androidx.core:core-ktx", version.ref = "androidx-core" }
-androidx-espresso-core = { module = "androidx.test.espresso:espresso-core", version.ref = "androidx-espresso" }
-androidx-appcompat = { module = "androidx.appcompat:appcompat", version.ref = "androidx-appcompat" }
-androidx-constraintlayout = { module = "androidx.constraintlayout:constraintlayout", version.ref = "androidx-constraintlayout" }
 androidx-activity-compose = { module = "androidx.activity:activity-compose", version.ref = "androidx-activity" }
 
 androidx-datastore = { module = "androidx.datastore:datastore", version.ref = "androidx-datastore" }
 androidx-datastore-preferences = { module = "androidx.datastore:datastore-preferences", version.ref = "androidx-datastore" }
 
 androidx-paging-compose = { module = "androidx.paging:paging-compose", version.ref = "pagingVersion" }
-androidx-paging-common = { module = "androidx.paging:paging-common", version.ref = "pagingVersion" }
-androidx-testExt-junit = { module = "androidx.test.ext:junit", version.ref = "androidx-testExt" }
 java-keyring = { module = "com.github.javakeyring:java-keyring", version.ref = "javaKeyring" }
-junit = { module = "junit:junit", version.ref = "junit" }
 
 androidx-lifecycle-viewmodel = { module = "org.jetbrains.androidx.lifecycle:lifecycle-viewmodel", version.ref = "androidx-lifecycle" }
 androidx-lifecycle-runtimeCompose = { module = "org.jetbrains.androidx.lifecycle:lifecycle-runtime-compose", version.ref = "androidx-lifecycle" }
@@ -81,10 +68,8 @@ androidx-navigation-compose = { module = "org.jetbrains.androidx.navigation:navi
 
 kotlinx-datetime = { module = "org.jetbrains.kotlinx:kotlinx-datetime", version.ref = "kotlinxDatetime" }
 logback-classic = { module = "ch.qos.logback:logback-classic", version.ref = "logbackClassic" }
-material-icons-extended = { module = "org.jetbrains.compose.material:material-icons-extended", version.ref = "materialIconsExtended" }
 
 kotlin-test = { module = "org.jetbrains.kotlin:kotlin-test", version.ref = "kotlin" }
-kotlin-testJunit = { module = "org.jetbrains.kotlin:kotlin-test-junit", version.ref = "kotlin" }
 
 pullrefresh = { module = "dev.materii.pullrefresh:pullrefresh", version.ref = "pullrefresh" }
 sqldelight-android = { module = "app.cash.sqldelight:android-driver", version.ref = "sqldelight" }
@@ -112,7 +97,6 @@ ktor-plugin-auth = { module = "io.ktor:ktor-client-auth", version.ref = "ktor" }
 ktor-plugin-logging = { module = "io.ktor:ktor-client-logging", version.ref = "ktor" }
 
 koin-android = { module = "io.insert-koin:koin-android", version.ref = "koin" }
-koin-androidx-compose = { module = "io.insert-koin:koin-androidx-compose", version.ref = "koin" }
 koin-core = { module = "io.insert-koin:koin-core", version.ref = "koin" }
 koin-compose = { module = "io.insert-koin:koin-compose", version.ref = "koin" }
 koin-compose-viewmodel = { module = "io.insert-koin:koin-compose-viewmodel", version.ref = "koin" }
@@ -122,18 +106,14 @@ coil-compose = { module = "io.coil-kt.coil3:coil-compose", version.ref = "coil3"
 coil-compose-core = { module = "io.coil-kt.coil3:coil-compose-core", version.ref = "coil3" }
 coil-network-ktor3 = { module = "io.coil-kt.coil3:coil-network-ktor3", version.ref = "coil3" }
 
-coil-base = { module = "io.coil-kt:coil-base", version.ref = "coilCompose" }
-coil-okhttp = { module = "io.coil-kt:coil-okhttp", version.ref = "coilKt" }
 
 # Room Database
 androidx-sqlite-bundled = { module = "androidx.sqlite:sqlite-bundled", version.ref = "sqlite" }
 androidx-room-runtime = { module = "androidx.room:room-runtime", version.ref = "room" }
-androidx-room-ktx = { group = "androidx.room", name = "room-ktx", version.ref = "room" }
 androidx-room-paging = { module = "androidx.room:room-paging", version.ref = "room" }
 androidx-room-compiler = { module = "androidx.room:room-compiler", version.ref = "room" }
 security-crypto = { module = "androidx.security:security-crypto", version.ref = "securityCryptoVersion" }
 android-tink = { module = "com.google.crypto.tink:tink-android", version = "1.20.0" }
-androidx-work-runtime-ktx = { group = "androidx.work", name = "work-runtime-ktx", version.ref = "workRuntimeKtx" }
 androidx-material3 = { group = "androidx.compose.material3", name = "material3", version.ref = "material3" }
 ui-tooling = { module = "androidx.compose.ui:ui-tooling" }
 ui-tooling-preview = { module = "androidx.compose.ui:ui-tooling-preview" }
@@ -142,7 +122,7 @@ work-runtime-ktx = { group = "androidx.work", name = "work-runtime-ktx", version
 
 
 [plugins]
-sentry = { id = "io.sentry.jvm.gradle", version = "5.12.2" }
+sentry = { id = "io.sentry.jvm.gradle", version = "6.1.0" }
 google-services = { id = "com.google.gms.google-services", version.ref = "google-services" }
 sqlDelight = { id = "app.cash.sqldelight", version.ref = "sqldelight" }
 kmpLibrary = { id = "com.android.kotlin.multiplatform.library", version.ref = "androidGradlePlugin" }
@@ -151,13 +131,14 @@ ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }
 kotlinSerialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
 
 androidApplication = { id = "com.android.application", version.ref = "agp" }
-androidLibrary = { id = "com.android.library", version.ref = "agp" }
 composeHotReload = { id = "org.jetbrains.compose.hot-reload", version.ref = "composeHotReload" }
 composeMultiplatform = { id = "org.jetbrains.compose", version.ref = "composeMultiplatform" }
 composeCompiler = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
 androidx-room = { id = "androidx.room", version.ref = "room" }
 
 build-konfig = { id = "com.codingfeline.buildkonfig", version.ref = "konfig" }
+spotless = { id = "com.diffplug.spotless", version.ref = "spotless" }
+detekt = { id = "io.gitlab.arturbosch.detekt", version.ref = "detekt" }
 
 [bundles]
 coil = [
@@ -165,6 +146,3 @@ coil = [
     "coil-compose-core",
     "coil-network-ktor3"
 ]
-koin = ["koin-core", "koin-android", "koin-androidx-compose"]
-ktor = ["ktor-client-core", "ktor-client-okhttp", "ktor-client-darwin", "kotlinx-serialization-json"]
-coroutines = ["kotlinx-coroutines-core", "kotlinx-coroutines-android"]

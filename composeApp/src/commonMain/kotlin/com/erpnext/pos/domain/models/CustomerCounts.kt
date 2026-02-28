@@ -1,6 +1,3 @@
 package com.erpnext.pos.domain.models
 
-data class CustomerCounts(
-    val total: Int,
-    val pending: Int
-)
+data class CustomerCounts(val total: Int, val pending: Int)
