@@ -1454,6 +1454,56 @@ class CashBoxManager(
         findActiveCashboxForProfile(resolveServerUserId(user), ctx.profileName)
     }
 
+    suspend fun resolveOpeningEntryForReporting(): String? = withContext(Dispatchers.IO) {
+        val activeCashbox = getActiveCashboxWithDetails() ?: return@withContext null
+        val candidates = buildOpeningEntryCandidates(activeCashbox)
+        if (candidates.isEmpty()) return@withContext null
+
+        val scored = candidates.map { openingEntryId ->
+            val paymentCount = salesInvoiceDao.getPaymentsForOpeningEntry(openingEntryId).size
+            val invoiceCount = salesInvoiceDao.getInvoicesForOpeningEntry(openingEntryId).size
+            OpeningEntryScore(
+                openingEntryId = openingEntryId,
+                paymentCount = paymentCount,
+                invoiceCount = invoiceCount
+            )
+        }
+        val best = scored.maxWithOrNull(
+            compareBy<OpeningEntryScore> { it.paymentCount }
+                .thenBy { it.invoiceCount }
+        )
+        if (best != null && (best.paymentCount > 0 || best.invoiceCount > 0)) {
+            best.openingEntryId
+        } else {
+            candidates.first()
+        }
+    }
+
+    private suspend fun buildOpeningEntryCandidates(
+        activeCashbox: CashboxWithDetails
+    ): List<String> {
+        val link = openingEntryLinkDao.getByCashboxId(activeCashbox.cashbox.localId)
+        val bootstrapOpening = bootstrapContextPreferences.load().posOpeningEntry
+        return listOf(
+            activeCashbox.cashbox.openingEntryId,
+            link?.remoteOpeningEntryName,
+            link?.localOpeningEntryName,
+            bootstrapOpening
+        )
+            .mapNotNull(::normalizeOpeningEntryId)
+            .distinct()
+    }
+
+    private fun normalizeOpeningEntryId(value: String?): String? {
+        return value?.trim()?.takeIf { it.isNotBlank() }
+    }
+
+    private data class OpeningEntryScore(
+        val openingEntryId: String,
+        val paymentCount: Int,
+        val invoiceCount: Int
+    )
+
     //TODO: Sincronizar las monedas existentes y activas en el ERP
     private suspend fun resolveSupportedCurrencies(
         profileName: String,

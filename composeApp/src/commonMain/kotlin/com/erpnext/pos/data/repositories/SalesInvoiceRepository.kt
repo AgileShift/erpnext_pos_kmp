@@ -503,6 +503,9 @@ class SalesInvoiceRepository(
             syncStatus = "Synced",
             modifiedAt = now
         )
+        if (localInvoiceName != remoteName) {
+            localSource.rebindChildrenToInvoice(localInvoiceName, remoteName)
+        }
         refreshCustomerSummaryWithRates(remote.customer)
     }
 

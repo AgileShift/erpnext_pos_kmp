@@ -1,30 +1,30 @@
 package com.erpnext.pos.views.reconciliation
 
 import androidx.lifecycle.viewModelScope
-import com.erpnext.pos.base.BaseViewModel
 import com.erpnext.pos.auth.SessionRefresher
+import com.erpnext.pos.base.BaseViewModel
 import com.erpnext.pos.data.repositories.PosProfilePaymentMethodLocalRepository
 import com.erpnext.pos.localSource.dao.SalesInvoiceDao
+import com.erpnext.pos.localSource.dao.ShiftPaymentRow
+import com.erpnext.pos.localSource.entities.SalesInvoiceEntity
 import com.erpnext.pos.sync.PushSyncRunner
 import com.erpnext.pos.sync.SyncContextProvider
 import com.erpnext.pos.utils.AppLogger
-import com.erpnext.pos.utils.NetworkMonitor
-import com.erpnext.pos.localSource.dao.ShiftPaymentRow
-import com.erpnext.pos.localSource.entities.SalesInvoiceEntity
 import com.erpnext.pos.utils.CurrencyService
-import com.erpnext.pos.views.CashBoxManager
-import com.erpnext.pos.utils.parseErpDateTimeToEpochMillis
+import com.erpnext.pos.utils.NetworkMonitor
 import com.erpnext.pos.utils.normalizeCurrency
+import com.erpnext.pos.utils.parseErpDateTimeToEpochMillis
 import com.erpnext.pos.utils.roundToCurrency
+import com.erpnext.pos.views.CashBoxManager
 import com.erpnext.pos.views.POSContext
-import kotlin.time.Clock
-import kotlin.time.ExperimentalTime
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlin.time.Clock
+import kotlin.time.ExperimentalTime
 
 @OptIn(ExperimentalTime::class)
 class ReconciliationViewModel(
@@ -164,9 +164,18 @@ class ReconciliationViewModel(
         val endMillis = activeCashbox.cashbox.periodEndDate?.let {
             parseErpDateTimeToEpochMillis(it)
         } ?: Clock.System.now().toEpochMilliseconds()
-        val openingEntryId = activeCashbox.cashbox.openingEntryId
+        val openingEntryId = cashBoxManager.resolveOpeningEntryForReporting()
+            ?: activeCashbox.cashbox.openingEntryId
+                ?.trim()
+                ?.takeIf { it.isNotBlank() }
         val invoices = if (!openingEntryId.isNullOrBlank()) {
-            salesInvoiceDao.getInvoicesForOpeningEntry(openingEntryId)
+            salesInvoiceDao.getInvoicesForOpeningEntry(openingEntryId).ifEmpty {
+                salesInvoiceDao.getInvoicesForShift(
+                    profileId = context.profileName,
+                    startMillis = startMillis,
+                    endMillis = endMillis
+                )
+            }
         } else {
             salesInvoiceDao.getInvoicesForShift(
                 profileId = context.profileName,
@@ -178,7 +187,13 @@ class ReconciliationViewModel(
         val posCurrency = normalizeCurrency(context.currency)
         val rateCache = mutableMapOf<String, Double>()
         val paymentRows = if (!openingEntryId.isNullOrBlank()) {
-            salesInvoiceDao.getPaymentsForOpeningEntry(openingEntryId)
+            salesInvoiceDao.getPaymentsForOpeningEntry(openingEntryId).ifEmpty {
+                salesInvoiceDao.getShiftPayments(
+                    profileId = context.profileName,
+                    startMillis = startMillis,
+                    endMillis = endMillis
+                )
+            }
         } else {
             salesInvoiceDao.getShiftPayments(
                 profileId = context.profileName,
@@ -192,9 +207,13 @@ class ReconciliationViewModel(
             paymentMethodLocalRepository.getMethodsForProfile(context.profileName)
         val modeCurrency = resolvedMethods
             .mapNotNull { method ->
-                val currency = method.currency?.takeIf { it.isNotBlank() }
-                    ?.let { normalizeCurrency(it) }
-                currency?.let { method.mopName to it }
+                val modeKey = normalizeModeKey(method.mopName)
+                val currency = normalizeCurrencyOrNull(method.currency)
+                if (modeKey == null || currency == null) {
+                    null
+                } else {
+                    modeKey to currency
+                }
             }
             .toMap()
         val cashMethodsByCurrency =
@@ -204,37 +223,52 @@ class ReconciliationViewModel(
             )
         val cashModeCurrency = cashMethodsByCurrency.flatMap { (currency, methods) ->
             val normalized = normalizeCurrency(currency)
-            methods.map { it.mopName to normalized }
+            methods.mapNotNull { method ->
+                sanitizeModeName(method.mopName)?.let { it to normalized }
+            }
         }.toMap()
+        val cashModeCurrencyByKey = cashModeCurrency.mapNotNull { (mode, currency) ->
+            normalizeModeKey(mode)?.let { modeKey -> modeKey to currency }
+        }.toMap()
+        val resolvedModeCurrency = modeCurrency + cashModeCurrencyByKey
         val cashCurrencies = cashMethodsByCurrency.keys.map {
             normalizeCurrency(it)
         }.distinct().sorted()
+        val configuredCashModes = cashMethodsByCurrency.values
+            .flatten()
+            .mapNotNull { sanitizeModeName(it.mopName) }
         val paymentsByMode =
             aggregatePaymentsByMode(
                 invoices,
                 paymentRowsFiltered,
                 posCurrency,
-                modeCurrency,
+                resolvedModeCurrency,
                 rateCache
             )
-        val cashModes = resolveCashModes(context, openingByMode)
+        val cashModes = resolveCashModes(context, openingByMode, configuredCashModes)
         val paymentsCashByCurrency =
             aggregateCashByCurrency(
                 paymentRowsFiltered,
                 invoices,
                 posCurrency,
                 cashModes,
+                resolvedModeCurrency,
                 rateCache
             )
         val paymentsByCurrency =
-            aggregatePaymentsByCurrency(invoices, paymentRowsFiltered, posCurrency)
+            aggregatePaymentsByCurrency(
+                invoices,
+                paymentRowsFiltered,
+                posCurrency,
+                resolvedModeCurrency
+            )
         val availableModes = context.paymentModes.mapNotNull { mode ->
             mode.modeOfPayment.takeIf { it.isNotBlank() }
         }
         // Construye el esperado por modo (apertura + pagos del turno).
         val expectedByMode = buildExpectedByMode(openingByMode, paymentsByMode, availableModes)
         val openingByCurrency =
-            mapOpeningByCurrency(openingByMode, modeCurrency)
+            mapOpeningByCurrency(openingByMode, resolvedModeCurrency, posCurrency)
         // El total esperado en caja solo debe contemplar modos de efectivo y en moneda POS.
         val expectedTotal = roundToCurrency(
             (openingByCurrency[posCurrency.uppercase()] ?: 0.0) +
@@ -259,13 +293,14 @@ class ReconciliationViewModel(
             paymentRows = paymentRowsFiltered,
             cashModes = cashModes,
             posCurrency = posCurrency,
+            modeCurrency = resolvedModeCurrency,
             rateCache = rateCache
         )
         val expensesByCurrency =
             convertAmountForCurrencies(0.0, posCurrency, currencySet, rateCache)
         return ReconciliationSummaryUi(
             posProfile = context.profileName,
-            openingEntryId = activeCashbox.cashbox.openingEntryId.orEmpty(),
+            openingEntryId = openingEntryId.orEmpty(),
             cashierName = context.cashier.firstName,
             periodStart = activeCashbox.cashbox.periodStartDate,
             periodEnd = activeCashbox.cashbox.periodEndDate,
@@ -305,6 +340,7 @@ class ReconciliationViewModel(
         invoices: List<SalesInvoiceEntity>,
         posCurrency: String,
         cashModes: Set<String>,
+        modeCurrency: Map<String, String>,
         rateCache: MutableMap<String, Double>
     ): Map<String, Double> {
         // Mapa de facturas para resolver totales y calcular vuelto real por invoice.
@@ -312,22 +348,27 @@ class ReconciliationViewModel(
         val totals = mutableMapOf<String, Double>()
         val cashRowsByInvoice = mutableMapOf<String, MutableList<ShiftPaymentRow>>()
         val nonCashBaseByInvoice = mutableMapOf<String, Double>()
-        rows.filter { isCashModeName(it.modeOfPayment) || cashModes.contains(it.modeOfPayment) }
-            .forEach { row ->
-                val payCurrency = resolvePaymentCurrency(row)
+        val cashModeKeys = cashModes.mapNotNull(::normalizeModeKey).toSet()
+        for (row in rows) {
+            if (isCashMode(row.modeOfPayment, cashModeKeys)) {
+                val payCurrency = resolvePaymentCurrency(row, posCurrency, modeCurrency)
                 val normalizedCurrency = payCurrency.uppercase()
                 // Para efectivo sumamos lo recibido (entered_amount) si existe.
-                val amountInPayCurrency = resolvePaymentAmount(row, payCurrency)
+                val amountInPayCurrency = resolvePaymentAmount(
+                    row = row,
+                    paymentCurrency = payCurrency,
+                    posCurrency = posCurrency,
+                    rateCache = rateCache
+                )
                 totals[normalizedCurrency] =
                     (totals[normalizedCurrency] ?: 0.0) + amountInPayCurrency
                 cashRowsByInvoice.getOrPut(row.invoiceName) { mutableListOf() }.add(row)
-            }
-        rows.filterNot { isCashModeName(it.modeOfPayment) || cashModes.contains(it.modeOfPayment) }
-            .forEach { row ->
+            } else {
                 // Pagos no efectivo en base (POS) para descontar del total de la factura.
                 nonCashBaseByInvoice[row.invoiceName] =
                     (nonCashBaseByInvoice[row.invoiceName] ?: 0.0) + row.amount
             }
+        }
         // Calculamos vuelto por factura para restarlo en la moneda donde realmente se entregó.
         cashRowsByInvoice.forEach { (invoiceName, cashRows) ->
             val invoice = invoicesByName[invoiceName] ?: return@forEach
@@ -338,7 +379,7 @@ class ReconciliationViewModel(
             val cashPaidBase = cashRows.sumOf { it.amount }
             val changeBase = (cashPaidBase - cashDue).takeIf { it > 0.0 } ?: 0.0
             if (changeBase <= 0.0) return@forEach
-            val changeCurrency = resolveChangeCurrency(cashRows, posCurrency)
+            val changeCurrency = resolveChangeCurrency(cashRows, posCurrency, modeCurrency)
             val changeInCurrency = if (changeCurrency.equals(invoiceCurrency, ignoreCase = true)) {
                 changeBase
             } else {
@@ -361,9 +402,10 @@ class ReconciliationViewModel(
     private fun resolveChangeCurrency(
         cashRows: List<ShiftPaymentRow>,
         posCurrency: String,
+        modeCurrency: Map<String, String>
     ): String {
         val dominantRow = cashRows.maxByOrNull { it.amount }
-        return dominantRow?.let { resolvePaymentCurrency(it) }
+        return dominantRow?.let { resolvePaymentCurrency(it, posCurrency, modeCurrency) }
             ?: posCurrency
     }
 
@@ -371,14 +413,21 @@ class ReconciliationViewModel(
         invoices: List<SalesInvoiceEntity>,
         rows: List<ShiftPaymentRow>,
         posCurrency: String,
+        modeCurrency: Map<String, String>
     ): Map<String, Double> {
         val totals = mutableMapOf<String, Double>()
         val paymentsByInvoice = mutableMapOf<String, Double>()
         val invoiceByName = invoices.associateBy { it.invoiceName }
-        rows.forEach { row ->
-            val payCurrency = resolvePaymentCurrency(row)
+        val rateCache = mutableMapOf<String, Double>()
+        for (row in rows) {
+            val payCurrency = resolvePaymentCurrency(row, posCurrency, modeCurrency)
             val normalizedCurrency = payCurrency.uppercase()
-            val amount = resolvePaymentAmount(row, payCurrency)
+            val amount = resolvePaymentAmount(
+                row = row,
+                paymentCurrency = payCurrency,
+                posCurrency = posCurrency,
+                rateCache = rateCache
+            )
             totals[normalizedCurrency] = (totals[normalizedCurrency] ?: 0.0) + amount
 
             val invoice = invoiceByName[row.invoiceName]
@@ -422,36 +471,108 @@ class ReconciliationViewModel(
     // Prioriza la moneda capturada en el pago; si falta, usa la del modo; último recurso la del POS.
     private fun resolvePaymentCurrency(
         row: ShiftPaymentRow,
+        posCurrency: String,
+        modeCurrency: Map<String, String>
     ): String {
-        val fromRow = normalizeCurrency(row.paymentCurrency)
-        return fromRow.uppercase()
+        val fromRow = row.paymentCurrency
+            ?.trim()
+            ?.takeIf { it.isNotBlank() }
+            ?.let(::normalizeCurrency)
+        if (!fromRow.isNullOrBlank()) return fromRow
+
+        val fromMode = normalizeModeKey(row.modeOfPayment)
+            ?.let { modeCurrency[it] }
+            ?.trim()
+            ?.takeIf { it.isNotBlank() }
+            ?.let(::normalizeCurrency)
+        if (!fromMode.isNullOrBlank()) return fromMode
+
+        val fromInvoice = row.invoiceCurrency
+            ?.trim()
+            ?.takeIf { it.isNotBlank() }
+            ?.let(::normalizeCurrency)
+        if (!fromInvoice.isNullOrBlank()) return fromInvoice
+
+        val fromPartyAccount = row.partyAccountCurrency
+            ?.trim()
+            ?.takeIf { it.isNotBlank() }
+            ?.let(::normalizeCurrency)
+        if (!fromPartyAccount.isNullOrBlank()) return fromPartyAccount
+
+        return normalizeCurrency(posCurrency)
     }
 
-    private fun resolvePaymentAmount(row: ShiftPaymentRow, paymentCurrency: String): Double {
+    private suspend fun resolvePaymentAmount(
+        row: ShiftPaymentRow,
+        paymentCurrency: String,
+        posCurrency: String,
+        rateCache: MutableMap<String, Double>
+    ): Double {
+        val normalizedPaymentCurrency = normalizeCurrency(paymentCurrency)
+        val invoiceCurrency = normalizeCurrency(
+            row.invoiceCurrency
+                ?: row.partyAccountCurrency
+                ?: posCurrency
+        )
         // entered_amount es el monto en la moneda efectivamente recibida.
-        if (row.enteredAmount > 0.0) return row.enteredAmount
+        if (row.enteredAmount > 0.0) {
+            val looksInconsistent = !normalizedPaymentCurrency.equals(
+                invoiceCurrency,
+                ignoreCase = true
+            ) && almostEquals(row.enteredAmount, row.amount)
+            if (!looksInconsistent) return row.enteredAmount
+        }
 
         if (row.exchangeRate > 0.0 && paymentCurrency.isNotBlank()) {
             // amount está en moneda de factura, exchangeRate es pago -> factura.
-            return row.amount / row.exchangeRate
+            val converted = row.amount / row.exchangeRate
+            if (converted > 0.0 && !converted.isNaN() && !converted.isInfinite()) {
+                return converted
+            }
+        }
+
+        if (!normalizedPaymentCurrency.equals(invoiceCurrency, ignoreCase = true)) {
+            val key = "${invoiceCurrency.uppercase()}->${normalizedPaymentCurrency.uppercase()}"
+            val rate = rateCache.getOrPut(key) {
+                cashBoxManager.resolveExchangeRateBetween(
+                    invoiceCurrency,
+                    normalizedPaymentCurrency,
+                    allowNetwork = false
+                ) ?: 1.0
+            }
+            if (rate > 0.0) {
+                val converted = row.amount * rate
+                if (converted > 0.0 && !converted.isNaN() && !converted.isInfinite()) {
+                    return converted
+                }
+            }
         }
         return row.amount
+    }
+
+    private fun almostEquals(left: Double, right: Double, epsilon: Double = 0.01): Boolean {
+        return kotlin.math.abs(left - right) <= epsilon
     }
 
     private fun resolveModeCurrency(
         mode: String,
         modeCurrency: Map<String, String>,
+        posCurrency: String
     ): String {
-        return normalizeCurrency(modeCurrency[mode])
+        val fromMode = normalizeModeKey(mode)
+            ?.let { modeCurrency[it] }
+            ?.let(::normalizeCurrencyOrNull)
+        return fromMode ?: normalizeCurrency(posCurrency)
     }
 
     private fun mapOpeningByCurrency(
         openingByMode: Map<String, Double>,
-        modeCurrency: Map<String, String>
+        modeCurrency: Map<String, String>,
+        posCurrency: String
     ): Map<String, Double> {
         val acc = mutableMapOf<String, Double>()
         openingByMode.forEach { (mode, amount) ->
-            val currency = resolveModeCurrency(mode, modeCurrency)
+            val currency = resolveModeCurrency(mode, modeCurrency, posCurrency)
             acc[currency] = (acc[currency] ?: 0.0) + amount
         }
         return acc.mapValues { roundToCurrency(it.value) }
@@ -502,9 +623,14 @@ class ReconciliationViewModel(
         val totals = mutableMapOf<String, Double>()
         val paymentsByInvoice = mutableMapOf<String, Double>()
         val invoiceByName = invoices.associateBy { it.invoiceName }
-        rows.forEach { row ->
-            val payCurrency = resolvePaymentCurrency(row)
-            val amount = resolvePaymentAmount(row, payCurrency)
+        for (row in rows) {
+            val payCurrency = resolvePaymentCurrency(row, posCurrency, modeCurrency)
+            val amount = resolvePaymentAmount(
+                row = row,
+                paymentCurrency = payCurrency,
+                posCurrency = posCurrency,
+                rateCache = rateCache
+            )
             totals[row.modeOfPayment] = (totals[row.modeOfPayment] ?: 0.0) + amount
             val invoice = invoiceByName[row.invoiceName]
             val receivableCurrency = normalizeCurrency(invoice?.partyAccountCurrency)
@@ -538,7 +664,7 @@ class ReconciliationViewModel(
             if (delta > 0.005) {
                 val mode =
                     invoice.modeOfPayment?.takeIf { it.isNotBlank() } ?: UNASSIGNED_PAYMENT_MODE
-                val targetCurrency = resolveModeCurrency(mode, modeCurrency)
+                val targetCurrency = resolveModeCurrency(mode, modeCurrency, posCurrency)
                 val adjusted = if (targetCurrency.equals(invoiceCurrency, ignoreCase = true)) {
                     delta
                 } else {
@@ -561,17 +687,33 @@ class ReconciliationViewModel(
 
     private fun resolveCashModes(
         context: POSContext,
-        openingByMode: Map<String, Double>
+        openingByMode: Map<String, Double>,
+        configuredCashModes: List<String>
     ): Set<String> {
-        val direct = context.paymentModes.filter { mode ->
-            mode.type?.equals(
-                "Cash",
-                ignoreCase = true
-            ) == true || isCashModeName(mode.modeOfPayment)
-        }.map { it.modeOfPayment }
-        if (direct.isNotEmpty()) return direct.toSet()
-        val fallback = openingByMode.keys.filter { mode -> isCashModeName(mode) }
-        return if (fallback.isNotEmpty()) fallback.toSet() else openingByMode.keys
+        val fromRepository = configuredCashModes.mapNotNull(::sanitizeModeName).toSet()
+        if (fromRepository.isNotEmpty()) return fromRepository
+
+        val configuredByType = context.paymentModes
+            .filter { mode -> mode.type?.equals("Cash", ignoreCase = true) == true }
+            .flatMap { mode -> listOf(mode.modeOfPayment, mode.name) }
+            .mapNotNull(::sanitizeModeName)
+            .toSet()
+        if (configuredByType.isNotEmpty()) return configuredByType
+
+        val direct = context.paymentModes
+            .flatMap { mode -> listOf(mode.modeOfPayment, mode.name) }
+            .mapNotNull(::sanitizeModeName)
+            .filter(::isCashModeName)
+            .toSet()
+        if (direct.isNotEmpty()) return direct
+
+        val fallback = openingByMode.keys
+            .mapNotNull(::sanitizeModeName)
+            .filter(::isCashModeName)
+            .toSet()
+        return fallback.ifEmpty {
+            openingByMode.keys.mapNotNull(::sanitizeModeName).toSet()
+        }
     }
 
     private fun isCashModeName(mode: String?): Boolean {
@@ -579,6 +721,25 @@ class ReconciliationViewModel(
         val normalized = mode.trim()
         return normalized.contains("cash", ignoreCase = true) ||
                 normalized.contains("efectivo", ignoreCase = true)
+    }
+
+    private fun isCashMode(mode: String?, cashModeKeys: Set<String>): Boolean {
+        if (isCashModeName(mode)) return true
+        val key = normalizeModeKey(mode) ?: return false
+        return cashModeKeys.contains(key)
+    }
+
+    private fun sanitizeModeName(mode: String?): String? {
+        return mode?.trim()?.takeIf { it.isNotBlank() }
+    }
+
+    private fun normalizeModeKey(mode: String?): String? {
+        return sanitizeModeName(mode)?.uppercase()
+    }
+
+    private fun normalizeCurrencyOrNull(value: String?): String? {
+        val normalized = value?.trim()?.takeIf { it.isNotBlank() } ?: return null
+        return normalizeCurrency(normalized)
     }
 
     private suspend fun updateClosingAmounts(
@@ -623,6 +784,7 @@ class ReconciliationViewModel(
         paymentRows: List<ShiftPaymentRow>,
         cashModes: Set<String>,
         posCurrency: String,
+        modeCurrency: Map<String, String>,
         rateCache: MutableMap<String, Double>
     ): CreditTotals {
         // Separamos pagos parciales (paid) y pendientes (outstanding) por moneda.
@@ -632,10 +794,19 @@ class ReconciliationViewModel(
         var pendingTotal = 0.0
 
         // Pagos parciales en efectivo por moneda real recibida
-        val cashPartialsByCurrency = paymentRows
-            .filter { cashModes.contains(it.modeOfPayment) }
-            .groupBy { resolvePaymentCurrency(it) }
-            .mapValues { entry -> entry.value.sumOf { resolvePaymentAmount(it, entry.key) } }
+        val cashModeKeys = cashModes.mapNotNull(::normalizeModeKey).toSet()
+        val cashPartialsByCurrency = mutableMapOf<String, Double>()
+        for (row in paymentRows) {
+            if (!isCashMode(row.modeOfPayment, cashModeKeys)) continue
+            val currency = resolvePaymentCurrency(row, posCurrency, modeCurrency)
+            val amount = resolvePaymentAmount(
+                row = row,
+                paymentCurrency = currency,
+                posCurrency = posCurrency,
+                rateCache = rateCache
+            )
+            cashPartialsByCurrency[currency] = (cashPartialsByCurrency[currency] ?: 0.0) + amount
+        }
 
         invoices.forEach { invoice ->
             // Solo consideramos facturas con saldo pendiente para crédito.

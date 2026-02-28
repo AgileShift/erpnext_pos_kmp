@@ -38,6 +38,7 @@ import com.erpnext.pos.views.CashBoxManager
 import com.erpnext.pos.views.PaymentModeWithAmount
 import com.erpnext.pos.views.reconciliation.ReconciliationMode
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -60,6 +61,7 @@ import kotlinx.datetime.number
 import kotlinx.datetime.plus
 import kotlinx.datetime.toInstant
 import kotlinx.datetime.toLocalDateTime
+import kotlin.math.abs
 import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
 
@@ -163,9 +165,14 @@ class HomeViewModel(
             }
         }
         viewModelScope.launch {
-            generalPreferences.salesTargetMonthly.collectLatest {
-                refreshSalesTarget()
-            }
+            generalPreferences.salesTargetMonthly
+                .distinctUntilChanged()
+                .collectLatest { monthlyLocal ->
+                    refreshSalesTargetSafely(
+                        source = "sales-target-flow",
+                        monthlyFromFlow = monthlyLocal.takeIf { it > 0.0 }
+                    )
+                }
         }
         viewModelScope.launch {
             homeRefreshController.events.collectLatest {
@@ -239,7 +246,7 @@ class HomeViewModel(
                 AppLogger.info("HomeViewModel.loadInitialData -> profiles loaded")
                 loadMetricsForActiveShift()
                 refreshInventoryAlerts()
-                refreshSalesTarget()
+                refreshSalesTargetSafely(source = "load-initial")
                 _stateFlow.update { HomeState.POSProfiles(posProfiles, userInfo) }
                 AppLogger.info("HomeViewModel.loadInitialData -> done")
             }
@@ -256,7 +263,7 @@ class HomeViewModel(
             action = {
                 loadMetricsForActiveShift()
                 refreshInventoryAlerts()
-                refreshSalesTarget()
+                refreshSalesTargetSafely(source = "refresh-metrics")
             },
             exceptionHandler = { it.printStackTrace() },
             loadingMessage = "Actualizando métricas..."
@@ -279,6 +286,11 @@ class HomeViewModel(
     }
 
     private suspend fun resolveMetricsOpeningEntryId(): String? {
+        val fromReporting = contextManager.resolveOpeningEntryForReporting()
+            ?.trim()
+            ?.takeIf { it.isNotBlank() }
+        if (!fromReporting.isNullOrBlank()) return fromReporting
+
         val fromFlow = openingEntryId.value?.trim()?.takeIf { it.isNotBlank() }
         if (!fromFlow.isNullOrBlank()) return fromFlow
         return contextManager.getActiveCashboxWithDetails()
@@ -512,15 +524,31 @@ class HomeViewModel(
             .coerceAtLeast(1_000L)
     }
 
-    private suspend fun refreshSalesTarget() {
+    private suspend fun refreshSalesTargetSafely(
+        source: String,
+        monthlyFromFlow: Double? = null
+    ) {
+        runCatching {
+            refreshSalesTarget(monthlyFromFlow)
+        }.onFailure { error ->
+            if (error is CancellationException) throw error
+            AppLogger.warn("HomeViewModel.refreshSalesTarget[$source] -> error", error)
+        }
+    }
+
+    private suspend fun refreshSalesTarget(monthlyFromFlow: Double? = null) {
         val ctx = contextManager.getContext()
         val current = _homeMetrics.value.salesTarget
         val monthlyFromContext = ctx?.monthlySalesTarget?.takeIf { it > 0.0 }
         val monthlyFromBootstrap = bootstrapContextPreferences.load().monthlySalesTarget
             ?.takeIf { it > 0.0 }
-        val monthlyFromLocal = generalPreferences.getSalesTargetMonthly()
+        val monthlyFromLocal = (monthlyFromFlow ?: generalPreferences.getSalesTargetMonthly())
             .takeIf { it > 0.0 }
         val monthly = monthlyFromContext ?: monthlyFromBootstrap ?: monthlyFromLocal
+
+        if (monthly != null && (monthlyFromLocal == null || abs(monthlyFromLocal - monthly) > 0.0001)) {
+            generalPreferences.setSalesTargetMonthly(monthly)
+        }
 
         if (monthly == null) {
             if (ctx == null && current != null) return

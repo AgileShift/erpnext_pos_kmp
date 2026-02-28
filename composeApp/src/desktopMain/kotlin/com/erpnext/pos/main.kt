@@ -2,6 +2,10 @@ package com.erpnext.pos
 
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.PointOfSale
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Window
@@ -31,14 +35,20 @@ fun main() = application {
         title = "ERPNext POS",
         state = state,
     ) {
-        KoinApplication(application = {
-            printLogger(Level.DEBUG)
-            modules(
-                appModule,
-                desktopModule
-            )
-        }) {
-            AppNavigation()
+        val restartToken by DesktopRuntimeRestart.restartToken.collectAsState()
+        LaunchedEffect(restartToken) {
+            DesktopLogger.info("Desktop runtime restart token=$restartToken")
+        }
+        key(restartToken) {
+            KoinApplication(application = {
+                printLogger(Level.DEBUG)
+                modules(
+                    appModule,
+                    desktopModule
+                )
+            }) {
+                AppNavigation()
+            }
         }
     }
 }

@@ -82,6 +82,10 @@ interface SalesInvoiceDao {
     @Query("SELECT * FROM tabSalesInvoice WHERE is_deleted = 0 AND invoice_name = :invoiceName LIMIT 1")
     suspend fun getInvoiceByName(invoiceName: String): SalesInvoiceWithItemsAndPayments?
 
+    @Transaction
+    @Query("SELECT * FROM tabSalesInvoice WHERE invoice_name = :invoiceName LIMIT 1")
+    suspend fun getInvoiceByNameAny(invoiceName: String): SalesInvoiceWithItemsAndPayments?
+
     @Query(
         """
         SELECT debit_to
@@ -777,6 +781,40 @@ interface SalesInvoiceDao {
         invoiceName: String,
         posOpeningEntry: String
     )
+
+    @Query(
+        """
+        UPDATE tabSalesInvoiceItem
+        SET parent_invoice = :newInvoiceName
+        WHERE parent_invoice = :oldInvoiceName
+        """
+    )
+    suspend fun updateItemsParentInvoice(
+        oldInvoiceName: String,
+        newInvoiceName: String
+    )
+
+    @Query(
+        """
+        UPDATE tabSalesInvoicePayment
+        SET parent_invoice = :newInvoiceName
+        WHERE parent_invoice = :oldInvoiceName
+        """
+    )
+    suspend fun updatePaymentsParentInvoice(
+        oldInvoiceName: String,
+        newInvoiceName: String
+    )
+
+    @Transaction
+    suspend fun rebindChildrenToInvoice(
+        oldInvoiceName: String,
+        newInvoiceName: String
+    ) {
+        if (oldInvoiceName == newInvoiceName) return
+        updateItemsParentInvoice(oldInvoiceName, newInvoiceName)
+        updatePaymentsParentInvoice(oldInvoiceName, newInvoiceName)
+    }
 
     @Query(
         """

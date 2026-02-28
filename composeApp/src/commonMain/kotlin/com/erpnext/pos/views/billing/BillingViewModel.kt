@@ -34,6 +34,7 @@ import com.erpnext.pos.domain.usecases.UpdateLocalInvoiceFromRemoteUseCase
 import com.erpnext.pos.domain.utils.UUIDGenerator
 import com.erpnext.pos.localSource.dao.ModeOfPaymentDao
 import com.erpnext.pos.localSource.entities.ModeOfPaymentEntity
+import com.erpnext.pos.localSource.preferences.GeneralPreferences
 import com.erpnext.pos.localSource.preferences.LanguagePreferences
 import com.erpnext.pos.localization.AppLanguage
 import com.erpnext.pos.navigation.NavRoute
@@ -56,6 +57,7 @@ import com.erpnext.pos.utils.roundForCurrency
 import com.erpnext.pos.utils.roundToCurrency
 import com.erpnext.pos.utils.toCurrencySymbol
 import com.erpnext.pos.utils.view.DateTimeProvider
+import com.erpnext.pos.utils.NetworkMonitor
 import com.erpnext.pos.views.CashBoxManager
 import com.erpnext.pos.views.POSContext
 import com.erpnext.pos.views.payment.PaymentHandler
@@ -66,6 +68,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -91,6 +94,8 @@ class BillingViewModel(
     private val paymentHandler: PaymentHandler,
     private val billingResetController: BillingResetController,
     private val languagePreferences: LanguagePreferences,
+    private val generalPreferences: GeneralPreferences,
+    private val networkMonitor: NetworkMonitor,
 ) : BaseViewModel() {
 
     private val _state: MutableStateFlow<BillingState> = MutableStateFlow(BillingState.Loading)
@@ -902,10 +907,18 @@ class BillingViewModel(
                     )
                 )
 
-                val createdResult = runCatching {
-                    createSalesInvoiceRemoteOnlyUseCase(
-                        CreateSalesInvoiceRemoteOnlyInput(invoiceDto.copy(name = null))
-                    )
+                val offlineModeEnabled = generalPreferences.getOfflineMode()
+                val isOnline = networkMonitor.isConnected.first()
+                val shouldAttemptRemote = isOnline && !offlineModeEnabled
+
+                val createdResult = if (shouldAttemptRemote) {
+                    runCatching {
+                        createSalesInvoiceRemoteOnlyUseCase(
+                            CreateSalesInvoiceRemoteOnlyInput(invoiceDto.copy(name = null))
+                        )
+                    }
+                } else {
+                    Result.success(null)
                 }
                 val created = createdResult.getOrNull()
                 val remoteErrorMessage = createdResult.exceptionOrNull()

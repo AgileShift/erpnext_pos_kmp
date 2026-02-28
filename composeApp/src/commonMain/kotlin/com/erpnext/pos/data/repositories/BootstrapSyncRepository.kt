@@ -789,7 +789,11 @@ class BootstrapSyncRepository(
 
     private suspend fun persistCompany(snapshot: Snapshot) {
         val companies = snapshot.data.resolvedCompanies
-        if (companies.isEmpty()) return
+        if (companies.isEmpty()) {
+            companyDao.softDeleteAll()
+            companyDao.hardDeleteAllDeleted()
+            return
+        }
         companies.forEach { company ->
             val companyName = company.resolvedCompanyName?.trim()?.takeIf { it.isNotBlank() }
                 ?: return@forEach
@@ -976,7 +980,17 @@ class BootstrapSyncRepository(
     }
 
     private suspend fun persistInvoices(snapshot: Snapshot) {
-        val invoices = snapshot.data.invoices.toEntities()
+        val fallbackProfile = resolveBootstrapContextProfile(snapshot)
+        val fallbackOpening = resolveBootstrapContextOpening(snapshot)
+        val invoices = snapshot.data.invoices
+            .toEntities()
+            .map { payload ->
+                normalizeInvoicePayload(
+                    payload = payload,
+                    fallbackProfile = fallbackProfile,
+                    fallbackOpening = fallbackOpening
+                )
+            }
         if (invoices.isNotEmpty()) {
             customerLocalSource.saveInvoices(invoices)
         }
@@ -985,7 +999,14 @@ class BootstrapSyncRepository(
                 ?.trim()
                 ?.takeIf { it.isNotBlank() }
         }.distinct()
-        invoiceLocalSource.softDeleteMissingRemoteInvoices(invoiceNames)
+        if (shouldSoftDeleteMissingInvoices(invoiceNames.size)) {
+            invoiceLocalSource.softDeleteMissingRemoteInvoices(invoiceNames)
+        } else {
+            AppLogger.warn(
+                "BootstrapSyncRepository.persistInvoices: snapshot incompleto, " +
+                    "se omite soft-delete de facturas (fetched=${invoiceNames.size})"
+            )
+        }
         val customerIds = snapshot.data.customers
             .map { it.name }
             .filter { it.isNotBlank() }
@@ -1003,7 +1024,10 @@ class BootstrapSyncRepository(
     }
 
     private suspend fun persistPaymentEntriesSnapshot(snapshot: Snapshot) {
-        val payments = buildInvoicePaymentRowsFromPaymentEntries(snapshot.data.paymentEntries)
+        val payments = buildInvoicePaymentRowsFromPaymentEntries(
+            entries = snapshot.data.paymentEntries,
+            fallbackOpening = resolveBootstrapContextOpening(snapshot)
+        )
         val remoteEntryNames = payments
             .mapNotNull { it.remotePaymentEntry?.trim()?.takeIf { value -> value.isNotBlank() } }
             .distinct()
@@ -1021,17 +1045,18 @@ class BootstrapSyncRepository(
     }
 
     private suspend fun buildInvoicePaymentRowsFromPaymentEntries(
-        entries: List<PaymentEntryDto>
+        entries: List<PaymentEntryDto>,
+        fallbackOpening: String?
     ): List<POSInvoicePaymentEntity> {
         if (entries.isEmpty()) return emptyList()
 
-        val existingInvoiceCache = mutableMapOf<String, Boolean>()
+        val existingInvoiceCache = mutableMapOf<String, com.erpnext.pos.localSource.entities.SalesInvoiceWithItemsAndPayments?>()
 
-        suspend fun invoiceExists(invoiceName: String): Boolean {
+        suspend fun localInvoice(invoiceName: String): com.erpnext.pos.localSource.entities.SalesInvoiceWithItemsAndPayments? {
             existingInvoiceCache[invoiceName]?.let { return it }
-            val exists = invoiceLocalSource.getInvoiceByName(invoiceName) != null
-            existingInvoiceCache[invoiceName] = exists
-            return exists
+            val wrapper = invoiceLocalSource.getInvoiceByNameAny(invoiceName)
+            existingInvoiceCache[invoiceName] = wrapper
+            return wrapper
         }
 
         val rows = mutableListOf<POSInvoicePaymentEntity>()
@@ -1039,6 +1064,7 @@ class BootstrapSyncRepository(
             val remotePaymentEntry = entry.name?.trim()?.takeIf { it.isNotBlank() } ?: continue
             val modeOfPayment = entry.modeOfPayment?.trim()?.takeIf { it.isNotBlank() } ?: continue
             val postingDate = entry.postingDate?.trim()?.takeIf { it.isNotBlank() }
+            val openingFromEntry = entry.posOpeningEntry?.trim()?.takeIf { it.isNotBlank() }
             val paymentCurrency = entry.paidToAccountCurrency
                 ?.trim()
                 ?.takeIf { it.isNotBlank() }
@@ -1047,27 +1073,177 @@ class BootstrapSyncRepository(
             entry.references.forEach { reference ->
                 if (!reference.referenceDoctype.equals("Sales Invoice", ignoreCase = true)) return@forEach
                 val invoiceName = reference.referenceName?.trim()?.takeIf { it.isNotBlank() } ?: return@forEach
-                if (!invoiceExists(invoiceName)) return@forEach
+                val wrapper = localInvoice(invoiceName) ?: return@forEach
+                val invoice = wrapper.invoice
 
                 val allocatedAmount = reference.allocatedAmount
                 if (allocatedAmount == 0.0) return@forEach
+                val paidAmount = entry.paidAmount
+                val receivedAmount = entry.receivedAmount
+                val allocatedRatio = if (paidAmount > 0.0) {
+                    (allocatedAmount / paidAmount).coerceIn(0.0, 1.0)
+                } else {
+                    1.0
+                }
+                val enteredAmount = if (receivedAmount > 0.0 && paidAmount > 0.0) {
+                    receivedAmount * allocatedRatio
+                } else {
+                    allocatedAmount
+                }
+                val exchangeRate = when {
+                    enteredAmount > 0.0 -> allocatedAmount / enteredAmount
+                    else -> 1.0
+                }
+                val openingFromReference = reference.posOpeningEntry?.trim()?.takeIf { it.isNotBlank() }
+                val openingFromExistingPaymentMatch = wrapper.payments.firstOrNull { payment ->
+                    payment.remotePaymentEntry?.equals(remotePaymentEntry, ignoreCase = true) == true &&
+                        !payment.posOpeningEntry.isNullOrBlank()
+                }?.posOpeningEntry
+                val openingFromAnyExistingPayment = wrapper.payments
+                    .firstOrNull { !it.posOpeningEntry.isNullOrBlank() }
+                    ?.posOpeningEntry
 
                 rows += POSInvoicePaymentEntity(
                     parentInvoice = invoiceName,
                     modeOfPayment = modeOfPayment,
                     amount = allocatedAmount,
-                    enteredAmount = allocatedAmount,
+                    enteredAmount = enteredAmount,
                     paymentCurrency = paymentCurrency,
-                    exchangeRate = 1.0,
+                    exchangeRate = exchangeRate,
                     paymentReference = remotePaymentEntry,
                     remotePaymentEntry = remotePaymentEntry,
                     paymentDate = postingDate,
-                    posOpeningEntry = null,
+                    posOpeningEntry = openingFromReference
+                        ?: openingFromEntry
+                        ?: openingFromExistingPaymentMatch
+                        ?: openingFromAnyExistingPayment
+                        ?: invoice.posOpeningEntry?.takeIf { it.isNotBlank() }
+                        ?: fallbackOpening,
                     syncStatus = "Synced"
                 )
             }
         }
         return rows
+    }
+
+    private suspend fun normalizeInvoicePayload(
+        payload: com.erpnext.pos.localSource.entities.SalesInvoiceWithItemsAndPayments,
+        fallbackProfile: String?,
+        fallbackOpening: String?
+    ): com.erpnext.pos.localSource.entities.SalesInvoiceWithItemsAndPayments {
+        val invoiceName = payload.invoice.invoiceName?.trim().orEmpty()
+        val local = if (invoiceName.isBlank()) null else invoiceLocalSource.getInvoiceByNameAny(invoiceName)
+        val localInvoice = local?.invoice
+
+        val resolvedProfile = payload.invoice.profileId
+            ?.takeIf { it.isNotBlank() }
+            ?: localInvoice?.profileId?.takeIf { it.isNotBlank() }
+            ?: fallbackProfile
+        val openingFromAnyLocalPayment = local?.payments
+            ?.firstOrNull { !it.posOpeningEntry.isNullOrBlank() }
+            ?.posOpeningEntry
+            ?.takeIf { it.isNotBlank() }
+        val hasPaymentSignal = payload.invoice.paidAmount > 0.0 || payload.payments.any { payment ->
+            payment.amount > 0.0 || payment.enteredAmount > 0.0 || !payment.remotePaymentEntry.isNullOrBlank()
+        }
+        val resolvedOpening = payload.invoice.posOpeningEntry
+            ?.takeIf { it.isNotBlank() }
+            ?: localInvoice?.posOpeningEntry?.takeIf { it.isNotBlank() }
+            ?: openingFromAnyLocalPayment
+            ?: fallbackOpening?.takeIf { hasPaymentSignal && it.isNotBlank() }
+
+        val normalizedInvoice = payload.invoice.copy(
+            profileId = resolvedProfile,
+            posOpeningEntry = resolvedOpening
+        )
+        val normalizedPayments = payload.payments
+            .filter { payment ->
+                payment.amount > 0.0 || payment.enteredAmount > 0.0 ||
+                    !payment.remotePaymentEntry.isNullOrBlank()
+            }
+            .map { payment ->
+                val openingFromLocalPaymentMatch = local?.payments
+                    ?.firstOrNull { existing ->
+                        existing.remotePaymentEntry?.isNotBlank() == true &&
+                            existing.remotePaymentEntry.equals(
+                                payment.remotePaymentEntry,
+                                ignoreCase = true
+                            ) &&
+                            !existing.posOpeningEntry.isNullOrBlank()
+                    }
+                    ?.posOpeningEntry
+                val openingFromLocalPaymentAny = local?.payments
+                    ?.firstOrNull { !it.posOpeningEntry.isNullOrBlank() }
+                    ?.posOpeningEntry
+                payment.copy(
+                    parentInvoice = normalizedInvoice.invoiceName.orEmpty(),
+                    posOpeningEntry = payment.posOpeningEntry
+                        ?.takeIf { it.isNotBlank() }
+                        ?: openingFromLocalPaymentMatch
+                        ?: openingFromLocalPaymentAny
+                        ?: resolvedOpening
+                )
+            }
+        return payload.copy(
+            invoice = normalizedInvoice,
+            payments = normalizedPayments
+        )
+    }
+
+    private suspend fun resolveBootstrapContextProfile(snapshot: Snapshot): String? {
+        val fromSnapshot = snapshot.data.context?.profileName
+            ?.trim()
+            ?.takeIf { it.isNotBlank() }
+        if (!fromSnapshot.isNullOrBlank()) return fromSnapshot
+
+        val raw = configurationStore.loadRaw("bootstrap.context") ?: return null
+        val root = runCatching {
+            api.json.parseToJsonElement(raw).jsonObject
+        }.getOrNull() ?: return null
+        return root["profileName"]?.jsonPrimitive?.contentOrNull
+            ?.trim()
+            ?.takeIf { it.isNotBlank() }
+    }
+
+    private suspend fun resolveBootstrapContextOpening(snapshot: Snapshot): String? {
+        val fromSnapshotRaw = (snapshot.raw["context"] as? JsonObject)?.let { context ->
+            context["pos_opening_entry"]?.jsonPrimitive?.contentOrNull
+                ?: context["posOpeningEntry"]?.jsonPrimitive?.contentOrNull
+        }?.trim()?.takeIf { it.isNotBlank() }
+        if (!fromSnapshotRaw.isNullOrBlank()) return fromSnapshotRaw
+
+        val raw = configurationStore.loadRaw("bootstrap.context") ?: return null
+        val root = runCatching {
+            api.json.parseToJsonElement(raw).jsonObject
+        }.getOrNull() ?: return null
+        return root["posOpeningEntry"]?.jsonPrimitive?.contentOrNull
+            ?.trim()
+            ?.takeIf { it.isNotBlank() }
+    }
+
+    private suspend fun shouldSoftDeleteMissingInvoices(fetchedCount: Int): Boolean {
+        val raw = configurationStore.loadRaw(KEY_BOOTSTRAP_META) ?: return false
+        val root = runCatching {
+            api.json.parseToJsonElement(raw).jsonObject
+        }.getOrNull() ?: return false
+        val invoices = root["invoices"]?.jsonObject ?: return false
+        val fetched = invoices["fetched"]?.jsonPrimitive?.intOrNull ?: fetchedCount
+        val pagination = invoices["pagination"]?.jsonObject
+        val total = pagination?.get("total")?.jsonPrimitive?.intOrNull
+        val hasMore = pagination?.get("has_more")?.jsonPrimitive?.let(::parseJsonBoolean)
+
+        if (fetched <= 0) return false
+        if (total != null && fetched < total) return false
+        if (total == null && hasMore == true) return false
+        return true
+    }
+
+    private fun parseJsonBoolean(value: JsonPrimitive): Boolean? {
+        return value.booleanOrNull
+            ?: value.intOrNull?.let { it != 0 }
+            ?: value.contentOrNull?.lowercase()?.let { token ->
+                token in setOf("1", "true", "yes")
+            }
     }
 
     private suspend fun persistInventoryAlertsSnapshot(snapshot: Snapshot) {

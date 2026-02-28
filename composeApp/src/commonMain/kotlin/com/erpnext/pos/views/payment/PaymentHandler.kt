@@ -9,6 +9,7 @@ import com.erpnext.pos.domain.usecases.SaveInvoicePaymentsUseCase
 import com.erpnext.pos.domain.utils.UUIDGenerator
 import com.erpnext.pos.localSource.datasources.InvoiceLocalSource
 import com.erpnext.pos.localSource.entities.ModeOfPaymentEntity
+import com.erpnext.pos.localSource.preferences.GeneralPreferences
 import com.erpnext.pos.remoteSource.api.APIService
 import com.erpnext.pos.remoteSource.dto.SalesInvoiceDto
 import com.erpnext.pos.utils.InvoiceReceivableAmounts
@@ -36,7 +37,8 @@ class PaymentHandler(
     private val saveInvoicePaymentsUseCase: SaveInvoicePaymentsUseCase,
     private val exchangeRateRepository: ExchangeRateRepository,
     private val invoiceLocalSource: InvoiceLocalSource,
-    private val networkMonitor: NetworkMonitor
+    private val networkMonitor: NetworkMonitor,
+    private val generalPreferences: GeneralPreferences
 ) {
 
     data class PaymentLineResult(
@@ -179,6 +181,8 @@ class PaymentHandler(
         }
 
         val isOnline = networkMonitor.isConnected.first()
+        val offlineMode = generalPreferences.getOfflineMode()
+        val shouldAttemptRemote = isOnline && !offlineMode
         val remoteEntryByReference = mutableMapOf<String, String?>()
 
         if (createdInvoice != null) {
@@ -252,7 +256,7 @@ class PaymentHandler(
                 remainingOutstandingRc = receivableAmounts.totalRc.takeIf { it > 0.0 }
             }
 
-            if (isOnline) {
+            if (shouldAttemptRemote) {
                 val paidFrom = resolvePaidFromAccount(
                     invoice = createdInvoice,
                     invoiceNameForLocal = invoiceNameForLocal,

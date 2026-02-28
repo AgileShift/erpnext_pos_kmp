@@ -467,7 +467,9 @@ class SyncManager(
                 lastError = ""
             )
             try {
-                val fetchedSnapshot = bootstrapSyncRepository.fetchSnapshot(profileName = null)
+                val fetchedSnapshot = bootstrapSyncRepository.fetchSnapshot(
+                    profileName = profileName.takeIf { it.isNotBlank() }
+                )
                 snapshot = fetchedSnapshot
                 val remoteMonthlyTarget = fetchedSnapshot.data.context?.monthlySalesTarget
                     ?.takeIf { it > 0.0 }
@@ -620,7 +622,9 @@ class SyncManager(
                         "ttl_hours" to effectiveTtlHours.toString()
                     )
                 )
-                val snapshot = bootstrapSyncRepository.fetchSnapshot(profileName = null)
+                val snapshot = bootstrapSyncRepository.fetchSnapshot(
+                    profileName = profileName.takeIf { it.isNotBlank() }
+                )
                 val remoteMonthlyTarget = snapshot.data.context?.monthlySalesTarget
                     ?.takeIf { it > 0.0 }
                 bootstrapContextPreferences.update(

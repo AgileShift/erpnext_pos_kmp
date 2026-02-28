@@ -7,6 +7,8 @@ import kotlinx.serialization.Serializable
 data class PaymentEntryDto(
     @SerialName("name")
     val name: String? = null,
+    @SerialName("pos_opening_entry")
+    val posOpeningEntry: String? = null,
     @SerialName("posting_date")
     val postingDate: String? = null,
     @SerialName("company")
@@ -43,6 +45,8 @@ data class PaymentEntryDto(
 data class PaymentEntryReferenceDto(
     @SerialName("payment_entry")
     val paymentEntry: String? = null,
+    @SerialName("pos_opening_entry")
+    val posOpeningEntry: String? = null,
     @SerialName("reference_doctype")
     val referenceDoctype: String? = null,
     @SerialName("reference_name")

@@ -78,6 +78,7 @@ import coil3.request.crossfade
 import com.erpnext.pos.NavGraph.Setup
 import com.erpnext.pos.base.getPlatformName
 import com.erpnext.pos.domain.usecases.LogoutUseCase
+import com.erpnext.pos.localSource.dao.CompanyDao
 import com.erpnext.pos.localSource.dao.UserDao
 import com.erpnext.pos.localSource.preferences.GeneralPreferences
 import com.erpnext.pos.localSource.preferences.SyncPreferences
@@ -96,6 +97,7 @@ import com.erpnext.pos.navigation.ShiftOpenChip
 import com.erpnext.pos.navigation.StatusIconButton
 import com.erpnext.pos.navigation.TopBarController
 import com.erpnext.pos.navigation.formatShiftDuration
+import com.erpnext.pos.remoteSource.oauth.AuthInfoStore
 import com.erpnext.pos.remoteSource.oauth.TokenStore
 import com.erpnext.pos.sync.SyncManager
 import com.erpnext.pos.sync.SyncState
@@ -113,6 +115,7 @@ import com.erpnext.pos.views.billing.BillingResetController
 import com.erpnext.pos.views.home.HomeRefreshController
 import com.erpnext.pos.views.inventory.InventoryRefreshController
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
 import kotlin.time.Clock
@@ -231,6 +234,8 @@ fun AppNavigation() {
     val billingResetController = koinInject<BillingResetController>()
     val logoutUseCase = koinInject<LogoutUseCase>()
     val tokenStore = koinInject<TokenStore>()
+    val authInfoStore = koinInject<AuthInfoStore>()
+    val companyDao = koinInject<CompanyDao>()
     val userDao = koinInject<UserDao>()
     val topBarController = remember { TopBarController() }
     val scope = rememberCoroutineScope()
@@ -249,8 +254,8 @@ fun AppNavigation() {
     val activityBadgeCount by activityCenter.unreadCount.collectAsState(0)
     val printerEnabled by generalPreferences.printerEnabled.collectAsState(true)
     val posContext by cashBoxManager.contextFlow.collectAsState(null)
+    val tokenSnapshot by tokenStore.tokensFlow().collectAsState(initial = null)
     val isCashboxOpen by cashBoxManager.cashboxState.collectAsState()
-    val shiftStart by cashBoxManager.activeCashboxStart().collectAsState(null)
     var profileMenuExpanded by remember { mutableStateOf(false) }
     var tick by remember { mutableStateOf(0L) }
     var settingsFromMenu by remember { mutableStateOf(false) }
@@ -263,6 +268,13 @@ fun AppNavigation() {
     }
     val visibleEntries by navController.visibleEntries.collectAsState()
     val currentRoute = visibleEntries.lastOrNull()?.destination?.route ?: ""
+    val shiftStart by produceState<String?>(initialValue = null, posContext, currentRoute) {
+        if (posContext == null || !shouldShowTopBar(currentRoute)) {
+            value = null
+            return@produceState
+        }
+        cashBoxManager.activeCashboxStart().collect { value = it }
+    }
     LaunchedEffect(currentRoute) {
         AppLogger.info("AppNavigation currentRoute -> $currentRoute")
     }
@@ -316,6 +328,35 @@ fun AppNavigation() {
         .joinToString("")
         .ifBlank { "C" }
     val companyName = posContext?.company?.takeIf { it.isNotBlank() }
+    val currentSiteUrl by produceState<String?>(initialValue = null, tokenSnapshot) {
+        value = runCatching {
+            authInfoStore.getCurrentSite()?.trim()?.takeIf { it.isNotBlank() }
+        }.getOrNull()
+    }
+    val currentSiteCompany by produceState<String?>(initialValue = null, currentSiteUrl) {
+        val selectedSite = currentSiteUrl?.trim()?.takeIf { it.isNotBlank() }
+        if (selectedSite == null) {
+            value = null
+            return@produceState
+        }
+        value = runCatching {
+            authInfoStore.loadAuthInfoByUrl(selectedSite).company.trim().takeIf { it.isNotBlank() }
+        }.getOrNull()
+    }
+    val dbCompanyName by produceState<String?>(initialValue = null, currentSiteUrl, tokenSnapshot) {
+        value = runCatching {
+            companyDao.getCompanyInfo()?.companyName?.trim()?.takeIf { it.isNotBlank() }
+        }.getOrNull()
+    }
+    val instanceDisplayName = currentSiteCompany ?: dbCompanyName ?: companyName ?: currentSiteUrl
+    LaunchedEffect(currentSiteUrl, dbCompanyName, companyName, instanceDisplayName) {
+        AppLogger.info(
+            "AppNavigation.instanceLabel site=${currentSiteUrl ?: "none"} " +
+                "dbCompany=${dbCompanyName ?: "none"} " +
+                "contextCompany=${companyName ?: "none"} " +
+                "display=${instanceDisplayName ?: "none"}"
+        )
+    }
     val localUserImage by produceState<String?>(initialValue = null) {
         value = runCatching { userDao.getUserInfo()?.image?.trim()?.takeIf { it.isNotBlank() } }
             .getOrNull()
@@ -561,7 +602,7 @@ fun AppNavigation() {
                                             verticalAlignment = Alignment.CenterVertically,
                                             horizontalArrangement = Arrangement.spacedBy(10.dp)
                                         ) {
-                                            if (companyName != null) {
+                                            if (instanceDisplayName != null) {
                                                 Surface(
                                                     color = MaterialTheme.colorScheme.surfaceVariant,
                                                     shape = MaterialTheme.shapes.medium,
@@ -569,6 +610,7 @@ fun AppNavigation() {
                                                         interactionSource = remember { MutableInteractionSource() },
                                                         indication = null
                                                     ) {
+                                                        cashBoxManager.clearContext()
                                                         navController.navigateToLoginRoot()
                                                     }
                                                 ) {
@@ -589,7 +631,7 @@ fun AppNavigation() {
                                                         )
                                                         Column(horizontalAlignment = Alignment.End) {
                                                             Text(
-                                                                text = companyName,
+                                                                text = instanceDisplayName,
                                                                 style = MaterialTheme.typography.labelLarge,
                                                                 fontWeight = FontWeight.SemiBold,
                                                                 color = MaterialTheme.colorScheme.onSurface

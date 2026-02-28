@@ -323,6 +323,13 @@ class LoginViewModel(
     }
 
     private suspend fun clearCurrentSessionBeforeSwitch() {
+        runCatching { oauthService.clearAuthSessionState() }
+            .onFailure {
+                AppLogger.warn(
+                    "LoginViewModel.clearCurrentSessionBeforeSwitch auth session clear failed",
+                    it
+                )
+            }
         runCatching { tokenStore.clear() }
             .onFailure {
                 AppLogger.warn(

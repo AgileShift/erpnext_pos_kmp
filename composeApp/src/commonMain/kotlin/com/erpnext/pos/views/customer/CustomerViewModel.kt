@@ -8,6 +8,7 @@ import androidx.lifecycle.viewModelScope
 import com.erpnext.pos.base.BaseViewModel
 import com.erpnext.pos.domain.models.CustomerBO
 import com.erpnext.pos.domain.models.CompanyBO
+import com.erpnext.pos.domain.models.POSPaymentModeOption
 import com.erpnext.pos.domain.models.SalesInvoiceBO
 import com.erpnext.pos.domain.usecases.CheckCustomerCreditUseCase
 import com.erpnext.pos.domain.usecases.CustomerCreditInput
@@ -33,6 +34,7 @@ import com.erpnext.pos.domain.usecases.PartialReturnUseCase
 import com.erpnext.pos.domain.usecases.PushPendingCustomersUseCase
 import com.erpnext.pos.domain.usecases.RebuildCustomerSummariesUseCase
 import com.erpnext.pos.localSource.dao.ModeOfPaymentDao
+import com.erpnext.pos.localSource.dao.PosProfilePaymentMethodDao
 import com.erpnext.pos.localSource.dao.CompanyDao
 import com.erpnext.pos.localSource.entities.ModeOfPaymentEntity
 import com.erpnext.pos.localSource.entities.SalesInvoiceWithItemsAndPayments
@@ -95,6 +97,7 @@ class CustomerViewModel(
     private val downloadSalesInvoicePdfUseCase: DownloadSalesInvoicePdfUseCase,
     private val fetchSalesInvoiceWithItemsUseCase: FetchSalesInvoiceWithItemsUseCase,
     private val modeOfPaymentDao: ModeOfPaymentDao,
+    private val posProfilePaymentMethodDao: PosProfilePaymentMethodDao,
     private val paymentHandler: PaymentHandler,
     private val createCustomerUseCase: CreateCustomerUseCase,
     private val pushPendingCustomersUseCase: PushPendingCustomersUseCase,
@@ -166,7 +169,8 @@ class CustomerViewModel(
         errorMessage: String? = null,
         successMessage: String? = null,
         modeTypes: Map<String, ModeOfPaymentEntity>? = mapOf(),
-        modeDetails: Map<String, String>? = mapOf()
+        modeDetails: Map<String, String>? = mapOf(),
+        paymentModesOverride: List<POSPaymentModeOption>? = null
     ): CustomerPaymentState {
         val context = cashboxManager.getContext()
         return CustomerPaymentState(
@@ -176,11 +180,39 @@ class CustomerViewModel(
             baseCurrency = context?.companyCurrency ?: (context?.currency ?: "USD"),
             partyAccountCurrency = context?.partyAccountCurrency ?: (context?.currency ?: "USD"),
             allowedCurrencies = context?.allowedCurrencies ?: emptyList(),
-            paymentModes = context?.paymentModes ?: emptyList(),
+            paymentModes = paymentModesOverride ?: (context?.paymentModes ?: emptyList()),
             exchangeRate = context?.exchangeRate ?: 1.0,
             modeTypes = modeTypes,
             paymentModeCurrencyByMode = modeDetails
         )
+    }
+
+    private suspend fun resolvePaymentModesForState(): List<POSPaymentModeOption> {
+        val context = cashboxManager.getContext() ?: cashboxManager.initializeContext()
+        val profileName = context?.profileName?.trim().orEmpty()
+        if (profileName.isBlank()) return context?.paymentModes ?: emptyList()
+
+        val resolved = runCatching {
+            posProfilePaymentMethodDao.getResolvedMethodsForProfile(profileName)
+        }.getOrElse { emptyList() }
+
+        val mapped = resolved
+            .asSequence()
+            .filter { it.enabled && it.enabledInProfile }
+            .map {
+                POSPaymentModeOption(
+                    name = it.mopName,
+                    modeOfPayment = it.mopName,
+                    account = it.account,
+                    currency = it.currency,
+                    type = it.type,
+                    allowInReturns = it.allowInReturns
+                )
+            }
+            .distinctBy { it.modeOfPayment.uppercase() }
+            .toList()
+
+        return if (mapped.isNotEmpty()) mapped else (context?.paymentModes ?: emptyList())
     }
 
     private var searchFilter by mutableStateOf<String?>(null)
@@ -237,9 +269,11 @@ class CustomerViewModel(
 
     private fun preloadPaymentState() {
         viewModelScope.launch {
+            val paymentModes = resolvePaymentModesForState()
             _paymentState.value = buildPaymentState(
                 modeTypes = paymentModeDetails,
-                modeDetails = emptyMap()
+                modeDetails = emptyMap(),
+                paymentModesOverride = paymentModes
             )
         }
     }
@@ -340,7 +374,8 @@ class CustomerViewModel(
                 modeTypes = modeTypes,
                 modeDetails = paymentModeCurrencyByMode,
                 successMessage = successMessage,
-                errorMessage = errorMessage
+                errorMessage = errorMessage,
+                paymentModesOverride = resolvePaymentModesForState()
             )
         }
 

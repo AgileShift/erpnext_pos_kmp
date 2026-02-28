@@ -28,11 +28,28 @@ class DesktopTokenStore(
     private val stateFlow = MutableStateFlow<TokenResponse?>(null)
     private val json = Json { ignoreUnknownKeys = true }
     private val prefs: Preferences = Preferences.userRoot().node(prefsNode)
+    private val desktopFallbackCompanies = setOf("ERPNext POS Desktop", "ERPNext POS Mobile")
     init {
         AppLogger.info(
             "DesktopTokenStore prefsNode=${prefs.absolutePath()} " +
                 "currentSite=${prefs.get("current_site", null) ?: "none"}"
         )
+    }
+
+    private fun canonicalUrl(url: String?): String? =
+        url?.trim()?.trimEnd('/')?.takeIf { it.isNotBlank() }
+
+    private fun isFallbackCompany(company: String?): Boolean {
+        val normalized = company?.trim().orEmpty()
+        return normalized.isBlank() || normalized in desktopFallbackCompanies
+    }
+
+    private fun mergeCompany(newCompany: String, existingCompany: String?): String {
+        val newTrimmed = newCompany.trim()
+        val existingTrimmed = existingCompany?.trim().orEmpty()
+        if (newTrimmed.isBlank()) return existingTrimmed
+        if (isFallbackCompany(newTrimmed) && !isFallbackCompany(existingTrimmed)) return existingTrimmed
+        return newTrimmed
     }
 
     /**
@@ -214,10 +231,14 @@ class DesktopTokenStore(
     // AuthInfoStore
     // ------------------------------------------------------------
     override suspend fun loadAuthInfoByUrl(url: String?, platform: String?): LoginInfo {
-        val currentUrl = url?.takeIf { it.isNotBlank() } ?: getCurrentSite()
+        val currentUrl = canonicalUrl(url) ?: canonicalUrl(getCurrentSite())
         val sitesInfo = loadAuthInfo()
-        val sameUrl = sitesInfo.filter { it.url == currentUrl }
+        val sameUrl = sitesInfo.filter { canonicalUrl(it.url) == currentUrl }
         if (getPlatformName() == "Desktop") {
+            sameUrl.firstOrNull {
+                it.redirectUrl.contains("127.0.0.1") && !isFallbackCompany(it.company)
+            }?.let { return it }
+            sameUrl.firstOrNull { !isFallbackCompany(it.company) }?.let { return it }
             sameUrl.firstOrNull { it.redirectUrl.contains("127.0.0.1") }?.let { return it }
         }
         sameUrl.firstOrNull()?.let { return it }
@@ -232,19 +253,33 @@ class DesktopTokenStore(
     }
 
     override suspend fun saveAuthInfo(info: LoginInfo) = mutex.withLock {
+        val previousSite = prefs.get("current_site", null)
         val list = loadAuthInfo()
-        val existing = list.firstOrNull { it.url == info.url }
-        list.removeAll { it.url == info.url }
+        val infoCanonicalUrl = canonicalUrl(info.url) ?: info.url
+        val sameUrlEntries = list.filter { canonicalUrl(it.url) == infoCanonicalUrl }
+        val existing = sameUrlEntries.firstOrNull()
+        list.removeAll { canonicalUrl(it.url) == infoCanonicalUrl }
+
+        val mergedCompany = mergeCompany(
+            newCompany = info.company,
+            existingCompany = sameUrlEntries.firstOrNull { !isFallbackCompany(it.company) }?.company
+                ?: existing?.company
+        )
         list.add(
             info.copy(
+                url = infoCanonicalUrl,
+                company = mergedCompany,
                 lastUsedAt = existing?.lastUsedAt,
                 isFavorite = existing?.isFavorite ?: info.isFavorite
             )
         )
 
         prefs.put("sitesInfo", json.encodeToString(list))
-        prefs.put("current_site", info.url)
+        prefs.put("current_site", infoCanonicalUrl)
         prefs.flush()
+        AppLogger.info(
+            "DesktopTokenStore.saveAuthInfo -> current_site ${previousSite ?: "none"} -> $infoCanonicalUrl company=${mergedCompany.ifBlank { "none" }}"
+        )
     }
 
     override suspend fun getCurrentSite(): String? =
@@ -252,17 +287,21 @@ class DesktopTokenStore(
 
     override suspend fun deleteSite(url: String): Boolean = mutex.withLock {
         val list = loadAuthInfo()
-        if (list.none { it.url == url }) return@withLock false
-        val updated = list.filterNot { it.url == url }
+        val targetUrl = canonicalUrl(url) ?: url
+        if (list.none { canonicalUrl(it.url) == targetUrl }) return@withLock false
+        val matchingEntries = list.filter { canonicalUrl(it.url) == targetUrl }
+        val updated = list.filterNot { canonicalUrl(it.url) == targetUrl }
 
-        deleteSecret(siteScopedKeyForUrl(url, "access_token"))
-        deleteSecret(siteScopedKeyForUrl(url, "refresh_token"))
-        deleteSecret(siteScopedKeyForUrl(url, "id_token"))
-        prefs.remove(siteScopedKeyForUrl(url, "expires_in"))
-        prefs.remove(siteScopedKeyForUrl(url, "userId"))
+        matchingEntries.forEach { entry ->
+            deleteSecret(siteScopedKeyForUrl(entry.url, "access_token"))
+            deleteSecret(siteScopedKeyForUrl(entry.url, "refresh_token"))
+            deleteSecret(siteScopedKeyForUrl(entry.url, "id_token"))
+            prefs.remove(siteScopedKeyForUrl(entry.url, "expires_in"))
+            prefs.remove(siteScopedKeyForUrl(entry.url, "userId"))
+        }
 
-        val currentSite = getCurrentSite()
-        if (currentSite == url) {
+        val currentSite = canonicalUrl(getCurrentSite())
+        if (currentSite == targetUrl) {
             stateFlow.update { null }
             val nextSite = updated.firstOrNull()?.url
             if (nextSite.isNullOrBlank()) {
@@ -287,9 +326,10 @@ class DesktopTokenStore(
         isFavorite: Boolean?
     ) = mutex.withLock {
         AppLogger.info("DesktopTokenStore.updateSiteMeta -> start url=$url")
+        val targetUrl = canonicalUrl(url) ?: url
         val list = loadAuthInfo()
         val updated = list.map { item ->
-            if (item.url != url) return@map item
+            if (canonicalUrl(item.url) != targetUrl) return@map item
             item.copy(
                 lastUsedAt = lastUsedAt ?: item.lastUsedAt,
                 isFavorite = isFavorite ?: item.isFavorite

@@ -3,7 +3,6 @@ package com.erpnext.pos.remoteSource.api
 import com.erpnext.pos.BuildKonfig
 import com.erpnext.pos.base.getPlatformName
 import com.erpnext.pos.localSource.preferences.BootstrapContextPreferences
-import com.erpnext.pos.remoteSource.dto.AddressListDto
 import com.erpnext.pos.remoteSource.dto.BalanceDetailsDto
 import com.erpnext.pos.remoteSource.dto.BootstrapClosingEntryDto
 import com.erpnext.pos.remoteSource.dto.BootstrapDataDto
@@ -13,17 +12,14 @@ import com.erpnext.pos.remoteSource.dto.BootstrapRequestDto
 import com.erpnext.pos.remoteSource.dto.BootstrapShiftSnapshotDto
 import com.erpnext.pos.remoteSource.dto.CategoryDto
 import com.erpnext.pos.remoteSource.dto.CompanyDto
-import com.erpnext.pos.remoteSource.dto.ContactListDto
 import com.erpnext.pos.remoteSource.dto.CurrencyDto
 import com.erpnext.pos.remoteSource.dto.CustomerCreateDto
 import com.erpnext.pos.remoteSource.dto.CustomerDto
-import com.erpnext.pos.remoteSource.dto.CustomerGroupDto
 import com.erpnext.pos.remoteSource.dto.DocNameResponseDto
 import com.erpnext.pos.remoteSource.dto.ExchangeRateResponse
 import com.erpnext.pos.remoteSource.dto.InternalTransferCreateDto
 import com.erpnext.pos.remoteSource.dto.InternalTransferSubmitDto
 import com.erpnext.pos.remoteSource.dto.ItemDto
-import com.erpnext.pos.remoteSource.dto.LinkRefDto
 import com.erpnext.pos.remoteSource.dto.LoginInfo
 import com.erpnext.pos.remoteSource.dto.OutstandingInfo
 import com.erpnext.pos.remoteSource.dto.POSClosingEntryDto
@@ -46,7 +42,6 @@ import com.erpnext.pos.remoteSource.dto.SalesInvoiceDto
 import com.erpnext.pos.remoteSource.dto.ShippingRuleDto
 import com.erpnext.pos.remoteSource.dto.StockSettingsDto
 import com.erpnext.pos.remoteSource.dto.SubmitResponseDto
-import com.erpnext.pos.remoteSource.dto.TerritoryDto
 import com.erpnext.pos.remoteSource.dto.TokenResponse
 import com.erpnext.pos.remoteSource.dto.UserDto
 import com.erpnext.pos.remoteSource.dto.WarehouseItemDto
@@ -67,6 +62,8 @@ import com.erpnext.pos.utils.view.DateTimeProvider
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.engine.HttpClientEngine
+import io.ktor.client.plugins.auth.authProviders
+import io.ktor.client.plugins.auth.providers.BearerAuthProvider
 import io.ktor.client.request.forms.FormDataContent
 import io.ktor.client.request.get
 import io.ktor.client.request.parameter
@@ -150,6 +147,20 @@ class APIService(
     }
 
     private var bootstrapCache: BootstrapCacheEntry? = null
+
+    suspend fun clearAuthSessionState() {
+        bootstrapCache = null
+        runCatching {
+            val bearerProviders = client.authProviders
+                .filterIsInstance<BearerAuthProvider>()
+            bearerProviders.forEach { it.clearToken() }
+            AppLogger.info(
+                "APIService.clearAuthSessionState -> bearer cache cleared providers=${bearerProviders.size}"
+            )
+        }.onFailure {
+            AppLogger.warn("APIService.clearAuthSessionState -> unable to clear bearer cache", it)
+        }
+    }
 
     suspend fun getCompanyInfo(): List<CompanyDto> {
         val bootstrapRaw = runCatching {
@@ -327,78 +338,6 @@ class APIService(
         val raw = fetchBootstrapRaw(payload)
         return raw["delivery_charges"]?.let { json.decodeFromJsonElement<List<ShippingRuleDto>>(it) }
             .orEmpty()
-    }
-
-    suspend fun fetchCustomerGroups(): List<CustomerGroupDto> {
-        val payload = BootstrapRequestDto(
-            includeInventory = false,
-            includeCustomers = false,
-            includeInvoices = false,
-            includeAlerts = false,
-            includeActivity = false,
-            recentPaidOnly = true
-        )
-        val raw = fetchBootstrapRaw(payload)
-        return raw["customer_groups"]?.let { json.decodeFromJsonElement<List<CustomerGroupDto>>(it) }
-            .orEmpty()
-    }
-
-    suspend fun fetchTerritories(): List<TerritoryDto> {
-        val payload = BootstrapRequestDto(
-            includeInventory = false,
-            includeCustomers = false,
-            includeInvoices = false,
-            includeAlerts = false,
-            includeActivity = false,
-            recentPaidOnly = true
-        )
-        val raw = fetchBootstrapRaw(payload)
-        return raw["territories"]?.let { json.decodeFromJsonElement<List<TerritoryDto>>(it) }
-            .orEmpty()
-    }
-
-    suspend fun fetchCustomerContacts(): List<ContactListDto> {
-        val payload = BootstrapRequestDto(
-            includeInventory = false,
-            includeCustomers = true,
-            includeInvoices = false,
-            includeAlerts = false,
-            includeActivity = false,
-            recentPaidOnly = true
-        )
-        return fetchBootstrap(payload).customers.map { customer ->
-            ContactListDto(
-                name = "CONTACT-${customer.name}",
-                emailId = customer.email,
-                mobileNo = customer.mobileNo,
-                phone = customer.mobileNo,
-                links = listOf(LinkRefDto(linkDoctype = "Customer", linkName = customer.name))
-            )
-        }
-    }
-
-    suspend fun fetchCustomerAddresses(): List<AddressListDto> {
-        val payload = BootstrapRequestDto(
-            includeInventory = false,
-            includeCustomers = true,
-            includeInvoices = false,
-            includeAlerts = false,
-            includeActivity = false,
-            recentPaidOnly = true
-        )
-        return fetchBootstrap(payload).customers
-            .filter { !it.address.isNullOrBlank() }
-            .map { customer ->
-                AddressListDto(
-                    name = customer.address!!.trim(),
-                    addressTitle = customer.customerName,
-                    addressType = "Billing",
-                    country = null,
-                    emailId = customer.email,
-                    phone = customer.mobileNo,
-                    links = listOf(LinkRefDto(linkDoctype = "Customer", linkName = customer.name))
-                )
-            }
     }
 
     suspend fun createCustomer(payload: CustomerCreateDto): DocNameResponseDto {
@@ -1038,8 +977,9 @@ class APIService(
     private suspend fun fetchBootstrap(payload: BootstrapRequestDto): BootstrapDataDto {
         requireAuthenticatedSession("sync.bootstrap")
         val site = authStore.getCurrentSite()?.trim()?.trimEnd('/').orEmpty()
+        val authScope = buildBootstrapAuthScopeKey()
         val enrichedPayload = enrichBootstrapPayload(payload)
-        val cacheKey = "$site::${json.encodeToString(enrichedPayload)}"
+        val cacheKey = "$site::$authScope::${json.encodeToString(enrichedPayload)}"
         val now = Clock.System.now().toEpochMilliseconds()
         bootstrapCache?.let { cached ->
             if (cached.key == cacheKey && now - cached.createdAtMillis <= BOOTSTRAP_CACHE_WINDOW_MS) {
@@ -1062,6 +1002,17 @@ class APIService(
             createdAtMillis = now
         )
         return resolved
+    }
+
+    private suspend fun buildBootstrapAuthScopeKey(): String {
+        val tokens = store.load()
+        val user = store.loadUser()?.trim().orEmpty()
+        val accessToken = tokens?.access_token.orEmpty()
+        if (accessToken.isBlank()) {
+            return "user=$user;token=none"
+        }
+        val tokenFingerprint = "${accessToken.length}:${accessToken.take(8)}:${accessToken.takeLast(8)}"
+        return "user=$user;token=$tokenFingerprint"
     }
 
     private fun shouldAutoPageBootstrap(payload: BootstrapRequestDto): Boolean {
@@ -1562,15 +1513,12 @@ class APIService(
         val endpoint =
             normalizedSite.trimEnd('/') + "/api/method/erpnext_pos.api.v1.discovery.resolve_site"
         val response = withRetries {
-            client.get {
-                url { takeFrom(endpoint) }
-                contentType(ContentType.Application.Json)
-                setBody(
-                    buildJsonObject {
-                        put("site_url", JsonPrimitive(normalizedSite))
-                        put("platform", JsonPrimitive(platform))
-                    }
-                )
+            tokenClient.get {
+                url {
+                    takeFrom(endpoint)
+                    parameters.append("site_url", normalizedSite)
+                    parameters.append("platform", platform)
+                }
             }
         }
         val bodyText = response.bodyAsText()

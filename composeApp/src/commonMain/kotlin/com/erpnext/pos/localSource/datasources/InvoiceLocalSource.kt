@@ -83,6 +83,10 @@ class InvoiceLocalSource(
         return salesInvoiceDao.getInvoiceByName(invoiceName)
     }
 
+    suspend fun getInvoiceByNameAny(invoiceName: String): SalesInvoiceWithItemsAndPayments? {
+        return salesInvoiceDao.getInvoiceByNameAny(invoiceName)
+    }
+
     suspend fun findRecentDebitTo(
         company: String,
         customer: String?,
@@ -289,6 +293,13 @@ class InvoiceLocalSource(
             syncStatus = syncStatus,
             modifiedAt = modifiedAt
         )
+    }
+
+    suspend fun rebindChildrenToInvoice(
+        oldInvoiceName: String,
+        newInvoiceName: String
+    ) {
+        salesInvoiceDao.rebindChildrenToInvoice(oldInvoiceName, newInvoiceName)
     }
 
     override suspend fun refreshCustomerSummary(customerId: String) {

@@ -356,7 +356,8 @@ val appModule = module {
             saveInvoicePaymentsUseCase = get(),
             exchangeRateRepository = get(),
             invoiceLocalSource = get(),
-            networkMonitor = get()
+            networkMonitor = get(),
+            generalPreferences = get()
         )
     }
     single { get<AppDatabase>().configurationDao() }
@@ -554,6 +555,7 @@ val appModule = module {
             downloadSalesInvoicePdfUseCase = get(),
             fetchSalesInvoiceWithItemsUseCase = get(),
             modeOfPaymentDao = get(),
+            posProfilePaymentMethodDao = get(),
             paymentHandler = get(),
             createCustomerUseCase = get(),
             pushPendingCustomersUseCase = get(),
@@ -670,7 +672,9 @@ val appModule = module {
             markSalesInvoiceSyncedUseCase = get(),
             paymentHandler = get(),
             billingResetController = get(),
-            languagePreferences = get()
+            languagePreferences = get(),
+            generalPreferences = get(),
+            networkMonitor = get()
         )
     }
     single { SalesInvoiceRemoteSource(get(), get()) }

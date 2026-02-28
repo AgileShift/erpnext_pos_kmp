@@ -65,7 +65,6 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuAnchorType
 import androidx.compose.material3.ExposedDropdownMenuBox
@@ -619,7 +618,7 @@ private fun BillingLabContent(
             .sorted()
     }
     val categories = remember(state.productCategories, categoriesFromSnapshot) {
-        if (state.productCategories.isNotEmpty()) state.productCategories else categoriesFromSnapshot
+        state.productCategories.ifEmpty { categoriesFromSnapshot }
     }
     var selectedCategory by rememberSaveable { mutableStateOf(state.selectedProductCategory) }
 
@@ -1106,7 +1105,6 @@ private fun BillingLabCheckoutStep(
                             paymentModes = state.paymentModes,
                             paidAmountBase = state.paidAmountBase,
                             totalAmount = state.total,
-                            paymentErrorMessage = state.paymentErrorMessage,
                             isCreditSale = state.isCreditSale,
                             onAddPaymentLine = action.onAddPaymentLine,
                             onRemovePaymentLine = action.onRemovePaymentLine,
@@ -1729,7 +1727,6 @@ private fun PaymentSection(
     paymentModes: List<POSPaymentModeOption>,
     paidAmountBase: Double,
     totalAmount: Double,
-    paymentErrorMessage: String?,
     isCreditSale: Boolean,
     onAddPaymentLine: (PaymentLine) -> Unit,
     onRemovePaymentLine: (Int) -> Unit,
