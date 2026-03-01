@@ -2,16 +2,18 @@ package com.erpnext.pos.data.repositories
 
 import com.erpnext.pos.remoteSource.dto.SalesInvoiceDto
 import com.erpnext.pos.remoteSource.dto.SalesInvoicePaymentDto
+import com.erpnext.pos.remoteSource.dto.SalesInvoicePaymentScheduleDto
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertNull
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlin.test.assertFailsWith
 
 class SalesInvoicePaymentEntryPayloadTest {
 
   @Test
-  fun stripsEmbeddedPaymentsForCashFlow() {
+  fun cashFlow_keepsExistingBehaviorWithoutInvalidSchedule() {
     val source = fixture(total = 381.0, paid = 381.0, outstanding = 0.0)
     val sanitized = sanitizeInvoiceForPaymentEntry(source)
 
@@ -24,10 +26,11 @@ class SalesInvoicePaymentEntryPayloadTest {
     assertEquals(false, sanitized.isCreatedUsingPos)
     assertNull(sanitized.posProfile)
     assertNull(sanitized.posOpeningEntry)
+    assertTrue(sanitized.paymentSchedule.isEmpty())
   }
 
   @Test
-  fun stripsEmbeddedPaymentsForPartialFlow() {
+  fun partialFlow_keepsExistingBehaviorWithoutInvalidSchedule() {
     val source = fixture(total = 381.0, paid = 300.0, outstanding = 81.0)
     val sanitized = sanitizeInvoiceForPaymentEntry(source)
 
@@ -39,10 +42,11 @@ class SalesInvoicePaymentEntryPayloadTest {
     assertEquals(false, sanitized.isCreatedUsingPos)
     assertNull(sanitized.posProfile)
     assertNull(sanitized.posOpeningEntry)
+    assertTrue(sanitized.paymentSchedule.isEmpty())
   }
 
   @Test
-  fun keepsCreditFullAsUnpaidWithoutPayments() {
+  fun creditFull_withoutPaymentSchedule_isValid() {
     val source = fixture(total = 220.0, paid = 0.0, outstanding = 220.0, payments = emptyList())
     val sanitized = sanitizeInvoiceForPaymentEntry(source)
 
@@ -54,12 +58,62 @@ class SalesInvoicePaymentEntryPayloadTest {
     assertEquals(false, sanitized.isCreatedUsingPos)
     assertNull(sanitized.posProfile)
     assertNull(sanitized.posOpeningEntry)
+    assertTrue(sanitized.paymentSchedule.isEmpty())
+  }
+
+  @Test
+  fun validPaymentSchedule_invoicePortion100_isKept() {
+    val source =
+        fixture(
+            total = 220.0,
+            paid = 10.0,
+            outstanding = 210.0,
+            paymentSchedule =
+                listOf(
+                    SalesInvoicePaymentScheduleDto(
+                        paymentTerm = "Net 30",
+                        invoicePortion = 100.0,
+                        dueDate = "2026-03-30",
+                    )
+                ),
+            paymentTermsTemplate = "Net 30",
+        )
+
+    val sanitized = sanitizeInvoiceForPaymentEntry(source)
+
+    assertEquals(1, sanitized.paymentSchedule.size)
+    assertEquals(100.0, sanitized.paymentSchedule.first().invoicePortion)
+    assertEquals("Net 30", sanitized.paymentTermsTemplate)
+  }
+
+  @Test
+  fun invalidPaymentSchedule_rowWithoutPortionOrAmount_failsLocally() {
+    val source =
+        fixture(
+            total = 220.0,
+            paid = 10.0,
+            outstanding = 210.0,
+            paymentSchedule =
+                listOf(
+                    SalesInvoicePaymentScheduleDto(
+                        paymentTerm = "Invalid",
+                        invoicePortion = 0.0,
+                        dueDate = "2026-03-30",
+                        paymentAmount = null,
+                    )
+                ),
+        )
+
+    val error = assertFailsWith<IllegalArgumentException> { sanitizeInvoiceForPaymentEntry(source) }
+    assertTrue(error.message.orEmpty().contains("payment_schedule inválido"))
   }
 
   private fun fixture(
       total: Double,
       paid: Double,
       outstanding: Double,
+      paymentSchedule: List<SalesInvoicePaymentScheduleDto> = emptyList(),
+      paymentTermsTemplate: String? = null,
       payments: List<SalesInvoicePaymentDto> =
           listOf(
               SalesInvoicePaymentDto(
@@ -82,6 +136,8 @@ class SalesInvoicePaymentEntryPayloadTest {
         netTotal = total,
         paidAmount = paid,
         payments = payments,
+        paymentSchedule = paymentSchedule,
+        paymentTermsTemplate = paymentTermsTemplate,
         isPos = true,
         posProfile = "Test POS Profile",
         posOpeningEntry = "POS-OPE-2026-00017",

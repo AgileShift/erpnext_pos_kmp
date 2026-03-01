@@ -1505,7 +1505,8 @@ class BillingViewModel(
         items = items,
         payments = emptyList(),
         paymentSchedule = paymentSchedule,
-        paymentTerms = if (current.isCreditSale) current.selectedPaymentTerm?.name else null,
+        paymentTerms = null,
+        paymentTermsTemplate = if (current.isCreditSale) current.selectedPaymentTerm?.name else null,
         posProfile = if (postingDecision.isPos) context.profileName else null,
         posOpeningEntry = if (postingDecision.isPos) posOpeningEntry else null,
         remarks = paymentMetadata,
@@ -1682,10 +1683,12 @@ class BillingViewModel(
   ): List<SalesInvoicePaymentScheduleDto> {
     if (!isCreditSale) return emptyList()
     val resolvedTerm = term ?: error("El término de pago es obligatorio para ventas a crédito.")
+    val portion = resolvedTerm.invoicePortion ?: 0.0
+    if (portion <= 0.0) return emptyList()
     return listOf(
         SalesInvoicePaymentScheduleDto(
             paymentTerm = resolvedTerm.name,
-            invoicePortion = resolvedTerm.invoicePortion ?: 100.0,
+            invoicePortion = portion,
             dueDate = dueDate,
             modeOfPayment = resolvedTerm.modeOfPayment,
         )

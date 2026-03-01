@@ -168,6 +168,23 @@ private fun minorUnitEpsilon(minorUnits: Int): Double {
   return if (units == 0) 0.5 else 1.0 / (2.0 * 10.0.pow(units.toDouble()))
 }
 
+private fun resolveAllocationTolerance(
+    receivableSpec: CurrencySpec,
+    enteredSpec: CurrencySpec,
+    enteredCurrency: String,
+    receivableCurrency: String,
+    rateEnteredToReceivable: Double,
+): Double {
+  val receivableTolerance = minorUnitEpsilon(receivableSpec.minorUnits)
+  if (enteredCurrency.equals(receivableCurrency, ignoreCase = true)) {
+    return receivableTolerance
+  }
+  val enteredScale = enteredSpec.cashScale.coerceAtMost(enteredSpec.minorUnits).coerceAtLeast(0)
+  val enteredTolerance = minorUnitEpsilon(enteredScale)
+  val fxTolerance = enteredTolerance * rateEnteredToReceivable.coerceAtLeast(0.0)
+  return maxOf(receivableTolerance, fxTolerance)
+}
+
 fun resolveMinorUnits(
     currency: String?,
     specs: Map<String, CurrencySpec> = buildCurrencySpecs(),
@@ -383,7 +400,14 @@ private suspend fun resolveAllocatedReceivableAmount(
           )
   val deliveredRc =
       entered.safeMul(bd(rateEnteredToReceivable)).moneyScaleDown(resolved.rcSpec.minorUnits)
-  val roundingTolerance = minorUnitEpsilon(resolved.rcSpec.minorUnits)
+  val roundingTolerance =
+      resolveAllocationTolerance(
+          receivableSpec = resolved.rcSpec,
+          enteredSpec = resolved.enteredSpec,
+          enteredCurrency = resolved.enteredCurrency,
+          receivableCurrency = resolved.receivableCurrency,
+          rateEnteredToReceivable = rateEnteredToReceivable,
+      )
   val outstandingValue = outstanding.toDouble(resolved.rcSpec.minorUnits)
   return if (
       deliveredRc.toDouble(resolved.rcSpec.minorUnits) + roundingTolerance >= outstandingValue
@@ -487,7 +511,6 @@ suspend fun buildPaymentEntryDtoWithRateResolver(
   }
 
   val entered = roundCashIfNeeded(bd(line.enteredAmount), enteredSpec)
-  val roundingTolerance = minorUnitEpsilon(rcSpec.minorUnits)
 
   val invoiceCurrencyResolved = normalizeCurrency(invoiceCurrency)
   val rateFromInputsToReceivable =
@@ -510,6 +533,14 @@ suspend fun buildPaymentEntryDtoWithRateResolver(
           ?: cachedRateToReceivable
           ?: rateResolver(enteredCurrency, receivableCurrency)?.takeIf { it > 0.0 }
           ?: error("No se pudo resolver tasa $enteredCurrency -> $receivableCurrency")
+  val roundingTolerance =
+      resolveAllocationTolerance(
+          receivableSpec = rcSpec,
+          enteredSpec = enteredSpec,
+          enteredCurrency = enteredCurrency,
+          receivableCurrency = receivableCurrency,
+          rateEnteredToReceivable = rateEnteredToReceivable,
+      )
 
   val deliveredRc = entered.safeMul(bd(rateEnteredToReceivable)).moneyScaleDown(rcSpec.minorUnits)
   val outstandingValue = outstanding.toDouble(rcSpec.minorUnits)
