@@ -32,6 +32,7 @@ data class CancelSalesInvoiceInput(
     val refundModeOfPayment: String? = null,
     val refundReferenceNo: String? = null,
     val applyRefund: Boolean = true,
+    val affectInventory: Boolean? = null,
 )
 
 data class CancelSalesInvoiceResult(
@@ -64,6 +65,7 @@ class CancelSalesInvoiceUseCase(
               refundModeOfPayment = input.refundModeOfPayment,
               refundReferenceNo = input.refundReferenceNo,
               applyRefund = input.applyRefund,
+              affectInventory = input.affectInventory,
           )
     }
   }
@@ -93,6 +95,7 @@ class CancelSalesInvoiceUseCase(
       refundModeOfPayment: String?,
       refundReferenceNo: String?,
       applyRefund: Boolean,
+      affectInventory: Boolean?,
   ): CancelSalesInvoiceResult {
     val originalName = invoice.invoice.invoiceName ?: return CancelSalesInvoiceResult()
     if (!isOnline) {
@@ -104,7 +107,8 @@ class CancelSalesInvoiceUseCase(
     if (returnItems.isEmpty()) {
       throw IllegalStateException("La factura ya fue retornada por completo.")
     }
-    val creditNoteDto = buildCreditNoteDto(invoice, returnItems, reason)
+    val stockImpact = resolveReturnStockImpact(invoice.invoice.isPos, affectInventory)
+    val creditNoteDto = buildCreditNoteDto(invoice, returnItems, reason, stockImpact)
     val created = invoiceRepository.createRemoteInvoice(creditNoteDto)
     val entity = created.toEntity()
     invoiceRepository.saveInvoiceLocally(
@@ -153,10 +157,14 @@ class CancelSalesInvoiceUseCase(
         (localReturnedByItem.keys + remoteReturnedByItem.keys).associateWith { itemCode ->
           maxOf(localReturnedByItem[itemCode] ?: 0.0, remoteReturnedByItem[itemCode] ?: 0.0)
         }
+    val returnedQty = returnedByItem.toMutableMap()
     return baseItems.mapNotNull { item ->
-      val originalQty = abs(item.qty)
-      val returnedQty = returnedByItem[item.itemCode] ?: 0.0
-      val remaining = (originalQty - returnedQty).coerceAtLeast(0.0)
+      val originalQty = abs(item.qty).coerceAtLeast(0.0)
+      if (originalQty <= 0.0) return@mapNotNull null
+      val returnedForCode = (returnedQty[item.itemCode] ?: 0.0).coerceAtLeast(0.0)
+      val consumedByHistory = minOf(originalQty, returnedForCode)
+      returnedQty[item.itemCode] = (returnedForCode - consumedByHistory).coerceAtLeast(0.0)
+      val remaining = (originalQty - consumedByHistory).coerceAtLeast(0.0)
       if (remaining <= 0.0) null else createReturnItemFromDto(item, remaining)
     }
   }
@@ -175,6 +183,7 @@ class CancelSalesInvoiceUseCase(
       invoice: SalesInvoiceWithItemsAndPayments,
       items: List<SalesInvoiceItemDto>,
       reason: String?,
+      affectInventory: Boolean,
   ): SalesInvoiceDto {
     val parent = invoice.invoice
     val now = Clock.System.now().toEpochMilliseconds()
@@ -197,7 +206,7 @@ class CancelSalesInvoiceUseCase(
         items = items,
         payments = emptyList(),
         remarks = reason ?: parent.remarks,
-        updateStock = true,
+        updateStock = affectInventory,
         posProfile = parent.profileId,
         currency = parent.currency,
         conversionRate = parent.conversionRate,
@@ -233,6 +242,20 @@ class CancelSalesInvoiceUseCase(
     if (!isRefundModeAllowed(profileId, resolvedMode)) {
       throw IllegalStateException("El modo de reembolso no está habilitado para retornos.")
     }
+    val paidFromAccount = resolveAccount(resolvedMode, modes, fallback = null)
+    if (receivableAccount.isNullOrBlank()) {
+      throw IllegalStateException("No se encontró cuenta por cobrar para aplicar el reembolso.")
+    }
+    if (paidFromAccount.isNullOrBlank()) {
+      throw IllegalStateException(
+          "El modo de reembolso '$resolvedMode' no tiene una cuenta de caja/banco configurada."
+      )
+    }
+    if (paidFromAccount.equals(receivableAccount, ignoreCase = true)) {
+      throw IllegalStateException(
+          "La cuenta del modo de reembolso no puede ser igual a la cuenta por cobrar de la factura."
+      )
+    }
     val paidToCurrency =
         creditNote.partyAccountCurrency ?: creditNote.currency ?: invoice.invoice.currency
     val originalOutstanding = invoice.invoice.outstandingAmount.coerceAtLeast(0.0)
@@ -261,8 +284,8 @@ class CancelSalesInvoiceUseCase(
             modeOfPayment = resolvedMode,
             paidAmount = totalReturn,
             receivedAmount = totalReturn,
-            paidFrom = resolveAccount(resolvedMode, modes, receivableAccount),
-            paidTo = resolveAccount(resolvedMode, modes, receivableAccount),
+            paidFrom = paidFromAccount,
+            paidTo = receivableAccount,
             paidToAccountCurrency = paidToCurrency,
             referenceNo = refundReferenceNo?.takeIf { it.isNotBlank() },
             referenceDate = postingDate,

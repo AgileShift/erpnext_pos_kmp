@@ -735,6 +735,7 @@ class CustomerViewModel(
       refundModeOfPayment: String?,
       refundReferenceNo: String?,
       applyRefund: Boolean,
+      affectInventory: Boolean,
       itemsToReturnByCode: Map<String, Double>,
   ) {
     viewModelScope.launch {
@@ -766,6 +767,7 @@ class CustomerViewModel(
                     refundModeOfPayment = refundModeOfPayment,
                     refundReferenceNo = refundReferenceNo,
                     applyRefund = applyRefund,
+                    affectInventory = affectInventory,
                 )
             )
         val message =
@@ -795,6 +797,7 @@ class CustomerViewModel(
       refundModeOfPayment: String?,
       refundReferenceNo: String?,
       applyRefund: Boolean,
+      affectInventory: Boolean,
   ) {
     viewModelScope.launch {
       val isOnline = networkMonitor.isConnected.first()
@@ -833,6 +836,7 @@ class CustomerViewModel(
                     refundModeOfPayment = refundModeOfPayment,
                     refundReferenceNo = refundReferenceNo,
                     applyRefund = applyRefund,
+                    affectInventory = affectInventory,
                 )
             )
         _historyMessage.value =
@@ -910,13 +914,15 @@ class CustomerViewModel(
       requested: Map<String, Double>,
   ): ReturnPreview? {
     invoice ?: return null
+    val requestedRemaining = requested.mapValues { it.value.coerceAtLeast(0.0) }.toMutableMap()
     var total = 0.0
     invoice.items.forEach { item ->
-      val desired = (requested[item.itemCode] ?: 0.0).coerceAtLeast(0.0)
+      val desired = (requestedRemaining[item.itemCode] ?: 0.0).coerceAtLeast(0.0)
       if (desired <= 0.0) return@forEach
       val soldQty = kotlin.math.abs(item.qty)
       val qtyToReturn = desired.coerceAtMost(soldQty)
       if (qtyToReturn <= 0.0) return@forEach
+      requestedRemaining[item.itemCode] = (desired - qtyToReturn).coerceAtLeast(0.0)
       val perUnit = if (item.qty != 0.0) item.amount / item.qty else item.rate
       total += kotlin.math.abs(perUnit) * qtyToReturn
     }

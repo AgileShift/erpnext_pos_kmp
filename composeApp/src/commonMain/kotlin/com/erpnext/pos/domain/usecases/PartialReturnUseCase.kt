@@ -28,6 +28,7 @@ data class PartialReturnInput(
     val refundModeOfPayment: String? = null,
     val refundReferenceNo: String? = null,
     val applyRefund: Boolean = false,
+    val affectInventory: Boolean? = null,
 )
 
 data class PartialReturnResult(val creditNoteName: String?, val refundCreated: Boolean = false)
@@ -58,7 +59,8 @@ class PartialReturnUseCase(
     }
 
     if (isOnline) {
-      val creditNoteDto = buildCreditNoteDto(invoice, returnItems, input.reason)
+      val stockImpact = resolveReturnStockImpact(invoice.invoice.isPos, input.affectInventory)
+      val creditNoteDto = buildCreditNoteDto(invoice, returnItems, input.reason, stockImpact)
       val created = repository.createRemoteInvoice(creditNoteDto)
       val entity = created.toEntity()
       repository.saveInvoiceLocally(
@@ -144,17 +146,26 @@ class PartialReturnUseCase(
         (returnedFromLocal.keys + returnedFromRemote.keys).associateWith { itemCode ->
           maxOf(returnedFromLocal[itemCode] ?: 0.0, returnedFromRemote[itemCode] ?: 0.0)
         }
-    val requestedQty = requested.mapValues { it.value.coerceAtLeast(0.0) }
+    val requestedQty = requested.mapValues { it.value.coerceAtLeast(0.0) }.toMutableMap()
+    val returnedQty = returnedByItem.toMutableMap()
     return invoice.items
         .mapNotNull { item ->
-          val originalQty = kotlin.math.abs(item.qty)
-          val alreadyReturned = returnedByItem[item.itemCode] ?: 0.0
-          val remaining = (originalQty - alreadyReturned).coerceAtLeast(0.0)
+          val originalQty = kotlin.math.abs(item.qty).coerceAtLeast(0.0)
+          if (originalQty <= 0.0) return@mapNotNull null
+
+          val returnedForCode = (returnedQty[item.itemCode] ?: 0.0).coerceAtLeast(0.0)
+          val consumedByHistory = minOf(originalQty, returnedForCode)
+          returnedQty[item.itemCode] = (returnedForCode - consumedByHistory).coerceAtLeast(0.0)
+
+          val remaining = (originalQty - consumedByHistory).coerceAtLeast(0.0)
           if (remaining <= 0.0) return@mapNotNull null
-          val desired = requestedQty[item.itemCode] ?: 0.0
+
+          val desired = (requestedQty[item.itemCode] ?: 0.0).coerceAtLeast(0.0)
           if (desired <= 0.0) return@mapNotNull null
-          val qtyToReturn = desired.coerceAtMost(remaining)
+
+          val qtyToReturn = minOf(desired, remaining)
           if (qtyToReturn <= 0.0) return@mapNotNull null
+          requestedQty[item.itemCode] = (desired - qtyToReturn).coerceAtLeast(0.0)
           createReturnItem(item, parent, qtyToReturn)
         }
         .filter { it.qty != 0.0 }
@@ -176,6 +187,7 @@ class PartialReturnUseCase(
       invoice: SalesInvoiceWithItemsAndPayments,
       items: List<SalesInvoiceItemDto>,
       reason: String?,
+      affectInventory: Boolean,
   ): SalesInvoiceDto {
     val parent = invoice.invoice
     val now = Clock.System.now()
@@ -197,7 +209,7 @@ class PartialReturnUseCase(
         items = items,
         payments = emptyList(),
         remarks = reason ?: parent.remarks,
-        updateStock = true,
+        updateStock = affectInventory,
         posProfile = parent.profileId,
         currency = parent.currency,
         conversionRate = parent.conversionRate,
@@ -246,6 +258,21 @@ class PartialReturnUseCase(
           emptyList()
         }
     val postingDate = Clock.System.now().toEpochMilliseconds().toErpDateTime()
+    val receivableAccount = invoice.invoice.debitTo?.trim().orEmpty()
+    val paidFromAccount = resolveAccount(refundModeOfPayment, refundModes, fallback = null)
+    if (receivableAccount.isBlank()) {
+      throw IllegalStateException("No se encontró cuenta por cobrar para aplicar el reembolso.")
+    }
+    if (paidFromAccount.isNullOrBlank()) {
+      throw IllegalStateException(
+          "El modo de reembolso '$refundModeOfPayment' no tiene una cuenta de caja/banco configurada."
+      )
+    }
+    if (paidFromAccount.equals(receivableAccount, ignoreCase = true)) {
+      throw IllegalStateException(
+          "La cuenta del modo de reembolso no puede ser igual a la cuenta por cobrar de la factura."
+      )
+    }
 
     val entry =
         PaymentEntryCreateDto(
@@ -257,9 +284,9 @@ class PartialReturnUseCase(
             modeOfPayment = refundModeOfPayment,
             paidAmount = totalReturn,
             receivedAmount = totalReturn,
-            paidFrom = resolveAccount(refundModeOfPayment, refundModes, invoice.invoice.debitTo),
-            paidTo = resolveAccount(refundModeOfPayment, refundModes, invoice.invoice.debitTo),
-            paidToAccountCurrency = invoice.invoice.currency,
+            paidFrom = paidFromAccount,
+            paidTo = receivableAccount,
+            paidToAccountCurrency = invoice.invoice.partyAccountCurrency ?: invoice.invoice.currency,
             referenceNo = refundReferenceNo,
             referenceDate = postingDate,
             references = references,
