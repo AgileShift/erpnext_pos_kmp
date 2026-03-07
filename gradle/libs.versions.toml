@@ -36,7 +36,7 @@ securityCryptoVersion = "1.1.0"
 sqlite = "2.6.2"
 konfig = "0.17.1"
 sqldelight = "2.2.1"
-spotless = "8.2.1"
+spotless = "8.3.0"
 detekt = "1.23.8"
 
 coil3 = "3.4.0"
