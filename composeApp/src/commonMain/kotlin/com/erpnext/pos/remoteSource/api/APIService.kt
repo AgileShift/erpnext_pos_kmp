@@ -77,6 +77,10 @@ import io.ktor.http.contentType
 import io.ktor.http.formUrlEncode
 import io.ktor.http.isSuccess
 import io.ktor.http.takeFrom
+import kotlin.io.encoding.Base64
+import kotlin.io.encoding.ExperimentalEncodingApi
+import kotlin.time.Clock
+import kotlin.time.ExperimentalTime
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
@@ -90,10 +94,6 @@ import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
-import kotlin.io.encoding.Base64
-import kotlin.io.encoding.ExperimentalEncodingApi
-import kotlin.time.Clock
-import kotlin.time.ExperimentalTime
 
 @OptIn(ExperimentalTime::class)
 class APIService(
@@ -1234,9 +1234,7 @@ class APIService(
         payload.profileName?.takeIf { it.isNotBlank() }
             ?: defaults.profileName?.takeIf { it.isNotBlank() }
             ?: ""
-    val resolvedOpening =
-        payload.posOpeningEntry?.takeIf { it.isNotBlank() }
-            ?: ""
+    val resolvedOpening = payload.posOpeningEntry?.takeIf { it.isNotBlank() } ?: ""
     val resolvedFromDate =
         payload.fromDate?.takeIf { it.isNotBlank() }
             ?: BootstrapFromDatePolicy.resolve(daysBack = DEFAULT_INVOICE_SYNC_DAYS)

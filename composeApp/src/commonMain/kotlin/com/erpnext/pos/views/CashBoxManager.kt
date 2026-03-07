@@ -1631,9 +1631,7 @@ class CashBoxManager(
       }
 
   suspend fun getShiftMovements(openingEntryId: String): List<ShiftMovementRecord> =
-      withContext(Dispatchers.IO) {
-        shiftMovementPreferences.listForOpeningEntry(openingEntryId)
-      }
+      withContext(Dispatchers.IO) { shiftMovementPreferences.listForOpeningEntry(openingEntryId) }
 
   suspend fun resolveTransferAccount(accountName: String): TransferAccountResolution =
       withContext(Dispatchers.IO) {
@@ -1760,17 +1758,20 @@ class CashBoxManager(
           error("Modo no existe en apertura: $mode")
         }
         val projected = roundMoney(available - amount)
-        activeCashbox.cashbox.openingEntryId?.trim()?.takeIf { it.isNotBlank() }?.let { opening ->
-          recordShiftMovement(
-              openingEntry = opening,
-              profileName = ctx.profileName,
-              movementType = ShiftMovementType.EXPENSE,
-              modeOfPayment = mode,
-              amount = amount,
-              currency = resolveModeCurrency(mode, ctx),
-              note = note,
-          )
-        }
+        activeCashbox.cashbox.openingEntryId
+            ?.trim()
+            ?.takeIf { it.isNotBlank() }
+            ?.let { opening ->
+              recordShiftMovement(
+                  openingEntry = opening,
+                  profileName = ctx.profileName,
+                  movementType = ShiftMovementType.EXPENSE,
+                  modeOfPayment = mode,
+                  amount = amount,
+                  currency = resolveModeCurrency(mode, ctx),
+                  note = note,
+              )
+            }
         AppLogger.info(
             "supplier-payment-outflow: profile=${ctx.profileName} cashbox=$cashboxId mode=$mode amount=$amount availableBefore=${roundMoney(available)} availableAfter=$projected note=${note?.trim().orEmpty()}"
         )
@@ -1887,38 +1888,47 @@ class CashBoxManager(
                   ?: error("Modo no existe en apertura: $mode")
           val availableByMode = computeExpectedFundsByMode(ctx, activeCashbox)
           val openingNow = roundMoney((availableByMode[mode] ?: opening) + amount)
-          activeCashbox.cashbox.openingEntryId?.trim()?.takeIf { it.isNotBlank() }?.let { openingEntry ->
-            recordShiftMovement(
-                openingEntry = openingEntry,
-                profileName = ctx.profileName,
-                movementType = ShiftMovementType.CASH_IN,
-                modeOfPayment = mode,
-                amount = amount,
-                currency = resolveModeCurrency(mode, ctx),
-                note = note,
-            )
-          }
+          activeCashbox.cashbox.openingEntryId
+              ?.trim()
+              ?.takeIf { it.isNotBlank() }
+              ?.let { openingEntry ->
+                recordShiftMovement(
+                    openingEntry = openingEntry,
+                    profileName = ctx.profileName,
+                    movementType = ShiftMovementType.CASH_IN,
+                    modeOfPayment = mode,
+                    amount = amount,
+                    currency = resolveModeCurrency(mode, ctx),
+                    note = note,
+                )
+              }
           AppLogger.info(
               "cash-movement: type=receive profile=${ctx.profileName} cashbox=$cashboxId mode=$mode amount=$amount openingBefore=$opening openingNow=$openingNow note=${note?.trim().orEmpty()}"
           )
         } else {
           val availableByMode = computeExpectedFundsByMode(ctx, activeCashbox)
-          val available = availableByMode[mode] ?: cashboxDao.getOpeningAmountForMode(cashboxId, mode) ?: 0.0
+          val available =
+              availableByMode[mode] ?: cashboxDao.getOpeningAmountForMode(cashboxId, mode) ?: 0.0
           if (available + 0.009 < amount) {
-            error("Fondos insuficientes en apertura para $mode. Disponible: ${roundMoney(available)}")
-          }
-          val remaining = roundMoney(available - amount)
-          activeCashbox.cashbox.openingEntryId?.trim()?.takeIf { it.isNotBlank() }?.let { openingEntry ->
-            recordShiftMovement(
-                openingEntry = openingEntry,
-                profileName = ctx.profileName,
-                movementType = ShiftMovementType.CASH_OUT,
-                modeOfPayment = mode,
-                amount = amount,
-                currency = resolveModeCurrency(mode, ctx),
-                note = note,
+            error(
+                "Fondos insuficientes en apertura para $mode. Disponible: ${roundMoney(available)}"
             )
           }
+          val remaining = roundMoney(available - amount)
+          activeCashbox.cashbox.openingEntryId
+              ?.trim()
+              ?.takeIf { it.isNotBlank() }
+              ?.let { openingEntry ->
+                recordShiftMovement(
+                    openingEntry = openingEntry,
+                    profileName = ctx.profileName,
+                    movementType = ShiftMovementType.CASH_OUT,
+                    modeOfPayment = mode,
+                    amount = amount,
+                    currency = resolveModeCurrency(mode, ctx),
+                    note = note,
+                )
+              }
           AppLogger.info(
               "cash-movement: type=pay profile=${ctx.profileName} cashbox=$cashboxId mode=$mode amount=$amount openingNow=$remaining note=${note?.trim().orEmpty()}"
           )
@@ -1976,8 +1986,7 @@ class CashBoxManager(
     val movementAdjustments =
         activeCashbox.cashbox.openingEntryId
             ?.takeIf { it.isNotBlank() }
-            ?.let { buildMovementAdjustmentsByMode(it) }
-            ?: emptyMap()
+            ?.let { buildMovementAdjustmentsByMode(it) } ?: emptyMap()
     val reconciliationSeeds =
         buildPaymentReconciliationSeeds(
             balanceDetails = activeCashbox.details,

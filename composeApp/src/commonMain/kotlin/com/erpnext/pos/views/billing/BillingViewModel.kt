@@ -67,6 +67,8 @@ import com.erpnext.pos.views.payment.PaymentHandler
 import com.erpnext.pos.views.salesflow.SalesFlowContext
 import com.erpnext.pos.views.salesflow.SalesFlowContextStore
 import com.erpnext.pos.views.salesflow.SalesFlowSource
+import kotlin.time.Clock
+import kotlin.time.ExperimentalTime
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -75,8 +77,6 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import kotlin.time.Clock
-import kotlin.time.ExperimentalTime
 
 class BillingViewModel(
     private val customersUseCase: FetchCustomersLocalUseCase,
@@ -1008,7 +1008,11 @@ class BillingViewModel(
                 }
             val paymentsRemoteSucceeded = paymentRegistration?.remotePaymentsSucceeded == true
             val paymentsSyncWarning =
-                if (resolvedPaymentLines.isNotEmpty() && shouldAttemptRemote && !paymentsRemoteSucceeded) {
+                if (
+                    resolvedPaymentLines.isNotEmpty() &&
+                        shouldAttemptRemote &&
+                        !paymentsRemoteSucceeded
+                ) {
                   tr(
                       spanish =
                           " No se pudieron enviar todos los pagos en línea; quedaron pendientes de sincronización.",
@@ -1831,7 +1835,8 @@ class BillingViewModel(
                 isCreditSale = true,
                 allowPartialPayment = allowPartialPayment,
                 tolerance = tolerance,
-            )) {
+            )
+    ) {
       is SalesPostingResolution.Blocked -> mapPostingBlockToMessage(resolution.reason)
       is SalesPostingResolution.Allowed -> null
     }
@@ -1877,7 +1882,8 @@ class BillingViewModel(
                 isCreditSale = isCreditSale,
                 allowPartialPayment = allowPartialPayment,
                 tolerance = tolerance,
-            )) {
+            )
+    ) {
       is SalesPostingResolution.Allowed -> resolution.decision
       is SalesPostingResolution.Blocked -> error(mapPostingBlockToMessage(resolution.reason))
     }

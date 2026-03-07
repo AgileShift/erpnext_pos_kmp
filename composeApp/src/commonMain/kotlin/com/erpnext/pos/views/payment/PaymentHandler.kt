@@ -348,8 +348,7 @@ class PaymentHandler(
               return@forEach
             }
 
-            val (paymentEntry, createdPaymentName) =
-                remoteAttempt.getOrNull() ?: return@forEach
+            val (paymentEntry, createdPaymentName) = remoteAttempt.getOrNull() ?: return@forEach
             adjustedLine.referenceNumber
                 ?.takeIf { it.isNotBlank() }
                 ?.let { ref -> remoteEntryByReference[ref] = createdPaymentName }

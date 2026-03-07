@@ -286,7 +286,8 @@ class PartialReturnUseCase(
             receivedAmount = totalReturn,
             paidFrom = paidFromAccount,
             paidTo = receivableAccount,
-            paidToAccountCurrency = invoice.invoice.partyAccountCurrency ?: invoice.invoice.currency,
+            paidToAccountCurrency =
+                invoice.invoice.partyAccountCurrency ?: invoice.invoice.currency,
             referenceNo = refundReferenceNo,
             referenceDate = postingDate,
             references = references,

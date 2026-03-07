@@ -7,6 +7,7 @@ import com.erpnext.pos.data.repositories.PosProfilePaymentMethodLocalRepository
 import com.erpnext.pos.localSource.dao.SalesInvoiceDao
 import com.erpnext.pos.localSource.dao.ShiftPaymentRow
 import com.erpnext.pos.localSource.entities.SalesInvoiceEntity
+import com.erpnext.pos.localSource.preferences.ShiftMovementType
 import com.erpnext.pos.sync.PushSyncRunner
 import com.erpnext.pos.sync.SyncContextProvider
 import com.erpnext.pos.utils.AppLogger
@@ -17,7 +18,6 @@ import com.erpnext.pos.utils.parseErpDateTimeToEpochMillis
 import com.erpnext.pos.utils.roundToCurrency
 import com.erpnext.pos.views.CashBoxManager
 import com.erpnext.pos.views.POSContext
-import com.erpnext.pos.localSource.preferences.ShiftMovementType
 import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -278,13 +278,17 @@ class ReconciliationViewModel(
     val expectedByModeBase = buildExpectedByMode(openingByMode, paymentsByMode, availableModes)
     val expectedByMode =
         (expectedByModeBase.keys + movementAdjustmentsByMode.keys).associateWith { mode ->
-          roundToCurrency((expectedByModeBase[mode] ?: 0.0) + (movementAdjustmentsByMode[mode] ?: 0.0))
+          roundToCurrency(
+              (expectedByModeBase[mode] ?: 0.0) + (movementAdjustmentsByMode[mode] ?: 0.0)
+          )
         }
     val openingByCurrency = mapOpeningByCurrency(openingByMode, resolvedModeCurrency, posCurrency)
     // El total esperado en caja contempla saldo esperado por modo efectivo en moneda POS.
     val expectedTotal =
         expectedByMode.entries
-            .filter { (mode, _) -> isCashMode(mode, cashModes.mapNotNull(::normalizeModeKey).toSet()) }
+            .filter { (mode, _) ->
+              isCashMode(mode, cashModes.mapNotNull(::normalizeModeKey).toSet())
+            }
             .sumOf { (mode, amount) ->
               val modeCurrencyCode = resolveModeCurrency(mode, resolvedModeCurrency, posCurrency)
               if (modeCurrencyCode.equals(posCurrency, ignoreCase = true)) {

@@ -13,10 +13,8 @@ fun buildClosingEntryDto(
     postingDate: String,
     periodEndDate: String,
     paymentReconciliation: List<PaymentReconciliationSeed>,
-    @Suppress("UNUSED_PARAMETER")
-    invoices: List<SalesInvoiceEntity>,
-    @Suppress("UNUSED_PARAMETER")
-    paidInvoiceNames: Set<String> = emptySet(),
+    @Suppress("UNUSED_PARAMETER") invoices: List<SalesInvoiceEntity>,
+    @Suppress("UNUSED_PARAMETER") paidInvoiceNames: Set<String> = emptySet(),
 ): POSClosingEntryDto {
   // sales_invoices se calcula en API desde pos_opening_entry para evitar divergencias cliente/ERP.
   return POSClosingEntryDto(

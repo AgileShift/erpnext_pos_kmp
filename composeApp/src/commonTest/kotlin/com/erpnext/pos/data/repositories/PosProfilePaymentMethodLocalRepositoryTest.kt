@@ -4,10 +4,10 @@ import com.erpnext.pos.localSource.dao.PosProfilePaymentMethodDao
 import com.erpnext.pos.localSource.dao.ResolvedPaymentMethod
 import com.erpnext.pos.localSource.entities.ModeOfPaymentEntity
 import com.erpnext.pos.localSource.entities.PosProfilePaymentMethodEntity
-import kotlinx.coroutines.runBlocking
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
+import kotlinx.coroutines.runBlocking
 
 class PosProfilePaymentMethodLocalRepositoryTest {
   @Test
@@ -218,9 +218,7 @@ private class InMemoryPosProfilePaymentMethodDao : PosProfilePaymentMethodDao {
   override suspend fun softDeleteStaleForProfile(profileId: String, activeMops: List<String>) {
     mutateRelations { relation ->
       if (
-          relation.profileId == profileId &&
-              !relation.isDeleted &&
-              relation.mopName !in activeMops
+          relation.profileId == profileId && !relation.isDeleted && relation.mopName !in activeMops
       ) {
         relation.copy(isDeleted = true)
       } else {
@@ -233,9 +231,7 @@ private class InMemoryPosProfilePaymentMethodDao : PosProfilePaymentMethodDao {
       profileId: String,
       activeMops: List<String>,
   ) {
-    relations.removeAll {
-      it.profileId == profileId && it.isDeleted && it.mopName !in activeMops
-    }
+    relations.removeAll { it.profileId == profileId && it.isDeleted && it.mopName !in activeMops }
   }
 
   override suspend fun softDeleteAllForProfile(profileId: String) {
@@ -276,7 +272,9 @@ private class InMemoryPosProfilePaymentMethodDao : PosProfilePaymentMethodDao {
     relations.removeAll { it.isDeleted }
   }
 
-  private fun mutateRelations(transform: (PosProfilePaymentMethodEntity) -> PosProfilePaymentMethodEntity) {
+  private fun mutateRelations(
+      transform: (PosProfilePaymentMethodEntity) -> PosProfilePaymentMethodEntity
+  ) {
     val updated = relations.map(transform)
     relations.clear()
     relations.addAll(updated)

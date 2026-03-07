@@ -46,6 +46,5 @@ data class PaymentReconciliationDto(
     @SerialName("expected_amount")
     val expectedAmount: Double? = null,
     @SerialName("closing_amount") val closingAmount: Double,
-    @EncodeDefault(EncodeDefault.Mode.NEVER)
-    val difference: Double? = null,
+    @EncodeDefault(EncodeDefault.Mode.NEVER) val difference: Double? = null,
 )

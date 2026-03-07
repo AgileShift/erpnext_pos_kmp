@@ -3,9 +3,9 @@ package com.erpnext.pos.utils
 import com.erpnext.pos.localSource.dao.ShiftPaymentRow
 import com.erpnext.pos.localSource.entities.BalanceDetailsEntity
 import com.erpnext.pos.localSource.entities.SalesInvoiceEntity
-import kotlinx.coroutines.runBlocking
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlinx.coroutines.runBlocking
 
 class PaymentReconciliationBuilderTest {
 
@@ -58,4 +58,3 @@ class PaymentReconciliationBuilderTest {
     assertEquals(3598.0, cashSeed.expectedAmount)
   }
 }
-

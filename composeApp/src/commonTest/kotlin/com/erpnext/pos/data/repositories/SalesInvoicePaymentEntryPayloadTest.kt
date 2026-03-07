@@ -5,10 +5,10 @@ import com.erpnext.pos.remoteSource.dto.SalesInvoicePaymentDto
 import com.erpnext.pos.remoteSource.dto.SalesInvoicePaymentScheduleDto
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
-import kotlin.test.assertFailsWith
 
 class SalesInvoicePaymentEntryPayloadTest {
 
@@ -112,18 +112,18 @@ class SalesInvoicePaymentEntryPayloadTest {
   fun paymentTerms_text_isNotPromotedToTemplate() {
     val source =
         fixture(
-            total = 220.0,
-            paid = 10.0,
-            outstanding = 210.0,
-            paymentSchedule =
-                listOf(
-                    SalesInvoicePaymentScheduleDto(
-                        paymentTerm = "Apartado 1 mes",
-                        invoicePortion = 100.0,
-                        dueDate = "2026-03-30",
-                    )
-                ),
-        )
+                total = 220.0,
+                paid = 10.0,
+                outstanding = 210.0,
+                paymentSchedule =
+                    listOf(
+                        SalesInvoicePaymentScheduleDto(
+                            paymentTerm = "Apartado 1 mes",
+                            invoicePortion = 100.0,
+                            dueDate = "2026-03-30",
+                        )
+                    ),
+            )
             .copy(paymentTerms = "Apartado 1 mes", paymentTermsTemplate = null)
 
     val sanitized = sanitizeInvoiceForPaymentEntry(source)

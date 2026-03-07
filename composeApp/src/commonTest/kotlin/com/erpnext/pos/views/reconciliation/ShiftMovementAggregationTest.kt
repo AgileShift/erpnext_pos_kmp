@@ -2,9 +2,9 @@ package com.erpnext.pos.views.reconciliation
 
 import com.erpnext.pos.localSource.preferences.ShiftMovementRecord
 import com.erpnext.pos.localSource.preferences.ShiftMovementType
-import kotlinx.coroutines.runBlocking
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlinx.coroutines.runBlocking
 
 class ShiftMovementAggregationTest {
 

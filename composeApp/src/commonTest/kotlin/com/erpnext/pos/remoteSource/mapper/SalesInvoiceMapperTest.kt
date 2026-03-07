@@ -14,7 +14,8 @@ class SalesInvoiceMapperTest {
 
   @Test
   fun cashSale_mapsAsPosAndPreservesPaymentAmount() {
-    val source = fixture(grandTotal = 256.0, paidAmount = 256.0, outstandingAmount = 0.0, isPos = true)
+    val source =
+        fixture(grandTotal = 256.0, paidAmount = 256.0, outstandingAmount = 0.0, isPos = true)
     val dto = source.toDto()
 
     assertTrue(dto.isPos)
@@ -28,7 +29,8 @@ class SalesInvoiceMapperTest {
 
   @Test
   fun partialSale_mapsAsPosAndUsesEnteredPayment() {
-    val source = fixture(grandTotal = 381.0, paidAmount = 300.0, outstandingAmount = 81.0, isPos = true)
+    val source =
+        fixture(grandTotal = 381.0, paidAmount = 300.0, outstandingAmount = 81.0, isPos = true)
     val dto = source.toDto()
 
     assertTrue(dto.isPos)
@@ -40,7 +42,8 @@ class SalesInvoiceMapperTest {
 
   @Test
   fun fullCreditSale_forcesNonPosAndClearsPosReconciliationFields() {
-    val source = fixture(grandTotal = 220.0, paidAmount = 0.0, outstandingAmount = 220.0, isPos = true)
+    val source =
+        fixture(grandTotal = 220.0, paidAmount = 0.0, outstandingAmount = 220.0, isPos = true)
     val dto = source.toDto()
 
     assertFalse(dto.isPos)

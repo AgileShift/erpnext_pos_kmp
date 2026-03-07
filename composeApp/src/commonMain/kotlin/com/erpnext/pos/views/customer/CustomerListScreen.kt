@@ -3236,8 +3236,7 @@ private fun CustomerInvoiceHistorySheet(
   var showFullReturnDialog by remember { mutableStateOf(false) }
   var fullReturnInvoiceId by remember { mutableStateOf<String?>(null) }
   var fullReturnInvoice by remember { mutableStateOf<SalesInvoiceBO?>(null) }
-  var fullReturnInvoiceLocal by
-      remember { mutableStateOf<SalesInvoiceWithItemsAndPayments?>(null) }
+  var fullReturnInvoiceLocal by remember { mutableStateOf<SalesInvoiceWithItemsAndPayments?>(null) }
   var fullReturnLoading by remember { mutableStateOf(false) }
   var fullReturnError by remember { mutableStateOf<String?>(null) }
   var fullRefundMode by remember { mutableStateOf<String?>(null) }
@@ -4099,8 +4098,7 @@ private fun CustomerInvoiceHistoryContent(
   var showFullReturnDialog by remember { mutableStateOf(false) }
   var fullReturnInvoiceId by remember { mutableStateOf<String?>(null) }
   var fullReturnInvoice by remember { mutableStateOf<SalesInvoiceBO?>(null) }
-  var fullReturnInvoiceLocal by
-      remember { mutableStateOf<SalesInvoiceWithItemsAndPayments?>(null) }
+  var fullReturnInvoiceLocal by remember { mutableStateOf<SalesInvoiceWithItemsAndPayments?>(null) }
   var fullReturnLoading by remember { mutableStateOf(false) }
   var fullReturnError by remember { mutableStateOf<String?>(null) }
   var fullRefundMode by remember { mutableStateOf<String?>(null) }
@@ -4108,8 +4106,9 @@ private fun CustomerInvoiceHistoryContent(
   var fullReturnReason by remember { mutableStateOf("") }
   var fullReturnDestination by remember { mutableStateOf(defaultReturnDestination(returnPolicy)) }
   var fullDestinationTouched by remember { mutableStateOf(false) }
-  var isFullPhysicalReturn by
-      remember { mutableStateOf(defaultReturnIsPhysical(isPosInvoice = true)) }
+  var isFullPhysicalReturn by remember {
+    mutableStateOf(defaultReturnIsPhysical(isPosInvoice = true))
+  }
 
   val refundOptions =
       remember(paymentState.paymentModes) {
@@ -4247,14 +4246,14 @@ private fun CustomerInvoiceHistoryContent(
                 ReturnSelectionItemUi(
                     itemCode = itemCode,
                     itemName =
-                        rows.firstNotNullOfOrNull { row -> row.itemName?.takeIf { it.isNotBlank() } }
-                            ?: itemCode,
+                        rows.firstNotNullOfOrNull { row ->
+                          row.itemName?.takeIf { it.isNotBlank() }
+                        } ?: itemCode,
                     soldQty = soldQty,
                     unitAmount = unitAmount,
                 )
               }
-              ?.sortedBy { it.itemName.lowercase() }
-              ?: emptyList()
+              ?.sortedBy { it.itemName.lowercase() } ?: emptyList()
         }
     val invoiceCurrency = normalizeCurrency(returnInvoiceLocal?.invoice?.currency)
     val returnTotal =
@@ -4266,7 +4265,9 @@ private fun CustomerInvoiceHistoryContent(
           }
         }
     val projectedOutstanding =
-        returnInvoiceLocal?.invoice?.outstandingAmount?.let { (it - returnTotal).coerceAtLeast(0.0) }
+        returnInvoiceLocal?.invoice?.outstandingAmount?.let {
+          (it - returnTotal).coerceAtLeast(0.0)
+        }
     val refundAllowed = returnPolicy.allowRefunds
     val effectiveDestination = if (refundAllowed) returnDestination else ReturnDestination.CREDIT
     val refundEnabled = refundAllowed && effectiveDestination == ReturnDestination.RETURN
@@ -4496,7 +4497,8 @@ private fun CustomerInvoiceHistoryContent(
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                         Text(
-                            text = "Precio unitario: ${formatCurrency(invoiceCurrency, item.unitAmount)}",
+                            text =
+                                "Precio unitario: ${formatCurrency(invoiceCurrency, item.unitAmount)}",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -4635,8 +4637,7 @@ private fun CustomerInvoiceHistoryContent(
             .coerceAtLeast(0.0)
     val outstandingAmount =
         fullReturnInvoiceLocal?.invoice?.outstandingAmount ?: fullReturnInvoice?.outstandingAmount
-    val projectedOutstanding =
-        outstandingAmount?.let { (it - returnTotal).coerceAtLeast(0.0) }
+    val projectedOutstanding = outstandingAmount?.let { (it - returnTotal).coerceAtLeast(0.0) }
     val refundAllowed = returnPolicy.allowRefunds
     val effectiveDestination =
         if (refundAllowed) fullReturnDestination else ReturnDestination.CREDIT

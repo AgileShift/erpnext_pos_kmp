@@ -121,9 +121,7 @@ fun ReconciliationScreen(
         it.expectedByMode.filterKeys { key -> cashKeys.contains(key) }
       } ?: emptyMap()
   val expectedCashByCurrency: Map<String, Double> =
-      summary?.let { s ->
-        buildExpectedCashByCurrency(summary = s)
-      } ?: emptyMap()
+      summary?.let { s -> buildExpectedCashByCurrency(summary = s) } ?: emptyMap()
   // Totales contados por moneda
   val cashTotalsByCurrency =
       countState.mapValues { entry -> entry.value.sumOf { it.value * it.count } }
@@ -266,8 +264,7 @@ private fun buildExpectedCashByCurrency(summary: ReconciliationSummaryUi): Map<S
     return mapOf(summary.currency.uppercase() to summary.expectedTotal)
   }
   val cashModeKeys = summary.cashModes.map { it.uppercase() }.toSet()
-  val modeCurrencyByKey =
-      summary.cashModeCurrency.mapKeys { (mode, _) -> mode.uppercase() }
+  val modeCurrencyByKey = summary.cashModeCurrency.mapKeys { (mode, _) -> mode.uppercase() }
   val fallbackCurrency = summary.currency.uppercase()
   val totals = mutableMapOf<String, Double>()
   summary.expectedByMode.forEach { (mode, amount) ->

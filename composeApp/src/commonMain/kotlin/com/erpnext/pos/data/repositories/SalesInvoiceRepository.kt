@@ -36,11 +36,11 @@ import com.erpnext.pos.utils.roundToCurrency
 import com.erpnext.pos.utils.savePdfFile
 import com.erpnext.pos.utils.view.DateTimeProvider
 import com.erpnext.pos.views.CashBoxManager
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.flowOf
 import kotlin.math.abs
 import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flowOf
 
 @OptIn(ExperimentalTime::class)
 class SalesInvoiceRepository(
@@ -217,7 +217,11 @@ class SalesInvoiceRepository(
     entity.invoice.profileId = if (isPosInvoice) profileId else null
     entity.invoice.posOpeningEntry = if (isPosInvoice) openingEntryId else null
     entity.payments.forEach { it.posOpeningEntry = if (isPosInvoice) openingEntryId else null }
-    check(!(isPosInvoice && (entity.invoice.profileId.isNullOrBlank() || entity.invoice.posOpeningEntry.isNullOrBlank()))) {
+    check(
+        !(isPosInvoice &&
+            (entity.invoice.profileId.isNullOrBlank() ||
+                entity.invoice.posOpeningEntry.isNullOrBlank()))
+    ) {
       "Falta POS Profile o apertura de caja activa para crear la factura."
     }
     val providedRate = dto.conversionRate

@@ -72,6 +72,9 @@ import com.erpnext.pos.views.components.DenominationCounter
 import com.erpnext.pos.views.components.DenominationCounterLabels
 import com.erpnext.pos.views.components.DenominationUi
 import com.erpnext.pos.views.components.buildDenominationsForCurrency
+import kotlin.math.max
+import kotlin.time.Clock
+import kotlin.time.ExperimentalTime
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
@@ -80,9 +83,6 @@ import kotlinx.coroutines.launch
 import kotlinx.datetime.DayOfWeek
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
-import kotlin.math.max
-import kotlin.time.Clock
-import kotlin.time.ExperimentalTime
 
 @Composable
 fun CashboxOpeningScreen(
@@ -96,364 +96,339 @@ fun CashboxOpeningScreen(
     onDismiss: () -> Unit,
     snackbar: SnackbarController,
 ) {
-    var isSubmitting by remember { mutableStateOf(false) }
-    var selectedProfile by remember { mutableStateOf<POSProfileSimpleBO?>(null) }
-    var profileMenuExpanded by remember { mutableStateOf(false) }
-    var selectedCurrency by remember { mutableStateOf("") }
-    var lastDraftKey by remember { mutableStateOf<String?>(null) }
-    val denominationState = remember {
-        androidx.compose.runtime.mutableStateMapOf<String, List<DenominationUi>>()
-    }
-    val openingSessionPreferences: OpeningSessionPreferences = org.koin.compose.koinInject()
-    val openingDraft by openingSessionPreferences.draft.collectAsState(initial = null)
-    val formatter = remember { DecimalFormatter() }
-    val scope = rememberCoroutineScope()
+  var isSubmitting by remember { mutableStateOf(false) }
+  var selectedProfile by remember { mutableStateOf<POSProfileSimpleBO?>(null) }
+  var profileMenuExpanded by remember { mutableStateOf(false) }
+  var selectedCurrency by remember { mutableStateOf("") }
+  var lastDraftKey by remember { mutableStateOf<String?>(null) }
+  val denominationState = remember {
+    androidx.compose.runtime.mutableStateMapOf<String, List<DenominationUi>>()
+  }
+  val openingSessionPreferences: OpeningSessionPreferences = org.koin.compose.koinInject()
+  val openingDraft by openingSessionPreferences.draft.collectAsState(initial = null)
+  val formatter = remember { DecimalFormatter() }
+  val scope = rememberCoroutineScope()
 
-    LaunchedEffect(profiles) {
-        if (profiles.size == 1) {
-            selectedProfile = profiles.first()
-            onSelectProfile(profiles.first())
+  LaunchedEffect(profiles) {
+    if (profiles.size == 1) {
+      selectedProfile = profiles.first()
+      onSelectProfile(profiles.first())
+      profileMenuExpanded = false
+    }
+  }
+
+  LaunchedEffect(selectedProfile?.name) {
+    selectedCurrency = ""
+    denominationState.clear()
+    lastDraftKey = null
+    onLoadOpeningProfile(selectedProfile?.name)
+  }
+
+  val paymentModes =
+      openingState.methods.map {
+        com.erpnext.pos.domain.models.PaymentModesBO(name = it.mopName, modeOfPayment = it.mopName)
+      }
+  val baseCurrency =
+      openingState.baseCurrency.takeIf { it.isNotBlank() }
+          ?: selectedProfile?.currency
+          ?: profiles.firstOrNull()?.currency
+          ?: "USD"
+  val normalizedBaseCurrency = normalizeCurrency(baseCurrency)
+  val cashMethodsByCurrency = openingState.cashMethodsByCurrency
+  val cashMethodByCurrency = cashMethodsByCurrency.mapValues { it.value.first() }
+  val duplicateCashCurrencies = cashMethodsByCurrency.filterValues { it.size > 1 }.keys.toList()
+  val cashMethodsMissingCurrency =
+      openingState.methods.filter { method ->
+        method.currency.isNullOrBlank() &&
+            method.type?.equals("Cash", ignoreCase = true) == true &&
+            method.enabled &&
+            method.enabledInProfile
+      }
+  val openingCurrencies = remember(cashMethodsByCurrency) { cashMethodsByCurrency.keys.sorted() }
+
+  LaunchedEffect(openingDraft, profiles, user?.email) {
+    val userEmail = user?.email ?: return@LaunchedEffect
+    val draftProfileId = openingDraft?.takeIf { it.user == userEmail }?.posProfileId
+    if (draftProfileId != null && selectedProfile == null) {
+      profiles
+          .firstOrNull { it.name == draftProfileId }
+          ?.let { profile ->
+            selectedProfile = profile
+            onSelectProfile(profile)
             profileMenuExpanded = false
-        }
+          }
     }
+  }
 
-    LaunchedEffect(selectedProfile?.name) {
-        selectedCurrency = ""
-        denominationState.clear()
-        lastDraftKey = null
-        onLoadOpeningProfile(selectedProfile?.name)
+  LaunchedEffect(openingCurrencies) {
+    if (openingCurrencies.isNotEmpty() && selectedCurrency !in openingCurrencies) {
+      selectedCurrency = openingCurrencies.first()
     }
-
-    val paymentModes =
-        openingState.methods.map {
-            com.erpnext.pos.domain.models.PaymentModesBO(
-                name = it.mopName,
-                modeOfPayment = it.mopName
+    openingCurrencies.forEach { currency ->
+      if (!denominationState.containsKey(currency)) {
+        denominationState[currency] =
+            buildDenominationsForCurrency(
+                currency = currency,
+                symbolOverride = currency.toCurrencySymbol(),
+                formatter = formatter,
             )
-        }
-    val baseCurrency =
-        openingState.baseCurrency.takeIf { it.isNotBlank() }
-            ?: selectedProfile?.currency
-            ?: profiles.firstOrNull()?.currency
-            ?: "USD"
-    val normalizedBaseCurrency = normalizeCurrency(baseCurrency)
-    val cashMethodsByCurrency = openingState.cashMethodsByCurrency
-    val cashMethodByCurrency = cashMethodsByCurrency.mapValues { it.value.first() }
-    val duplicateCashCurrencies = cashMethodsByCurrency.filterValues { it.size > 1 }.keys.toList()
-    val cashMethodsMissingCurrency =
-        openingState.methods.filter { method ->
-            method.currency.isNullOrBlank() &&
-                    method.type?.equals("Cash", ignoreCase = true) == true &&
-                    method.enabled &&
-                    method.enabledInProfile
-        }
-    val openingCurrencies = remember(cashMethodsByCurrency) { cashMethodsByCurrency.keys.sorted() }
-
-    LaunchedEffect(openingDraft, profiles, user?.email) {
-        val userEmail = user?.email ?: return@LaunchedEffect
-        val draftProfileId = openingDraft?.takeIf { it.user == userEmail }?.posProfileId
-        if (draftProfileId != null && selectedProfile == null) {
-            profiles
-                .firstOrNull { it.name == draftProfileId }
-                ?.let { profile ->
-                    selectedProfile = profile
-                    onSelectProfile(profile)
-                    profileMenuExpanded = false
-                }
-        }
+      }
     }
+  }
 
-    LaunchedEffect(openingCurrencies) {
-        if (openingCurrencies.isNotEmpty() && selectedCurrency !in openingCurrencies) {
-            selectedCurrency = openingCurrencies.first()
-        }
-        openingCurrencies.forEach { currency ->
-            if (!denominationState.containsKey(currency)) {
-                denominationState[currency] =
-                    buildDenominationsForCurrency(
-                        currency = currency,
-                        symbolOverride = currency.toCurrencySymbol(),
-                        formatter = formatter,
-                    )
-            }
-        }
+  LaunchedEffect(openingDraft, selectedProfile?.name, user?.email, openingCurrencies) {
+    val profileId = selectedProfile?.name ?: return@LaunchedEffect
+    val userEmail = user?.email ?: return@LaunchedEffect
+    val draft = openingDraft?.takeIf { it.posProfileId == profileId && it.user == userEmail }
+    val draftKey = draft?.let { "${it.posProfileId}-${it.user}" }
+    if (draft != null && draftKey != null && draftKey != lastDraftKey) {
+      openingCurrencies.forEach { currency ->
+        val baseDenoms =
+            buildDenominationsForCurrency(
+                currency = currency,
+                symbolOverride = currency.toCurrencySymbol(),
+                formatter = formatter,
+            )
+        val updated = applyDraftCounts(baseDenoms, draft.denominationCounts[currency].orEmpty())
+        denominationState[currency] = updated
+      }
+      lastDraftKey = draftKey
     }
+  }
 
-    LaunchedEffect(openingDraft, selectedProfile?.name, user?.email, openingCurrencies) {
-        val profileId = selectedProfile?.name ?: return@LaunchedEffect
-        val userEmail = user?.email ?: return@LaunchedEffect
-        val draft = openingDraft?.takeIf { it.posProfileId == profileId && it.user == userEmail }
-        val draftKey = draft?.let { "${it.posProfileId}-${it.user}" }
-        if (draft != null && draftKey != null && draftKey != lastDraftKey) {
-            openingCurrencies.forEach { currency ->
-                val baseDenoms =
-                    buildDenominationsForCurrency(
-                        currency = currency,
-                        symbolOverride = currency.toCurrencySymbol(),
-                        formatter = formatter,
-                    )
-                val updated =
-                    applyDraftCounts(baseDenoms, draft.denominationCounts[currency].orEmpty())
-                denominationState[currency] = updated
-            }
-            lastDraftKey = draftKey
+  LaunchedEffect(selectedProfile?.name, user?.email, openingCurrencies) {
+    val profileId = selectedProfile?.name ?: return@LaunchedEffect
+    val userEmail = user?.email ?: return@LaunchedEffect
+    snapshotFlow { denominationState.toMap().mapValues { (_, denoms) -> denoms.map { it.copy() } } }
+        .debounce(500)
+        .collectLatest { current ->
+          if (current.isEmpty()) return@collectLatest
+          val totals = current.mapValues { entry -> entry.value.sumOf { it.value * it.count } }
+          val counts =
+              current.mapValues { entry ->
+                entry.value.map { DenominationCount(value = it.value, count = it.count) }
+              }
+          openingSessionPreferences.saveDraft(
+              OpeningSessionDraft(
+                  posProfileId = profileId,
+                  user = userEmail,
+                  createdAtEpochMillis = Clock.System.now().toEpochMilliseconds(),
+                  openingCashByCurrency = totals,
+                  denominationCounts = counts,
+              )
+          )
         }
+  }
+
+  val totalsByCurrency: Map<String, Double> =
+      openingCurrencies.associateWith { currency ->
+        denominationState[currency].orEmpty().sumOf { it.value * it.count }
+      }
+  val canOpen = selectedProfile != null && cashMethodsByCurrency.isNotEmpty()
+
+  val handleOpen: () -> Unit = {
+    val profile = selectedProfile
+    if (profile == null) {
+      scope.launch {
+        snackbar.show("Selecciona un perfil de POS", SnackbarType.Error, SnackbarPosition.Top)
+      }
+    } else {
+      val amountByMode =
+          cashMethodByCurrency.entries.associate { (currency, resolved) ->
+            resolved.mopName to (totalsByCurrency[currency] ?: 0.0)
+          }
+      val amounts =
+          paymentModes.map { mode ->
+            val amount = amountByMode[mode.name] ?: 0.0
+            PaymentModeWithAmount(mode = mode, amount = amount)
+          }
+      isSubmitting = true
+      scope.launch {
+        val totalsMsg =
+            totalsByCurrency.entries.joinToString(" · ") { (cur, total) ->
+              formatCurrency(cur, total)
+            }
+        try {
+          onOpenCashbox(profile, amounts)
+          openingSessionPreferences.clearDraft()
+          snackbar.show("Caja abierta: $totalsMsg", SnackbarType.Success, SnackbarPosition.Top)
+          onDismiss()
+        } catch (e: Exception) {
+          snackbar.show(
+              e.message ?: "Error al abrir caja",
+              SnackbarType.Error,
+              SnackbarPosition.Top,
+          )
+        }
+        isSubmitting = false
+      }
     }
+  }
 
-    LaunchedEffect(selectedProfile?.name, user?.email, openingCurrencies) {
-        val profileId = selectedProfile?.name ?: return@LaunchedEffect
-        val userEmail = user?.email ?: return@LaunchedEffect
-        snapshotFlow {
-            denominationState.toMap().mapValues { (_, denoms) -> denoms.map { it.copy() } }
-        }
-            .debounce(500)
-            .collectLatest { current ->
-                if (current.isEmpty()) return@collectLatest
-                val totals =
-                    current.mapValues { entry -> entry.value.sumOf { it.value * it.count } }
-                val counts =
-                    current.mapValues { entry ->
-                        entry.value.map { DenominationCount(value = it.value, count = it.count) }
-                    }
-                openingSessionPreferences.saveDraft(
-                    OpeningSessionDraft(
-                        posProfileId = profileId,
-                        user = userEmail,
-                        createdAtEpochMillis = Clock.System.now().toEpochMilliseconds(),
-                        openingCashByCurrency = totals,
-                        denominationCounts = counts,
-                    )
-                )
-            }
-    }
+  Surface(color = MaterialTheme.colorScheme.background, modifier = Modifier.fillMaxSize()) {
+    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+      val isCompact = maxWidth < 900.dp
 
-    val totalsByCurrency: Map<String, Double> =
-        openingCurrencies.associateWith { currency ->
-            denominationState[currency].orEmpty().sumOf { it.value * it.count }
-        }
-    val canOpen = selectedProfile != null && cashMethodsByCurrency.isNotEmpty()
+      Column(modifier = Modifier.fillMaxSize()) {
+        OpeningHeader(onDismiss = onDismiss)
 
-    val handleOpen: () -> Unit = {
-        val profile = selectedProfile
-        if (profile == null) {
-            scope.launch {
-                snackbar.show(
-                    "Selecciona un perfil de POS",
-                    SnackbarType.Error,
-                    SnackbarPosition.Top
-                )
-            }
+        val bottomPadding = if (isCompact) 96.dp else 24.dp
+
+        if (isCompact) {
+          Column(
+              modifier =
+                  Modifier.fillMaxSize()
+                      .padding(horizontal = 20.dp, vertical = 16.dp)
+                      .padding(bottom = bottomPadding),
+              verticalArrangement = Arrangement.spacedBy(12.dp),
+          ) {
+            OpeningFormSection(
+                user = user,
+                profiles = profiles,
+                selectedProfile = selectedProfile,
+                onSelectProfile = {
+                  selectedProfile = it
+                  onSelectProfile(it)
+                },
+                expanded = profileMenuExpanded,
+                onExpandedChange = { profileMenuExpanded = it },
+                totalsByCurrency = totalsByCurrency,
+                isLoading =
+                    isSubmitting || openingState.isLoading || uiState is HomeState.POSInfoLoading,
+                canOpen = canOpen && !isSubmitting,
+                cashModesMissingCurrency = cashMethodsMissingCurrency.map { it.mopName },
+                onOpen = handleOpen,
+                onCancel = onDismiss,
+            )
+
+            val activeCurrency = selectedCurrency.ifBlank { normalizedBaseCurrency }
+            OpeningCashContent(
+                countCurrencies = openingCurrencies,
+                selectedCurrency = activeCurrency,
+                denominations = denominationState[activeCurrency].orEmpty(),
+                onCurrencyChange = { selectedCurrency = it },
+                onDenominationChange = { value, count ->
+                  val current = denominationState[activeCurrency].orEmpty()
+                  denominationState[activeCurrency] =
+                      current.map { denom ->
+                        if (denom.value == value) denom.copy(count = max(0, count)) else denom
+                      }
+                },
+                totalsByCurrency = totalsByCurrency,
+            )
+          }
         } else {
-            val amountByMode =
-                cashMethodByCurrency.entries.associate { (currency, resolved) ->
-                    resolved.mopName to (totalsByCurrency[currency] ?: 0.0)
-                }
-            val amounts =
-                paymentModes.map { mode ->
-                    val amount = amountByMode[mode.name] ?: 0.0
-                    PaymentModeWithAmount(mode = mode, amount = amount)
-                }
-            isSubmitting = true
-            scope.launch {
-                val totalsMsg =
-                    totalsByCurrency.entries.joinToString(" · ") { (cur, total) ->
-                        formatCurrency(cur, total)
-                    }
-                try {
-                    onOpenCashbox(profile, amounts)
-                    openingSessionPreferences.clearDraft()
-                    snackbar.show(
-                        "Caja abierta: $totalsMsg",
-                        SnackbarType.Success,
-                        SnackbarPosition.Top
-                    )
-                    onDismiss()
-                } catch (e: Exception) {
-                    snackbar.show(
-                        e.message ?: "Error al abrir caja",
-                        SnackbarType.Error,
-                        SnackbarPosition.Top,
-                    )
-                }
-                isSubmitting = false
+          Row(
+              modifier =
+                  Modifier.fillMaxSize()
+                      .padding(horizontal = 20.dp, vertical = 16.dp)
+                      .padding(bottom = bottomPadding),
+              horizontalArrangement = Arrangement.spacedBy(24.dp),
+          ) {
+            Column(
+                modifier = Modifier.weight(4f).fillMaxSize(),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+              OpeningFormSection(
+                  user = user,
+                  profiles = profiles,
+                  selectedProfile = selectedProfile,
+                  onSelectProfile = {
+                    selectedProfile = it
+                    onSelectProfile(it)
+                  },
+                  expanded = profileMenuExpanded,
+                  onExpandedChange = { profileMenuExpanded = it },
+                  totalsByCurrency = totalsByCurrency,
+                  isLoading =
+                      isSubmitting || openingState.isLoading || uiState is HomeState.POSInfoLoading,
+                  canOpen = canOpen && !isSubmitting,
+                  cashModesMissingCurrency = cashMethodsMissingCurrency.map { it.mopName },
+                  onOpen = handleOpen,
+                  onCancel = onDismiss,
+              )
             }
-        }
-    }
 
-    Surface(color = MaterialTheme.colorScheme.background, modifier = Modifier.fillMaxSize()) {
-        BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
-            val isCompact = maxWidth < 900.dp
-
-            Column(modifier = Modifier.fillMaxSize()) {
-                OpeningHeader(onDismiss = onDismiss)
-
-                val bottomPadding = if (isCompact) 96.dp else 24.dp
-
-                if (isCompact) {
-                    Column(
-                        modifier =
-                            Modifier.fillMaxSize()
-                                .padding(horizontal = 20.dp, vertical = 16.dp)
-                                .padding(bottom = bottomPadding),
-                        verticalArrangement = Arrangement.spacedBy(12.dp),
-                    ) {
-                        OpeningFormSection(
-                            user = user,
-                            profiles = profiles,
-                            selectedProfile = selectedProfile,
-                            onSelectProfile = {
-                                selectedProfile = it
-                                onSelectProfile(it)
-                            },
-                            expanded = profileMenuExpanded,
-                            onExpandedChange = { profileMenuExpanded = it },
-                            totalsByCurrency = totalsByCurrency,
-                            isLoading =
-                                isSubmitting || openingState.isLoading || uiState is HomeState.POSInfoLoading,
-                            canOpen = canOpen && !isSubmitting,
-                            cashModesMissingCurrency = cashMethodsMissingCurrency.map { it.mopName },
-                            onOpen = handleOpen,
-                            onCancel = onDismiss,
-                        )
-
-                        val activeCurrency = selectedCurrency.ifBlank { normalizedBaseCurrency }
-                        OpeningCashContent(
-                            countCurrencies = openingCurrencies,
-                            selectedCurrency = activeCurrency,
-                            denominations = denominationState[activeCurrency].orEmpty(),
-                            onCurrencyChange = { selectedCurrency = it },
-                            onDenominationChange = { value, count ->
-                                val current = denominationState[activeCurrency].orEmpty()
-                                denominationState[activeCurrency] =
-                                    current.map { denom ->
-                                        if (denom.value == value) denom.copy(
-                                            count = max(
-                                                0,
-                                                count
-                                            )
-                                        ) else denom
-                                    }
-                            },
-                            totalsByCurrency = totalsByCurrency,
-                        )
-                    }
-                } else {
-                    Row(
-                        modifier =
-                            Modifier.fillMaxSize()
-                                .padding(horizontal = 20.dp, vertical = 16.dp)
-                                .padding(bottom = bottomPadding),
-                        horizontalArrangement = Arrangement.spacedBy(24.dp),
-                    ) {
-                        Column(
-                            modifier = Modifier.weight(4f).fillMaxSize(),
-                            verticalArrangement = Arrangement.spacedBy(12.dp),
-                        ) {
-                            OpeningFormSection(
-                                user = user,
-                                profiles = profiles,
-                                selectedProfile = selectedProfile,
-                                onSelectProfile = {
-                                    selectedProfile = it
-                                    onSelectProfile(it)
-                                },
-                                expanded = profileMenuExpanded,
-                                onExpandedChange = { profileMenuExpanded = it },
-                                totalsByCurrency = totalsByCurrency,
-                                isLoading =
-                                    isSubmitting || openingState.isLoading || uiState is HomeState.POSInfoLoading,
-                                canOpen = canOpen && !isSubmitting,
-                                cashModesMissingCurrency = cashMethodsMissingCurrency.map { it.mopName },
-                                onOpen = handleOpen,
-                                onCancel = onDismiss,
-                            )
+            Column(
+                modifier = Modifier.weight(8f).fillMaxSize(),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+              val activeCurrency = selectedCurrency.ifBlank { normalizedBaseCurrency }
+              OpeningCashContent(
+                  countCurrencies = openingCurrencies,
+                  selectedCurrency = activeCurrency,
+                  denominations = denominationState[activeCurrency].orEmpty(),
+                  onCurrencyChange = { selectedCurrency = it },
+                  onDenominationChange = { value, count ->
+                    val current = denominationState[activeCurrency].orEmpty()
+                    denominationState[activeCurrency] =
+                        current.map { denom ->
+                          if (denom.value == value) denom.copy(count = max(0, count)) else denom
                         }
-
-                        Column(
-                            modifier = Modifier.weight(8f).fillMaxSize(),
-                            verticalArrangement = Arrangement.spacedBy(12.dp),
-                        ) {
-                            val activeCurrency = selectedCurrency.ifBlank { normalizedBaseCurrency }
-                            OpeningCashContent(
-                                countCurrencies = openingCurrencies,
-                                selectedCurrency = activeCurrency,
-                                denominations = denominationState[activeCurrency].orEmpty(),
-                                onCurrencyChange = { selectedCurrency = it },
-                                onDenominationChange = { value, count ->
-                                    val current = denominationState[activeCurrency].orEmpty()
-                                    denominationState[activeCurrency] =
-                                        current.map { denom ->
-                                            if (denom.value == value) denom.copy(
-                                                count = max(
-                                                    0,
-                                                    count
-                                                )
-                                            ) else denom
-                                        }
-                                },
-                                totalsByCurrency = totalsByCurrency,
-                            )
-                        }
-                    }
-                }
+                  },
+                  totalsByCurrency = totalsByCurrency,
+              )
             }
-
-            SnackbarHost(
-                snackbar = snackbar.snackbar.collectAsState().value,
-                onDismiss = { snackbar.dismiss() },
-                modifier = Modifier.fillMaxSize(),
-            )
-
-            if (isSubmitting) {
-                Box(
-                    modifier =
-                        Modifier.fillMaxSize()
-                            .background(MaterialTheme.colorScheme.background.copy(alpha = 0.35f)),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    CircularProgressIndicator()
-                }
-            }
+          }
         }
+      }
+
+      SnackbarHost(
+          snackbar = snackbar.snackbar.collectAsState().value,
+          onDismiss = { snackbar.dismiss() },
+          modifier = Modifier.fillMaxSize(),
+      )
+
+      if (isSubmitting) {
+        Box(
+            modifier =
+                Modifier.fillMaxSize()
+                    .background(MaterialTheme.colorScheme.background.copy(alpha = 0.35f)),
+            contentAlignment = Alignment.Center,
+        ) {
+          CircularProgressIndicator()
+        }
+      }
     }
+  }
 }
 
 @Composable
 private fun OpeningHeader(onDismiss: () -> Unit) {
-    Surface(
-        color = MaterialTheme.colorScheme.surface,
-        tonalElevation = 0.dp,
-        shadowElevation = 0.dp,
-    ) {
-        Column {
-            Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                IconButton(onClick = onDismiss) {
-                    Icon(
-                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = "Volver",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                Column {
-                    Text(
-                        text = "Apertura de caja",
-                        style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
-                        color = MaterialTheme.colorScheme.onSurface,
-                    )
-                    Text(
-                        text = "Nueva entrada",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            }
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+  Surface(
+      color = MaterialTheme.colorScheme.surface,
+      tonalElevation = 0.dp,
+      shadowElevation = 0.dp,
+  ) {
+    Column {
+      Row(
+          modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
+          verticalAlignment = Alignment.CenterVertically,
+          horizontalArrangement = Arrangement.spacedBy(12.dp),
+      ) {
+        IconButton(onClick = onDismiss) {
+          Icon(
+              imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+              contentDescription = "Volver",
+              tint = MaterialTheme.colorScheme.onSurfaceVariant,
+          )
         }
+        Column {
+          Text(
+              text = "Apertura de caja",
+              style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+              color = MaterialTheme.colorScheme.onSurface,
+          )
+          Text(
+              text = "Nueva entrada",
+              style = MaterialTheme.typography.bodySmall,
+              color = MaterialTheme.colorScheme.onSurfaceVariant,
+          )
+        }
+      }
+      HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
     }
+  }
 }
 
 @Composable
@@ -471,248 +446,240 @@ private fun OpeningFormSection(
     onOpen: () -> Unit,
     onCancel: () -> Unit,
 ) {
-    SectionCard(title = "Detalles de Apertura") {
-        val nowInstant by
+  SectionCard(title = "Detalles de Apertura") {
+    val nowInstant by
         produceState(initialValue = Clock.System.now()) {
-            while (true) {
-                value = Clock.System.now()
-                delay(1000)
-            }
+          while (true) {
+            value = Clock.System.now()
+            delay(1000)
+          }
         }
-        val now = nowInstant.toLocalDateTime(TimeZone.currentSystemDefault())
-        val outline = MaterialTheme.colorScheme.outlineVariant
-        var notes by remember { mutableStateOf("") }
-        val cashierName =
-            listOfNotNull(
+    val now = nowInstant.toLocalDateTime(TimeZone.currentSystemDefault())
+    val outline = MaterialTheme.colorScheme.outlineVariant
+    var notes by remember { mutableStateOf("") }
+    val cashierName =
+        listOfNotNull(
                 user?.firstName?.takeIf { it.isNotBlank() },
                 user?.lastName?.takeIf { !it.isNullOrBlank() },
             )
-                .joinToString(" ")
-                .ifBlank { user?.name ?: "" }
-        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            if (isLoading) {
-                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    LinearProgressIndicator(
-                        modifier = Modifier.fillMaxWidth(),
-                        color = MaterialTheme.colorScheme.primary,
-                    )
+            .joinToString(" ")
+            .ifBlank { user?.name ?: "" }
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+      if (isLoading) {
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+          LinearProgressIndicator(
+              modifier = Modifier.fillMaxWidth(),
+              color = MaterialTheme.colorScheme.primary,
+          )
+          Text(
+              text = "Cargando información del POS...",
+              style = MaterialTheme.typography.bodySmall,
+              color = MaterialTheme.colorScheme.onSurfaceVariant,
+          )
+        }
+      }
+      Surface(
+          color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.8f),
+          shape = RoundedCornerShape(10.dp),
+          border = BorderStroke(1.dp, outline.copy(alpha = 0.6f)),
+      ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(14.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+          Column {
+            Text(
+                text = "Fecha",
+                style =
+                    MaterialTheme.typography.labelSmall.copy(
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 0.5.sp,
+                    ),
+                color = MaterialTheme.colorScheme.primary,
+            )
+            Text(
+                text =
+                    "${dayName(now.dayOfWeek)} ${now.dayOfMonth} ${monthName(now.monthNumber)} ${now.year}",
+                style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium),
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+          }
+          Column(horizontalAlignment = Alignment.End) {
+            Text(
+                text = "Hora",
+                style =
+                    MaterialTheme.typography.labelSmall.copy(
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 0.5.sp,
+                    ),
+                color = MaterialTheme.colorScheme.primary,
+            )
+            Text(
+                text =
+                    "${now.hour.toString().padStart(2, '0')}:${
+                                    now.minute.toString().padStart(2, '0')
+                                }",
+                style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium),
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+          }
+        }
+      }
+
+      ExposedDropdownMenuBox(
+          expanded = expanded,
+          onExpandedChange = onExpandedChange,
+      ) {
+        OutlinedTextField(
+            value = selectedProfile?.name ?: "Seleccionar POS",
+            onValueChange = {},
+            modifier = Modifier.fillMaxWidth().menuAnchor(),
+            readOnly = true,
+            label = { Text("Perfil de POS") },
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+            colors = ExposedDropdownMenuDefaults.textFieldColors(),
+        )
+        ExposedDropdownMenu(expanded = expanded, onDismissRequest = { onExpandedChange(false) }) {
+          profiles.forEach { profile ->
+            androidx.compose.material3.DropdownMenuItem(
+                text = {
+                  Column {
+                    Text(profile.name, fontWeight = FontWeight.SemiBold)
                     Text(
-                        text = "Cargando información del POS...",
+                        profile.company,
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
-                }
-            }
-            Surface(
-                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.8f),
-                shape = RoundedCornerShape(10.dp),
-                border = BorderStroke(1.dp, outline.copy(alpha = 0.6f)),
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth().padding(14.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                ) {
-                    Column {
-                        Text(
-                            text = "Fecha",
-                            style =
-                                MaterialTheme.typography.labelSmall.copy(
-                                    fontWeight = FontWeight.Bold,
-                                    letterSpacing = 0.5.sp,
-                                ),
-                            color = MaterialTheme.colorScheme.primary,
-                        )
-                        Text(
-                            text =
-                                "${dayName(now.dayOfWeek)} ${now.dayOfMonth} ${monthName(now.monthNumber)} ${now.year}",
-                            style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium),
-                            color = MaterialTheme.colorScheme.onSurface,
-                        )
-                    }
-                    Column(horizontalAlignment = Alignment.End) {
-                        Text(
-                            text = "Hora",
-                            style =
-                                MaterialTheme.typography.labelSmall.copy(
-                                    fontWeight = FontWeight.Bold,
-                                    letterSpacing = 0.5.sp,
-                                ),
-                            color = MaterialTheme.colorScheme.primary,
-                        )
-                        Text(
-                            text =
-                                "${now.hour.toString().padStart(2, '0')}:${
-                                    now.minute.toString().padStart(2, '0')
-                                }",
-                            style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium),
-                            color = MaterialTheme.colorScheme.onSurface,
-                        )
-                    }
-                }
-            }
-
-            ExposedDropdownMenuBox(
-                expanded = expanded,
-                onExpandedChange = onExpandedChange,
-            ) {
-                OutlinedTextField(
-                    value = selectedProfile?.name ?: "Seleccionar POS",
-                    onValueChange = {},
-                    modifier = Modifier.fillMaxWidth().menuAnchor(),
-                    readOnly = true,
-                    label = { Text("Perfil de POS") },
-                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-                    colors = ExposedDropdownMenuDefaults.textFieldColors(),
-                )
-                ExposedDropdownMenu(
-                    expanded = expanded,
-                    onDismissRequest = { onExpandedChange(false) }) {
-                    profiles.forEach { profile ->
-                        androidx.compose.material3.DropdownMenuItem(
-                            text = {
-                                Column {
-                                    Text(profile.name, fontWeight = FontWeight.SemiBold)
-                                    Text(
-                                        profile.company,
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    )
-                                }
-                            },
-                            onClick = {
-                                onSelectProfile(profile)
-                                onExpandedChange(false)
-                            },
-                        )
-                    }
-                }
-            }
-
-            OutlinedTextField(
-                value = cashierName,
-                onValueChange = {},
-                modifier = Modifier.fillMaxWidth(),
-                label = { Text("Cajero / Usuario") },
-                leadingIcon = {
-                    Icon(
-                        imageVector = Icons.Outlined.Person,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+                  }
                 },
-                readOnly = true,
+                onClick = {
+                  onSelectProfile(profile)
+                  onExpandedChange(false)
+                },
             )
+          }
+        }
+      }
 
-            OutlinedTextField(
-                value = notes,
-                onValueChange = { notes = it },
-                modifier = Modifier.fillMaxWidth(),
-                label = { Text("Notas / Observaciones") },
-                placeholder = { Text("Detalles adicionales para la apertura") },
-                singleLine = false,
-                maxLines = 3,
+      OutlinedTextField(
+          value = cashierName,
+          onValueChange = {},
+          modifier = Modifier.fillMaxWidth(),
+          label = { Text("Cajero / Usuario") },
+          leadingIcon = {
+            Icon(
+                imageVector = Icons.Outlined.Person,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+          },
+          readOnly = true,
+      )
 
-            Divider(color = MaterialTheme.colorScheme.outlineVariant)
+      OutlinedTextField(
+          value = notes,
+          onValueChange = { notes = it },
+          modifier = Modifier.fillMaxWidth(),
+          label = { Text("Notas / Observaciones") },
+          placeholder = { Text("Detalles adicionales para la apertura") },
+          singleLine = false,
+          maxLines = 3,
+      )
 
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(
-                    text = "Resumen de Apertura",
-                    style =
-                        MaterialTheme.typography.labelSmall.copy(
-                            fontWeight = FontWeight.Bold,
-                            letterSpacing = 0.5.sp,
-                        ),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-                totalsByCurrency.forEach { (cur, total) ->
-                    SummaryRow(
-                        icon = Icons.Outlined.Wallet,
-                        label = "Efectivo $cur",
-                        value = formatCurrency(cur, total),
-                    )
-                }
-                Divider(color = MaterialTheme.colorScheme.outlineVariant)
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Text(
-                        text = "Total Apertura",
-                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                    )
-                    Column(horizontalAlignment = Alignment.End) {
-                        totalsByCurrency.forEach { (cur, total) ->
-                            Text(
-                                text = formatCurrency(cur, total),
-                                style =
-                                    MaterialTheme.typography.titleLarge.copy(
-                                        fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.primary,
-                                    ),
-                            )
-                        }
-                    }
-                }
+      Divider(color = MaterialTheme.colorScheme.outlineVariant)
+
+      Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text(
+            text = "Resumen de Apertura",
+            style =
+                MaterialTheme.typography.labelSmall.copy(
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 0.5.sp,
+                ),
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        totalsByCurrency.forEach { (cur, total) ->
+          SummaryRow(
+              icon = Icons.Outlined.Wallet,
+              label = "Efectivo $cur",
+              value = formatCurrency(cur, total),
+          )
+        }
+        Divider(color = MaterialTheme.colorScheme.outlineVariant)
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+          Text(
+              text = "Total Apertura",
+              style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+          )
+          Column(horizontalAlignment = Alignment.End) {
+            totalsByCurrency.forEach { (cur, total) ->
+              Text(
+                  text = formatCurrency(cur, total),
+                  style =
+                      MaterialTheme.typography.titleLarge.copy(
+                          fontWeight = FontWeight.Bold,
+                          color = MaterialTheme.colorScheme.primary,
+                      ),
+              )
             }
+          }
+        }
+      }
 
-            if (cashModesMissingCurrency.isNotEmpty()) {
-                Surface(
-                    color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.5f),
-                    shape = RoundedCornerShape(10.dp),
-                ) {
-                    Text(
-                        text =
-                            "ASSUMPTION: these cash modes have no currency configured and use the base currency: ${
+      if (cashModesMissingCurrency.isNotEmpty()) {
+        Surface(
+            color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.5f),
+            shape = RoundedCornerShape(10.dp),
+        ) {
+          Text(
+              text =
+                  "ASSUMPTION: these cash modes have no currency configured and use the base currency: ${
                                 cashModesMissingCurrency.joinToString(", ")
                             }",
-                        modifier = Modifier.padding(12.dp),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onTertiaryContainer,
-                    )
-                }
-            }
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                OutlinedButton(
-                    onClick = onCancel,
-                    modifier = Modifier.weight(1f),
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
-                    colors =
-                        ButtonDefaults.outlinedButtonColors(
-                            contentColor = MaterialTheme.colorScheme.onSurfaceVariant
-                        ),
-                ) {
-                    Text("Cancelar")
-                }
-                Button(
-                    onClick = onOpen,
-                    enabled = canOpen,
-                    modifier = Modifier.weight(1f),
-                    colors =
-                        ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
-                ) {
-                    Text("Abrir Caja", color = MaterialTheme.colorScheme.onPrimary)
-                }
-            }
-
-            Surface(
-                color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.4f),
-                shape = RoundedCornerShape(10.dp),
-            ) {
-                Text(
-                    text =
-                        "Apertura solo en efectivo. Si tienes otros métodos, regístralos luego como pagos.",
-                    modifier = Modifier.padding(12.dp),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSecondaryContainer,
-                )
-            }
+              modifier = Modifier.padding(12.dp),
+              style = MaterialTheme.typography.bodySmall,
+              color = MaterialTheme.colorScheme.onTertiaryContainer,
+          )
         }
+      }
+
+      Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        OutlinedButton(
+            onClick = onCancel,
+            modifier = Modifier.weight(1f),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+            colors =
+                ButtonDefaults.outlinedButtonColors(
+                    contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                ),
+        ) {
+          Text("Cancelar")
+        }
+        Button(
+            onClick = onOpen,
+            enabled = canOpen,
+            modifier = Modifier.weight(1f),
+            colors =
+                ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
+        ) {
+          Text("Abrir Caja", color = MaterialTheme.colorScheme.onPrimary)
+        }
+      }
+
+      Surface(
+          color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.4f),
+          shape = RoundedCornerShape(10.dp),
+      ) {
+        Text(
+            text =
+                "Apertura solo en efectivo. Si tienes otros métodos, regístralos luego como pagos.",
+            modifier = Modifier.padding(12.dp),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSecondaryContainer,
+        )
+      }
     }
+  }
 }
 
 @Composable
@@ -724,74 +691,74 @@ private fun OpeningCashContent(
     onDenominationChange: (Double, Int) -> Unit,
     totalsByCurrency: Map<String, Double>,
 ) {
-    SectionCard(title = "Conteo de efectivo") {
-        if (countCurrencies.isEmpty()) {
-            Text(
-                text = "No cash payment methods are configured for this POS profile.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.error,
-            )
-            return@SectionCard
-        }
-        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            DenominationCounter(
-                denominations = denominations,
-                onCountChange = onDenominationChange,
-                total = totalsByCurrency[selectedCurrency] ?: 0.0,
-                formatAmount = { amount -> formatCurrency(selectedCurrency, amount) },
-                labels =
-                    DenominationCounterLabels(
-                        title = "Detalle por denominación",
-                        subtitle = "billetes y monedas",
-                        billsLabel = "Billetes",
-                        coinsLabel = "Monedas",
-                        totalLabel = "Total contado",
-                    ),
-                countCurrencies = countCurrencies,
-                selectedCountCurrency = selectedCurrency,
-                onCurrencyChange = onCurrencyChange,
-            )
-
-            Surface(
-                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.08f),
-                shape = RoundedCornerShape(10.dp),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)),
-            ) {
-                Column(
-                    modifier = Modifier.fillMaxWidth().padding(14.dp),
-                ) {
-                    Text(
-                        text = "Total efectivo por moneda",
-                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-                        color = MaterialTheme.colorScheme.onSurface,
-                    )
-                    Spacer(Modifier.height(6.dp))
-
-                    totalsByCurrency.forEach { (cur, total) ->
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                        ) {
-                            Text(
-                                text = cur,
-                                style =
-                                    MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                            Text(
-                                text = formatCurrency(cur, total),
-                                style =
-                                    MaterialTheme.typography.titleLarge.copy(
-                                        fontWeight = FontWeight.ExtraBold,
-                                        color = MaterialTheme.colorScheme.primary,
-                                    ),
-                            )
-                        }
-                    }
-                }
-            }
-        }
+  SectionCard(title = "Conteo de efectivo") {
+    if (countCurrencies.isEmpty()) {
+      Text(
+          text = "No cash payment methods are configured for this POS profile.",
+          style = MaterialTheme.typography.bodyMedium,
+          color = MaterialTheme.colorScheme.error,
+      )
+      return@SectionCard
     }
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+      DenominationCounter(
+          denominations = denominations,
+          onCountChange = onDenominationChange,
+          total = totalsByCurrency[selectedCurrency] ?: 0.0,
+          formatAmount = { amount -> formatCurrency(selectedCurrency, amount) },
+          labels =
+              DenominationCounterLabels(
+                  title = "Detalle por denominación",
+                  subtitle = "billetes y monedas",
+                  billsLabel = "Billetes",
+                  coinsLabel = "Monedas",
+                  totalLabel = "Total contado",
+              ),
+          countCurrencies = countCurrencies,
+          selectedCountCurrency = selectedCurrency,
+          onCurrencyChange = onCurrencyChange,
+      )
+
+      Surface(
+          color = MaterialTheme.colorScheme.primary.copy(alpha = 0.08f),
+          shape = RoundedCornerShape(10.dp),
+          border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)),
+      ) {
+        Column(
+            modifier = Modifier.fillMaxWidth().padding(14.dp),
+        ) {
+          Text(
+              text = "Total efectivo por moneda",
+              style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+              color = MaterialTheme.colorScheme.onSurface,
+          )
+          Spacer(Modifier.height(6.dp))
+
+          totalsByCurrency.forEach { (cur, total) ->
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+              Text(
+                  text = cur,
+                  style =
+                      MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                  color = MaterialTheme.colorScheme.onSurfaceVariant,
+              )
+              Text(
+                  text = formatCurrency(cur, total),
+                  style =
+                      MaterialTheme.typography.titleLarge.copy(
+                          fontWeight = FontWeight.ExtraBold,
+                          color = MaterialTheme.colorScheme.primary,
+                      ),
+              )
+            }
+          }
+        }
+      }
+    }
+  }
 }
 
 @Composable
@@ -799,26 +766,26 @@ private fun SectionCard(
     title: String,
     content: @Composable () -> Unit,
 ) {
-    OutlinedCard(
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-        shape = RoundedCornerShape(12.dp),
-    ) {
-        Column(modifier = Modifier.fillMaxWidth()) {
-            Row(
-                modifier =
-                    Modifier.fillMaxWidth()
-                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f))
-                        .padding(horizontal = 16.dp, vertical = 12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
-                )
-            }
-            Column(modifier = Modifier.padding(16.dp)) { content() }
-        }
+  OutlinedCard(
+      border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+      shape = RoundedCornerShape(12.dp),
+  ) {
+    Column(modifier = Modifier.fillMaxWidth()) {
+      Row(
+          modifier =
+              Modifier.fillMaxWidth()
+                  .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f))
+                  .padding(horizontal = 16.dp, vertical = 12.dp),
+          verticalAlignment = Alignment.CenterVertically,
+      ) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+        )
+      }
+      Column(modifier = Modifier.padding(16.dp)) { content() }
     }
+  }
 }
 
 @Composable
@@ -827,68 +794,68 @@ private fun SummaryRow(
     label: String,
     value: String,
 ) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.size(18.dp),
-            )
-            Spacer(Modifier.width(8.dp))
-            Text(
-                text = label,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-        Text(
-            text = value,
-            style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium),
-        )
+  Row(
+      modifier = Modifier.fillMaxWidth(),
+      horizontalArrangement = Arrangement.SpaceBetween,
+      verticalAlignment = Alignment.CenterVertically,
+  ) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+      Icon(
+          imageVector = icon,
+          contentDescription = null,
+          tint = MaterialTheme.colorScheme.onSurfaceVariant,
+          modifier = Modifier.size(18.dp),
+      )
+      Spacer(Modifier.width(8.dp))
+      Text(
+          text = label,
+          style = MaterialTheme.typography.bodySmall,
+          color = MaterialTheme.colorScheme.onSurfaceVariant,
+      )
     }
+    Text(
+        text = value,
+        style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium),
+    )
+  }
 }
 
 private fun applyDraftCounts(
     denominations: List<DenominationUi>,
     counts: List<DenominationCount>,
 ): List<DenominationUi> {
-    if (counts.isEmpty()) return denominations
-    val countMap = counts.associate { it.value to it.count }
-    return denominations.map { denom -> denom.copy(count = countMap[denom.value] ?: 0) }
+  if (counts.isEmpty()) return denominations
+  val countMap = counts.associate { it.value to it.count }
+  return denominations.map { denom -> denom.copy(count = countMap[denom.value] ?: 0) }
 }
 
 private fun formatMoney(amount: Double): String = formatDoubleToString(amount, 2)
 
 private fun monthName(month: Int): String {
-    return when (month) {
-        1 -> "enero"
-        2 -> "febrero"
-        3 -> "marzo"
-        4 -> "abril"
-        5 -> "mayo"
-        6 -> "junio"
-        7 -> "julio"
-        8 -> "agosto"
-        9 -> "septiembre"
-        10 -> "octubre"
-        11 -> "noviembre"
-        else -> "diciembre"
-    }
+  return when (month) {
+    1 -> "enero"
+    2 -> "febrero"
+    3 -> "marzo"
+    4 -> "abril"
+    5 -> "mayo"
+    6 -> "junio"
+    7 -> "julio"
+    8 -> "agosto"
+    9 -> "septiembre"
+    10 -> "octubre"
+    11 -> "noviembre"
+    else -> "diciembre"
+  }
 }
 
 private fun dayName(dayOfWeek: DayOfWeek): String {
-    return when (dayOfWeek) {
-        DayOfWeek.MONDAY -> "lunes"
-        DayOfWeek.TUESDAY -> "martes"
-        DayOfWeek.WEDNESDAY -> "miércoles"
-        DayOfWeek.THURSDAY -> "jueves"
-        DayOfWeek.FRIDAY -> "viernes"
-        DayOfWeek.SATURDAY -> "sábado"
-        DayOfWeek.SUNDAY -> "domingo"
-    }
+  return when (dayOfWeek) {
+    DayOfWeek.MONDAY -> "lunes"
+    DayOfWeek.TUESDAY -> "martes"
+    DayOfWeek.WEDNESDAY -> "miércoles"
+    DayOfWeek.THURSDAY -> "jueves"
+    DayOfWeek.FRIDAY -> "viernes"
+    DayOfWeek.SATURDAY -> "sábado"
+    DayOfWeek.SUNDAY -> "domingo"
+  }
 }

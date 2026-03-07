@@ -72,14 +72,13 @@ kotlin {
     compilerOptions { jvmTarget.set(JvmTarget.JVM_11) }
   }
 
-  val iosTargets =
-      buildList {
-        add(iosArm64())
-        add(iosSimulatorArm64())
-        if (System.getProperty("os.arch") == "x86_64") {
-          add(iosX64())
-        }
-      }
+  val iosTargets = buildList {
+    add(iosArm64())
+    add(iosSimulatorArm64())
+    if (System.getProperty("os.arch") == "x86_64") {
+      add(iosX64())
+    }
+  }
 
   iosTargets.forEach { iosTarget ->
     iosTarget.binaries.framework {

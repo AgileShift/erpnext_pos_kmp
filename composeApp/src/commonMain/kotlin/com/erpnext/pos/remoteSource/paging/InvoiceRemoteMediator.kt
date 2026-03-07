@@ -22,73 +22,67 @@ class InvoiceRemoteMediator(
     private val preserveCacheOnEmptyRefresh: Boolean = true,
 ) : RemoteMediator<Int, SalesInvoiceWithItemsAndPayments>() {
 
-    override suspend fun load(
-        loadType: LoadType,
-        state: PagingState<Int, SalesInvoiceWithItemsAndPayments>,
-    ): MediatorResult {
-        return withContext(Dispatchers.IO) {
-            try {
-                val offset =
-                    when (loadType) {
-                        LoadType.REFRESH -> 0
-                        LoadType.PREPEND ->
-                            return@withContext MediatorResult.Success(endOfPaginationReached = true)
+  override suspend fun load(
+      loadType: LoadType,
+      state: PagingState<Int, SalesInvoiceWithItemsAndPayments>,
+  ): MediatorResult {
+    return withContext(Dispatchers.IO) {
+      try {
+        val offset =
+            when (loadType) {
+              LoadType.REFRESH -> 0
+              LoadType.PREPEND ->
+                  return@withContext MediatorResult.Success(endOfPaginationReached = true)
 
-                        LoadType.APPEND -> salesInvoiceDao.countAll()
-                    }
-
-                val fetched =
-                    apiService.fetchAllInvoices(
-                        posProfile = posProfile,
-                        offset = offset,
-                        limit = pageSize
-                    )
-                val entities = fetched.toEntities().map { mergeLocalInvoiceFields(it) }
-                val endReached = entities.isEmpty() || entities.size < pageSize
-
-                when (loadType) {
-                    LoadType.REFRESH -> {
-                        if (!preserveCacheOnEmptyRefresh || entities.isNotEmpty()) {
-                            if (entities.isNotEmpty()) salesInvoiceDao.insertFullInvoices(entities)
-                        }
-                    }
-
-                    LoadType.APPEND -> {
-                        if (entities.isNotEmpty()) salesInvoiceDao.insertFullInvoices(entities)
-                    }
-
-                    else -> {}
-                }
-
-                MediatorResult.Success(endOfPaginationReached = endReached)
-            } catch (e: IOException) {
-                MediatorResult.Error(e)
-            } catch (e: Exception) {
-                MediatorResult.Error(e)
+              LoadType.APPEND -> salesInvoiceDao.countAll()
             }
+
+        val fetched =
+            apiService.fetchAllInvoices(posProfile = posProfile, offset = offset, limit = pageSize)
+        val entities = fetched.toEntities().map { mergeLocalInvoiceFields(it) }
+        val endReached = entities.isEmpty() || entities.size < pageSize
+
+        when (loadType) {
+          LoadType.REFRESH -> {
+            if (!preserveCacheOnEmptyRefresh || entities.isNotEmpty()) {
+              if (entities.isNotEmpty()) salesInvoiceDao.insertFullInvoices(entities)
+            }
+          }
+
+          LoadType.APPEND -> {
+            if (entities.isNotEmpty()) salesInvoiceDao.insertFullInvoices(entities)
+          }
+
+          else -> {}
         }
-    }
 
-    override suspend fun initialize(): InitializeAction {
-        return InitializeAction.LAUNCH_INITIAL_REFRESH
+        MediatorResult.Success(endOfPaginationReached = endReached)
+      } catch (e: IOException) {
+        MediatorResult.Error(e)
+      } catch (e: Exception) {
+        MediatorResult.Error(e)
+      }
     }
+  }
 
-    private suspend fun mergeLocalInvoiceFields(
-        payload: SalesInvoiceWithItemsAndPayments
-    ): SalesInvoiceWithItemsAndPayments {
-        val invoiceName = payload.invoice.invoiceName?.trim().orEmpty()
-        if (invoiceName.isBlank()) return payload
-        val local = salesInvoiceDao.getInvoiceByName(invoiceName)?.invoice ?: return payload
-        val mergedInvoice =
-            payload.invoice.copy(
-                profileId = payload.invoice.profileId?.takeIf { it.isNotBlank() }
-                    ?: local.profileId,
-                posOpeningEntry =
-                    payload.invoice.posOpeningEntry?.takeIf { it.isNotBlank() }
-                        ?: local.posOpeningEntry,
-                warehouse = payload.invoice.warehouse?.takeIf { it.isNotBlank() }
-                    ?: local.warehouse,
-            )
-        return payload.copy(invoice = mergedInvoice)
-    }
+  override suspend fun initialize(): InitializeAction {
+    return InitializeAction.LAUNCH_INITIAL_REFRESH
+  }
+
+  private suspend fun mergeLocalInvoiceFields(
+      payload: SalesInvoiceWithItemsAndPayments
+  ): SalesInvoiceWithItemsAndPayments {
+    val invoiceName = payload.invoice.invoiceName?.trim().orEmpty()
+    if (invoiceName.isBlank()) return payload
+    val local = salesInvoiceDao.getInvoiceByName(invoiceName)?.invoice ?: return payload
+    val mergedInvoice =
+        payload.invoice.copy(
+            profileId = payload.invoice.profileId?.takeIf { it.isNotBlank() } ?: local.profileId,
+            posOpeningEntry =
+                payload.invoice.posOpeningEntry?.takeIf { it.isNotBlank() }
+                    ?: local.posOpeningEntry,
+            warehouse = payload.invoice.warehouse?.takeIf { it.isNotBlank() } ?: local.warehouse,
+        )
+    return payload.copy(invoice = mergedInvoice)
+  }
 }

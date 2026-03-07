@@ -86,7 +86,8 @@ data class SalesInvoicePaymentScheduleDto(
     @SerialName("due_date") val dueDate: String,
     @SerialName("mode_of_payment") val modeOfPayment: String? = null,
     @EncodeDefault(EncodeDefault.Mode.NEVER)
-    @SerialName("payment_amount") val paymentAmount: Double? = null,
+    @SerialName("payment_amount")
+    val paymentAmount: Double? = null,
 )
 
 @OptIn(ExperimentalSerializationApi::class)
