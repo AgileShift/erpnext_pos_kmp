@@ -146,6 +146,9 @@ import com.erpnext.pos.utils.AppSentry
 import com.erpnext.pos.utils.TokenUtils
 import com.erpnext.pos.utils.view.SnackbarController
 import com.erpnext.pos.views.CashBoxManager
+import com.erpnext.pos.views.CashBoxManagerDataDependencies
+import com.erpnext.pos.views.CashBoxManagerPreferenceDependencies
+import com.erpnext.pos.views.CashBoxManagerSyncDependencies
 import com.erpnext.pos.views.activity.ActivityCenter
 import com.erpnext.pos.views.activity.ActivityViewModel
 import com.erpnext.pos.views.billing.BillingResetController
@@ -385,23 +388,32 @@ val appModule = module {
   single<DatePolicy> { DefaultPolicy(PolicyInput()) }
   single<CashBoxManager> {
     CashBoxManager(
-        api = get(),
-        profileDao = get(),
-        openingDao = get(),
-        openingEntryLinkDao = get(),
-        closingDao = get(),
-        companyDao = get(),
-        cashboxDao = get(),
-        userDao = get(),
-        exchangeRatePreferences = get(),
-        exchangeRateRepository = get(),
-        openingEntrySyncRepository = get(),
-        closingEntrySyncRepository = get(),
-        posOpeningRepository = get(),
-        paymentMethodLocalRepository = get(),
-        salesInvoiceDao = get(),
-        generalPreferences = get(),
-        currencySettingsRepository = get(),
+        dataDependencies =
+            CashBoxManagerDataDependencies(
+                api = get(),
+                profileDao = get(),
+                openingDao = get(),
+                openingEntryLinkDao = get(),
+                closingDao = get(),
+                companyDao = get(),
+                cashboxDao = get(),
+                userDao = get(),
+                paymentMethodLocalRepository = get(),
+                salesInvoiceDao = get(),
+            ),
+        syncDependencies =
+            CashBoxManagerSyncDependencies(
+                exchangeRateRepository = get(),
+                openingEntrySyncRepository = get(),
+                closingEntrySyncRepository = get(),
+                posOpeningRepository = get(),
+                currencySettingsRepository = get(),
+            ),
+        preferenceDependencies =
+            CashBoxManagerPreferenceDependencies(
+                exchangeRatePreferences = get(),
+                generalPreferences = get(),
+            ),
         sessionRefresher = get(),
         networkMonitor = get(),
         bootstrapContextPreferences = get(),

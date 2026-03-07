@@ -7,6 +7,7 @@ import com.erpnext.pos.data.repositories.PosProfilePaymentMethodLocalRepository
 import com.erpnext.pos.localSource.dao.SalesInvoiceDao
 import com.erpnext.pos.localSource.dao.ShiftPaymentRow
 import com.erpnext.pos.localSource.entities.SalesInvoiceEntity
+import com.erpnext.pos.localSource.preferences.ShiftMovementRecord
 import com.erpnext.pos.localSource.preferences.ShiftMovementType
 import com.erpnext.pos.sync.PushSyncRunner
 import com.erpnext.pos.sync.SyncContextProvider
@@ -165,41 +166,12 @@ class ReconciliationViewModel(
     val openingEntryId =
         cashBoxManager.resolveOpeningEntryForReporting()
             ?: activeCashbox.cashbox.openingEntryId?.trim()?.takeIf { it.isNotBlank() }
-    val invoices =
-        if (!openingEntryId.isNullOrBlank()) {
-          salesInvoiceDao.getInvoicesForOpeningEntry(openingEntryId).ifEmpty {
-            salesInvoiceDao.getInvoicesForShift(
-                profileId = context.profileName,
-                startMillis = startMillis,
-                endMillis = endMillis,
-            )
-          }
-        } else {
-          salesInvoiceDao.getInvoicesForShift(
-              profileId = context.profileName,
-              startMillis = startMillis,
-              endMillis = endMillis,
-          )
-        }
+    val invoices = fetchShiftInvoices(openingEntryId, context.profileName, startMillis, endMillis)
     val pendingSubmitCount = invoices.count { it.docstatus == 0 }
     val posCurrency = normalizeCurrency(context.currency)
     val rateCache = mutableMapOf<String, Double>()
     val paymentRows =
-        if (!openingEntryId.isNullOrBlank()) {
-          salesInvoiceDao.getPaymentsForOpeningEntry(openingEntryId).ifEmpty {
-            salesInvoiceDao.getShiftPayments(
-                profileId = context.profileName,
-                startMillis = startMillis,
-                endMillis = endMillis,
-            )
-          }
-        } else {
-          salesInvoiceDao.getShiftPayments(
-              profileId = context.profileName,
-              startMillis = startMillis,
-              endMillis = endMillis,
-          )
-        }
+        fetchShiftPayments(openingEntryId, context.profileName, startMillis, endMillis)
     // Nos quedamos solo con pagos válidos para arqueo diario.
     val paymentRowsFiltered = paymentRows.filter { it.enteredAmount > 0.0 || it.amount > 0.0 }
     val resolvedMethods = paymentMethodLocalRepository.getMethodsForProfile(context.profileName)
@@ -267,12 +239,7 @@ class ReconciliationViewModel(
         )
     val availableModes =
         context.paymentModes.mapNotNull { mode -> mode.modeOfPayment.takeIf { it.isNotBlank() } }
-    val shiftMovements =
-        if (!openingEntryId.isNullOrBlank()) {
-          cashBoxManager.getShiftMovements(openingEntryId)
-        } else {
-          emptyList()
-        }
+    val shiftMovements = fetchShiftMovements(openingEntryId)
     val movementAdjustmentsByMode = aggregateMovementAdjustmentsByMode(shiftMovements)
     // Construye el esperado por modo (apertura + pagos del turno + ajustes por movimientos).
     val expectedByModeBase = buildExpectedByMode(openingByMode, paymentsByMode, availableModes)
@@ -348,11 +315,12 @@ class ReconciliationViewModel(
             rateCache = rateCache,
         )
     val expensesByCurrency =
-        if (movementSummary.expensesByCurrency.isEmpty()) {
-          convertAmountForCurrencies(0.0, posCurrency, currencySet, rateCache)
-        } else {
-          movementSummary.expensesByCurrency
-        }
+        resolveExpensesByCurrency(
+            expensesByCurrency = movementSummary.expensesByCurrency,
+            posCurrency = posCurrency,
+            currencySet = currencySet,
+            rateCache = rateCache,
+        )
     return ReconciliationSummaryUi(
         posProfile = context.profileName,
         openingEntryId = openingEntryId.orEmpty(),
@@ -389,6 +357,65 @@ class ReconciliationViewModel(
         cashCurrencies = cashCurrencies,
         cashModeCurrency = cashModeCurrency,
     )
+  }
+
+  private suspend fun fetchShiftInvoices(
+      openingEntryId: String?,
+      profileName: String,
+      startMillis: Long,
+      endMillis: Long,
+  ): List<SalesInvoiceEntity> {
+    if (openingEntryId.isNullOrBlank()) {
+      return salesInvoiceDao.getInvoicesForShift(
+          profileId = profileName,
+          startMillis = startMillis,
+          endMillis = endMillis,
+      )
+    }
+    return salesInvoiceDao.getInvoicesForOpeningEntry(openingEntryId).ifEmpty {
+      salesInvoiceDao.getInvoicesForShift(
+          profileId = profileName,
+          startMillis = startMillis,
+          endMillis = endMillis,
+      )
+    }
+  }
+
+  private suspend fun fetchShiftPayments(
+      openingEntryId: String?,
+      profileName: String,
+      startMillis: Long,
+      endMillis: Long,
+  ): List<ShiftPaymentRow> {
+    if (openingEntryId.isNullOrBlank()) {
+      return salesInvoiceDao.getShiftPayments(
+          profileId = profileName,
+          startMillis = startMillis,
+          endMillis = endMillis,
+      )
+    }
+    return salesInvoiceDao.getPaymentsForOpeningEntry(openingEntryId).ifEmpty {
+      salesInvoiceDao.getShiftPayments(
+          profileId = profileName,
+          startMillis = startMillis,
+          endMillis = endMillis,
+      )
+    }
+  }
+
+  private suspend fun fetchShiftMovements(openingEntryId: String?): List<ShiftMovementRecord> {
+    if (openingEntryId.isNullOrBlank()) return emptyList()
+    return cashBoxManager.getShiftMovements(openingEntryId)
+  }
+
+  private suspend fun resolveExpensesByCurrency(
+      expensesByCurrency: Map<String, Double>,
+      posCurrency: String,
+      currencySet: Set<String>,
+      rateCache: MutableMap<String, Double>,
+  ): Map<String, Double> {
+    if (expensesByCurrency.isNotEmpty()) return expensesByCurrency
+    return convertAmountForCurrencies(0.0, posCurrency, currencySet, rateCache)
   }
 
   private suspend fun aggregateCashByCurrency(
@@ -863,19 +890,21 @@ class ReconciliationViewModel(
     // Pagos parciales en efectivo por moneda real recibida (solo facturas con saldo pendiente).
     val cashModeKeys = cashModes.mapNotNull(::normalizeModeKey).toSet()
     val cashPartialsByCurrency = mutableMapOf<String, Double>()
-    for (row in paymentRows) {
-      if (!outstandingInvoiceNames.contains(row.invoiceName)) continue
-      if (!isCashMode(row.modeOfPayment, cashModeKeys)) continue
-      val currency = resolvePaymentCurrency(row, posCurrency, modeCurrency)
-      val amount =
-          resolvePaymentAmount(
-              row = row,
-              paymentCurrency = currency,
-              posCurrency = posCurrency,
-              rateCache = rateCache,
-          )
-      cashPartialsByCurrency[currency] = (cashPartialsByCurrency[currency] ?: 0.0) + amount
-    }
+    paymentRows
+        .asSequence()
+        .filter { outstandingInvoiceNames.contains(it.invoiceName) }
+        .filter { isCashMode(it.modeOfPayment, cashModeKeys) }
+        .forEach { row ->
+          val currency = resolvePaymentCurrency(row, posCurrency, modeCurrency)
+          val amount =
+              resolvePaymentAmount(
+                  row = row,
+                  paymentCurrency = currency,
+                  posCurrency = posCurrency,
+                  rateCache = rateCache,
+              )
+          cashPartialsByCurrency[currency] = (cashPartialsByCurrency[currency] ?: 0.0) + amount
+        }
 
     invoices.forEach { invoice ->
       // Solo consideramos facturas con saldo pendiente para crédito.

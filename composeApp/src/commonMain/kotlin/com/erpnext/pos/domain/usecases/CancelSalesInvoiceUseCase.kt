@@ -239,22 +239,18 @@ class CancelSalesInvoiceUseCase(
         refundModeOfPayment?.takeIf { it.isNotBlank() }
             ?: invoice.payments.firstOrNull()?.modeOfPayment
             ?: return
-    if (!isRefundModeAllowed(profileId, resolvedMode)) {
-      throw IllegalStateException("El modo de reembolso no está habilitado para retornos.")
+    check(isRefundModeAllowed(profileId, resolvedMode)) {
+      "El modo de reembolso no está habilitado para retornos."
     }
     val paidFromAccount = resolveAccount(resolvedMode, modes, fallback = null)
-    if (receivableAccount.isNullOrBlank()) {
-      throw IllegalStateException("No se encontró cuenta por cobrar para aplicar el reembolso.")
+    check(!receivableAccount.isNullOrBlank()) {
+      "No se encontró cuenta por cobrar para aplicar el reembolso."
     }
-    if (paidFromAccount.isNullOrBlank()) {
-      throw IllegalStateException(
-          "El modo de reembolso '$resolvedMode' no tiene una cuenta de caja/banco configurada."
-      )
+    check(!paidFromAccount.isNullOrBlank()) {
+      "El modo de reembolso '$resolvedMode' no tiene una cuenta de caja/banco configurada."
     }
-    if (paidFromAccount.equals(receivableAccount, ignoreCase = true)) {
-      throw IllegalStateException(
-          "La cuenta del modo de reembolso no puede ser igual a la cuenta por cobrar de la factura."
-      )
+    check(!paidFromAccount.equals(receivableAccount, ignoreCase = true)) {
+      "La cuenta del modo de reembolso no puede ser igual a la cuenta por cobrar de la factura."
     }
     val paidToCurrency =
         creditNote.partyAccountCurrency ?: creditNote.currency ?: invoice.invoice.currency

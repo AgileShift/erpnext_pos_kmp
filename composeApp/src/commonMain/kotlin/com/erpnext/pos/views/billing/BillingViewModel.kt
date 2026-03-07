@@ -78,6 +78,23 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
+private const val PAID_STATUS_TOLERANCE = 0.01
+
+private data class SalesInvoiceBuildInput(
+    val current: BillingState.Success,
+    val customer: CustomerBO,
+    val context: POSContext,
+    val totals: BillingTotals,
+    val discountPercent: Double?,
+    val discountAmount: Double,
+    val paymentSchedule: List<SalesInvoicePaymentScheduleDto>,
+    val paymentLines: List<PaymentLine>,
+    val invoiceCurrency: String,
+    val conversionRate: Double?,
+    val postingDate: String,
+    val dueDate: String,
+)
+
 class BillingViewModel(
     private val customersUseCase: FetchCustomersLocalUseCase,
     private val itemsUseCase: FetchBillingProductsLocalUseCase,
@@ -928,18 +945,20 @@ class BillingViewModel(
 
             val invoiceDto =
                 buildSalesInvoiceDto(
-                    current = currentWithHints,
-                    customer = customer,
-                    context = context,
-                    totals = totals,
-                    discountPercent = discountPercent,
-                    discountAmount = discountInfo.amount,
-                    paymentSchedule = paymentSchedule,
-                    paymentLines = resolvedPaymentLines,
-                    invoiceCurrency = invoiceCurrency,
-                    conversionRate = conversionRate,
-                    postingDate = postingDate,
-                    dueDate = dueDate,
+                    SalesInvoiceBuildInput(
+                        current = currentWithHints,
+                        customer = customer,
+                        context = context,
+                        totals = totals,
+                        discountPercent = discountPercent,
+                        discountAmount = discountInfo.amount,
+                        paymentSchedule = paymentSchedule,
+                        paymentLines = resolvedPaymentLines,
+                        invoiceCurrency = invoiceCurrency,
+                        conversionRate = conversionRate,
+                        postingDate = postingDate,
+                        dueDate = dueDate,
+                    )
                 )
 
             val localInvoiceName = "LOCAL-${UUIDGenerator().newId()}"
@@ -1460,61 +1479,54 @@ class BillingViewModel(
     return if (value % 1.0 == 0.0) value.toLong().toString() else value.toString()
   }
 
-  private fun buildSalesInvoiceDto(
-      current: BillingState.Success,
-      customer: CustomerBO,
-      context: POSContext,
-      totals: BillingTotals,
-      discountPercent: Double?,
-      discountAmount: Double,
-      paymentSchedule: List<SalesInvoicePaymentScheduleDto>,
-      paymentLines: List<PaymentLine>,
-      invoiceCurrency: String,
-      conversionRate: Double?,
-      postingDate: String,
-      dueDate: String,
-  ): SalesInvoiceDto {
-    val items = buildInvoiceItems(current, context, invoiceCurrency)
+  private fun buildSalesInvoiceDto(input: SalesInvoiceBuildInput): SalesInvoiceDto {
+    val items = buildInvoiceItems(input.current, input.context, input.invoiceCurrency)
     val paymentMetadata =
-        buildInvoiceRemarks(current, paymentLines, totals.shipping, invoiceCurrency)
-    val taxes = roundForCurrency(totals.taxes, invoiceCurrency)
-    val total = roundForCurrency(totals.total, invoiceCurrency)
-    val netTotal = roundForCurrency((total - taxes).coerceAtLeast(0.0), invoiceCurrency)
-    val resolvedDiscountPercent = discountPercent?.takeIf { it > 0.0 }
+        buildInvoiceRemarks(
+            input.current,
+            input.paymentLines,
+            input.totals.shipping,
+            input.invoiceCurrency,
+        )
+    val taxes = roundForCurrency(input.totals.taxes, input.invoiceCurrency)
+    val total = roundForCurrency(input.totals.total, input.invoiceCurrency)
+    val netTotal = roundForCurrency((total - taxes).coerceAtLeast(0.0), input.invoiceCurrency)
+    val resolvedDiscountPercent = input.discountPercent?.takeIf { it > 0.0 }
     val resolvedDiscountAmount =
-        roundForCurrency(discountAmount, invoiceCurrency).takeIf { it > 0.0 }
-    val couponCode = current.discountCode.trim().takeIf { it.isNotBlank() }
-    val applyDiscountOn = current.applyDiscountOn.takeIf { it.isNotBlank() } ?: "Grand Total"
+        roundForCurrency(input.discountAmount, input.invoiceCurrency).takeIf { it > 0.0 }
+    val couponCode = input.current.discountCode.trim().takeIf { it.isNotBlank() }
+    val applyDiscountOn = input.current.applyDiscountOn.takeIf { it.isNotBlank() } ?: "Grand Total"
 
-    val rounded = resolveRoundedTotal(totals.total, invoiceCurrency)
-    val resolvedTotal = roundForCurrency(totals.total, invoiceCurrency)
-    val resolvedStatus = if (resolvedTotal <= 0.01) "Paid" else "Unpaid"
+    val rounded = resolveRoundedTotal(input.totals.total, input.invoiceCurrency)
+    val resolvedTotal = roundForCurrency(input.totals.total, input.invoiceCurrency)
+    val resolvedStatus = if (resolvedTotal <= PAID_STATUS_TOLERANCE) "Paid" else "Unpaid"
 
     val hasRounding = kotlin.math.abs(rounded.roundingAdjustment) > 0.0001
     val roundedTotalField =
-        if (hasRounding) roundForCurrency(rounded.roundedTotal, invoiceCurrency) else null
+        if (hasRounding) roundForCurrency(rounded.roundedTotal, input.invoiceCurrency) else null
     val roundingAdjustmentField =
-        if (hasRounding) roundForCurrency(rounded.roundingAdjustment, invoiceCurrency) else null
+        if (hasRounding) roundForCurrency(rounded.roundingAdjustment, input.invoiceCurrency)
+        else null
     val receivableAccount =
-        customer.receivableAccount?.takeIf { it.isNotBlank() }
-            ?: context.defaultReceivableAccount?.takeIf { it.isNotBlank() }
+        input.customer.receivableAccount?.takeIf { it.isNotBlank() }
+            ?: input.context.defaultReceivableAccount?.takeIf { it.isNotBlank() }
     val partyAccountCurrency =
-        customer.partyAccountCurrency?.takeIf { it.isNotBlank() }
-            ?: customer.receivableAccountCurrency?.takeIf { it.isNotBlank() }
-            ?: context.defaultReceivableAccountCurrency?.takeIf { it.isNotBlank() }
-            ?: context.partyAccountCurrency
+        input.customer.partyAccountCurrency?.takeIf { it.isNotBlank() }
+            ?: input.customer.receivableAccountCurrency?.takeIf { it.isNotBlank() }
+            ?: input.context.defaultReceivableAccountCurrency?.takeIf { it.isNotBlank() }
+            ?: input.context.partyAccountCurrency
 
     return SalesInvoiceDto(
-        customer = customer.name,
-        customerName = customer.customerName,
-        customerPhone = customer.mobileNo,
-        company = context.company,
-        postingDate = postingDate,
-        currency = invoiceCurrency,
-        conversionRate = conversionRate?.takeIf { it > 0.0 },
+        customer = input.customer.name,
+        customerName = input.customer.customerName,
+        customerPhone = input.customer.mobileNo,
+        company = input.context.company,
+        postingDate = input.postingDate,
+        currency = input.invoiceCurrency,
+        conversionRate = input.conversionRate?.takeIf { it > 0.0 },
         partyAccountCurrency = partyAccountCurrency,
         debitTo = receivableAccount,
-        dueDate = dueDate,
+        dueDate = input.dueDate,
         status = resolvedStatus,
         grandTotal = total,
         roundedTotal = roundedTotalField,
@@ -1530,7 +1542,7 @@ class BillingViewModel(
         couponCode = couponCode,
         items = items,
         payments = emptyList(),
-        paymentSchedule = paymentSchedule,
+        paymentSchedule = input.paymentSchedule,
         paymentTerms = null,
         // Server currently resolves installment rows via payment_schedule/payment_term.
         // Do not send payment_terms_template unless templates are configured in ERPNext.
@@ -1859,9 +1871,11 @@ class BillingViewModel(
       SalesPostingBlockReason.PartialPaymentNotAllowedByProfile ->
           tr(
               spanish =
-                  "Este POS Profile no permite pagos parciales. Registra la venta de contado o como crédito completo sin abono.",
+                  "Este POS Profile no permite pagos parciales. Registra la venta de contado" +
+                      " o como crédito completo sin abono.",
               english =
-                  "This POS profile does not allow partial payments. Register the sale as cash or full credit without payment.",
+                  "This POS profile does not allow partial payments. Register the sale as cash" +
+                      " or full credit without payment.",
           )
     }
   }

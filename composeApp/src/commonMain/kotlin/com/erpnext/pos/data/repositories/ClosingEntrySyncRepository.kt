@@ -142,23 +142,11 @@ class ClosingEntrySyncRepository(
               posCurrency = normalizeCurrency(profileCurrency),
               rateResolver = { from, to -> exchangeRateRepository.getRate(from, to) },
           )
-      val paidInvoiceNames =
-          paymentRows
-              .asSequence()
-              .filter { (it.enteredAmount > 0.0001) || (it.amount > 0.0001) }
-              .map { it.invoiceName.trim() }
-              .filter { it.isNotBlank() }
-              .toSet()
-
       val dto =
           buildClosingEntryDto(
-              cashbox = cashbox,
               openingEntryId = remoteOpeningName,
-              postingDate = resolvedEndDate,
               periodEndDate = resolvedEndDate,
               paymentReconciliation = paymentReconciliation,
-              invoices = shiftInvoices,
-              paidInvoiceNames = paidInvoiceNames,
           )
 
       cashboxDao.updateStatus(
@@ -308,23 +296,12 @@ class ClosingEntrySyncRepository(
               posCurrency = normalizeCurrency(profileCurrency),
               rateResolver = { from, to -> exchangeRateRepository.getRate(from, to) },
           )
-      val paidInvoiceNames =
-          paymentRows
-              .asSequence()
-              .filter { (it.enteredAmount > 0.0001) || (it.amount > 0.0001) }
-              .map { it.invoiceName.trim() }
-              .filter { it.isNotBlank() }
-              .toSet()
       ensureRemoteOpeningEntry(remoteOpeningName, cashbox.localId)
       val dto =
           buildClosingEntryDto(
-              cashbox = cashbox,
               openingEntryId = remoteOpeningName,
-              postingDate = periodEnd,
               periodEndDate = periodEnd,
               paymentReconciliation = paymentReconciliation,
-              invoices = shiftInvoices,
-              paidInvoiceNames = paidInvoiceNames,
           )
 
       if (remoteClosing != null) {
