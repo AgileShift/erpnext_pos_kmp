@@ -758,6 +758,13 @@ class CustomerViewModel(
         }
         val localInvoice = fetchSalesInvoiceWithItemsUseCase(invoiceId)
         val preview = buildPartialReturnPreview(localInvoice, filtered)
+        if (applyRefund) {
+          ensureRefundFunds(
+              refundModeOfPayment = refundModeOfPayment,
+              preview = preview,
+              invoiceId = invoiceId,
+          )
+        }
         val result =
             partialReturnUseCase(
                 PartialReturnInput(
@@ -770,6 +777,14 @@ class CustomerViewModel(
                     affectInventory = affectInventory,
                 )
             )
+        if (applyRefund) {
+          applyRefundCashMovement(
+              refundModeOfPayment = refundModeOfPayment,
+              preview = preview,
+              invoiceId = invoiceId,
+              partial = true,
+          )
+        }
         val message =
             buildReturnPostMessage(
                 creditNoteName = result.creditNoteName,
@@ -827,6 +842,13 @@ class CustomerViewModel(
           }
         }
         val trimmedReason = reason?.takeIf { it.isNotBlank() }
+        if (action == InvoiceCancellationAction.RETURN && applyRefund) {
+          ensureRefundFunds(
+              refundModeOfPayment = refundModeOfPayment,
+              preview = fullReturnPreview,
+              invoiceId = invoiceId,
+          )
+        }
         val result =
             cancelSalesInvoiceUseCase(
                 CancelSalesInvoiceInput(
@@ -839,6 +861,14 @@ class CustomerViewModel(
                     affectInventory = affectInventory,
                 )
             )
+        if (action == InvoiceCancellationAction.RETURN && applyRefund) {
+          applyRefundCashMovement(
+              refundModeOfPayment = refundModeOfPayment,
+              preview = fullReturnPreview,
+              invoiceId = invoiceId,
+              partial = false,
+          )
+        }
         _historyMessage.value =
             when (action) {
               InvoiceCancellationAction.CANCEL -> "Factura $invoiceId cancelada."
@@ -944,6 +974,44 @@ class CustomerViewModel(
         currency = normalizeCurrency(invoice.currency),
         returnTotal = roundToCurrency(total),
         projectedOutstanding = roundToCurrency((outstanding - total).coerceAtLeast(0.0)),
+    )
+  }
+
+  private suspend fun ensureRefundFunds(
+      refundModeOfPayment: String?,
+      preview: ReturnPreview?,
+      invoiceId: String,
+  ) {
+    val mode = refundModeOfPayment?.trim().orEmpty()
+    if (mode.isBlank()) {
+      throw IllegalArgumentException("Debes seleccionar modo de reembolso para devolver factura $invoiceId.")
+    }
+    val amount = preview?.returnTotal?.coerceAtLeast(0.0) ?: 0.0
+    if (amount <= 0.0) {
+      throw IllegalArgumentException("No se pudo calcular el monto a reembolsar para la factura $invoiceId.")
+    }
+    val available = cashboxManager.getAvailableFundsForMode(mode)
+    if (available + 0.009 < amount) {
+      throw IllegalStateException(
+          "Fondos insuficientes para reembolso en $mode. Disponible: ${formatMoney(preview?.currency ?: "NIO", roundToCurrency(available))}."
+      )
+    }
+  }
+
+  private suspend fun applyRefundCashMovement(
+      refundModeOfPayment: String?,
+      preview: ReturnPreview?,
+      invoiceId: String,
+      partial: Boolean,
+  ) {
+    val mode = refundModeOfPayment?.trim().orEmpty()
+    val amount = preview?.returnTotal?.coerceAtLeast(0.0) ?: 0.0
+    if (mode.isBlank() || amount <= 0.0) return
+    val label = if (partial) "reembolso parcial" else "reembolso total"
+    cashboxManager.registerRefundOutflow(
+        modeOfPayment = mode,
+        amount = amount,
+        note = "$label factura $invoiceId",
     )
   }
 

@@ -100,8 +100,9 @@ data class CustomerAction(
             refundModeOfPayment: String?,
             refundReferenceNo: String?,
             applyRefund: Boolean,
+            affectInventory: Boolean,
         ) -> Unit =
-        { _, _, _, _, _, _ ->
+        { _, _, _, _, _, _, _ ->
         },
     val registerPayment:
         (
@@ -128,8 +129,9 @@ data class CustomerAction(
             refundModeOfPayment: String?,
             refundReferenceNo: String?,
             applyRefund: Boolean,
+            affectInventory: Boolean,
             itemsToReturnByCode: Map<String, Double>,
         ) -> Unit =
-        { _, _, _, _, _, _ ->
+        { _, _, _, _, _, _, _ ->
         },
 )

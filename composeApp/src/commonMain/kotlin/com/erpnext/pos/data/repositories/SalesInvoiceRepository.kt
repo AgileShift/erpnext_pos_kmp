@@ -363,6 +363,29 @@ class SalesInvoiceRepository(
     uniquePayments.lastOrNull()?.modeOfPayment?.let { invoice.modeOfPayment = it }
 
     localSource.applyPayments(invoice, normalizedPayments)
+    val collectionByMode =
+        normalizedPayments
+            .groupBy { it.modeOfPayment.trim() }
+            .mapNotNull { (mode, rows) ->
+              if (mode.isBlank()) return@mapNotNull null
+              val total =
+                  rows.sumOf { row ->
+                    when {
+                      row.enteredAmount > 0.0 -> row.enteredAmount
+                      row.exchangeRate > 0.0 && row.amount > 0.0 -> row.amount / row.exchangeRate
+                      else -> row.amount
+                    }
+                  }
+              mode to roundToCurrency(total)
+            }
+            .filter { (_, total) -> total > 0.0 }
+    collectionByMode.forEach { (mode, total) ->
+      context.registerCollectionInflow(
+          modeOfPayment = mode,
+          amount = total,
+          note = "Collection for invoice $invoiceId",
+      )
+    }
     refreshCustomerSummaryWithRates(invoice.customer)
   }
 

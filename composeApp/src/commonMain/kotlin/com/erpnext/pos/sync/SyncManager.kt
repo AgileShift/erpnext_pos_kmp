@@ -4,8 +4,6 @@ import com.erpnext.pos.auth.SessionRefresher
 import com.erpnext.pos.data.repositories.BootstrapSyncRepository
 import com.erpnext.pos.domain.models.SyncLogEntry
 import com.erpnext.pos.domain.models.SyncLogStatus
-import com.erpnext.pos.domain.policy.DefaultPolicy
-import com.erpnext.pos.domain.policy.PolicyInput
 import com.erpnext.pos.domain.sync.SyncContext
 import com.erpnext.pos.localSource.preferences.BootstrapContextPreferences
 import com.erpnext.pos.localSource.preferences.GeneralPreferences
@@ -14,12 +12,12 @@ import com.erpnext.pos.localSource.preferences.SyncPreferences
 import com.erpnext.pos.localSource.preferences.SyncSettings
 import com.erpnext.pos.utils.AppLogger
 import com.erpnext.pos.utils.AppSentry
+import com.erpnext.pos.utils.BootstrapFromDatePolicy
 import com.erpnext.pos.utils.NetworkMonitor
 import com.erpnext.pos.utils.loading.LoadingIndicator
 import com.erpnext.pos.views.CashBoxManager
 import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
-import kotlin.time.Instant
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -34,8 +32,6 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import kotlinx.datetime.TimeZone
-import kotlinx.datetime.toLocalDateTime
 
 interface ISyncManager {
   val state: StateFlow<SyncState>
@@ -362,7 +358,7 @@ class SyncManager(
         territoryId = base.territory ?: base.route ?: "",
         warehouseId = base.warehouse ?: "",
         priceList = base.priceList ?: base.currency,
-        fromDate = resolveModifiedSinceDate() ?: DefaultPolicy(PolicyInput(3)).invoicesFromDate(),
+        fromDate = resolveBootstrapFromDate(),
     )
   }
 
@@ -464,7 +460,7 @@ class SyncManager(
           val profileName = ctx?.profileName?.trim().orEmpty()
           val activeCashbox = cashBoxManager.getActiveCashboxWithDetails()
           val openingEntryId = activeCashbox?.cashbox?.openingEntryId?.trim().orEmpty()
-          val fromDate = resolveModifiedSinceDate()
+          val fromDate = resolveBootstrapFromDate()
           bootstrapContextPreferences.update(
               profileName = profileName,
               posOpeningEntry = openingEntryId,
@@ -599,7 +595,7 @@ class SyncManager(
             val profileName = ctx?.profileName?.trim().orEmpty()
             val activeCashbox = cashBoxManager.getActiveCashboxWithDetails()
             val openingEntryId = activeCashbox?.cashbox?.openingEntryId?.trim().orEmpty()
-            val fromDate = resolveModifiedSinceDate()
+            val fromDate = resolveBootstrapFromDate()
             bootstrapContextPreferences.update(
                 profileName = profileName,
                 posOpeningEntry = openingEntryId,
@@ -650,14 +646,7 @@ class SyncManager(
     }
   }
 
-  private suspend fun resolveModifiedSinceDate(): String? {
-    val lastSyncAt =
-        syncSettingsCache.lastSyncAt ?: return syncContextProvider.buildContext()?.fromDate
-    return Instant.fromEpochMilliseconds(lastSyncAt)
-        .toLocalDateTime(TimeZone.currentSystemDefault())
-        .date
-        .toString()
-  }
+  private fun resolveBootstrapFromDate(): String = BootstrapFromDatePolicy.resolve()
 
   private fun shouldAutoSyncOnConnection(): Boolean {
     if (offlineModeCache) return false

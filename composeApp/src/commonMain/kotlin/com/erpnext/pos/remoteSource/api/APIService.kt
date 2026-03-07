@@ -56,6 +56,7 @@ import com.erpnext.pos.remoteSource.sdk.FrappeException
 import com.erpnext.pos.remoteSource.sdk.withRetries
 import com.erpnext.pos.utils.AppLogger
 import com.erpnext.pos.utils.AppSentry
+import com.erpnext.pos.utils.BootstrapFromDatePolicy
 import com.erpnext.pos.utils.TokenUtils
 import com.erpnext.pos.utils.normalizeUrl
 import com.erpnext.pos.utils.view.DateTimeProvider
@@ -1235,12 +1236,10 @@ class APIService(
             ?: ""
     val resolvedOpening =
         payload.posOpeningEntry?.takeIf { it.isNotBlank() }
-            ?: defaults.posOpeningEntry?.takeIf { it.isNotBlank() }
             ?: ""
     val resolvedFromDate =
         payload.fromDate?.takeIf { it.isNotBlank() }
-            ?: defaults.fromDate?.takeIf { it.isNotBlank() }
-            ?: DateTimeProvider.addDays(DateTimeProvider.todayDate(), -DEFAULT_INVOICE_SYNC_DAYS)
+            ?: BootstrapFromDatePolicy.resolve(daysBack = DEFAULT_INVOICE_SYNC_DAYS)
     return payload.copy(
         profileName = resolvedProfile,
         posOpeningEntry = resolvedOpening,

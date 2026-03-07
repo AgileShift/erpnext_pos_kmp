@@ -133,7 +133,8 @@ fun rememberCustomerActions(
             reason,
             refundMode,
             refundReference,
-            applyRefund ->
+            applyRefund,
+            affectInventory ->
           coordinator.performInvoiceHistoryAction(
               invoiceId,
               action,
@@ -141,6 +142,7 @@ fun rememberCustomerActions(
               refundMode,
               refundReference,
               applyRefund,
+              affectInventory,
           )
         },
         loadInvoiceLocal = { invoiceId -> coordinator.loadInvoiceLocal(invoiceId) },
@@ -150,6 +152,7 @@ fun rememberCustomerActions(
             refundMode,
             refundReference,
             applyRefund,
+            affectInventory,
             items ->
           coordinator.submitPartialReturn(
               invoiceId,
@@ -157,6 +160,7 @@ fun rememberCustomerActions(
               refundMode,
               refundReference,
               applyRefund,
+              affectInventory,
               items,
           )
         },

@@ -18,6 +18,7 @@ suspend fun buildPaymentReconciliationSeeds(
     invoices: List<SalesInvoiceEntity>,
     modeCurrency: Map<String, String>,
     posCurrency: String,
+    modeAdjustmentsByMode: Map<String, Double> = emptyMap(),
     rateResolver: suspend (fromCurrency: String, toCurrency: String) -> Double?,
 ): List<PaymentReconciliationSeed> {
   val openingByMode =
@@ -30,6 +31,7 @@ suspend fun buildPaymentReconciliationSeeds(
   balanceDetails.forEach { orderedModes.add(it.modeOfPayment) }
   paymentRows.forEach { orderedModes.add(it.modeOfPayment) }
   modeCurrency.keys.forEach { orderedModes.add(it) }
+  modeAdjustmentsByMode.keys.forEach { orderedModes.add(it) }
 
   val paymentsByMode =
       aggregatePaymentsByMode(
@@ -39,12 +41,18 @@ suspend fun buildPaymentReconciliationSeeds(
           modeCurrency = modeCurrency,
           rateResolver = rateResolver,
       )
-  val expectedByMode =
+  val baseExpectedByMode =
       buildExpectedByMode(
           openingByMode = openingByMode,
           paymentsByMode = paymentsByMode,
           availableModes = orderedModes.toList(),
       )
+  val expectedByMode =
+      orderedModes.associateWith { mode ->
+        val base = baseExpectedByMode[mode] ?: 0.0
+        val adjustment = modeAdjustmentsByMode[mode] ?: 0.0
+        roundToCurrency(base + adjustment)
+      }
 
   return orderedModes.map { mode ->
     PaymentReconciliationSeed(
@@ -73,18 +81,17 @@ private suspend fun aggregatePaymentsByMode(
 
     val invoice = invoiceByName[row.invoiceName]
     val receivableCurrency = normalizeCurrency(invoice?.partyAccountCurrency)
-    val invoiceCurrency = normalizeCurrency(invoice?.currency)
-    val rateInvToRc =
+    val paymentToReceivableRate =
         CurrencyService.resolveInvoiceToReceivableRateUnified(
-            invoiceCurrency = invoiceCurrency,
+            invoiceCurrency = payCurrency,
             receivableCurrency = receivableCurrency,
-            conversionRate = invoice?.conversionRate,
-            customExchangeRate = invoice?.customExchangeRate,
+            conversionRate = null,
+            customExchangeRate = null,
             posCurrency = posCurrency,
             posExchangeRate = null,
             rateResolver = { from, to -> rateResolver(from, to) },
-        )
-    val rowReceivable = CurrencyService.amountInvoiceToReceivable(row.amount, rateInvToRc)
+        ) ?: 1.0
+    val rowReceivable = amount * paymentToReceivableRate
     paymentsByInvoice[row.invoiceName] = (paymentsByInvoice[row.invoiceName] ?: 0.0) + rowReceivable
   }
 

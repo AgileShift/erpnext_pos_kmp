@@ -130,6 +130,42 @@ class BillingViewModel(
     loadInitialData()
   }
 
+  fun refreshPolicyFromContext() {
+    viewModelScope.launch {
+      val context =
+          runCatching { contextProvider.initializeContext() }.getOrNull()
+              ?: contextProvider.getContext()
+              ?: return@launch
+      val blockedMessage =
+          mapPostingBlockToMessage(SalesPostingBlockReason.PartialPaymentNotAllowedByProfile)
+      _state.update { current ->
+        when (current) {
+          is BillingState.Success -> {
+            val forceCashSale = !context.allowPartialPayment && current.isCreditSale
+            current
+                .copy(
+                    allowPartialPayment = context.allowPartialPayment,
+                    isCreditSale = if (forceCashSale) false else current.isCreditSale,
+                    selectedPaymentTerm =
+                        if (forceCashSale) {
+                          null
+                        } else {
+                          current.selectedPaymentTerm
+                        },
+                    creditSaleTooltipMessage =
+                        if (forceCashSale) blockedMessage else current.creditSaleTooltipMessage,
+                    paymentErrorMessage =
+                        if (forceCashSale) blockedMessage else current.paymentErrorMessage,
+                )
+                .recalculatePaymentTotals()
+          }
+
+          else -> current
+        }
+      }
+    }
+  }
+
   private fun observeLanguage() {
     viewModelScope.launch {
       languagePreferences.language.collectLatest { lang -> currentLanguage = lang }
@@ -688,7 +724,18 @@ class BillingViewModel(
 
   fun onCreditSaleChanged(isCreditSale: Boolean) {
     val current = requireSuccessState() ?: return
-    if (!current.allowPartialPayment && isCreditSale) return
+    if (!current.allowPartialPayment && isCreditSale) {
+      val blockedMessage =
+          mapPostingBlockToMessage(SalesPostingBlockReason.PartialPaymentNotAllowedByProfile)
+      _state.update {
+        current.copy(
+            isCreditSale = false,
+            creditSaleTooltipMessage = blockedMessage,
+            paymentErrorMessage = blockedMessage,
+        )
+      }
+      return
+    }
     if (isCreditSale && current.paymentTerms.isEmpty()) return
 
     _state.update {
@@ -844,14 +891,13 @@ class BillingViewModel(
                       )
                       .line
                 }
-            val postingDecision =
-                resolvePostingDecision(
-                    total = totals.total,
-                    paid = resolvedPaymentLines.sumOf { it.baseAmount },
-                    isCreditSale = isCreditSale,
-                    allowPartialPayment = context.allowPartialPayment,
-                    currency = invoiceCurrency,
-                )
+            resolvePostingDecision(
+                total = totals.total,
+                paid = resolvedPaymentLines.sumOf { it.baseAmount },
+                isCreditSale = isCreditSale,
+                allowPartialPayment = context.allowPartialPayment,
+                currency = invoiceCurrency,
+            )
 
             val postingDate = DateTimeProvider.todayDate()
             val dueDate =
@@ -891,31 +937,16 @@ class BillingViewModel(
                     paymentSchedule = paymentSchedule,
                     paymentLines = resolvedPaymentLines,
                     invoiceCurrency = invoiceCurrency,
-                    postingDecision = postingDecision,
                     conversionRate = conversionRate,
                     postingDate = postingDate,
                     dueDate = dueDate,
-                    posOpeningEntry = openingEntryId,
-                )
-            val invoiceForSubmission =
-                invoiceDto.copy(
-                    payments = emptyList(),
-                    paidAmount = 0.0,
-                    changeAmount = null,
-                    outstandingAmount = invoiceDto.grandTotal.coerceAtLeast(0.0),
-                    status =
-                        if (invoiceDto.grandTotal.coerceAtLeast(0.0) <= 0.01) "Paid" else "Unpaid",
-                    isPos = false,
-                    isCreatedUsingPos = false,
-                    posProfile = null,
-                    posOpeningEntry = null,
                 )
 
             val localInvoiceName = "LOCAL-${UUIDGenerator().newId()}"
             createSalesInvoiceLocalUseCase(
                 CreateSalesInvoiceLocalInput(
                     localInvoiceName = localInvoiceName,
-                    invoice = invoiceForSubmission,
+                    invoice = invoiceDto,
                 )
             )
 
@@ -927,7 +958,7 @@ class BillingViewModel(
                 if (shouldAttemptRemote) {
                   runCatching {
                     createSalesInvoiceRemoteOnlyUseCase(
-                        CreateSalesInvoiceRemoteOnlyInput(invoiceForSubmission.copy(name = null))
+                        CreateSalesInvoiceRemoteOnlyInput(invoiceDto.copy(name = null))
                     )
                   }
                 } else {
@@ -1435,11 +1466,9 @@ class BillingViewModel(
       paymentSchedule: List<SalesInvoicePaymentScheduleDto>,
       paymentLines: List<PaymentLine>,
       invoiceCurrency: String,
-      postingDecision: SalesPostingDecision,
       conversionRate: Double?,
       postingDate: String,
       dueDate: String,
-      posOpeningEntry: String?,
   ): SalesInvoiceDto {
     val items = buildInvoiceItems(current, context, invoiceCurrency)
     val paymentMetadata =
@@ -1453,15 +1482,9 @@ class BillingViewModel(
     val couponCode = current.discountCode.trim().takeIf { it.isNotBlank() }
     val applyDiscountOn = current.applyDiscountOn.takeIf { it.isNotBlank() } ?: "Grand Total"
 
-    if (postingDecision.isPos) {
-      require(!posOpeningEntry.isNullOrBlank()) { "Falta POS Opening Entry para crear factura POS." }
-    }
-
     val rounded = resolveRoundedTotal(totals.total, invoiceCurrency)
-    val resolvedPaid = roundForCurrency(postingDecision.paidAmount, invoiceCurrency)
-    val resolvedOutstanding = roundForCurrency(postingDecision.outstandingAmount, invoiceCurrency)
-    val resolvedChange = roundForCurrency(postingDecision.changeAmount, invoiceCurrency)
-    val resolvedStatus = postingDecision.status
+    val resolvedTotal = roundForCurrency(totals.total, invoiceCurrency)
+    val resolvedStatus = if (resolvedTotal <= 0.01) "Paid" else "Unpaid"
 
     val hasRounding = kotlin.math.abs(rounded.roundingAdjustment) > 0.0001
     val roundedTotalField =
@@ -1493,11 +1516,10 @@ class BillingViewModel(
         roundedTotal = roundedTotalField,
         roundingAdjustment = roundingAdjustmentField,
         disableRoundedTotal = true,
-        outstandingAmount = resolvedOutstanding,
         totalTaxesAndCharges = taxes,
         netTotal = netTotal,
-        paidAmount = resolvedPaid,
-        changeAmount = resolvedChange.takeIf { it > 0.0 },
+        paidAmount = 0.0,
+        changeAmount = null,
         discountAmount = resolvedDiscountAmount,
         applyDiscountOn = applyDiscountOn,
         additionalDiscountPercentage = resolvedDiscountPercent,
@@ -1506,14 +1528,18 @@ class BillingViewModel(
         payments = emptyList(),
         paymentSchedule = paymentSchedule,
         paymentTerms = null,
-        paymentTermsTemplate = if (current.isCreditSale) current.selectedPaymentTerm?.name else null,
-        posProfile = if (postingDecision.isPos) context.profileName else null,
-        posOpeningEntry = if (postingDecision.isPos) posOpeningEntry else null,
+        // Server currently resolves installment rows via payment_schedule/payment_term.
+        // Do not send payment_terms_template unless templates are configured in ERPNext.
+        paymentTermsTemplate = null,
+        posProfile = null,
+        posOpeningEntry = null,
         remarks = paymentMetadata,
         customExchangeRate = null,
         updateStock = true,
         docStatus = 0,
-        isPos = postingDecision.isPos,
+        outstandingAmount = resolvedTotal,
+        isPos = false,
+        isCreatedUsingPos = false,
         doctype = "Sales Invoice",
     )
   }

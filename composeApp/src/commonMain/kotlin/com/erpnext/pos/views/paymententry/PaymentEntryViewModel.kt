@@ -22,6 +22,7 @@ import com.erpnext.pos.remoteSource.dto.PaymentOutCreateDto
 import com.erpnext.pos.utils.NetworkMonitor
 import com.erpnext.pos.utils.view.DateTimeProvider
 import com.erpnext.pos.views.CashBoxManager
+import com.erpnext.pos.views.ShiftAccountScope
 import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -348,6 +349,7 @@ class PaymentEntryViewModel(
 
     val sourceMode: String
     val targetMode: String
+    var isShiftTransfer = false
 
     if (current.entryType == PaymentEntryType.InternalTransfer) {
       val sourceAccount = current.sourceAccount.trim()
@@ -603,10 +605,19 @@ class PaymentEntryViewModel(
                       ?: error("No hay contexto POS activo.")
               val paidFromAccount = current.sourceAccount.trim()
               val paidToAccount = current.targetAccount.trim()
+              val sourceResolution = cashBoxManager.resolveTransferAccount(paidFromAccount)
+              val targetResolution = cashBoxManager.resolveTransferAccount(paidToAccount)
+              val resolvedSourceMode = sourceResolution.modeOfPayment ?: sourceMode
+              val resolvedTargetMode = targetResolution.modeOfPayment ?: targetMode
+              isShiftTransfer =
+                  sourceResolution.scope == ShiftAccountScope.IN_SHIFT &&
+                      targetResolution.scope == ShiftAccountScope.IN_SHIFT
               val fromCurrency =
-                  modeToCurrency[sourceMode]?.takeIf { it.isNotBlank() } ?: context.companyCurrency
+                  modeToCurrency[resolvedSourceMode]?.takeIf { it.isNotBlank() }
+                      ?: context.companyCurrency
               val toCurrency =
-                  modeToCurrency[targetMode]?.takeIf { it.isNotBlank() } ?: context.companyCurrency
+                  modeToCurrency[resolvedTargetMode]?.takeIf { it.isNotBlank() }
+                      ?: context.companyCurrency
               val rate =
                   if (fromCurrency.equals(toCurrency, ignoreCase = true)) {
                     1.0
@@ -629,7 +640,7 @@ class PaymentEntryViewModel(
                           InternalTransferCreateDto(
                               company = context.company,
                               postingDate = DateTimeProvider.todayDate(),
-                              modeOfPayment = sourceMode,
+                              modeOfPayment = resolvedSourceMode,
                               paidAmount = amount,
                               receivedAmount = receivedAmount,
                               paidFrom = paidFromAccount,
@@ -640,19 +651,26 @@ class PaymentEntryViewModel(
                           ),
                   )
               )
-              cashBoxManager.registerInternalTransfer(
-                  sourceModeOfPayment = sourceMode,
-                  targetModeOfPayment = targetMode,
-                  amount = amount,
-                  note = narration,
-              )
+              if (isShiftTransfer) {
+                cashBoxManager.registerInternalTransfer(
+                    sourceModeOfPayment = resolvedSourceMode,
+                    targetModeOfPayment = resolvedTargetMode,
+                    amount = amount,
+                    exchangeRate = rate,
+                    note = narration,
+                )
+              }
             }
           }
           _state.update {
             val successText =
                 when (current.entryType) {
                   PaymentEntryType.InternalTransfer ->
-                      "Transferencia interna registrada por $amount de ${current.sourceAccount} a ${current.targetAccount}."
+                      if (isShiftTransfer) {
+                        "Transferencia de turno registrada por $amount de ${current.sourceAccount} a ${current.targetAccount}."
+                      } else {
+                        "Transferencia contable registrada por $amount de ${current.sourceAccount} a ${current.targetAccount}."
+                      }
 
                   PaymentEntryType.Pay ->
                       if (selectedSupplierReferences.isNotEmpty()) {

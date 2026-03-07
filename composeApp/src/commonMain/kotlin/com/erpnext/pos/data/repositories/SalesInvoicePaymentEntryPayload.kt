@@ -17,9 +17,7 @@ internal fun sanitizeInvoiceForPaymentEntry(invoice: SalesInvoiceDto): SalesInvo
     )
   }
 
-  val resolvedTemplate =
-      invoice.paymentTermsTemplate?.takeIf { it.isNotBlank() }
-          ?: invoice.paymentTerms?.takeIf { it.isNotBlank() }
+  val resolvedTemplate = invoice.paymentTermsTemplate?.takeIf { it.isNotBlank() }
   val resolvedStatus = if (total <= 0.01) "Paid" else "Unpaid"
 
   return invoice.copy(

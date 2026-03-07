@@ -122,19 +122,7 @@ fun ReconciliationScreen(
       } ?: emptyMap()
   val expectedCashByCurrency: Map<String, Double> =
       summary?.let { s ->
-        val map = mutableMapOf<String, Double>()
-        s.openingCashByCurrency.forEach { (code, amount) ->
-          val key = code.uppercase()
-          map[key] = (map[key] ?: 0.0) + amount
-        }
-        s.cashByCurrency.forEach { (code, amount) ->
-          val key = code.uppercase()
-          map[key] = (map[key] ?: 0.0) + amount
-        }
-        if (map.isEmpty()) {
-          map[s.currency.uppercase()] = s.expectedTotal
-        }
-        map
+        buildExpectedCashByCurrency(summary = s)
       } ?: emptyMap()
   // Totales contados por moneda
   val cashTotalsByCurrency =
@@ -271,6 +259,27 @@ fun ReconciliationScreen(
       }
     }
   }
+}
+
+private fun buildExpectedCashByCurrency(summary: ReconciliationSummaryUi): Map<String, Double> {
+  if (summary.expectedByMode.isEmpty()) {
+    return mapOf(summary.currency.uppercase() to summary.expectedTotal)
+  }
+  val cashModeKeys = summary.cashModes.map { it.uppercase() }.toSet()
+  val modeCurrencyByKey =
+      summary.cashModeCurrency.mapKeys { (mode, _) -> mode.uppercase() }
+  val fallbackCurrency = summary.currency.uppercase()
+  val totals = mutableMapOf<String, Double>()
+  summary.expectedByMode.forEach { (mode, amount) ->
+    val modeKey = mode.uppercase()
+    if (cashModeKeys.isNotEmpty() && !cashModeKeys.contains(modeKey)) return@forEach
+    val currency = modeCurrencyByKey[modeKey]?.uppercase() ?: fallbackCurrency
+    totals[currency] = (totals[currency] ?: 0.0) + amount
+  }
+  if (totals.isEmpty()) {
+    totals[fallbackCurrency] = summary.expectedTotal
+  }
+  return totals.mapValues { (_, amount) -> kotlin.math.round(amount * 100.0) / 100.0 }
 }
 
 private fun isPrimaryCashModeName(mode: String): Boolean {

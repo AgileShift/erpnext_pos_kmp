@@ -117,6 +117,7 @@ import com.erpnext.pos.localSource.preferences.LanguagePreferences
 import com.erpnext.pos.localSource.preferences.OpeningSessionPreferences
 import com.erpnext.pos.localSource.preferences.ReturnLedgerPreferences
 import com.erpnext.pos.localSource.preferences.ReturnPolicyPreferences
+import com.erpnext.pos.localSource.preferences.ShiftMovementPreferences
 import com.erpnext.pos.localSource.preferences.SyncLogPreferences
 import com.erpnext.pos.localSource.preferences.SyncPreferences
 import com.erpnext.pos.localSource.preferences.ThemePreferences
@@ -374,6 +375,7 @@ val appModule = module {
   single { OpeningSessionPreferences(get()) }
   single { BootstrapContextPreferences(get()) }
   single { ReturnLedgerPreferences(get()) }
+  single { ShiftMovementPreferences(get()) }
   single { SyncLogPreferences(get()) }
   single { SyncPreferences(get()) }
   single { ThemePreferences(get()) }
@@ -403,6 +405,7 @@ val appModule = module {
         sessionRefresher = get(),
         networkMonitor = get(),
         bootstrapContextPreferences = get(),
+        shiftMovementPreferences = get(),
     )
   }
   single<PushSyncRunner> {

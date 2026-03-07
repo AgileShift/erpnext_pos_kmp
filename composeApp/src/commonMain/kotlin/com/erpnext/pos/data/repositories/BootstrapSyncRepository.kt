@@ -250,8 +250,8 @@ class BootstrapSyncRepository(
                 includeInvoices = true,
                 includeAlerts = false,
                 includeActivity = false,
-                // Invoice snapshot must be complete to preserve customer pending balances.
-                recentPaidOnly = false,
+                // Backend currently returns broader invoice coverage with recent_paid_only=true.
+                recentPaidOnly = true,
                 profileName = profileName,
                 offset = 0,
                 limit = DEFAULT_PAGE_LIMIT,
@@ -273,7 +273,7 @@ class BootstrapSyncRepository(
                       includeInvoices = true,
                       includeAlerts = false,
                       includeActivity = false,
-                      recentPaidOnly = false,
+                      recentPaidOnly = true,
                       profileName = profileName,
                       offset = nextOffset,
                       limit = pageLimit,
@@ -296,7 +296,7 @@ class BootstrapSyncRepository(
                       includeInvoices = true,
                       includeAlerts = false,
                       includeActivity = false,
-                      recentPaidOnly = false,
+                      recentPaidOnly = true,
                       profileName = profileName,
                       offset = nextOffset,
                       limit = pageLimit,

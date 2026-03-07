@@ -2,6 +2,7 @@ package com.erpnext.pos.views.billing
 
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -14,6 +15,7 @@ import org.koin.compose.koinInject
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun BillingRoute(coordinator: BillingCoordinator = rememberBillingCoordinator()) {
+  LaunchedEffect(coordinator) { coordinator.onRouteVisible() }
   val uiState by coordinator.screenStateFlow.collectAsState()
   val productsPagingFlow by
       coordinator.productsPagingFlow.collectAsState(flowOf(PagingData.empty()))
@@ -29,6 +31,7 @@ fun BillingLabRoute(
     backStackEntry: NavBackStackEntry,
     coordinator: BillingCoordinator = rememberBillingLabCoordinator(backStackEntry),
 ) {
+  LaunchedEffect(coordinator) { coordinator.onRouteVisible() }
   val uiState by coordinator.screenStateFlow.collectAsState()
   val productsPagingFlow by
       coordinator.productsPagingFlow.collectAsState(flowOf(PagingData.empty()))

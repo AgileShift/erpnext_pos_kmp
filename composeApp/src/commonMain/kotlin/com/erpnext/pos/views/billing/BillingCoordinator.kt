@@ -11,6 +11,8 @@ class BillingCoordinator(val viewModel: BillingViewModel) {
   val screenStateFlow = viewModel.state
   val productsPagingFlow = viewModel.productsPagingFlow
 
+  fun onRouteVisible() = viewModel.refreshPolicyFromContext()
+
   fun onCustomerSearchQueryChange(query: String) = viewModel.onCustomerSearchQueryChange(query)
 
   fun onCustomerSelected(customer: com.erpnext.pos.domain.models.CustomerBO) =

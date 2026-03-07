@@ -16,4 +16,5 @@ data class InvoiceHistoryReturnInput(
     val reason: String? = null,
     val returnLines: List<InvoiceReturnLine> = emptyList(),
     val refundTarget: InvoiceRefundTarget = InvoiceRefundTarget.StoreCredit,
+    val affectInventory: Boolean? = null,
 )

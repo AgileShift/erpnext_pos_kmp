@@ -76,6 +76,7 @@ class CustomerCoordinator(val viewModel: CustomerViewModel) {
       refundModeOfPayment: String?,
       refundReferenceNo: String?,
       applyRefund: Boolean,
+      affectInventory: Boolean,
   ) =
       viewModel.performInvoiceHistoryAction(
           invoiceId,
@@ -84,6 +85,7 @@ class CustomerCoordinator(val viewModel: CustomerViewModel) {
           refundModeOfPayment,
           refundReferenceNo,
           applyRefund,
+          affectInventory,
       )
 
   suspend fun loadInvoiceLocal(invoiceId: String): SalesInvoiceWithItemsAndPayments? =
@@ -95,6 +97,7 @@ class CustomerCoordinator(val viewModel: CustomerViewModel) {
       refundModeOfPayment: String?,
       refundReferenceNo: String?,
       applyRefund: Boolean,
+      affectInventory: Boolean,
       itemsToReturnByCode: Map<String, Double>,
   ) =
       viewModel.submitPartialReturn(
@@ -103,6 +106,7 @@ class CustomerCoordinator(val viewModel: CustomerViewModel) {
           refundModeOfPayment,
           refundReferenceNo,
           applyRefund,
+          affectInventory,
           itemsToReturnByCode,
       )
 }

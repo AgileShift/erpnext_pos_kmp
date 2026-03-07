@@ -108,6 +108,31 @@ class SalesInvoicePaymentEntryPayloadTest {
     assertTrue(error.message.orEmpty().contains("payment_schedule inválido"))
   }
 
+  @Test
+  fun paymentTerms_text_isNotPromotedToTemplate() {
+    val source =
+        fixture(
+            total = 220.0,
+            paid = 10.0,
+            outstanding = 210.0,
+            paymentSchedule =
+                listOf(
+                    SalesInvoicePaymentScheduleDto(
+                        paymentTerm = "Apartado 1 mes",
+                        invoicePortion = 100.0,
+                        dueDate = "2026-03-30",
+                    )
+                ),
+        )
+            .copy(paymentTerms = "Apartado 1 mes", paymentTermsTemplate = null)
+
+    val sanitized = sanitizeInvoiceForPaymentEntry(source)
+
+    assertNull(sanitized.paymentTermsTemplate)
+    assertNull(sanitized.paymentTerms)
+    assertEquals(1, sanitized.paymentSchedule.size)
+  }
+
   private fun fixture(
       total: Double,
       paid: Double,

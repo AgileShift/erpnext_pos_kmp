@@ -631,6 +631,10 @@ private fun BillingLabContent(
       modifier = modifier.background(background).padding(16.dp),
       verticalArrangement = Arrangement.spacedBy(12.dp),
   ) {
+    if (!state.allowPartialPayment) {
+      CreditSalesDisabledBanner(strings.billing.creditSalesNotAllowedBanner)
+    }
+
     Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
       Column(
           modifier =
@@ -931,6 +935,10 @@ private fun BillingLabCheckoutStep(
           color = colors.onSurfaceVariant,
       )
     }
+    if (!state.allowPartialPayment) {
+      Spacer(Modifier.height(10.dp))
+      CreditSalesDisabledBanner(strings.billing.creditSalesNotAllowedBanner)
+    }
     Spacer(Modifier.height(12.dp))
     BoxWithConstraints(modifier = Modifier.fillMaxWidth().padding(bottom = 72.dp)) {
       val isWide = maxWidth >= 980.dp
@@ -1018,7 +1026,7 @@ private fun BillingLabCheckoutStep(
 
       @Composable
       fun CreditCard(modifier: Modifier = Modifier) {
-        if (state.paymentTerms.isNotEmpty() || !state.allowPartialPayment) {
+        if (state.allowPartialPayment && state.paymentTerms.isNotEmpty()) {
           Card(
               modifier = modifier,
               colors = CardDefaults.cardColors(containerColor = panelBg),
@@ -1030,21 +1038,6 @@ private fun BillingLabCheckoutStep(
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
               SectionHeader(title = strings.billing.creditSaleLabel, accent = colors.tertiary)
-              if (!state.allowPartialPayment) {
-                Surface(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(10.dp),
-                    color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.45f),
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.error),
-                ) {
-                  Text(
-                      text = strings.billing.creditSalesNotAllowedBanner,
-                      style = MaterialTheme.typography.bodySmall,
-                      color = MaterialTheme.colorScheme.onErrorContainer,
-                      modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-                  )
-                }
-              }
               CreditTermsSection(
                   isCreditSale = state.isCreditSale,
                   allowPartialPayment = state.allowPartialPayment,
@@ -2353,6 +2346,23 @@ private fun CreditTermsSection(
           color = MaterialTheme.colorScheme.onSurfaceVariant,
       )
     }
+  }
+}
+
+@Composable
+private fun CreditSalesDisabledBanner(message: String) {
+  Surface(
+      modifier = Modifier.fillMaxWidth(),
+      shape = RoundedCornerShape(10.dp),
+      color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.45f),
+      border = BorderStroke(1.dp, MaterialTheme.colorScheme.error),
+  ) {
+    Text(
+        text = message,
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onErrorContainer,
+        modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+    )
   }
 }
 
