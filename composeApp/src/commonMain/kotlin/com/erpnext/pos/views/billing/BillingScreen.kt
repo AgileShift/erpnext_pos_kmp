@@ -157,6 +157,8 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 
+private const val SUCCESS_POPUP_HIDE_DELAY_MS = 5_000L
+
 data class CartItem(
     val itemCode: String,
     val name: String,
@@ -224,7 +226,7 @@ fun BillingScreen(
             ?: return@LaunchedEffect
     popupMessage = message
     popupInvoice = successDialogInvoice
-    delay(5000)
+    delay(SUCCESS_POPUP_HIDE_DELAY_MS)
     if (!popupMessage.isNullOrBlank()) {
       popupMessage = null
       popupInvoice = null

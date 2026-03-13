@@ -64,6 +64,8 @@ import com.erpnext.pos.views.components.DenominationUi
 import com.erpnext.pos.views.components.buildDenominationsForCurrency
 import kotlin.math.abs
 
+private const val CURRENCY_MINOR_UNITS_FACTOR = 100.0
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ReconciliationScreen(
@@ -276,7 +278,9 @@ private fun buildExpectedCashByCurrency(summary: ReconciliationSummaryUi): Map<S
   if (totals.isEmpty()) {
     totals[fallbackCurrency] = summary.expectedTotal
   }
-  return totals.mapValues { (_, amount) -> kotlin.math.round(amount * 100.0) / 100.0 }
+  return totals.mapValues { (_, amount) ->
+    kotlin.math.round(amount * CURRENCY_MINOR_UNITS_FACTOR) / CURRENCY_MINOR_UNITS_FACTOR
+  }
 }
 
 private fun isPrimaryCashModeName(mode: String): Boolean {

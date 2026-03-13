@@ -102,29 +102,71 @@ data class POSContext(
     val allowPartialPayment: Boolean,
 )
 
+data class CashBoxManagerDataDependencies(
+    val api: APIService,
+    val profileDao: POSProfileDao,
+    val openingDao: POSOpeningEntryDao,
+    val openingEntryLinkDao: POSOpeningEntryLinkDao,
+    val closingDao: POSClosingEntryDao,
+    val companyDao: CompanyDao,
+    val cashboxDao: CashboxDao,
+    val userDao: UserDao,
+    val paymentMethodLocalRepository: PosProfilePaymentMethodLocalRepository,
+    val salesInvoiceDao: SalesInvoiceDao,
+)
+
+data class CashBoxManagerSyncDependencies(
+    val exchangeRateRepository: ExchangeRateRepository,
+    val openingEntrySyncRepository: OpeningEntrySyncRepository,
+    val closingEntrySyncRepository: ClosingEntrySyncRepository,
+    val posOpeningRepository: PosOpeningRepository,
+    val currencySettingsRepository: CurrencySettingsRepository,
+)
+
+data class CashBoxManagerPreferenceDependencies(
+    val exchangeRatePreferences: ExchangeRatePreferences,
+    val generalPreferences: GeneralPreferences,
+)
+
+private data class InternalTransferMovement(
+    val profileName: String,
+    val sourceMode: String,
+    val sourceCurrency: String,
+    val sourceAmount: Double,
+    val targetMode: String,
+    val targetCurrency: String,
+    val targetAmount: Double,
+)
+
 class CashBoxManager(
-    private val api: APIService,
-    private val profileDao: POSProfileDao,
-    private val openingDao: POSOpeningEntryDao,
-    private val openingEntryLinkDao: POSOpeningEntryLinkDao,
-    private val closingDao: POSClosingEntryDao,
-    private val companyDao: CompanyDao,
-    private val cashboxDao: CashboxDao,
-    private val userDao: UserDao,
-    private val exchangeRatePreferences: ExchangeRatePreferences,
-    private val exchangeRateRepository: ExchangeRateRepository,
-    private val openingEntrySyncRepository: OpeningEntrySyncRepository,
-    private val closingEntrySyncRepository: ClosingEntrySyncRepository,
-    private val posOpeningRepository: PosOpeningRepository,
-    private val paymentMethodLocalRepository: PosProfilePaymentMethodLocalRepository,
-    private val salesInvoiceDao: SalesInvoiceDao,
-    private val generalPreferences: GeneralPreferences,
-    private val currencySettingsRepository: CurrencySettingsRepository,
+    dataDependencies: CashBoxManagerDataDependencies,
+    syncDependencies: CashBoxManagerSyncDependencies,
+    preferenceDependencies: CashBoxManagerPreferenceDependencies,
     private val sessionRefresher: SessionRefresher,
     private val networkMonitor: NetworkMonitor,
     private val bootstrapContextPreferences: BootstrapContextPreferences,
     private val shiftMovementPreferences: ShiftMovementPreferences,
 ) {
+  private val api = dataDependencies.api
+  private val profileDao = dataDependencies.profileDao
+  private val openingDao = dataDependencies.openingDao
+  private val openingEntryLinkDao = dataDependencies.openingEntryLinkDao
+  private val closingDao = dataDependencies.closingDao
+  private val companyDao = dataDependencies.companyDao
+  private val cashboxDao = dataDependencies.cashboxDao
+  private val userDao = dataDependencies.userDao
+  private val paymentMethodLocalRepository = dataDependencies.paymentMethodLocalRepository
+  private val salesInvoiceDao = dataDependencies.salesInvoiceDao
+
+  private val exchangeRateRepository = syncDependencies.exchangeRateRepository
+  private val openingEntrySyncRepository = syncDependencies.openingEntrySyncRepository
+  private val closingEntrySyncRepository = syncDependencies.closingEntrySyncRepository
+  private val posOpeningRepository = syncDependencies.posOpeningRepository
+  private val currencySettingsRepository = syncDependencies.currencySettingsRepository
+
+  private val exchangeRatePreferences = preferenceDependencies.exchangeRatePreferences
+  private val generalPreferences = preferenceDependencies.generalPreferences
+
   private val allowRemoteReadsFromUi = false
 
   // Contexto actual del POS cargado en memoria
@@ -1228,13 +1270,9 @@ class CashBoxManager(
         val endDate = getTimeMillis().toErpDateTime()
         val dto =
             buildClosingEntryDto(
-                cashbox = entry.cashbox,
                 openingEntryId = openingEntryId,
-                postingDate = endDate,
                 periodEndDate = endDate,
                 paymentReconciliation = paymentReconciliation,
-                invoices = emptyList(),
-                paidInvoiceNames = emptySet(),
             )
         if (!remoteOpeningEntryId.isNullOrBlank()) {
           val existing = openingDao.getByName(remoteOpeningEntryId)
@@ -1708,7 +1746,9 @@ class CashBoxManager(
             note = note,
         )
         AppLogger.info(
-            "refund-outflow: profile=${ctx.profileName} cashbox=$cashboxId mode=$mode amount=$amount availableBefore=${roundMoney(available)} availableAfter=$projected note=${note?.trim().orEmpty()}"
+            "refund-outflow: profile=${ctx.profileName} cashbox=$cashboxId mode=$mode " +
+                "amount=$amount availableBefore=${roundMoney(available)} " +
+                "availableAfter=$projected note=${note?.trim().orEmpty()}"
         )
       }
 
@@ -1837,33 +1877,53 @@ class CashBoxManager(
         val remaining = roundMoney(sourceAvailable - amount)
         val targetAvailable = availableByMode[targetMode] ?: targetOpening
         val targetNow = roundMoney(targetAvailable + targetAmount)
-        val refreshedCashbox = getActiveCashboxWithDetails()
-        val openingEntry =
-            refreshedCashbox?.cashbox?.openingEntryId?.trim()?.takeIf { it.isNotBlank() }
-        if (openingEntry != null) {
-          recordShiftMovement(
-              openingEntry = openingEntry,
-              profileName = ctx.profileName,
-              movementType = ShiftMovementType.INTERNAL_TRANSFER_OUT,
-              modeOfPayment = sourceMode,
-              amount = amount,
-              currency = sourceCurrency,
-              note = note,
-          )
-          recordShiftMovement(
-              openingEntry = openingEntry,
-              profileName = ctx.profileName,
-              movementType = ShiftMovementType.INTERNAL_TRANSFER_IN,
-              modeOfPayment = targetMode,
-              amount = targetAmount,
-              currency = targetCurrency,
-              note = note,
-          )
-        }
+        recordInternalTransferShiftMovements(
+            movement =
+                InternalTransferMovement(
+                    profileName = ctx.profileName,
+                    sourceMode = sourceMode,
+                    sourceCurrency = sourceCurrency,
+                    sourceAmount = amount,
+                    targetMode = targetMode,
+                    targetCurrency = targetCurrency,
+                    targetAmount = targetAmount,
+                ),
+            note = note,
+        )
         AppLogger.info(
-            "internal-transfer: profile=${ctx.profileName} cashbox=$cashboxId from=$sourceMode($sourceCurrency) to=$targetMode($targetCurrency) sourceAmount=$amount targetAmount=$targetAmount rate=$transferRate fromRemaining=$remaining toNow=$targetNow note=${note?.trim().orEmpty()}"
+            "internal-transfer: profile=${ctx.profileName} cashbox=$cashboxId " +
+                "from=$sourceMode($sourceCurrency) to=$targetMode($targetCurrency) " +
+                "sourceAmount=$amount targetAmount=$targetAmount rate=$transferRate " +
+                "fromRemaining=$remaining toNow=$targetNow note=${note?.trim().orEmpty()}"
         )
       }
+
+  private suspend fun recordInternalTransferShiftMovements(
+      movement: InternalTransferMovement,
+      note: String?,
+  ) {
+    val openingEntry =
+        getActiveCashboxWithDetails()?.cashbox?.openingEntryId?.trim()?.takeIf { it.isNotBlank() }
+            ?: return
+    recordShiftMovement(
+        openingEntry = openingEntry,
+        profileName = movement.profileName,
+        movementType = ShiftMovementType.INTERNAL_TRANSFER_OUT,
+        modeOfPayment = movement.sourceMode,
+        amount = movement.sourceAmount,
+        currency = movement.sourceCurrency,
+        note = note,
+    )
+    recordShiftMovement(
+        openingEntry = openingEntry,
+        profileName = movement.profileName,
+        movementType = ShiftMovementType.INTERNAL_TRANSFER_IN,
+        modeOfPayment = movement.targetMode,
+        amount = movement.targetAmount,
+        currency = movement.targetCurrency,
+        note = note,
+    )
+  }
 
   suspend fun registerCashMovement(
       modeOfPayment: String,
@@ -1903,7 +1963,9 @@ class CashBoxManager(
                 )
               }
           AppLogger.info(
-              "cash-movement: type=receive profile=${ctx.profileName} cashbox=$cashboxId mode=$mode amount=$amount openingBefore=$opening openingNow=$openingNow note=${note?.trim().orEmpty()}"
+              "cash-movement: type=receive profile=${ctx.profileName} cashbox=$cashboxId " +
+                  "mode=$mode amount=$amount openingBefore=$opening openingNow=$openingNow " +
+                  "note=${note?.trim().orEmpty()}"
           )
         } else {
           val availableByMode = computeExpectedFundsByMode(ctx, activeCashbox)

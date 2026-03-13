@@ -667,9 +667,11 @@ class PaymentEntryViewModel(
                 when (current.entryType) {
                   PaymentEntryType.InternalTransfer ->
                       if (isShiftTransfer) {
-                        "Transferencia de turno registrada por $amount de ${current.sourceAccount} a ${current.targetAccount}."
+                        "Transferencia de turno registrada por $amount de " +
+                            "${current.sourceAccount} a ${current.targetAccount}."
                       } else {
-                        "Transferencia contable registrada por $amount de ${current.sourceAccount} a ${current.targetAccount}."
+                        "Transferencia contable registrada por $amount de " +
+                            "${current.sourceAccount} a ${current.targetAccount}."
                       }
 
                   PaymentEntryType.Pay ->

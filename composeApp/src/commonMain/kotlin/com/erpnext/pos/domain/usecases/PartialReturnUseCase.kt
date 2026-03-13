@@ -238,8 +238,8 @@ class PartialReturnUseCase(
     if (totalReturn <= 0.0) return false
 
     val refundModes = modeOfPaymentDao.getAllModes(company)
-    if (!isRefundModeAllowed(profileId, refundModeOfPayment)) {
-      throw IllegalStateException("El modo de reembolso no está habilitado para retornos.")
+    check(isRefundModeAllowed(profileId, refundModeOfPayment)) {
+      "El modo de reembolso no está habilitado para retornos."
     }
     val originalOutstanding = invoice.invoice.outstandingAmount.coerceAtLeast(0.0)
     val allocated = minOf(totalReturn, originalOutstanding)
@@ -260,18 +260,14 @@ class PartialReturnUseCase(
     val postingDate = Clock.System.now().toEpochMilliseconds().toErpDateTime()
     val receivableAccount = invoice.invoice.debitTo?.trim().orEmpty()
     val paidFromAccount = resolveAccount(refundModeOfPayment, refundModes, fallback = null)
-    if (receivableAccount.isBlank()) {
-      throw IllegalStateException("No se encontró cuenta por cobrar para aplicar el reembolso.")
+    check(receivableAccount.isNotBlank()) {
+      "No se encontró cuenta por cobrar para aplicar el reembolso."
     }
-    if (paidFromAccount.isNullOrBlank()) {
-      throw IllegalStateException(
-          "El modo de reembolso '$refundModeOfPayment' no tiene una cuenta de caja/banco configurada."
-      )
+    check(!paidFromAccount.isNullOrBlank()) {
+      "El modo de reembolso '$refundModeOfPayment' no tiene una cuenta de caja/banco configurada."
     }
-    if (paidFromAccount.equals(receivableAccount, ignoreCase = true)) {
-      throw IllegalStateException(
-          "La cuenta del modo de reembolso no puede ser igual a la cuenta por cobrar de la factura."
-      )
+    check(!paidFromAccount.equals(receivableAccount, ignoreCase = true)) {
+      "La cuenta del modo de reembolso no puede ser igual a la cuenta por cobrar de la factura."
     }
 
     val entry =

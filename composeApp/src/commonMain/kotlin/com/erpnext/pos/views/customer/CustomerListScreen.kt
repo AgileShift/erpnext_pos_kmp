@@ -542,7 +542,6 @@ fun CustomerListScreen(
           customer = customer,
           invoicesState = invoicesState,
           paymentState = paymentState,
-          cashboxManager = cashboxManager,
           onDismiss = {},
           onActionSelected = { actionType ->
             when (actionType) {
@@ -594,7 +593,6 @@ fun CustomerListScreen(
           historyBusy = historyBusy,
           paymentState = paymentState,
           posBaseCurrency = companyCurrency,
-          cashboxManager = cashboxManager,
           returnPolicy = returnPolicy,
           onAction = {
               invoiceId,
@@ -1078,7 +1076,6 @@ private fun CustomerDetailPanel(
           customer = customer,
           invoices = emptyList(),
           posBaseCurrency = companyCurrency,
-          cashboxManager = cashboxManager,
       )
     }
   }
@@ -1139,7 +1136,6 @@ private fun CustomerRightPanel(
   Column(modifier = Modifier.fillMaxSize()) {
     CustomerPanelHeader(
         customer = customer,
-        invoicesState = invoicesState,
         cashboxManager = cashboxManager,
         baseCurrency = paymentState.baseCurrency,
     )
@@ -1226,7 +1222,6 @@ private fun CustomerRightPanel(
                 historyBusy = historyBusy,
                 paymentState = paymentState,
                 posBaseCurrency = posBaseCurrency,
-                cashboxManager = cashboxManager,
                 returnPolicy = returnPolicy,
                 onAction = onInvoiceHistoryAction,
                 onDownloadInvoicePdf = onDownloadInvoicePdf,
@@ -1248,10 +1243,8 @@ private fun CustomerRightPanel(
 }
 
 @Composable
-@Suppress("UNUSED_PARAMETER")
 private fun CustomerPanelHeader(
     customer: CustomerBO?,
-    invoicesState: CustomerInvoicesState,
     cashboxManager: CashBoxManager,
     baseCurrency: String,
 ) {
@@ -2609,7 +2602,6 @@ private fun CustomerQuickActionsSheet(
     customer: CustomerBO,
     invoicesState: CustomerInvoicesState,
     paymentState: CustomerPaymentState,
-    cashboxManager: CashBoxManager,
     onDismiss: () -> Unit,
     onActionSelected: (CustomerQuickActionType) -> Unit,
 ) {
@@ -2632,7 +2624,6 @@ private fun CustomerQuickActionsSheet(
           customer = customer,
           invoices = emptyList(),
           posBaseCurrency = paymentState.baseCurrency,
-          cashboxManager = cashboxManager,
       )
 
       HorizontalDivider()
@@ -3193,7 +3184,6 @@ private fun CustomerInvoiceHistorySheet(
     historyBusy: Boolean,
     paymentState: CustomerPaymentState,
     posBaseCurrency: String,
-    cashboxManager: CashBoxManager,
     returnPolicy: ReturnPolicySettings,
     onAction:
         (
@@ -4029,7 +4019,6 @@ private fun CustomerInvoiceHistorySheet(
         historyBusy = historyBusy,
         paymentState = paymentState,
         posBaseCurrency = posBaseCurrency,
-        cashboxManager = cashboxManager,
         returnPolicy = returnPolicy,
         onAction = onAction,
         onDownloadInvoicePdf = onDownloadInvoicePdf,
@@ -4049,7 +4038,6 @@ private fun CustomerInvoiceHistoryContent(
     historyBusy: Boolean,
     paymentState: CustomerPaymentState,
     posBaseCurrency: String,
-    cashboxManager: CashBoxManager,
     returnPolicy: ReturnPolicySettings,
     onAction:
         (
@@ -5034,7 +5022,6 @@ private fun CustomerInvoiceHistoryContent(
           InvoiceHistorySummary(
               invoices = invoices,
               posBaseCurrency = posBaseCurrency,
-              cashboxManager = cashboxManager,
           )
           LazyColumn(
               modifier = Modifier.fillMaxWidth().heightIn(max = 360.dp),
@@ -5051,7 +5038,6 @@ private fun CustomerInvoiceHistoryContent(
                   invoice = invoice,
                   isBusy = historyBusy,
                   posBaseCurrency = posBaseCurrency,
-                  cashboxManager = cashboxManager,
                   returnPolicy = returnPolicy,
                   onCancel = { invoiceId ->
                     onAction(
@@ -5179,11 +5165,9 @@ private fun HistoryRangeChip(label: String, selected: Boolean, onClick: () -> Un
 }
 
 @Composable
-@Suppress("UNUSED_PARAMETER")
 private fun InvoiceHistorySummary(
     invoices: List<SalesInvoiceBO>,
     posBaseCurrency: String,
-    cashboxManager: CashBoxManager,
 ) {
   val companyCurrency = normalizeCurrency(posBaseCurrency)
   val invoiceCurrency = normalizeCurrency(invoices.firstOrNull()?.currency)
@@ -5246,12 +5230,10 @@ private fun normalizedStatus(status: String?): String {
 }
 
 @Composable
-@Suppress("UNUSED_PARAMETER")
 private fun InvoiceHistoryRow(
     invoice: SalesInvoiceBO,
     isBusy: Boolean,
     posBaseCurrency: String,
-    cashboxManager: CashBoxManager,
     returnPolicy: ReturnPolicySettings,
     onCancel: (String) -> Unit,
     onReturnTotal: (String) -> Unit,
@@ -5624,12 +5606,10 @@ private enum class ReturnDestination(val label: String) {
 private fun defaultReturnIsPhysical(isPosInvoice: Boolean): Boolean = isPosInvoice
 
 @Composable
-@Suppress("UNUSED_PARAMETER")
 private fun CustomerOutstandingSummary(
     customer: CustomerBO,
     invoices: List<SalesInvoiceBO>,
     posBaseCurrency: String,
-    cashboxManager: CashBoxManager,
 ) {
   val strings = LocalAppStrings.current
   val companyCurrency = normalizeCurrency(posBaseCurrency)
