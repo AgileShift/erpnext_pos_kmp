@@ -14,7 +14,6 @@ data class POSProfileEntity(
     @PrimaryKey(autoGenerate = false) @ColumnInfo(name = "profile_name") var profileName: String,
     @ColumnInfo(name = "warehouse") var warehouse: String,
     @ColumnInfo(name = "route") var route: String? = null,
-    @ColumnInfo(name = "country") var country: String,
     @ColumnInfo(name = "company") var company: String,
     @ColumnInfo(name = "currency") var currency: String,
     @ColumnInfo("income_account") var incomeAccount: String? = null,

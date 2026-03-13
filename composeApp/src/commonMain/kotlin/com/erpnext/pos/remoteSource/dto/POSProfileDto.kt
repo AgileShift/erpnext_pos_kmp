@@ -15,7 +15,6 @@ data class POSProfileDto(
     @SerialName("name") val profileName: String,
     @SerialName("warehouse") val warehouse: String,
     @SerialName("route") val route: String? = null,
-    val country: String,
     val company: String,
     val currency: String,
     @SerialName("income_account") val incomeAccount: String? = null,
