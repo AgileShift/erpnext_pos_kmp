@@ -19,7 +19,6 @@ fun POSProfileDto.toEntity(): POSProfileEntity {
   return POSProfileEntity(
       profileName = this.profileName,
       warehouse = this.warehouse,
-      country = this.country,
       company = this.company,
       currency = this.currency,
       route = this.route,

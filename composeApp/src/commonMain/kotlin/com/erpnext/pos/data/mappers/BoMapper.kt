@@ -238,8 +238,6 @@ fun POSProfileDto.toBO(): POSProfileBO {
   return POSProfileBO(
       name = this.profileName,
       warehouse = this.warehouse,
-      country = this.country,
-      company = this.company,
       currency = this.currency,
       route = this.route,
       incomeAccount = this.incomeAccount,
@@ -272,7 +270,6 @@ fun POSProfileEntity.toBO(): POSProfileBO {
   return POSProfileBO(
       name = profileName,
       warehouse = warehouse,
-      country = country,
       disabled = active != true,
       company = company,
       route = route,
