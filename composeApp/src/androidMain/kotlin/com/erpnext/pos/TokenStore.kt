@@ -9,6 +9,7 @@ import com.erpnext.pos.remoteSource.dto.TokenResponse
 import com.erpnext.pos.remoteSource.oauth.AuthInfoStore
 import com.erpnext.pos.remoteSource.oauth.TokenStore
 import com.erpnext.pos.remoteSource.oauth.TransientAuthStore
+import com.erpnext.pos.utils.AppLogger
 import com.erpnext.pos.utils.TokenUtils.decodePayload
 import com.erpnext.pos.utils.TokenUtils.resolveUserIdFromClaims
 import com.erpnext.pos.utils.instanceKeyFromUrl
@@ -30,20 +31,50 @@ class AndroidTokenStore(private val context: Context) :
   private val mutex = Mutex()
   private val stateFlow = MutableStateFlow<TokenResponse?>(null)
   private val json = Json { ignoreUnknownKeys = true }
+  private val authPrefs: SharedPreferences by lazy {
+    context.getSharedPreferences(AUTH_INFO_PREF_FILE, Context.MODE_PRIVATE)
+  }
 
   // --- SecurePrefs initialization ---
-  private val prefs by lazy {
+  private val prefs by lazy { buildSecurePrefsWithRecovery() }
+
+  private fun buildSecurePrefsWithRecovery(): SecurePrefs {
+    return runCatching { buildSecurePrefs() }
+        .onFailure { throwable ->
+          AppLogger.warn("AndroidTokenStore: secure keyset init failed, attempting recovery", throwable)
+          clearEncryptedStorage()
+        }
+        .getOrElse {
+          runCatching { buildSecurePrefs() }
+              .onFailure { throwable ->
+                AppLogger.warn(
+                    "AndroidTokenStore: secure keyset recovery failed, using no-op secure prefs",
+                    throwable,
+                )
+              }
+              .getOrElse { SecurePrefs.unavailable(context, SECURE_PREF_FILE) }
+        }
+  }
+
+  private fun buildSecurePrefs(): SecurePrefs {
     TinkConfig.register()
     val keysetHandle =
         AndroidKeysetManager.Builder()
-            .withSharedPref(context, "master_keyset", "master_key_preference")
+            .withSharedPref(context, KEYSET_PREF_KEY, KEYSET_PREF_FILE)
             .withKeyTemplate(AeadKeyTemplates.AES256_GCM)
-            .withMasterKeyUri("android-keystore://master_key")
+            .withMasterKeyUri(MASTER_KEY_URI)
             .build()
             .keysetHandle
 
     val aead = keysetHandle.getPrimitive(Aead::class.java)
-    SecurePrefs(context, "secure_prefs_v2", aead)
+    return SecurePrefs(context, SECURE_PREF_FILE, aead)
+  }
+
+  private fun clearEncryptedStorage() {
+    context.getSharedPreferences(KEYSET_PREF_FILE, Context.MODE_PRIVATE).edit {
+      remove(KEYSET_PREF_KEY)
+    }
+    context.getSharedPreferences(SECURE_PREF_FILE, Context.MODE_PRIVATE).edit { clear() }
   }
 
   private fun siteScopedKeyForUrl(url: String?, key: String): String {
@@ -145,7 +176,7 @@ class AndroidTokenStore(private val context: Context) :
   }
 
   override suspend fun loadAuthInfo(): MutableList<LoginInfo> {
-    val sitesInfo = prefs.getString("sitesInfo")
+    val sitesInfo = authPrefs.getString("sitesInfo", null)
     if (sitesInfo.isNullOrEmpty()) return mutableListOf()
     return json.decodeFromString(sitesInfo)
   }
@@ -162,11 +193,13 @@ class AndroidTokenStore(private val context: Context) :
             )
         )
         val serialized = json.encodeToString(list)
-        prefs.putString("sitesInfo", serialized)
-        prefs.putString("current_site", info.url)
+        authPrefs.edit {
+          putString("sitesInfo", serialized)
+          putString("current_site", info.url)
+        }
       }
 
-  override suspend fun getCurrentSite(): String? = prefs.getString("current_site")
+  override suspend fun getCurrentSite(): String? = authPrefs.getString("current_site", null)
 
   override suspend fun deleteSite(url: String): Boolean =
       mutex.withLock {
@@ -183,16 +216,20 @@ class AndroidTokenStore(private val context: Context) :
         if (currentSite == url) {
           stateFlow.update { null }
           val nextSite = updated.firstOrNull()?.url
-          if (nextSite.isNullOrBlank()) {
-            prefs.remove("current_site")
-          } else {
-            prefs.putString("current_site", nextSite)
+          authPrefs.edit {
+            if (nextSite.isNullOrBlank()) {
+              remove("current_site")
+            } else {
+              putString("current_site", nextSite)
+            }
           }
         }
-        if (updated.isEmpty()) {
-          prefs.remove("sitesInfo")
-        } else {
-          prefs.putString("sitesInfo", json.encodeToString(updated))
+        authPrefs.edit {
+          if (updated.isEmpty()) {
+            remove("sitesInfo")
+          } else {
+            putString("sitesInfo", json.encodeToString(updated))
+          }
         }
         true
       }
@@ -208,13 +245,15 @@ class AndroidTokenStore(private val context: Context) :
                   isFavorite = isFavorite ?: item.isFavorite,
               )
             }
-        prefs.putString("sitesInfo", json.encodeToString(updated))
+        authPrefs.edit { putString("sitesInfo", json.encodeToString(updated)) }
       }
 
   override suspend fun clearAuthInfo() =
       mutex.withLock {
-        prefs.remove("sitesInfo")
-        prefs.remove("current_site")
+        authPrefs.edit {
+          remove("sitesInfo")
+          remove("current_site")
+        }
       }
 
   override suspend fun clear() =
@@ -272,13 +311,18 @@ class AndroidTokenStore(private val context: Context) :
 
     fun putString(key: String, value: String) {
       val encrypted =
-          try {
-            val bytes = aead.encrypt(value.toByteArray(), null)
-            Base64.encodeToString(bytes, Base64.NO_WRAP)
-          } catch (_: Exception) {
-            ""
-          }
-      prefs.edit { putString(key, encrypted) }
+          runCatching {
+                val bytes = aead.encrypt(value.toByteArray(), null)
+                Base64.encodeToString(bytes, Base64.NO_WRAP)
+              }
+              .getOrNull()
+      prefs.edit {
+        if (encrypted == null) {
+          remove(key)
+        } else {
+          putString(key, encrypted)
+        }
+      }
     }
 
     fun getString(key: String, default: String? = null): String? {
@@ -306,5 +350,29 @@ class AndroidTokenStore(private val context: Context) :
     fun clear() {
       prefs.edit { clear() }
     }
+
+    companion object {
+      fun unavailable(context: Context, name: String): SecurePrefs {
+        return SecurePrefs(context, name, UnavailableAead)
+      }
+    }
+  }
+
+  private object UnavailableAead : Aead {
+    override fun encrypt(plaintext: ByteArray, associatedData: ByteArray?): ByteArray {
+      throw IllegalStateException("Secure encryption unavailable")
+    }
+
+    override fun decrypt(ciphertext: ByteArray, associatedData: ByteArray?): ByteArray {
+      throw IllegalStateException("Secure decryption unavailable")
+    }
+  }
+
+  private companion object {
+    const val KEYSET_PREF_FILE = "master_key_preference"
+    const val KEYSET_PREF_KEY = "master_keyset"
+    const val SECURE_PREF_FILE = "secure_prefs_v2"
+    const val AUTH_INFO_PREF_FILE = "auth_info_prefs_v1"
+    const val MASTER_KEY_URI = "android-keystore://master_key"
   }
 }

@@ -1,0 +1,13 @@
+package com.erpnext.pos.printing.renderer.escpos
+
+object EscPosCommands {
+  val INIT = byteArrayOf(0x1B, 0x40)
+  val ALIGN_LEFT = byteArrayOf(0x1B, 0x61, 0x00)
+  val ALIGN_CENTER = byteArrayOf(0x1B, 0x61, 0x01)
+  val BOLD_ON = byteArrayOf(0x1B, 0x45, 0x01)
+  val BOLD_OFF = byteArrayOf(0x1B, 0x45, 0x00)
+  val FEED_3 = byteArrayOf(0x1B, 0x64, 0x03)
+  val CUT = byteArrayOf(0x1D, 0x56, 0x00)
+  val OPEN_DRAWER = byteArrayOf(0x1B, 0x70, 0x00, 0x19, 0xFA.toByte())
+  val LF = byteArrayOf(0x0A)
+}

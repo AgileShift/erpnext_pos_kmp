@@ -4,6 +4,7 @@ import android.app.Application
 import com.erpnext.pos.data.DatabaseBuilder
 import com.erpnext.pos.di.initKoin
 import com.erpnext.pos.localSource.preferences.GeneralPreferences
+import com.erpnext.pos.utils.AppLogger
 import com.erpnext.pos.utils.AppSentry
 import com.erpnext.pos.utils.notifications.configureInventoryAlertWorker
 import com.google.firebase.Firebase
@@ -27,12 +28,20 @@ class Application : Application() {
         builder = DatabaseBuilder(this@Application),
     )
 
-    runBlocking {
-      val generalPreferences = GlobalContext.get().get<GeneralPreferences>()
-      val enabled = generalPreferences.getInventoryAlertsEnabled()
-      val hour = generalPreferences.getInventoryAlertHour()
-      val minute = generalPreferences.getInventoryAlertMinute()
-      configureInventoryAlertWorker(enabled, hour, minute)
-    }
+    runCatching {
+          runBlocking {
+            val generalPreferences = GlobalContext.get().get<GeneralPreferences>()
+            val enabled = generalPreferences.getInventoryAlertsEnabled()
+            val hour = generalPreferences.getInventoryAlertHour()
+            val minute = generalPreferences.getInventoryAlertMinute()
+            configureInventoryAlertWorker(enabled, hour, minute)
+          }
+        }
+        .onFailure { error ->
+          AppLogger.warn(
+              "Application startup: inventory alert worker setup skipped due to recoverable error",
+              error,
+          )
+        }
   }
 }
