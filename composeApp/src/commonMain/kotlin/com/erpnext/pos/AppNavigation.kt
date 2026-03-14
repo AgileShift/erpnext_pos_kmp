@@ -31,6 +31,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.Logout
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Business
+import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Print
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Settings
@@ -39,6 +40,7 @@ import androidx.compose.material.icons.outlined.SwapHoriz
 import androidx.compose.material.icons.outlined.Tune
 import androidx.compose.material.icons.outlined.Wifi
 import androidx.compose.material.icons.outlined.WifiOff
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -47,6 +49,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -66,6 +69,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavGraph.Companion.findStartDestination
@@ -78,6 +82,11 @@ import coil3.request.crossfade
 import com.erpnext.pos.NavGraph.Setup
 import com.erpnext.pos.base.getPlatformName
 import com.erpnext.pos.domain.usecases.LogoutUseCase
+import com.erpnext.pos.domain.printing.model.PrintJobStatus
+import com.erpnext.pos.domain.printing.model.TransportType
+import com.erpnext.pos.domain.repositories.printing.IPrintJobRepository
+import com.erpnext.pos.domain.repositories.printing.IPrinterProfileRepository
+import com.erpnext.pos.domain.printing.ports.PrinterDiscoveryService
 import com.erpnext.pos.localSource.dao.CompanyDao
 import com.erpnext.pos.localSource.dao.UserDao
 import com.erpnext.pos.localSource.preferences.GeneralPreferences
@@ -103,8 +112,11 @@ import com.erpnext.pos.sync.SyncManager
 import com.erpnext.pos.sync.SyncState
 import com.erpnext.pos.utils.AppLogger
 import com.erpnext.pos.utils.NetworkMonitor
+import com.erpnext.pos.utils.WindowHeightSizeClass
+import com.erpnext.pos.utils.WindowWidthSizeClass
 import com.erpnext.pos.utils.loading.LoadingIndicator
 import com.erpnext.pos.utils.loading.LoadingUiState
+import com.erpnext.pos.utils.rememberWindowSizeClass
 import com.erpnext.pos.utils.view.SnackbarController
 import com.erpnext.pos.utils.view.SnackbarHost
 import com.erpnext.pos.utils.view.SnackbarPosition
@@ -144,8 +156,17 @@ private fun defaultTitleForRoute(route: String, strings: AppStrings): String {
     route.startsWith("payment-entry") -> strings.navigation.expenses
     route == NavRoute.Activity.path -> strings.navigation.activity
     route == NavRoute.Settings.path -> strings.navigation.settings
+    route == NavRoute.Printers.path -> strings.navigation.printers
     else -> ""
   }
+}
+
+private enum class TopBarPrinterState {
+  CONNECTED,
+  DISCONNECTED,
+  OFF,
+  PRINTING,
+  PROBLEM,
 }
 
 private fun NavHostController.navigateTopLevel(route: String) {
@@ -214,6 +235,9 @@ fun AppNavigation() {
   val syncManager = koinInject<SyncManager>()
   val syncPreferences = koinInject<SyncPreferences>()
   val networkMonitor = koinInject<NetworkMonitor>()
+  val printerProfileRepository = koinInject<IPrinterProfileRepository>()
+  val printJobRepository = koinInject<IPrintJobRepository>()
+  val printerDiscoveryService = koinInject<PrinterDiscoveryService>()
   val appTheme by themePreferences.theme.collectAsState(initial = AppColorTheme.Noir)
   val appThemeMode by themePreferences.themeMode.collectAsState(initial = AppThemeMode.System)
 
@@ -246,12 +270,17 @@ fun AppNavigation() {
   val isOnline by networkMonitor.isConnected.collectAsState(false)
   val activityBadgeCount by activityCenter.unreadCount.collectAsState(0)
   val printerEnabled by generalPreferences.printerEnabled.collectAsState(true)
+  val defaultPrinter by printerProfileRepository.observeDefaultProfile().collectAsState(initial = null)
+  val printJobs by printJobRepository.observeJobs().collectAsState(initial = emptyList())
   val posContext by cashBoxManager.contextFlow.collectAsState(null)
   val tokenSnapshot by tokenStore.tokensFlow().collectAsState(initial = null)
   val isCashboxOpen by cashBoxManager.cashboxState.collectAsState()
   var profileMenuExpanded by remember { mutableStateOf(false) }
   var tick by remember { mutableStateOf(0L) }
   var settingsFromMenu by remember { mutableStateOf(false) }
+  var isBluetoothOff by remember { mutableStateOf(false) }
+  var showBluetoothOffDialog by remember { mutableStateOf(false) }
+  var bluetoothOffDialogAcknowledged by remember { mutableStateOf(false) }
 
   LaunchedEffect(Unit) {
     while (true) {
@@ -271,7 +300,44 @@ fun AppNavigation() {
       }
   LaunchedEffect(currentRoute) { AppLogger.info("AppNavigation currentRoute -> $currentRoute") }
 
+  LaunchedEffect(printerEnabled, defaultPrinter?.id) {
+    while (true) {
+      val profile = defaultPrinter
+      if (
+          !printerEnabled ||
+              profile == null ||
+              profile.preferredTransport !in setOf(TransportType.BT_SPP, TransportType.BT_DESKTOP)
+      ) {
+        isBluetoothOff = false
+        showBluetoothOffDialog = false
+        bluetoothOffDialogAcknowledged = false
+      } else {
+        val bluetoothState =
+            runCatching { printerDiscoveryService.bondedDevices(); false }
+                .getOrElse { error ->
+                  val message = error.message.orEmpty().lowercase()
+                  message.contains("bluetooth is turned off") || message.contains("bluetooth apagado")
+                }
+        if (!bluetoothState) {
+          bluetoothOffDialogAcknowledged = false
+        }
+        isBluetoothOff = bluetoothState
+        if (bluetoothState && !bluetoothOffDialogAcknowledged) {
+          showBluetoothOffDialog = true
+          bluetoothOffDialogAcknowledged = true
+        }
+      }
+      delay(5_000)
+    }
+  }
+
   val isDesktop = getPlatformName() == "Desktop"
+  val windowSizeClass = rememberWindowSizeClass()
+  val isPhoneCompact =
+      !isDesktop &&
+          (windowSizeClass.widthSizeClass == WindowWidthSizeClass.Compact ||
+              (windowSizeClass.widthSizeClass == WindowWidthSizeClass.Medium &&
+                  windowSizeClass.heightSizeClass == WindowHeightSizeClass.Compact))
   val previousRoute = navController.previousBackStackEntry?.destination?.route
   val noBackRoutes =
       setOf(
@@ -298,6 +364,7 @@ fun AppNavigation() {
   val topBarState = topBarController.state
   val resolvedShowBack = topBarState.showBack ?: showBackDefault
   val resolvedOnBack: () -> Unit = topBarState.onBack ?: { navController.popBackStack() }
+  val resolvedTopBarVisible = topBarState.isVisible ?: true
   val subtitle = topBarState.subtitle
   val cashier = posContext?.cashier
   val cashierDisplayName =
@@ -407,7 +474,7 @@ fun AppNavigation() {
               )
             }
             Column(modifier = Modifier.weight(1f)) {
-              if (shouldShowTopBar(currentRoute)) {
+              if (shouldShowTopBar(currentRoute) && (!isPhoneCompact || resolvedTopBarVisible)) {
                 GlobalTopBar(
                     title = {
                       Row(
@@ -418,7 +485,14 @@ fun AppNavigation() {
                           Text(
                               text = titleText,
                               color = MaterialTheme.colorScheme.onSurface,
-                              style = MaterialTheme.typography.titleLarge,
+                              style =
+                                  if (isPhoneCompact) {
+                                    MaterialTheme.typography.titleMedium
+                                  } else {
+                                    MaterialTheme.typography.titleLarge
+                                  },
+                              maxLines = 1,
+                              overflow = TextOverflow.Ellipsis,
                           )
                           AnimatedVisibility(
                               visible = !subtitle.isNullOrBlank(),
@@ -448,14 +522,18 @@ fun AppNavigation() {
                                   text = value,
                                   style = MaterialTheme.typography.bodySmall,
                                   color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                  maxLines = 1,
+                                  overflow = TextOverflow.Ellipsis,
                               )
                             }
                           }
                         }
-                        ShiftOpenChip(
-                            isOpen = isCashboxOpen,
-                            duration = formatShiftDuration(shiftStart, tick),
-                        )
+                        if (!isPhoneCompact) {
+                          ShiftOpenChip(
+                              isOpen = isCashboxOpen,
+                              duration = formatShiftDuration(shiftStart, tick),
+                          )
+                        }
                       }
                     },
                     actions = {
@@ -487,21 +565,68 @@ fun AppNavigation() {
                       val showNewSale =
                           (currentRoute == NavRoute.Billing.path ||
                               currentRoute == NavRoute.Billing.path) && !subtitle.isNullOrBlank()
+                      val latestJob = printJobs.maxByOrNull { it.createdAtEpochMs }
+                      val hasFailedJob = latestJob?.status == PrintJobStatus.FAILED
+                      val isPrintingJob =
+                          latestJob?.status in
+                              setOf(
+                                  PrintJobStatus.CONNECTING,
+                                  PrintJobStatus.RENDERING,
+                                  PrintJobStatus.PRINTING,
+                                  PrintJobStatus.RETRYING,
+                              )
+                      val hasDefaultPrinter = defaultPrinter?.isEnabled == true
+                      val isConnected =
+                          hasDefaultPrinter && !isBluetoothOff && !hasFailedJob && !isPrintingJob
+                      val printerState =
+                          when {
+                            isPrintingJob -> TopBarPrinterState.PRINTING
+                            hasFailedJob -> TopBarPrinterState.PROBLEM
+                            isBluetoothOff -> TopBarPrinterState.OFF
+                            isConnected -> TopBarPrinterState.CONNECTED
+                            else -> TopBarPrinterState.DISCONNECTED
+                          }
+                      val printerLabel =
+                          when (printerState) {
+                            TopBarPrinterState.CONNECTED -> strings.common.printerConnected
+                            TopBarPrinterState.DISCONNECTED -> strings.common.printerDisconnected
+                            TopBarPrinterState.OFF -> strings.common.printerOff
+                            TopBarPrinterState.PRINTING -> strings.common.printerPrinting
+                            TopBarPrinterState.PROBLEM -> strings.common.printerProblem
+                          }
+                      val printerTint =
+                          when (printerState) {
+                            TopBarPrinterState.CONNECTED -> Color(0xFF2E7D32)
+                            TopBarPrinterState.DISCONNECTED ->
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            TopBarPrinterState.OFF -> Color(0xFFF59E0B)
+                            TopBarPrinterState.PRINTING -> MaterialTheme.colorScheme.primary
+                            TopBarPrinterState.PROBLEM -> MaterialTheme.colorScheme.error
+                          }
+                      val printerIcon =
+                          when (printerState) {
+                            TopBarPrinterState.PROBLEM,
+                            TopBarPrinterState.OFF -> Icons.Outlined.Info
+                            else -> Icons.Outlined.Print
+                          }
                       Row(
-                          horizontalArrangement = Arrangement.spacedBy(12.dp),
+                          horizontalArrangement =
+                              Arrangement.spacedBy(if (isPhoneCompact) 8.dp else 12.dp),
                           verticalAlignment = Alignment.CenterVertically,
                       ) {
-                        AnimatedVisibility(
-                            visible = showNewSale,
-                            enter = fadeIn(tween(180)),
-                            exit = fadeOut(tween(160)),
-                        ) {
-                          StatusIconButton(
-                              label = strings.common.newSale,
-                              onClick = { billingResetController.reset() },
-                              tint = MaterialTheme.colorScheme.primary,
+                        if (!isPhoneCompact) {
+                          AnimatedVisibility(
+                              visible = showNewSale,
+                              enter = fadeIn(tween(180)),
+                              exit = fadeOut(tween(160)),
                           ) {
-                            Icon(imageVector = Icons.Outlined.Add, contentDescription = null)
+                            StatusIconButton(
+                                label = strings.common.newSale,
+                                onClick = { billingResetController.reset() },
+                                tint = MaterialTheme.colorScheme.primary,
+                            ) {
+                              Icon(imageVector = Icons.Outlined.Add, contentDescription = null)
+                            }
                           }
                         }
                         StatusIconButton(
@@ -522,14 +647,13 @@ fun AppNavigation() {
                         StatusIconButton(
                             label = dbLabel,
                             onClick = {
+                              scope.launch { syncManager.fullSync(force = true) }
                               if (!isCashboxOpen) {
                                 snackbarController.show(
-                                    strings.common.openCashboxToSyncError,
-                                    SnackbarType.Error,
+                                    strings.common.baseCompanySyncOnlyNotice,
+                                    SnackbarType.Info,
                                     SnackbarPosition.Bottom,
                                 )
-                              } else {
-                                scope.launch { syncManager.fullSync(force = true) }
                               }
                             },
                             tint = dbTint,
@@ -560,31 +684,27 @@ fun AppNavigation() {
                                 contentDescription = null
                             )
                         }*/
-                        StatusIconButton(
-                            label = strings.common.retry,
-                            onClick = {
-                              when (currentRoute) {
-                                NavRoute.Inventory.path -> inventoryRefreshController.refresh()
-                                NavRoute.Home.path -> homeRefreshController.refresh()
-                                else -> homeRefreshController.refresh()
-                              }
-                            },
-                        ) {
-                          Icon(Icons.Outlined.Refresh, contentDescription = null)
+                        if (!isPhoneCompact) {
+                          StatusIconButton(
+                              label = strings.common.retry,
+                              onClick = {
+                                when (currentRoute) {
+                                  NavRoute.Inventory.path -> inventoryRefreshController.refresh()
+                                  NavRoute.Home.path -> homeRefreshController.refresh()
+                                  else -> homeRefreshController.refresh()
+                                }
+                              },
+                          ) {
+                            Icon(Icons.Outlined.Refresh, contentDescription = null)
+                          }
                         }
                         if (printerEnabled) {
-                          val printerConnected = false
                           StatusIconButton(
-                              label =
-                                  if (printerConnected) strings.common.printerConnected
-                                  else strings.common.printerDisconnected,
-                              onClick = {},
-                              enabled = false,
-                              tint =
-                                  if (printerConnected) MaterialTheme.colorScheme.primary
-                                  else MaterialTheme.colorScheme.onSurfaceVariant,
+                              label = printerLabel,
+                              onClick = { navController.navigateSingle(NavRoute.Printers.path) },
+                              tint = printerTint,
                           ) {
-                            Icon(Icons.Outlined.Print, contentDescription = null)
+                            Icon(printerIcon, contentDescription = null)
                           }
                         }
                       }
@@ -594,51 +714,55 @@ fun AppNavigation() {
                           verticalAlignment = Alignment.CenterVertically,
                           horizontalArrangement = Arrangement.spacedBy(10.dp),
                       ) {
-                        if (instanceDisplayName != null) {
-                          Surface(
-                              color = MaterialTheme.colorScheme.surfaceVariant,
-                              shape = MaterialTheme.shapes.medium,
-                              modifier =
-                                  Modifier.clickable(
-                                      interactionSource = remember { MutableInteractionSource() },
-                                      indication = null,
-                                  ) {
-                                    cashBoxManager.clearContext()
-                                    navController.navigateToLoginRoot()
-                                  },
-                          ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        if (instanceDisplayName != null && !isPhoneCompact) {
+                            Surface(
+                                color = MaterialTheme.colorScheme.surfaceVariant,
+                                shape = MaterialTheme.shapes.medium,
+                                modifier =
+                                    Modifier.clickable(
+                                        interactionSource = remember { MutableInteractionSource() },
+                                        indication = null,
+                                    ) {
+                                      cashBoxManager.clearContext()
+                                      navController.navigateToLoginRoot()
+                                    },
                             ) {
-                              Icon(
-                                  imageVector = Icons.Outlined.Business,
-                                  contentDescription = null,
-                                  tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                              )
-                              Column(horizontalAlignment = Alignment.End) {
-                                Text(
-                                    text = instanceDisplayName,
-                                    style = MaterialTheme.typography.labelLarge,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color = MaterialTheme.colorScheme.onSurface,
+                              Row(
+                                  modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                                  verticalAlignment = Alignment.CenterVertically,
+                                  horizontalArrangement = Arrangement.spacedBy(8.dp),
+                              ) {
+                                Icon(
+                                    imageVector = Icons.Outlined.Business,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
-                                Text(
-                                    text = strings.common.switchInstance,
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
+                                Column(horizontalAlignment = Alignment.End) {
+                                  Text(
+                                      text = instanceDisplayName,
+                                      style = MaterialTheme.typography.labelLarge,
+                                      fontWeight = FontWeight.SemiBold,
+                                      color = MaterialTheme.colorScheme.onSurface,
+                                      maxLines = 1,
+                                      overflow = TextOverflow.Ellipsis,
+                                  )
+                                  Text(
+                                      text = strings.common.switchInstance,
+                                      style = MaterialTheme.typography.labelSmall,
+                                      color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                  )
+                                }
                               }
                             }
-                          }
                         }
-                        if (cashier != null) {
+                        if (cashier != null && !isPhoneCompact) {
                           Column(horizontalAlignment = Alignment.End) {
                             Text(
                                 cashierDisplayName,
                                 style = MaterialTheme.typography.bodyMedium,
                                 fontWeight = FontWeight.SemiBold,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
                             )
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
@@ -772,6 +896,20 @@ fun AppNavigation() {
                                 },
                             )
                             DropdownMenuItem(
+                                text = { Text(strings.common.retry) },
+                                leadingIcon = {
+                                  Icon(imageVector = Icons.Outlined.Refresh, contentDescription = null)
+                                },
+                                onClick = {
+                                  profileMenuExpanded = false
+                                  when (currentRoute) {
+                                    NavRoute.Inventory.path -> inventoryRefreshController.refresh()
+                                    NavRoute.Home.path -> homeRefreshController.refresh()
+                                    else -> homeRefreshController.refresh()
+                                  }
+                                },
+                            )
+                            DropdownMenuItem(
                                 text = { Text(strings.common.switchInstance) },
                                 leadingIcon = {
                                   Icon(
@@ -814,6 +952,37 @@ fun AppNavigation() {
               }
               Box(modifier = Modifier.weight(1f)) {
                 Setup(navController, false)
+                if (showBluetoothOffDialog) {
+                  AlertDialog(
+                      onDismissRequest = { showBluetoothOffDialog = false },
+                      icon = {
+                        Icon(
+                            imageVector = Icons.Outlined.Info,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.error,
+                        )
+                      },
+                      title = { Text(strings.common.printerOff) },
+                      text = {
+                        Text(strings.common.printerBluetoothOffDialogBody)
+                      },
+                      confirmButton = {
+                        TextButton(
+                            onClick = {
+                              showBluetoothOffDialog = false
+                              navController.navigateSingle(NavRoute.Printers.path)
+                            }
+                        ) {
+                          Text(strings.navigation.printers)
+                        }
+                      },
+                      dismissButton = {
+                        TextButton(onClick = { showBluetoothOffDialog = false }) {
+                          Text(strings.common.understood)
+                        }
+                      },
+                  )
+                }
 
                 SnackbarHost(snackbar = snackbar, onDismiss = snackbarController::dismiss)
 
@@ -941,6 +1110,7 @@ fun AppNavigation() {
                       is NavRoute.Reconciliation -> navController.navigateSingle(event.path)
 
                       is NavRoute.Settings -> navController.navigateTopLevel(NavRoute.Settings.path)
+                      is NavRoute.Printers -> navController.navigateSingle(NavRoute.Printers.path)
 
                       is NavRoute.Activity -> navController.navigateSingle(NavRoute.Activity.path)
 

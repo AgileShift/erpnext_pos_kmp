@@ -59,6 +59,13 @@ class SyncManager(
   companion object {
     private const val BOOTSTRAP_REFRESH_INTERVAL_MS = 5 * 60 * 1000L
     private const val STEP_COOLDOWN_MS = 1_000L
+    private val BASE_BOOTSTRAP_SECTIONS_WHEN_CASHBOX_CLOSED =
+        listOf(
+            BootstrapSyncRepository.Section.POS_PROFILES,
+            BootstrapSyncRepository.Section.COMPANY,
+            BootstrapSyncRepository.Section.STOCK_SETTINGS,
+            BootstrapSyncRepository.Section.EXCHANGE_RATES,
+        )
   }
 
   private val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
@@ -309,9 +316,8 @@ class SyncManager(
       return PushQueueReport.EMPTY
     }
     if (!cashBoxManager.cashboxState.value) {
-      AppLogger.warn(
-          "SyncManager: cashbox is closed, but pending push will continue with fallback context"
-      )
+      AppLogger.warn("SyncManager: push queue skipped because cashbox is closed")
+      return PushQueueReport.EMPTY
     }
     val ctx = resolvePushContext() ?: return PushQueueReport.EMPTY
     val syncing = _state.value as? SyncState.SYNCING
@@ -440,16 +446,29 @@ class SyncManager(
 
   private fun buildFullSyncSteps(@Suppress("UNUSED_PARAMETER") ttlHours: Int): List<SyncStep> {
     var snapshot: BootstrapSyncRepository.Snapshot? = null
-    val bootstrapSections = bootstrapSyncRepository.orderedSections()
-    val bootstrapSteps = mutableListOf<SyncStep>()
-    bootstrapSteps +=
-        SyncStep(
-            label = "Pendientes",
-            message = "Sincronizando pendientes antes de actualizar...",
-            haltOnFailure = true,
-        ) {
-          runPushQueue(updateProgress = true, trigger = "full_sync_pre_pull")
+    val isCashboxOpen = cashBoxManager.cashboxState.value
+    val bootstrapSections =
+        if (isCashboxOpen) {
+          bootstrapSyncRepository.orderedSections()
+        } else {
+          BASE_BOOTSTRAP_SECTIONS_WHEN_CASHBOX_CLOSED
         }
+    val bootstrapSteps = mutableListOf<SyncStep>()
+    if (isCashboxOpen) {
+      bootstrapSteps +=
+          SyncStep(
+              label = "Pendientes",
+              message = "Sincronizando pendientes antes de actualizar...",
+              haltOnFailure = true,
+          ) {
+            runPushQueue(updateProgress = true, trigger = "full_sync_pre_pull")
+          }
+    } else {
+      AppLogger.info(
+          "SyncManager.fullSync: cashbox closed -> running base company sync only " +
+              "(${bootstrapSections.joinToString { it.name }})"
+      )
+    }
     bootstrapSteps +=
         SyncStep(
             label = "Bootstrap Fetch",
@@ -494,10 +513,12 @@ class SyncManager(
             bootstrapSyncRepository.persistSection(resolved, section)
           }
     }
-    bootstrapSteps +=
-        SyncStep(label = "Caja", message = "Reconciliando estado de caja...") {
-          cashBoxManager.initializeContext()
-        }
+    if (isCashboxOpen) {
+      bootstrapSteps +=
+          SyncStep(label = "Caja", message = "Reconciliando estado de caja...") {
+            cashBoxManager.initializeContext()
+          }
+    }
     return bootstrapSteps
   }
 
@@ -590,7 +611,13 @@ class SyncManager(
         return@withLock false
       }
       return@withLock runCatching {
-            runPushQueue(updateProgress = false, trigger = "bootstrap_refresh_$trigger")
+            if (cashBoxManager.cashboxState.value) {
+              runPushQueue(updateProgress = false, trigger = "bootstrap_refresh_$trigger")
+            } else {
+              AppLogger.info(
+                  "SyncManager.bootstrap ($trigger): skipping push queue because cashbox is closed"
+              )
+            }
             val ctx = cashBoxManager.getContext() ?: cashBoxManager.initializeContext()
             val profileName = ctx?.profileName?.trim().orEmpty()
             val activeCashbox = cashBoxManager.getActiveCashboxWithDetails()
@@ -623,8 +650,14 @@ class SyncManager(
                 replaceMonthlySalesTarget = remoteMonthlyTarget != null,
                 lastSuccessAt = Clock.System.now().toEpochMilliseconds(),
             )
-            bootstrapSyncRepository.persistAll(snapshot)
-            cashBoxManager.initializeContext()
+            if (cashBoxManager.cashboxState.value) {
+              bootstrapSyncRepository.persistAll(snapshot)
+              cashBoxManager.initializeContext()
+            } else {
+              BASE_BOOTSTRAP_SECTIONS_WHEN_CASHBOX_CLOSED.forEach { section ->
+                bootstrapSyncRepository.persistSection(snapshot, section)
+              }
+            }
             AppLogger.info("SyncManager.bootstrap refreshed ($trigger)")
             true
           }
