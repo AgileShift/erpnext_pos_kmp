@@ -620,6 +620,9 @@ val appModule = module {
             cancelSalesInvoiceUseCase = get(),
             partialReturnUseCase = get(),
             networkMonitor = get(),
+            generalPreferences = get(),
+            printReceiptUseCase = get(),
+            printerProfileRepository = get(),
             returnPolicyPreferences = get(),
         )
     }

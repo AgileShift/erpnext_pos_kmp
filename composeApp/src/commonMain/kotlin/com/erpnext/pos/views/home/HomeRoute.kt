@@ -2,7 +2,6 @@ package com.erpnext.pos.views.home
 
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -12,8 +11,6 @@ import androidx.compose.runtime.remember
 fun HomeRoute(coordinator: HomeCoordinator = rememberHomeCoordinator()) {
   val uiState by coordinator.screenStateFlow.collectAsState(HomeState.Loading)
   val actions = rememberHomeActions(coordinator)
-
-  LaunchedEffect(Unit) { actions.loadInitialData() }
 
   HomeScreen(uiState, actions)
 }

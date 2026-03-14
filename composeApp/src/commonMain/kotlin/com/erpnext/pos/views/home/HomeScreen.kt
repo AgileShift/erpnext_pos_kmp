@@ -25,7 +25,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.ArrowDownward
@@ -48,6 +50,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -68,10 +71,14 @@ import com.erpnext.pos.domain.models.POSProfileSimpleBO
 import com.erpnext.pos.domain.models.UserBO
 import com.erpnext.pos.localSource.preferences.SyncSettings
 import com.erpnext.pos.localization.LocalAppStrings
+import com.erpnext.pos.navigation.LocalTopBarController
 import com.erpnext.pos.sync.SyncState
+import com.erpnext.pos.utils.WindowHeightSizeClass
+import com.erpnext.pos.utils.WindowWidthSizeClass
 import com.erpnext.pos.utils.datetimeNow
 import com.erpnext.pos.utils.formatCurrency
 import com.erpnext.pos.utils.formatDoubleToString
+import com.erpnext.pos.utils.rememberWindowSizeClass
 import com.erpnext.pos.utils.toCurrencySymbol
 import com.erpnext.pos.utils.view.SnackbarController
 import com.erpnext.pos.utils.view.SnackbarPosition
@@ -95,10 +102,16 @@ fun HomeScreen(
   val snackbar: SnackbarController = koinInject()
   val syncState by actions.syncState.collectAsState()
   val strings = LocalAppStrings.current
+  val topBarController = LocalTopBarController.current
   val homeMetrics by actions.homeMetrics.collectAsState()
   val openingState by actions.openingState.collectAsState()
   val isCashboxOpen by actions.isCashboxOpen().collectAsState()
   val inventoryAlertMessage by actions.inventoryAlertMessage.collectAsState()
+  val windowSizeClass = rememberWindowSizeClass()
+  val isCompactHeightPhone =
+      windowSizeClass.heightSizeClass == WindowHeightSizeClass.Compact &&
+          (windowSizeClass.widthSizeClass == WindowWidthSizeClass.Compact ||
+              windowSizeClass.widthSizeClass == WindowWidthSizeClass.Medium)
 
   LaunchedEffect(uiState) {
     if (uiState is HomeState.POSProfiles) {
@@ -112,6 +125,9 @@ fun HomeScreen(
       showOpeningView = false
     }
   }
+
+  LaunchedEffect(showOpeningView) { topBarController.update(isVisible = !showOpeningView) }
+  DisposableEffect(Unit) { onDispose { topBarController.reset() } }
 
   if (showOpeningView) {
     CashboxOpeningScreen(
@@ -142,7 +158,7 @@ fun HomeScreen(
               Modifier.padding(paddingValues)
                   .fillMaxSize()
                   .background(MaterialTheme.colorScheme.background)
-                  .padding(top = 12.dp, start = 12.dp, end = 16.dp),
+                  .padding(start = 12.dp, end = 16.dp),
           horizontalAlignment = Alignment.CenterHorizontally,
       ) {
         when (uiState) {
@@ -153,7 +169,15 @@ fun HomeScreen(
           is HomeState.POSProfiles -> {
             // Saludo y banners
             if (isCashboxOpen) {
-              Column(modifier = Modifier.fillMaxWidth(), horizontalAlignment = Alignment.Start) {
+              Column(
+                  modifier =
+                      if (isCompactHeightPhone) {
+                        Modifier.fillMaxWidth().verticalScroll(rememberScrollState())
+                      } else {
+                        Modifier.fillMaxWidth()
+                      },
+                  horizontalAlignment = Alignment.Start,
+              ) {
                 Text(
                     "Bienvenido ${uiState.user.firstName}",
                     style = MaterialTheme.typography.headlineSmall,
@@ -167,15 +191,20 @@ fun HomeScreen(
                 )
               }
 
-              Spacer(Modifier.height(24.dp))
+              Spacer(Modifier.height(if (isCompactHeightPhone) 12.dp else 24.dp))
 
               BISection(
                   metrics = homeMetrics,
                   actions = actions,
-                  modifier = Modifier.weight(1f).fillMaxWidth(),
+                  modifier =
+                      if (isCompactHeightPhone) {
+                        Modifier.fillMaxWidth()
+                      } else {
+                        Modifier.weight(1f).fillMaxWidth()
+                      },
               )
 
-              Spacer(Modifier.height(24.dp))
+              Spacer(Modifier.height(if (isCompactHeightPhone) 12.dp else 24.dp))
 
               Column(
                   modifier = Modifier.fillMaxWidth(),
@@ -269,7 +298,12 @@ fun HomeScreen(
               }
             } else {
               Column(
-                  modifier = Modifier.weight(6f).fillMaxSize(),
+                  modifier =
+                      if (isCompactHeightPhone) {
+                        Modifier.fillMaxWidth().verticalScroll(rememberScrollState())
+                      } else {
+                        Modifier.weight(6f).fillMaxSize()
+                      },
                   horizontalAlignment = Alignment.CenterHorizontally,
                   verticalArrangement = Arrangement.Center,
               ) {

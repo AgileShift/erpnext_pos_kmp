@@ -13,12 +13,16 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.Wallet
 import androidx.compose.material3.Button
@@ -36,6 +40,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -59,9 +64,12 @@ import com.erpnext.pos.domain.models.POSProfileSimpleBO
 import com.erpnext.pos.domain.models.UserBO
 import com.erpnext.pos.localSource.preferences.OpeningSessionPreferences
 import com.erpnext.pos.utils.DecimalFormatter
+import com.erpnext.pos.utils.WindowHeightSizeClass
+import com.erpnext.pos.utils.WindowWidthSizeClass
 import com.erpnext.pos.utils.formatCurrency
 import com.erpnext.pos.utils.formatDoubleToString
 import com.erpnext.pos.utils.normalizeCurrency
+import com.erpnext.pos.utils.rememberWindowSizeClass
 import com.erpnext.pos.utils.toCurrencySymbol
 import com.erpnext.pos.utils.view.SnackbarController
 import com.erpnext.pos.utils.view.SnackbarHost
@@ -84,6 +92,11 @@ import kotlinx.datetime.DayOfWeek
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 
+private enum class OpeningStep {
+  Details,
+  Count,
+}
+
 @Composable
 fun CashboxOpeningScreen(
     uiState: HomeState,
@@ -100,6 +113,7 @@ fun CashboxOpeningScreen(
   var selectedProfile by remember { mutableStateOf<POSProfileSimpleBO?>(null) }
   var profileMenuExpanded by remember { mutableStateOf(false) }
   var selectedCurrency by remember { mutableStateOf("") }
+  var compactStep by remember { mutableStateOf(OpeningStep.Details) }
   var lastDraftKey by remember { mutableStateOf<String?>(null) }
   val denominationState = remember {
     androidx.compose.runtime.mutableStateMapOf<String, List<DenominationUi>>()
@@ -267,55 +281,79 @@ fun CashboxOpeningScreen(
 
   Surface(color = MaterialTheme.colorScheme.background, modifier = Modifier.fillMaxSize()) {
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
-      val isCompact = maxWidth < 900.dp
+      val windowSizeClass = rememberWindowSizeClass()
+      val isPhoneCompact =
+          windowSizeClass.widthSizeClass == WindowWidthSizeClass.Compact ||
+              (windowSizeClass.widthSizeClass == WindowWidthSizeClass.Medium &&
+                  windowSizeClass.heightSizeClass == WindowHeightSizeClass.Compact)
+      val hasCompactHeight = windowSizeClass.heightSizeClass == WindowHeightSizeClass.Compact
+      val activeCurrency = selectedCurrency.ifBlank { normalizedBaseCurrency }
+      val compactScrollState = rememberScrollState()
 
       Column(modifier = Modifier.fillMaxSize()) {
         OpeningHeader(onDismiss = onDismiss)
 
-        val bottomPadding = if (isCompact) 96.dp else 24.dp
+        val bottomPadding =
+            if (isPhoneCompact) {
+              if (hasCompactHeight) 128.dp else 148.dp
+            } else {
+              24.dp
+            }
 
-        if (isCompact) {
+        if (isPhoneCompact) {
           Column(
               modifier =
                   Modifier.fillMaxSize()
-                      .padding(horizontal = 20.dp, vertical = 16.dp)
-                      .padding(bottom = bottomPadding),
+                      .padding(horizontal = if (hasCompactHeight) 14.dp else 20.dp, vertical = 16.dp)
+                      .padding(bottom = bottomPadding)
+                      .verticalScroll(compactScrollState),
               verticalArrangement = Arrangement.spacedBy(12.dp),
           ) {
-            OpeningFormSection(
-                user = user,
-                profiles = profiles,
-                selectedProfile = selectedProfile,
-                onSelectProfile = {
-                  selectedProfile = it
-                  onSelectProfile(it)
-                },
-                expanded = profileMenuExpanded,
-                onExpandedChange = { profileMenuExpanded = it },
+            CompactOpeningStepSelector(
+                currentStep = compactStep,
                 totalsByCurrency = totalsByCurrency,
-                isLoading =
-                    isSubmitting || openingState.isLoading || uiState is HomeState.POSInfoLoading,
-                canOpen = canOpen && !isSubmitting,
-                cashModesMissingCurrency = cashMethodsMissingCurrency.map { it.mopName },
-                onOpen = handleOpen,
-                onCancel = onDismiss,
-            )
+            ) { compactStep = it }
 
-            val activeCurrency = selectedCurrency.ifBlank { normalizedBaseCurrency }
-            OpeningCashContent(
-                countCurrencies = openingCurrencies,
-                selectedCurrency = activeCurrency,
-                denominations = denominationState[activeCurrency].orEmpty(),
-                onCurrencyChange = { selectedCurrency = it },
-                onDenominationChange = { value, count ->
-                  val current = denominationState[activeCurrency].orEmpty()
-                  denominationState[activeCurrency] =
-                      current.map { denom ->
-                        if (denom.value == value) denom.copy(count = max(0, count)) else denom
-                      }
-                },
-                totalsByCurrency = totalsByCurrency,
-            )
+            when (compactStep) {
+              OpeningStep.Details ->
+                  OpeningFormSection(
+                      user = user,
+                      profiles = profiles,
+                      selectedProfile = selectedProfile,
+                      onSelectProfile = {
+                        selectedProfile = it
+                        onSelectProfile(it)
+                      },
+                      expanded = profileMenuExpanded,
+                      onExpandedChange = { profileMenuExpanded = it },
+                      totalsByCurrency = totalsByCurrency,
+                      isLoading =
+                          isSubmitting ||
+                              openingState.isLoading ||
+                              uiState is HomeState.POSInfoLoading,
+                      canOpen = canOpen && !isSubmitting,
+                      cashModesMissingCurrency = cashMethodsMissingCurrency.map { it.mopName },
+                      onOpen = handleOpen,
+                      onCancel = onDismiss,
+                      showActions = false,
+                  )
+              OpeningStep.Count ->
+                  OpeningCashContent(
+                      countCurrencies = openingCurrencies,
+                      selectedCurrency = activeCurrency,
+                      denominations = denominationState[activeCurrency].orEmpty(),
+                      onCurrencyChange = { selectedCurrency = it },
+                      onDenominationChange = { value, count ->
+                        val current = denominationState[activeCurrency].orEmpty()
+                        denominationState[activeCurrency] =
+                            current.map { denom ->
+                              if (denom.value == value) denom.copy(count = max(0, count))
+                              else denom
+                            }
+                      },
+                      totalsByCurrency = totalsByCurrency,
+                  )
+            }
           }
         } else {
           Row(
@@ -353,7 +391,6 @@ fun CashboxOpeningScreen(
                 modifier = Modifier.weight(8f).fillMaxSize(),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-              val activeCurrency = selectedCurrency.ifBlank { normalizedBaseCurrency }
               OpeningCashContent(
                   countCurrencies = openingCurrencies,
                   selectedCurrency = activeCurrency,
@@ -371,6 +408,20 @@ fun CashboxOpeningScreen(
             }
           }
         }
+      }
+
+      if (isPhoneCompact) {
+        CompactOpeningActionBar(
+            modifier = Modifier.align(Alignment.BottomCenter),
+            step = compactStep,
+            canOpen = canOpen && !isSubmitting,
+            totalsByCurrency = totalsByCurrency,
+            onBack = {
+              if (compactStep == OpeningStep.Details) onDismiss() else compactStep = OpeningStep.Details
+            },
+            onNext = { compactStep = OpeningStep.Count },
+            onOpen = handleOpen,
+        )
       }
 
       SnackbarHost(
@@ -445,6 +496,7 @@ private fun OpeningFormSection(
     cashModesMissingCurrency: List<String>,
     onOpen: () -> Unit,
     onCancel: () -> Unit,
+    showActions: Boolean = true,
 ) {
   SectionCard(title = "Detalles de Apertura") {
     val nowInstant by
@@ -643,26 +695,31 @@ private fun OpeningFormSection(
         }
       }
 
-      Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-        OutlinedButton(
-            onClick = onCancel,
-            modifier = Modifier.weight(1f),
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
-            colors =
-                ButtonDefaults.outlinedButtonColors(
-                    contentColor = MaterialTheme.colorScheme.onSurfaceVariant
-                ),
+      if (showActions) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-          Text("Cancelar")
-        }
-        Button(
-            onClick = onOpen,
-            enabled = canOpen,
-            modifier = Modifier.weight(1f),
-            colors =
-                ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
-        ) {
-          Text("Abrir Caja", color = MaterialTheme.colorScheme.onPrimary)
+          OutlinedButton(
+              onClick = onCancel,
+              modifier = Modifier.weight(1f),
+              border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+              colors =
+                  ButtonDefaults.outlinedButtonColors(
+                      contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                  ),
+          ) {
+            Text("Cancelar")
+          }
+          Button(
+              onClick = onOpen,
+              enabled = canOpen,
+              modifier = Modifier.weight(1f),
+              colors =
+                  ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
+          ) {
+            Text("Abrir Caja", color = MaterialTheme.colorScheme.onPrimary)
+          }
         }
       }
 
@@ -677,6 +734,99 @@ private fun OpeningFormSection(
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSecondaryContainer,
         )
+      }
+    }
+  }
+}
+
+@Composable
+private fun CompactOpeningStepSelector(
+    currentStep: OpeningStep,
+    totalsByCurrency: Map<String, Double>,
+    onStepSelected: (OpeningStep) -> Unit,
+) {
+  val totalsSummary =
+      totalsByCurrency.entries.joinToString(" · ") { (currency, total) ->
+        formatCurrency(currency, total)
+      }
+  SectionCard(title = "Flujo de apertura") {
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+      Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        FilterChip(
+            selected = currentStep == OpeningStep.Details,
+            onClick = { onStepSelected(OpeningStep.Details) },
+            label = { Text("1. Detalles") },
+        )
+        FilterChip(
+            selected = currentStep == OpeningStep.Count,
+            onClick = { onStepSelected(OpeningStep.Count) },
+            label = { Text("2. Conteo") },
+        )
+      }
+      Text(
+          text =
+              if (totalsSummary.isBlank()) {
+                "Completa los datos y luego registra el conteo de efectivo."
+              } else {
+                "Resumen actual: $totalsSummary"
+              },
+          style = MaterialTheme.typography.bodySmall,
+          color = MaterialTheme.colorScheme.onSurfaceVariant,
+      )
+    }
+  }
+}
+
+@Composable
+private fun CompactOpeningActionBar(
+    modifier: Modifier = Modifier,
+    step: OpeningStep,
+    canOpen: Boolean,
+    totalsByCurrency: Map<String, Double>,
+    onBack: () -> Unit,
+    onNext: () -> Unit,
+    onOpen: () -> Unit,
+) {
+  Surface(
+      modifier =
+          modifier.fillMaxWidth()
+              .navigationBarsPadding(),
+      tonalElevation = 10.dp,
+      shadowElevation = 14.dp,
+      color = MaterialTheme.colorScheme.surface,
+  ) {
+    Column(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+      if (totalsByCurrency.isNotEmpty()) {
+        Text(
+            text =
+                totalsByCurrency.entries.joinToString(" · ") { (currency, total) ->
+                  formatCurrency(currency, total)
+                },
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.primary,
+            fontWeight = FontWeight.SemiBold,
+        )
+      }
+      Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth()) {
+        OutlinedButton(onClick = onBack, modifier = Modifier.weight(1f)) {
+          Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null)
+          Spacer(Modifier.width(6.dp))
+          Text(if (step == OpeningStep.Details) "Cancelar" else "Volver")
+        }
+        if (step == OpeningStep.Details) {
+          Button(onClick = onNext, modifier = Modifier.weight(1f)) {
+            Text("Ir a conteo")
+            Spacer(Modifier.width(6.dp))
+            Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null)
+          }
+        } else {
+          Button(onClick = onOpen, enabled = canOpen, modifier = Modifier.weight(1f)) {
+            Text("Abrir Caja")
+          }
+        }
       }
     }
   }

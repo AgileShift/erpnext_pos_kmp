@@ -306,8 +306,7 @@ fun CustomerListScreen(
       val contentPadding = if (isWideLayout) 24.dp else 16.dp
       SideEffect { allowSheets = !isWideLayout }
 
-      LaunchedEffect(isWideLayout, selectedCustomer?.name, rightPanelTab) {
-        if (!isWideLayout) return@LaunchedEffect
+      LaunchedEffect(selectedCustomer?.name, rightPanelTab) {
         val customer = selectedCustomer ?: return@LaunchedEffect
         when (rightPanelTab) {
           CustomerPanelTab.Pending -> actions.loadOutstandingInvoices(customer)
@@ -510,17 +509,24 @@ fun CustomerListScreen(
                       showBackToTop = showBackToTop,
                       isWideLayout = isWideLayout,
                       isDesktop = isDesktop,
-                      onOpenQuickActions = { quickActionsCustomer = it },
-                      onSelect = {},
+                      onOpenQuickActions = { customer ->
+                        selectedCustomer = customer
+                        rightPanelTab = CustomerPanelTab.Details
+                      },
+                      onSelect = { customer ->
+                        selectedCustomer = customer
+                        rightPanelTab = CustomerPanelTab.Details
+                      },
                       onQuickAction = { customer, actionType ->
+                        selectedCustomer = customer
                         when (actionType) {
                           CustomerQuickActionType.PendingInvoices,
                           CustomerQuickActionType.RegisterPayment -> {
-                            outstandingCustomer = customer
+                            rightPanelTab = CustomerPanelTab.Pending
                           }
 
                           CustomerQuickActionType.InvoiceHistory -> {
-                            historyCustomer = customer
+                            rightPanelTab = CustomerPanelTab.History
                           }
 
                           else -> handleQuickAction(actions, customer, actionType)
@@ -537,12 +543,69 @@ fun CustomerListScreen(
   }
 
   if (allowSheets) {
+    selectedCustomer?.let { customer ->
+      CustomerMobileDetailSheet(
+          customer = customer,
+          rightPanelTab = rightPanelTab,
+          paymentState = paymentState,
+          invoicesState = invoicesState,
+          outstandingInvoicesPagingItems = outstandingInvoicesPagingItems,
+          historyState = historyState,
+          historyInvoicesPagingItems = historyInvoicesPagingItems,
+          historyMessage = historyMessage,
+          returnInfoMessage = returnInfoMessage,
+          historyBusy = historyBusy,
+          supportedCurrencies = supportedCurrencies,
+          cashboxManager = cashboxManager,
+          posBaseCurrency = companyCurrency,
+          returnPolicy = returnPolicy,
+          onDismiss = {
+            selectedCustomer = null
+            rightPanelTab = CustomerPanelTab.Details
+            actions.clearOutstandingInvoices()
+            actions.clearInvoiceHistory()
+          },
+          onTabChange = { rightPanelTab = it },
+          onRegisterPayment = { invoiceId, mode, enteredAmount, enteredCurrency, referenceNumber ->
+            actions.registerPayment(
+                customer.name,
+                invoiceId,
+                mode,
+                enteredAmount,
+                enteredCurrency,
+                referenceNumber,
+            )
+          },
+          onDownloadInvoicePdf = actions.onDownloadInvoicePdf,
+          onInvoiceHistoryAction = {
+              invoiceId,
+              action,
+              reason,
+              refundMode,
+              refundReference,
+              applyRefund,
+              affectInventory ->
+            actions.onInvoiceHistoryAction(
+                invoiceId,
+                action,
+                reason,
+                refundMode,
+                refundReference,
+                applyRefund,
+                affectInventory,
+            )
+          },
+          loadLocalInvoice = actions.loadInvoiceLocal,
+          onSubmitPartialReturn = actions.onInvoicePartialReturn,
+      )
+    }
+
     quickActionsCustomer?.let { customer ->
       CustomerQuickActionsSheet(
           customer = customer,
           invoicesState = invoicesState,
           paymentState = paymentState,
-          onDismiss = {},
+          onDismiss = { quickActionsCustomer = null },
           onActionSelected = { actionType ->
             when (actionType) {
               CustomerQuickActionType.PendingInvoices,
@@ -1273,10 +1336,9 @@ private fun CustomerPanelHeader(
   }
 
   Surface(color = MaterialTheme.colorScheme.surface, tonalElevation = 0.dp) {
-    Row(
+    Column(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
       Row(verticalAlignment = Alignment.CenterVertically) {
         Surface(shape = CircleShape, color = MaterialTheme.colorScheme.surfaceVariant) {
@@ -1288,7 +1350,7 @@ private fun CustomerPanelHeader(
           )
         }
         Spacer(Modifier.width(10.dp))
-        Column {
+        Column(modifier = Modifier.weight(1f)) {
           Text(
               text = customer?.customerName ?: "Clientes",
               style = MaterialTheme.typography.titleMedium,
@@ -1304,6 +1366,7 @@ private fun CustomerPanelHeader(
 
       if (customer != null) {
         Row(
+            modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -1323,8 +1386,6 @@ private fun CustomerPanelHeader(
               isCritical = pendingCount > 0,
           )
         }
-      } else {
-        Spacer(Modifier.width(8.dp))
       }
     }
   }
@@ -2454,11 +2515,7 @@ fun CustomerItem(
 
         IconButton(
             onClick = {
-              if (isDesktop) {
-                isMenuExpanded = true
-              } else {
-                onOpenQuickActions()
-              }
+              isMenuExpanded = true
             }
         ) {
           Icon(
@@ -2469,7 +2526,7 @@ fun CustomerItem(
         }
 
         DropdownMenu(
-            expanded = isDesktop && isMenuExpanded,
+            expanded = isMenuExpanded,
             onDismissRequest = { isMenuExpanded = false },
         ) {
           quickActions.forEach { action ->
@@ -2591,6 +2648,92 @@ fun CustomerShimmerList() {
       Box(
           modifier =
               Modifier.fillMaxWidth().height(96.dp).shimmerBackground(RoundedCornerShape(16.dp))
+      )
+    }
+  }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun CustomerMobileDetailSheet(
+    customer: CustomerBO,
+    rightPanelTab: CustomerPanelTab,
+    paymentState: CustomerPaymentState,
+    invoicesState: CustomerInvoicesState,
+    outstandingInvoicesPagingItems: androidx.paging.compose.LazyPagingItems<SalesInvoiceBO>,
+    historyState: CustomerInvoiceHistoryState,
+    historyInvoicesPagingItems: androidx.paging.compose.LazyPagingItems<SalesInvoiceBO>,
+    historyMessage: String?,
+    returnInfoMessage: String?,
+    historyBusy: Boolean,
+    supportedCurrencies: List<String>,
+    cashboxManager: CashBoxManager,
+    posBaseCurrency: String,
+    returnPolicy: ReturnPolicySettings,
+    onDismiss: () -> Unit,
+    onTabChange: (CustomerPanelTab) -> Unit,
+    onRegisterPayment:
+        (
+            invoiceId: String,
+            modeOfPayment: String,
+            enteredAmount: Double,
+            enteredCurrency: String,
+            referenceNumber: String,
+        ) -> Unit,
+    onDownloadInvoicePdf: (String, InvoicePdfActionOption) -> Unit,
+    onInvoiceHistoryAction:
+        (
+            invoiceId: String,
+            action: InvoiceCancellationAction,
+            reason: String?,
+            refundModeOfPayment: String?,
+            refundReferenceNo: String?,
+            applyRefund: Boolean,
+            affectInventory: Boolean,
+        ) -> Unit,
+    loadLocalInvoice: suspend (String) -> SalesInvoiceWithItemsAndPayments?,
+    onSubmitPartialReturn:
+        (
+            invoiceId: String,
+            reason: String?,
+            refundModeOfPayment: String?,
+            refundReferenceNo: String?,
+            applyRefund: Boolean,
+            affectInventory: Boolean,
+            itemsToReturnByCode: Map<String, Double>,
+        ) -> Unit,
+) {
+  ModalBottomSheet(
+      onDismissRequest = onDismiss,
+      dragHandle = { BottomSheetDefaults.DragHandle() },
+  ) {
+    Box(
+        modifier =
+            Modifier.fillMaxWidth()
+                .heightIn(min = 420.dp, max = 760.dp)
+                .padding(bottom = 12.dp)
+    ) {
+      CustomerRightPanel(
+          customer = customer,
+          rightPanelTab = rightPanelTab,
+          onTabChange = onTabChange,
+          paymentState = paymentState,
+          invoicesState = invoicesState,
+          outstandingInvoicesPagingItems = outstandingInvoicesPagingItems,
+          historyState = historyState,
+          historyInvoicesPagingItems = historyInvoicesPagingItems,
+          historyMessage = historyMessage,
+          returnInfoMessage = returnInfoMessage,
+          historyBusy = historyBusy,
+          supportedCurrencies = supportedCurrencies,
+          cashboxManager = cashboxManager,
+          posBaseCurrency = posBaseCurrency,
+          returnPolicy = returnPolicy,
+          onRegisterPayment = onRegisterPayment,
+          onDownloadInvoicePdf = onDownloadInvoicePdf,
+          onInvoiceHistoryAction = onInvoiceHistoryAction,
+          loadLocalInvoice = loadLocalInvoice,
+          onSubmitPartialReturn = onSubmitPartialReturn,
       )
     }
   }
@@ -2788,7 +2931,7 @@ private fun CustomerOutstandingInvoicesContent(
       verticalArrangement = Arrangement.spacedBy(16.dp),
   ) {
     Text(
-        text = "${strings.customer.outstandingInvoicesTitle} - ${customer.customerName}",
+        text = strings.customer.outstandingInvoicesTitle,
         style = MaterialTheme.typography.titleLarge,
         fontWeight = FontWeight.SemiBold,
     )
@@ -2838,7 +2981,7 @@ private fun CustomerOutstandingInvoicesContent(
           Text(text = strings.customer.emptyOsInvoices, style = MaterialTheme.typography.bodyMedium)
         } else {
           LazyColumn(
-              modifier = Modifier.fillMaxWidth().heightIn(max = 320.dp),
+              modifier = Modifier.fillMaxWidth().heightIn(max = 220.dp),
               verticalArrangement = Arrangement.spacedBy(8.dp),
           ) {
             items(
@@ -4867,52 +5010,25 @@ private fun CustomerInvoiceHistoryContent(
   }
 
   Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(14.dp)) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-      Surface(color = MaterialTheme.colorScheme.surfaceVariant, shape = CircleShape) {
-        Text(
-            text = customer.customerName.take(1).uppercase(),
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-            style = MaterialTheme.typography.labelLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-      }
-      Column(modifier = Modifier.weight(1f)) {
-        Text(
-            text = customer.customerName,
-            style = MaterialTheme.typography.titleLarge,
-            fontWeight = FontWeight.SemiBold,
-        )
-        val subtitle =
-            when (historyState) {
-              is CustomerInvoiceHistoryState.Success -> {
-                val count =
-                    historyInvoicesPagingItems.itemSnapshotList.items.count {
-                      isWithinDays(it.postingDate, selectedRangeDays)
-                    }
-                "$count facturas en $selectedRangeDays días"
-              }
+    val subtitle =
+        when (historyState) {
+          is CustomerInvoiceHistoryState.Success -> {
+            val count =
+                historyInvoicesPagingItems.itemSnapshotList.items.count {
+                  isWithinDays(it.postingDate, selectedRangeDays)
+                }
+            "$count facturas en $selectedRangeDays días"
+          }
 
-              CustomerInvoiceHistoryState.Loading -> "Cargando historial..."
-              is CustomerInvoiceHistoryState.Error -> "Historial no disponible"
-              else -> "Historial de facturas"
-            }
-        Row {
-          Text(
-              text = subtitle,
-              style = MaterialTheme.typography.bodySmall,
-              color = MaterialTheme.colorScheme.onSurfaceVariant,
-          )
-          Text(
-              text = " - Total pendiente: ",
-              style = MaterialTheme.typography.bodySmall,
-              color = MaterialTheme.colorScheme.onSurfaceVariant,
-          )
+          CustomerInvoiceHistoryState.Loading -> "Cargando historial..."
+          is CustomerInvoiceHistoryState.Error -> "Historial no disponible"
+          else -> "Historial de facturas"
         }
-      }
-    }
+    Text(
+        text = subtitle,
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
       HistoryRangeChip(
           label = "7 días",

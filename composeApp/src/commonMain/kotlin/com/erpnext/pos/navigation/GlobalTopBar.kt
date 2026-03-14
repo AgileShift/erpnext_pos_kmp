@@ -32,6 +32,7 @@ data class GlobalTopBarState(
     val subtitle: String? = null,
     val showBack: Boolean? = null,
     val onBack: (() -> Unit)? = null,
+    val isVisible: Boolean? = null,
 )
 
 class TopBarController(initialState: GlobalTopBarState = GlobalTopBarState()) {
@@ -46,8 +47,15 @@ class TopBarController(initialState: GlobalTopBarState = GlobalTopBarState()) {
       subtitle: String? = state.subtitle,
       showBack: Boolean? = state.showBack,
       onBack: (() -> Unit)? = state.onBack,
+      isVisible: Boolean? = state.isVisible,
   ) {
-    state = state.copy(subtitle = subtitle, showBack = showBack, onBack = onBack)
+    state =
+        state.copy(
+            subtitle = subtitle,
+            showBack = showBack,
+            onBack = onBack,
+            isVisible = isVisible,
+        )
   }
 
   fun reset() {

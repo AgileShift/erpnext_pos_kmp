@@ -19,7 +19,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.MoreHoriz
+import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FloatingActionButton
@@ -99,109 +99,174 @@ fun BottomBarWithCenterFab(
     val barMaxWidth = if (isDektop) 720.dp else Dp.Unspecified
     val barHorizontalPadding = if (isDektop) 24.dp else if (compactBar) 6.dp else 14.dp
     val barVerticalPadding = if (isDektop) 12.dp else 8.dp
-    val compactRightItems = rightItems.filterNot { it == NavRoute.Activity || it == NavRoute.Settings }
     val compactOverflowItems = rightItems.filter { it == NavRoute.Activity || it == NavRoute.Settings }
 
-    // Barra
-    Surface(
-        modifier =
-            Modifier.fillMaxWidth()
-                .padding(vertical = barVerticalPadding, horizontal = barHorizontalPadding)
-                .widthIn(max = barMaxWidth)
-                .height(navBarSize)
-                .align(Alignment.BottomCenter),
-        shape = RoundedCornerShape(24.dp),
-        tonalElevation = 8.dp,
-        shadowElevation = 12.dp,
-        color = MaterialTheme.colorScheme.surface,
-    ) {
-      Row(
-          modifier = Modifier.height(64.dp).padding(horizontal = if (compactBar) 6.dp else 18.dp),
-          horizontalArrangement = Arrangement.SpaceBetween,
-          verticalAlignment = Alignment.CenterVertically,
+    if (compactBar) {
+      val compactLeftItems = listOf(NavRoute.Home, NavRoute.Inventory, NavRoute.Customer, NavRoute.Expenses)
+      Surface(
+          modifier =
+              Modifier.fillMaxWidth()
+                  .padding(vertical = barVerticalPadding, horizontal = barHorizontalPadding)
+                  .widthIn(max = barMaxWidth)
+                  .height(navBarSize)
+                  .align(Alignment.BottomCenter),
+          shape = RoundedCornerShape(22.dp),
+          tonalElevation = 8.dp,
+          shadowElevation = 12.dp,
+          color = MaterialTheme.colorScheme.surface,
       ) {
-        Row(horizontalArrangement = Arrangement.spacedBy(if (compactBar) 10.dp else 24.dp)) {
-          leftItems.forEach {
-            AnimatedBottomNavItem(
-                it,
-                navController,
-                currentRoute,
-                it.isEnabled(isCashBoxOpen),
-                showLabel = !compactBar && currentRoute == it.path,
-            )
+        Row(
+            modifier = Modifier.fillMaxSize().padding(horizontal = 8.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+          Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+            compactLeftItems.forEach { item ->
+              if (item == NavRoute.Expenses) {
+                ExpensesBottomNavItem(
+                    current = currentRoute,
+                    enabled = item.isEnabled(isCashBoxOpen),
+                    showLabel = false,
+                    expanded = expensesMenuExpanded,
+                    onExpandedChange = { expensesMenuExpanded = it },
+                    onGoExpenses = {
+                      expensesMenuExpanded = false
+                      safeNavigate(navController, NavRoute.PaymentEntry().path)
+                    },
+                    onGoInternalTransfer = {
+                      expensesMenuExpanded = false
+                      safeNavigate(navController, NavRoute.InternalTransfer.path)
+                    },
+                )
+              } else {
+                AnimatedBottomNavItem(
+                    item = item,
+                    navController = navController,
+                    current = currentRoute,
+                    enabled = item.isEnabled(isCashBoxOpen),
+                    showLabel = false,
+                )
+              }
+            }
           }
-        }
-
-        Spacer(modifier = Modifier.width((fabSize - if (compactBar) 8.dp else 14.dp)))
-
-        Row(horizontalArrangement = Arrangement.spacedBy(if (compactBar) 8.dp else 18.dp)) {
-          (if (compactBar) compactRightItems else rightItems).forEach {
-            if (it == NavRoute.Expenses) {
-              ExpensesBottomNavItem(
-                  current = currentRoute,
-                  enabled = it.isEnabled(isCashBoxOpen),
-                  showLabel = !compactBar && currentRoute?.startsWith("payment-entry") == true,
-                  expanded = expensesMenuExpanded,
-                  onExpandedChange = { expensesMenuExpanded = it },
-                  onGoExpenses = {
-                    expensesMenuExpanded = false
-                    safeNavigate(navController, NavRoute.PaymentEntry().path)
+          Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            BillingBottomNavItem(
+                current = currentRoute,
+                enabled = fabItem.isEnabled(isCashBoxOpen),
+                onClick = {
+                  if (isCashBoxOpen) safeNavigate(navController, fabItem.path)
+                  else
+                      snackbarController.show(
+                          "Necesitas abrir caja antes de operar",
+                          SnackbarType.Error,
+                          position = SnackbarPosition.Top,
+                      )
+                },
+            )
+            if (compactOverflowItems.isNotEmpty()) {
+              MoreBottomNavItem(
+                  expanded = moreMenuExpanded,
+                  onExpandedChange = { moreMenuExpanded = it },
+                  onGoActivity = {
+                    moreMenuExpanded = false
+                    safeNavigate(navController, NavRoute.Activity.path)
                   },
-                  onGoInternalTransfer = {
-                    expensesMenuExpanded = false
-                    safeNavigate(navController, NavRoute.InternalTransfer.path)
+                  onGoSettings = {
+                    moreMenuExpanded = false
+                    safeNavigate(navController, NavRoute.Settings.path)
                   },
-              )
-            } else {
-              AnimatedBottomNavItem(
-                  it,
-                  navController,
-                  current = currentRoute,
-                  it.isEnabled(isCashBoxOpen),
-                  showLabel = !compactBar && currentRoute == it.path,
+                  selected =
+                      currentRoute == NavRoute.Activity.path ||
+                          currentRoute == NavRoute.Settings.path,
               )
             }
           }
-          if (compactBar && compactOverflowItems.isNotEmpty()) {
-            MoreBottomNavItem(
-                expanded = moreMenuExpanded,
-                onExpandedChange = { moreMenuExpanded = it },
-                onGoActivity = {
-                  moreMenuExpanded = false
-                  safeNavigate(navController, NavRoute.Activity.path)
-                },
-                onGoSettings = {
-                  moreMenuExpanded = false
-                  safeNavigate(navController, NavRoute.Settings.path)
-                },
-                selected =
-                    currentRoute == NavRoute.Activity.path || currentRoute == NavRoute.Settings.path,
-            )
+        }
+      }
+    } else {
+      Surface(
+          modifier =
+              Modifier.fillMaxWidth()
+                  .padding(vertical = barVerticalPadding, horizontal = barHorizontalPadding)
+                  .widthIn(max = barMaxWidth)
+                  .height(navBarSize)
+                  .align(Alignment.BottomCenter),
+          shape = RoundedCornerShape(24.dp),
+          tonalElevation = 8.dp,
+          shadowElevation = 12.dp,
+          color = MaterialTheme.colorScheme.surface,
+      ) {
+        Row(
+            modifier = Modifier.height(64.dp).padding(horizontal = 18.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+          Row(horizontalArrangement = Arrangement.spacedBy(24.dp)) {
+            leftItems.forEach {
+              AnimatedBottomNavItem(
+                  it,
+                  navController,
+                  currentRoute,
+                  it.isEnabled(isCashBoxOpen),
+                  showLabel = currentRoute == it.path,
+              )
+            }
+          }
+
+          Spacer(modifier = Modifier.width(fabSize - 14.dp))
+
+          Row(horizontalArrangement = Arrangement.spacedBy(18.dp)) {
+            rightItems.forEach {
+              if (it == NavRoute.Expenses) {
+                ExpensesBottomNavItem(
+                    current = currentRoute,
+                    enabled = it.isEnabled(isCashBoxOpen),
+                    showLabel = currentRoute?.startsWith("payment-entry") == true,
+                    expanded = expensesMenuExpanded,
+                    onExpandedChange = { expensesMenuExpanded = it },
+                    onGoExpenses = {
+                      expensesMenuExpanded = false
+                      safeNavigate(navController, NavRoute.PaymentEntry().path)
+                    },
+                    onGoInternalTransfer = {
+                      expensesMenuExpanded = false
+                      safeNavigate(navController, NavRoute.InternalTransfer.path)
+                    },
+                )
+              } else {
+                AnimatedBottomNavItem(
+                    it,
+                    navController,
+                    current = currentRoute,
+                    it.isEnabled(isCashBoxOpen),
+                    showLabel = currentRoute == it.path,
+                )
+              }
+            }
           }
         }
       }
-    }
 
-    FloatingActionButton(
-        onClick = {
-          if (isCashBoxOpen) safeNavigate(navController, fabItem.path)
-          else
-              snackbarController.show(
-                  "Necesitas abrir caja antes de operar",
-                  SnackbarType.Error,
-                  position = SnackbarPosition.Top,
-              )
-        },
-        modifier =
-            Modifier.size(fabSize).align(Alignment.TopCenter).offset(y = if (compactBar) (-10).dp else (-16).dp),
-        shape = CircleShape,
-        elevation = FloatingActionButtonDefaults.elevation(12.dp),
-        containerColor =
-            if (isCashBoxOpen) MaterialTheme.colorScheme.primary
-            else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
-        contentColor = MaterialTheme.colorScheme.onPrimary,
-    ) {
-      Icon(fabItem.icon, fabItem.localizedTitle())
+      FloatingActionButton(
+          onClick = {
+            if (isCashBoxOpen) safeNavigate(navController, fabItem.path)
+            else
+                snackbarController.show(
+                    "Necesitas abrir caja antes de operar",
+                    SnackbarType.Error,
+                    position = SnackbarPosition.Top,
+                )
+          },
+          modifier = Modifier.size(fabSize).align(Alignment.TopCenter).offset(y = (-16).dp),
+          shape = CircleShape,
+          elevation = FloatingActionButtonDefaults.elevation(12.dp),
+          containerColor =
+              if (isCashBoxOpen) MaterialTheme.colorScheme.primary
+              else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
+          contentColor = MaterialTheme.colorScheme.onPrimary,
+      ) {
+        Icon(fabItem.icon, fabItem.localizedTitle())
+      }
     }
   }
 }
@@ -357,7 +422,7 @@ private fun MoreBottomNavItem(
           contentAlignment = Alignment.Center,
       ) {
         Icon(
-            imageVector = Icons.Outlined.MoreHoriz,
+            imageVector = Icons.Outlined.MoreVert,
             contentDescription = "Más",
             tint = tint,
         )
@@ -382,6 +447,54 @@ private fun MoreBottomNavItem(
           text = { Text(NavRoute.Settings.localizedTitle()) },
           leadingIcon = { Icon(imageVector = NavRoute.Settings.icon, contentDescription = null) },
           onClick = onGoSettings,
+      )
+    }
+  }
+}
+
+@Composable
+private fun BillingBottomNavItem(
+    current: String?,
+    enabled: Boolean,
+    onClick: () -> Unit,
+) {
+  val colors = MaterialTheme.colorScheme
+  val selected = current == NavRoute.Billing.path
+  val interactionSource = remember { MutableInteractionSource() }
+  val iconTint by
+      animateColorAsState(
+          targetValue =
+              when {
+                !enabled -> colors.onSurfaceVariant.copy(alpha = 0.4f)
+                selected -> colors.primary
+                else -> colors.onSurfaceVariant
+              },
+          animationSpec = tween(durationMillis = 120),
+          label = "billingBottomNavTint",
+      )
+  Column(
+      modifier =
+          Modifier.height(64.dp).clickable(
+              enabled = enabled,
+              interactionSource = interactionSource,
+              indication = null,
+          ) { onClick() },
+      horizontalAlignment = Alignment.CenterHorizontally,
+      verticalArrangement = Arrangement.Center,
+  ) {
+    Box(
+        modifier =
+            Modifier.size(34.dp)
+                .background(
+                    if (selected) colors.primary.copy(alpha = 0.12f) else Color.Transparent,
+                    CircleShape,
+                ),
+        contentAlignment = Alignment.Center,
+    ) {
+      Icon(
+          imageVector = NavRoute.Billing.icon,
+          contentDescription = NavRoute.Billing.localizedTitle(),
+          tint = iconTint,
       )
     }
   }

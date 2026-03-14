@@ -33,14 +33,20 @@ import com.erpnext.pos.domain.usecases.PartialReturnInput
 import com.erpnext.pos.domain.usecases.PartialReturnUseCase
 import com.erpnext.pos.domain.usecases.PushPendingCustomersUseCase
 import com.erpnext.pos.domain.usecases.RebuildCustomerSummariesUseCase
+import com.erpnext.pos.domain.printing.usecase.PrintReceiptInput
+import com.erpnext.pos.domain.printing.usecase.PrintReceiptUseCase
+import com.erpnext.pos.domain.repositories.printing.IPrinterProfileRepository
 import com.erpnext.pos.domain.utils.UUIDGenerator
 import com.erpnext.pos.localSource.dao.CompanyDao
 import com.erpnext.pos.localSource.dao.ModeOfPaymentDao
 import com.erpnext.pos.localSource.dao.PosProfilePaymentMethodDao
 import com.erpnext.pos.localSource.entities.ModeOfPaymentEntity
 import com.erpnext.pos.localSource.entities.SalesInvoiceWithItemsAndPayments
+import com.erpnext.pos.localSource.preferences.GeneralPreferences
 import com.erpnext.pos.localSource.preferences.ReturnPolicyPreferences
+import com.erpnext.pos.printing.templates.buildPendingInvoicePaymentReceipt
 import com.erpnext.pos.remoteSource.mapper.toDto
+import com.erpnext.pos.utils.AppLogger
 import com.erpnext.pos.utils.NetworkMonitor
 import com.erpnext.pos.utils.buildPaymentModeDetailMap
 import com.erpnext.pos.utils.formatDoubleToString
@@ -105,6 +111,9 @@ class CustomerViewModel(
     private val cancelSalesInvoiceUseCase: CancelSalesInvoiceUseCase,
     private val partialReturnUseCase: PartialReturnUseCase,
     private val networkMonitor: NetworkMonitor,
+    private val generalPreferences: GeneralPreferences,
+    private val printReceiptUseCase: PrintReceiptUseCase,
+    private val printerProfileRepository: IPrinterProfileRepository,
     private val returnPolicyPreferences: ReturnPolicyPreferences,
 ) : BaseViewModel() {
 
@@ -567,8 +576,20 @@ class CustomerViewModel(
               }
 
           val finalMessage = listOfNotNull(baseMessage, changeText).joinToString(" ")
+          val printFeedback =
+              tryPrintPendingInvoicePaymentReceipt(
+                  invoiceId = invoiceLabel,
+                  amount = enteredAmount,
+                  currencyCode = normalizeCurrency(enteredCurrency),
+                  modeOfPayment = modeOfPayment,
+                  referenceNo = resolvedReference,
+                  notes = null,
+              )
 
-          loadOutstandingInvoices(customerId, successMessage = finalMessage)
+          loadOutstandingInvoices(
+              customerId,
+              successMessage = listOf(finalMessage, printFeedback).filter { it.isNotBlank() }.joinToString(" ")
+          )
           // Forzamos refresco inmediato de la lista principal para reflejar nuevos saldos.
           fetchAllCustomers(searchFilter, selectedState)
         },
@@ -586,6 +607,47 @@ class CustomerViewModel(
 
   suspend fun loadInvoiceLocal(invoiceId: String): SalesInvoiceWithItemsAndPayments? {
     return fetchSalesInvoiceWithItemsUseCase(invoiceId)
+  }
+
+  private suspend fun tryPrintPendingInvoicePaymentReceipt(
+      invoiceId: String,
+      amount: Double,
+      currencyCode: String,
+      modeOfPayment: String,
+      referenceNo: String?,
+      notes: String?,
+  ): String {
+    val printerEnabled = generalPreferences.printerEnabled.first()
+    if (!printerEnabled) return ""
+
+    val defaultPrinter = printerProfileRepository.getDefaultProfile() ?: return ""
+    val receipt =
+        buildPendingInvoicePaymentReceipt(
+            invoiceId = invoiceId,
+            amount = amount,
+            currencyCode = currencyCode,
+            modeOfPayment = modeOfPayment,
+            referenceNo = referenceNo,
+            notes = notes,
+        )
+
+    return runCatching {
+          printReceiptUseCase(
+              PrintReceiptInput(
+                  profileId = defaultPrinter.id,
+                  document = receipt,
+              )
+          ).getOrThrow()
+          "Comprobante impreso en ${defaultPrinter.name}."
+        }
+        .getOrElse { error ->
+          AppLogger.warn(
+              "CustomerViewModel.tryPrintPendingInvoicePaymentReceipt failed",
+              error,
+              reportToSentry = false,
+          )
+          "Pago registrado, pero no se pudo imprimir: ${error.message ?: "error desconocido"}."
+        }
   }
 
   fun downloadInvoicePdf(

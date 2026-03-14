@@ -125,7 +125,6 @@ import androidx.compose.ui.window.PopupProperties
 import androidx.paging.LoadState
 import androidx.paging.PagingData
 import androidx.paging.compose.collectAsLazyPagingItems
-import androidx.paging.filter
 import coil3.compose.LocalPlatformContext
 import coil3.compose.SubcomposeAsyncImage
 import coil3.request.ImageRequest
@@ -139,11 +138,14 @@ import com.erpnext.pos.localization.LocalAppStrings
 import com.erpnext.pos.navigation.GlobalTopBarState
 import com.erpnext.pos.navigation.LocalTopBarController
 import com.erpnext.pos.utils.formatAmount
+import com.erpnext.pos.utils.WindowHeightSizeClass
+import com.erpnext.pos.utils.WindowWidthSizeClass
 import com.erpnext.pos.utils.loading.LoadingIndicator
 import com.erpnext.pos.utils.loading.LoadingUiState
 import com.erpnext.pos.utils.oauth.bd
 import com.erpnext.pos.utils.oauth.moneyScale
 import com.erpnext.pos.utils.oauth.toDouble
+import com.erpnext.pos.utils.rememberWindowSizeClass
 import com.erpnext.pos.utils.resolveRateBetweenFromBaseRates
 import com.erpnext.pos.utils.toCurrencySymbol
 import com.erpnext.pos.utils.view.SnackbarController
@@ -605,11 +607,7 @@ private fun BillingLabContent(
     )
   }
 
-  val filteredProductsFlow =
-      remember(productsPagingFlow) {
-        productsPagingFlow.map { paging -> paging.filter { item -> item.actualQty > 0.0 } }
-      }
-  val products = filteredProductsFlow.collectAsLazyPagingItems()
+  val products = productsPagingFlow.collectAsLazyPagingItems()
   val categoriesFromSnapshot =
       remember(products.itemSnapshotList.items) {
         products.itemSnapshotList.items
@@ -627,6 +625,31 @@ private fun BillingLabContent(
     if (selectedCategory != state.selectedProductCategory) {
       selectedCategory = state.selectedProductCategory
     }
+  }
+  val windowSizeClass = rememberWindowSizeClass()
+  val isCompactPhone =
+      getPlatformName() != "Desktop" &&
+          (windowSizeClass.widthSizeClass == WindowWidthSizeClass.Compact ||
+              (windowSizeClass.widthSizeClass == WindowWidthSizeClass.Medium &&
+                  windowSizeClass.heightSizeClass == WindowHeightSizeClass.Compact))
+  if (isCompactPhone) {
+    BillingLabContentCompact(
+        state = state,
+        products = products,
+        categories = categories,
+        selectedCategory = selectedCategory,
+        onSelectCategory = {
+          selectedCategory = it
+          action.onProductCategorySelected(it)
+        },
+        invoiceCurrency = invoiceCurrency,
+        secondaryCurrency = secondaryCurrency,
+        toSecondary = ::toSecondary,
+        action = action,
+        onCheckout = onCheckout,
+        modifier = Modifier.fillMaxSize(),
+    )
+    return
   }
 
   Column(
@@ -886,6 +909,224 @@ private fun BillingLabContent(
               textAlign = TextAlign.Center,
               modifier = Modifier.fillMaxWidth(),
           )
+        }
+      }
+    }
+  }
+}
+
+@Composable
+private fun BillingLabContentCompact(
+    state: BillingState.Success,
+    products: androidx.paging.compose.LazyPagingItems<ItemBO>,
+    categories: List<String>,
+    selectedCategory: String,
+    onSelectCategory: (String) -> Unit,
+    invoiceCurrency: String,
+    secondaryCurrency: String?,
+    toSecondary: (Double) -> Double?,
+    action: BillingAction,
+    onCheckout: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+  val strings = LocalAppStrings.current
+  val colors = MaterialTheme.colorScheme
+  val accent = colors.primary
+  val scrollState = rememberScrollState()
+
+  Column(
+      modifier = modifier.background(colors.background).verticalScroll(scrollState).padding(12.dp),
+      verticalArrangement = Arrangement.spacedBy(12.dp),
+  ) {
+    if (!state.allowPartialPayment) {
+      CreditSalesDisabledBanner(strings.billing.creditSalesNotAllowedBanner)
+    }
+
+    Surface(
+        color = colors.surface,
+        shape = RoundedCornerShape(18.dp),
+        tonalElevation = 2.dp,
+        shadowElevation = 8.dp,
+    ) {
+      Column(
+          modifier = Modifier.fillMaxWidth().padding(14.dp),
+          verticalArrangement = Arrangement.spacedBy(10.dp),
+      ) {
+        LabCartHeader(itemCount = state.cartItems.sumOf { it.quantity }.toInt(), accent = accent)
+        CustomerSelector(
+            customers = state.customers,
+            query = state.customerSearchQuery,
+            onQueryChange = action.onCustomerSearchQueryChange,
+            onCustomerSelected = action.onCustomerSelected,
+        )
+        Text(
+            text = strings.billing.cartSectionTitle,
+            style = MaterialTheme.typography.titleSmall,
+            color = colors.onSurface,
+        )
+        if (state.cartItems.isEmpty()) {
+          Box(
+              modifier = Modifier.fillMaxWidth().height(90.dp),
+              contentAlignment = Alignment.Center,
+          ) {
+            Text(
+                text = strings.billing.cartEmptyTitle,
+                style = MaterialTheme.typography.bodySmall,
+                color = colors.onSurfaceVariant,
+            )
+          }
+        } else {
+          LazyColumn(
+              modifier = Modifier.fillMaxWidth().heightIn(max = 220.dp),
+              verticalArrangement = Arrangement.spacedBy(8.dp),
+          ) {
+            items(state.cartItems, key = { it.itemCode }) { item ->
+              LabCartItem(
+                  item = item,
+                  baseCurrency = invoiceCurrency,
+                  exchangeRateByCurrency = state.exchangeRateByCurrency,
+                  onUpdateQuantity = { qty -> action.onQuantityChanged(item.itemCode, qty) },
+                  onRemove = { action.onRemoveItem(item.itemCode) },
+              )
+            }
+          }
+        }
+
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = colors.surfaceVariant),
+        ) {
+          Column(
+              modifier = Modifier.padding(12.dp),
+              verticalArrangement = Arrangement.spacedBy(6.dp),
+          ) {
+            Text(
+                text = strings.billing.cartSummaryTitle,
+                style = MaterialTheme.typography.labelLarge,
+                color = colors.onSurface,
+            )
+            Text(
+                text =
+                    "${strings.billing.customerSectionTitle}: ${state.selectedCustomer?.customerName ?: "--"}",
+                style = MaterialTheme.typography.bodySmall,
+                color = colors.onSurfaceVariant,
+            )
+            Text(
+                text = "${strings.billing.cartItemsLabel}: ${state.cartItems.size}",
+                style = MaterialTheme.typography.bodySmall,
+                color = colors.onSurfaceVariant,
+            )
+            HorizontalDivider(color = colors.outlineVariant, thickness = 1.dp)
+            PaymentTotalsRow(
+                "Subtotal",
+                invoiceCurrency,
+                state.subtotal,
+                secondaryCurrencyCode = secondaryCurrency,
+                secondaryAmount = toSecondary(state.subtotal),
+            )
+            if (state.taxes > 0.0) {
+              PaymentTotalsRow(
+                  "Impuestos",
+                  invoiceCurrency,
+                  state.taxes,
+                  secondaryCurrencyCode = secondaryCurrency,
+                  secondaryAmount = toSecondary(state.taxes),
+              )
+            }
+            if (state.discount > 0.0) {
+              PaymentTotalsRow(
+                  "Descuento",
+                  invoiceCurrency,
+                  -state.discount,
+                  secondaryCurrencyCode = secondaryCurrency,
+                  secondaryAmount = toSecondary(-state.discount),
+              )
+            }
+            PaymentTotalsRow(
+                "Total",
+                invoiceCurrency,
+                state.total,
+                secondaryCurrencyCode = secondaryCurrency,
+                secondaryAmount = toSecondary(state.total),
+            )
+          }
+        }
+
+        Button(
+            onClick = onCheckout,
+            enabled = state.selectedCustomer != null && state.cartItems.isNotEmpty(),
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+          Text(strings.billing.checkoutButton)
+        }
+      }
+    }
+
+    Surface(
+        color = colors.surfaceVariant.copy(alpha = 0.45f),
+        shape = RoundedCornerShape(18.dp),
+    ) {
+      Column(
+          modifier = Modifier.fillMaxWidth().padding(12.dp),
+          verticalArrangement = Arrangement.spacedBy(10.dp),
+      ) {
+        LabSearchBar(
+            value = state.productSearchQuery,
+            onChange = action.onProductSearchQueryChange,
+            onClear = { action.onProductSearchQueryChange("") },
+        )
+        LabCategoryTabs(
+            categories = categories,
+            selectedCategory = selectedCategory,
+            onSelect = onSelectCategory,
+        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+          Text(
+              text =
+                  if (selectedCategory == "Todos") strings.customer.allLabel else selectedCategory,
+              style = MaterialTheme.typography.titleSmall,
+              color = colors.onSurfaceVariant,
+          )
+          Text(
+              text = "(${products.itemCount})",
+              style = MaterialTheme.typography.labelMedium,
+              color = colors.onSurfaceVariant.copy(alpha = 0.75f),
+          )
+        }
+
+        LazyVerticalGrid(
+            columns = GridCells.Adaptive(minSize = 150.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            modifier = Modifier.fillMaxWidth().height(360.dp),
+        ) {
+          items(
+              count = products.itemCount,
+              key = { index -> products[index]?.itemCode ?: "billing_phone_item_$index" },
+          ) { index ->
+            val item = products[index] ?: return@items
+            LabProductCard(
+                item = item,
+                baseCurrency = invoiceCurrency,
+                exchangeRateByCurrency = state.exchangeRateByCurrency,
+                accent = colors.primary,
+                onClick = { action.onProductAdded(item) },
+            )
+          }
+          if (products.loadState.append is LoadState.Loading) {
+            item(span = { androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan) }) {
+              Box(
+                  modifier = Modifier.fillMaxWidth().padding(10.dp),
+                  contentAlignment = Alignment.Center,
+              ) {
+                CircularProgressIndicator()
+              }
+            }
+          }
         }
       }
     }
@@ -1564,10 +1805,10 @@ private fun CustomerSelector(
         onDismissRequest = { expanded = false },
         properties =
             PopupProperties(
-                focusable = false,
+                focusable = true,
                 dismissOnBackPress = true,
                 dismissOnClickOutside = true,
-                clippingEnabled = true,
+                clippingEnabled = false,
             ),
     ) {
       val menuWidth =

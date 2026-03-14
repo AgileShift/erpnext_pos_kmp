@@ -332,6 +332,7 @@ fun AppNavigation() {
   }
 
   val isDesktop = getPlatformName() == "Desktop"
+  val isDevelopmentBuild = BuildKonfig.SENTRY_ENV.lowercase() != "production"
   val windowSizeClass = rememberWindowSizeClass()
   val isPhoneCompact =
       !isDesktop &&
@@ -647,8 +648,9 @@ fun AppNavigation() {
                         StatusIconButton(
                             label = dbLabel,
                             onClick = {
-                              scope.launch { syncManager.fullSync(force = true) }
-                              if (!isCashboxOpen) {
+                              if (isCashboxOpen || isDevelopmentBuild) {
+                                scope.launch { syncManager.fullSync(force = true) }
+                              } else {
                                 snackbarController.show(
                                     strings.common.baseCompanySyncOnlyNotice,
                                     SnackbarType.Info,

@@ -54,7 +54,7 @@ class LoginViewModel(
     authNavigator.openAuthPage(url)
   }
 
-  fun onAuthCodeReceived(code: String) {
+  fun onAuthCodeReceived(code: String, returnedState: String? = null) {
     _stateFlow.update { LoginState.Loading }
 
     viewModelScope.launch(Dispatchers.IO) {
@@ -74,6 +74,9 @@ class LoginViewModel(
         val expectedState =
             transientAuthStore.loadState()?.takeIf { it.isNotBlank() }
                 ?: error("Falta estado OAuth para completar autenticación.")
+        val effectiveReturnedState =
+            returnedState?.takeIf { it.isNotBlank() }
+                ?: error("Falta state retornado por OAuth para completar autenticación.")
         AppLogger.info(
             "LoginViewModel.onAuthCodeReceived redirectUri -> ${oAuthConfig.redirectUrl}"
         )
@@ -85,7 +88,7 @@ class LoginViewModel(
                   code,
                   Pkce(verifier = pkceVerifier, challenge = ""),
                   expectedState,
-                  expectedState,
+                  effectiveReturnedState,
               )
             }
         if (tokens != null) {
@@ -188,6 +191,10 @@ class LoginViewModel(
         }
         AppLogger.info("LoginViewModel.onSiteSelected URL -> ${request.url}")
         doLogin(request.url)
+        if (!isDesktop) {
+          // Mobile auth continues outside this coroutine and returns via deep link callback.
+          handedOffToCodeExchange = true
+        }
         if (isDesktop) {
           val code =
               runCatching {
