@@ -11,7 +11,6 @@ import androidx.savedstate.read
 import com.erpnext.pos.navigation.NavRoute
 import com.erpnext.pos.views.activity.ActivityRoute
 import com.erpnext.pos.views.billing.BillingLabRoute
-import com.erpnext.pos.views.billing.BillingRoute
 import com.erpnext.pos.views.customer.CustomerRoute
 import com.erpnext.pos.views.deliverynote.DeliveryNoteRoute
 import com.erpnext.pos.views.home.HomeRoute
@@ -19,6 +18,7 @@ import com.erpnext.pos.views.inventory.InventoryRoute
 import com.erpnext.pos.views.invoice.InvoiceRoute
 import com.erpnext.pos.views.login.LoginRoute
 import com.erpnext.pos.views.paymententry.PaymentEntryRoute
+import com.erpnext.pos.views.printing.PrinterManagementRoute
 import com.erpnext.pos.views.quotation.QuotationRoute
 import com.erpnext.pos.views.reconciliation.ReconciliationMode
 import com.erpnext.pos.views.reconciliation.ReconciliationRoute
@@ -36,7 +36,6 @@ object NavGraph {
       composable(NavRoute.Login.path) { LoginRoute() }
       composable(NavRoute.Home.path) { HomeRoute() }
       composable(NavRoute.Inventory.path) { InventoryRoute() }
-      composable(NavRoute.Billing.path) { BillingRoute() }
       composable(NavRoute.Billing.path) { entry ->
         // Se usa un ViewModel por destino para reiniciar estado al volver a entrar.
         BillingLabRoute(entry)
@@ -61,6 +60,7 @@ object NavGraph {
         ReconciliationRoute(mode)
       }
       composable(NavRoute.Settings.path) { SettingsRoute() }
+      composable(NavRoute.Printers.path) { PrinterManagementRoute() }
       composable(
           route = "payment-entry?invoiceId={invoiceId}&entryType={entryType}",
           arguments =

@@ -486,8 +486,9 @@ fun PosSettingsScreen(state: POSSettingState, action: POSSettingAction) {
                 checked = state.settings.cashDrawerEnabled,
                 onCheckedChange = action.onCashDrawerEnabledChanged,
                 compact = isCompact,
-                showDivider = false,
+                showDivider = true,
             )
+            Button(onClick = action.onOpenPrinters) { Text("Manage printers") }
           }
 
           SettingSection(

@@ -16,6 +16,8 @@ import com.erpnext.pos.localSource.preferences.SyncPreferences
 import com.erpnext.pos.localSource.preferences.SyncSettings
 import com.erpnext.pos.localSource.preferences.ThemePreferences
 import com.erpnext.pos.localization.AppLanguage
+import com.erpnext.pos.navigation.NavRoute
+import com.erpnext.pos.navigation.NavigationManager
 import com.erpnext.pos.sync.SyncManager
 import com.erpnext.pos.sync.SyncState
 import com.erpnext.pos.utils.normalizeCurrency
@@ -43,6 +45,7 @@ class SettingsViewModel(
     private val returnPolicyPreferences: ReturnPolicyPreferences,
     private val exchangeRateLocalSource: ExchangeRateLocalSource,
     private val bootstrapContextPreferences: BootstrapContextPreferences,
+    private val navManager: NavigationManager,
 ) : BaseViewModel() {
 
   private val _uiState: MutableStateFlow<POSSettingState> =
@@ -243,6 +246,10 @@ class SettingsViewModel(
 
   fun setThemeMode(mode: AppThemeMode) {
     viewModelScope.launch { themePreferences.setThemeMode(mode) }
+  }
+
+  fun openPrinters() {
+    navManager.navigateTo(NavRoute.Printers)
   }
 
   private suspend fun updateInventoryAlertSchedule() {

@@ -18,6 +18,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.MoreHoriz
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FloatingActionButton
@@ -83,29 +85,30 @@ fun BottomBarWithCenterFab(
   val navBackStackEntry by navController.currentBackStackEntryAsState()
   val currentRoute = navBackStackEntry?.destination?.route
   var expensesMenuExpanded by remember { mutableStateOf(false) }
+  var moreMenuExpanded by remember { mutableStateOf(false) }
 
   val isDektop = getPlatformName() == "Desktop"
-  val navBarSize = 76.dp
-  val fabSize = 64.dp
-  val barMaxWidth = if (isDektop) 720.dp else Dp.Unspecified
-  val barHorizontalPadding = if (isDektop) 24.dp else 14.dp
-  val barVerticalPadding = if (isDektop) 12.dp else 8.dp
-
-  Box(
+  BoxWithConstraints(
       modifier =
           modifier
-              // .shadow(elevation = 4.dp, RoundedCornerShape(24.dp))
               .fillMaxWidth()
-              .padding(vertical = barVerticalPadding, horizontal = barHorizontalPadding)
-              .widthIn(max = barMaxWidth)
-              .height(navBarSize)
   ) {
+    val compactBar = !isDektop && (maxWidth < 430.dp || maxHeight < 500.dp)
+    val navBarSize = if (compactBar) 66.dp else 76.dp
+    val fabSize = if (compactBar) 54.dp else 64.dp
+    val barMaxWidth = if (isDektop) 720.dp else Dp.Unspecified
+    val barHorizontalPadding = if (isDektop) 24.dp else if (compactBar) 6.dp else 14.dp
+    val barVerticalPadding = if (isDektop) 12.dp else 8.dp
+    val compactRightItems = rightItems.filterNot { it == NavRoute.Activity || it == NavRoute.Settings }
+    val compactOverflowItems = rightItems.filter { it == NavRoute.Activity || it == NavRoute.Settings }
+
     // Barra
     Surface(
         modifier =
             Modifier.fillMaxWidth()
+                .padding(vertical = barVerticalPadding, horizontal = barHorizontalPadding)
+                .widthIn(max = barMaxWidth)
                 .height(navBarSize)
-                .padding(vertical = 8.dp, horizontal = 14.dp)
                 .align(Alignment.BottomCenter),
         shape = RoundedCornerShape(24.dp),
         tonalElevation = 8.dp,
@@ -113,24 +116,31 @@ fun BottomBarWithCenterFab(
         color = MaterialTheme.colorScheme.surface,
     ) {
       Row(
-          modifier = Modifier.height(64.dp).padding(horizontal = 18.dp),
+          modifier = Modifier.height(64.dp).padding(horizontal = if (compactBar) 6.dp else 18.dp),
           horizontalArrangement = Arrangement.SpaceBetween,
           verticalAlignment = Alignment.CenterVertically,
       ) {
-        Row(horizontalArrangement = Arrangement.spacedBy(24.dp)) {
+        Row(horizontalArrangement = Arrangement.spacedBy(if (compactBar) 10.dp else 24.dp)) {
           leftItems.forEach {
-            AnimatedBottomNavItem(it, navController, currentRoute, it.isEnabled(isCashBoxOpen))
+            AnimatedBottomNavItem(
+                it,
+                navController,
+                currentRoute,
+                it.isEnabled(isCashBoxOpen),
+                showLabel = !compactBar && currentRoute == it.path,
+            )
           }
         }
 
-        Spacer(modifier = Modifier.width((fabSize - 14.dp)))
+        Spacer(modifier = Modifier.width((fabSize - if (compactBar) 8.dp else 14.dp)))
 
-        Row(horizontalArrangement = Arrangement.spacedBy(18.dp)) {
-          rightItems.forEach {
+        Row(horizontalArrangement = Arrangement.spacedBy(if (compactBar) 8.dp else 18.dp)) {
+          (if (compactBar) compactRightItems else rightItems).forEach {
             if (it == NavRoute.Expenses) {
               ExpensesBottomNavItem(
                   current = currentRoute,
                   enabled = it.isEnabled(isCashBoxOpen),
+                  showLabel = !compactBar && currentRoute?.startsWith("payment-entry") == true,
                   expanded = expensesMenuExpanded,
                   onExpandedChange = { expensesMenuExpanded = it },
                   onGoExpenses = {
@@ -148,8 +158,25 @@ fun BottomBarWithCenterFab(
                   navController,
                   current = currentRoute,
                   it.isEnabled(isCashBoxOpen),
+                  showLabel = !compactBar && currentRoute == it.path,
               )
             }
+          }
+          if (compactBar && compactOverflowItems.isNotEmpty()) {
+            MoreBottomNavItem(
+                expanded = moreMenuExpanded,
+                onExpandedChange = { moreMenuExpanded = it },
+                onGoActivity = {
+                  moreMenuExpanded = false
+                  safeNavigate(navController, NavRoute.Activity.path)
+                },
+                onGoSettings = {
+                  moreMenuExpanded = false
+                  safeNavigate(navController, NavRoute.Settings.path)
+                },
+                selected =
+                    currentRoute == NavRoute.Activity.path || currentRoute == NavRoute.Settings.path,
+            )
           }
         }
       }
@@ -165,7 +192,8 @@ fun BottomBarWithCenterFab(
                   position = SnackbarPosition.Top,
               )
         },
-        modifier = Modifier.size(fabSize).align(Alignment.TopCenter).offset(y = (-16).dp),
+        modifier =
+            Modifier.size(fabSize).align(Alignment.TopCenter).offset(y = if (compactBar) (-10).dp else (-16).dp),
         shape = CircleShape,
         elevation = FloatingActionButtonDefaults.elevation(12.dp),
         containerColor =
@@ -182,6 +210,7 @@ fun BottomBarWithCenterFab(
 private fun ExpensesBottomNavItem(
     current: String?,
     enabled: Boolean,
+    showLabel: Boolean,
     expanded: Boolean,
     onExpandedChange: (Boolean) -> Unit,
     onGoExpenses: () -> Unit,
@@ -254,13 +283,15 @@ private fun ExpensesBottomNavItem(
         Icon(imageVector = NavRoute.Expenses.icon, contentDescription = title, tint = iconColor)
       }
 
-      Text(
-          text = title,
-          style = MaterialTheme.typography.labelSmall,
-          color = textColor,
-          maxLines = 1,
-      )
-      Spacer(modifier = Modifier.height(7.dp))
+      if (showLabel) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.labelSmall,
+            color = textColor,
+            maxLines = 1,
+        )
+        Spacer(modifier = Modifier.height(7.dp))
+      }
     }
 
     DropdownMenu(
@@ -283,6 +314,74 @@ private fun ExpensesBottomNavItem(
             Icon(imageVector = NavRoute.InternalTransfer.icon, contentDescription = null)
           },
           onClick = onGoInternalTransfer,
+      )
+    }
+  }
+}
+
+@Composable
+private fun MoreBottomNavItem(
+    expanded: Boolean,
+    onExpandedChange: (Boolean) -> Unit,
+    onGoActivity: () -> Unit,
+    onGoSettings: () -> Unit,
+    selected: Boolean,
+) {
+  val colors = MaterialTheme.colorScheme
+  val interactionSource = remember { MutableInteractionSource() }
+  val tint by
+      animateColorAsState(
+          targetValue =
+              if (selected) colors.primary else colors.onSurfaceVariant,
+          animationSpec = tween(durationMillis = 120),
+          label = "moreNavTint",
+      )
+
+  Box {
+    Column(
+        modifier =
+            Modifier.height(64.dp).clickable(
+                interactionSource = interactionSource,
+                indication = null,
+            ) { onExpandedChange(!expanded) },
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+    ) {
+      Box(
+          modifier =
+              Modifier.size(34.dp)
+                  .background(
+                      if (selected) colors.primary.copy(alpha = 0.12f) else Color.Transparent,
+                      CircleShape,
+                  ),
+          contentAlignment = Alignment.Center,
+      ) {
+        Icon(
+            imageVector = Icons.Outlined.MoreHoriz,
+            contentDescription = "Más",
+            tint = tint,
+        )
+      }
+    }
+
+    DropdownMenu(
+        expanded = expanded,
+        onDismissRequest = { onExpandedChange(false) },
+        offset = DpOffset(x = 12.dp, y = (-8).dp),
+        shape = RoundedCornerShape(16.dp),
+        tonalElevation = 8.dp,
+        shadowElevation = 18.dp,
+        containerColor = colors.surface,
+    ) {
+      DropdownMenuItem(
+          text = { Text(NavRoute.Activity.localizedTitle()) },
+          leadingIcon = { Icon(imageVector = NavRoute.Activity.icon, contentDescription = null) },
+          onClick = onGoActivity,
+      )
+      DropdownMenuItem(
+          text = { Text(NavRoute.Settings.localizedTitle()) },
+          leadingIcon = { Icon(imageVector = NavRoute.Settings.icon, contentDescription = null) },
+          onClick = onGoSettings,
       )
     }
   }
@@ -343,6 +442,7 @@ fun AnimatedBottomNavItem(
     navController: NavController,
     current: String?,
     enabled: Boolean = true,
+    showLabel: Boolean = true,
 ) {
   val colors = MaterialTheme.colorScheme
 
@@ -405,8 +505,14 @@ fun AnimatedBottomNavItem(
       Icon(imageVector = item.icon, contentDescription = title, tint = iconColor)
     }
 
-    Text(text = title, style = MaterialTheme.typography.labelSmall, color = textColor, maxLines = 1)
-
-    Spacer(modifier = Modifier.height(7.dp))
+    if (showLabel) {
+      Text(
+          text = title,
+          style = MaterialTheme.typography.labelSmall,
+          color = textColor,
+          maxLines = 1,
+      )
+      Spacer(modifier = Modifier.height(7.dp))
+    }
   }
 }

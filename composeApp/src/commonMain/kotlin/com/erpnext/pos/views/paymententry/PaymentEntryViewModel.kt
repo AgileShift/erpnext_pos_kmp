@@ -12,13 +12,18 @@ import com.erpnext.pos.domain.usecases.FetchSupplierOutstandingPurchaseInvoicesU
 import com.erpnext.pos.domain.usecases.FetchSuppliersLocalUseCase
 import com.erpnext.pos.domain.usecases.RegisterInvoicePaymentInput
 import com.erpnext.pos.domain.usecases.RegisterInvoicePaymentUseCase
+import com.erpnext.pos.domain.printing.usecase.PrintReceiptInput
+import com.erpnext.pos.domain.printing.usecase.PrintReceiptUseCase
+import com.erpnext.pos.domain.repositories.printing.IPrinterProfileRepository
 import com.erpnext.pos.domain.utils.UUIDGenerator
 import com.erpnext.pos.localSource.preferences.GeneralPreferences
 import com.erpnext.pos.navigation.NavRoute
 import com.erpnext.pos.navigation.NavigationManager
+import com.erpnext.pos.printing.templates.buildPendingInvoicePaymentReceipt
 import com.erpnext.pos.remoteSource.dto.InternalTransferCreateDto
 import com.erpnext.pos.remoteSource.dto.PaymentEntryReferenceCreateDto
 import com.erpnext.pos.remoteSource.dto.PaymentOutCreateDto
+import com.erpnext.pos.utils.AppLogger
 import com.erpnext.pos.utils.NetworkMonitor
 import com.erpnext.pos.utils.view.DateTimeProvider
 import com.erpnext.pos.views.CashBoxManager
@@ -50,6 +55,8 @@ class PaymentEntryViewModel(
     private val createInternalTransferUseCase: CreateInternalTransferUseCase,
     private val networkMonitor: NetworkMonitor,
     private val generalPreferences: GeneralPreferences,
+    private val printReceiptUseCase: PrintReceiptUseCase,
+    private val printerProfileRepository: IPrinterProfileRepository,
 ) : BaseViewModel() {
   private val json = Json { ignoreUnknownKeys = true }
   private val amountDraftByType = mutableMapOf<PaymentEntryType, String>()
@@ -508,6 +515,7 @@ class PaymentEntryViewModel(
     executeUseCase(
         action = {
           val narration = buildNarration(current)
+          var receivePrintFeedback: String? = null
           when (current.entryType) {
             PaymentEntryType.Receive -> {
               if (current.invoiceId.isNotBlank()) {
@@ -518,6 +526,15 @@ class PaymentEntryViewModel(
                         amount = amount,
                     )
                 )
+                receivePrintFeedback =
+                    tryPrintPendingInvoicePaymentReceipt(
+                        invoiceId = current.invoiceId,
+                        amount = amount,
+                        currencyCode = current.currencyCode,
+                        modeOfPayment = sourceMode,
+                        referenceNo = current.referenceNo,
+                        notes = current.notes,
+                    )
               } else {
                 cashBoxManager.registerCashMovement(
                     modeOfPayment = sourceMode,
@@ -687,7 +704,14 @@ class PaymentEntryViewModel(
 
                   PaymentEntryType.Receive ->
                       if (current.invoiceId.isNotBlank()) {
-                        "Cobro registrado para factura ${current.invoiceId}."
+                        buildString {
+                          append("Cobro registrado para factura ${current.invoiceId}.")
+                          val feedback = receivePrintFeedback?.trim().orEmpty()
+                          if (feedback.isNotBlank()) {
+                            append(" ")
+                            append(feedback)
+                          }
+                        }
                       } else {
                         "Entrada registrada por $amount en $sourceMode."
                       }
@@ -760,6 +784,51 @@ class PaymentEntryViewModel(
       state.notes.trim().takeIf { it.isNotBlank() }?.let { add("Nota: $it") }
     }
     return segments.joinToString(" | ")
+  }
+
+  private suspend fun tryPrintPendingInvoicePaymentReceipt(
+      invoiceId: String,
+      amount: Double,
+      currencyCode: String,
+      modeOfPayment: String,
+      referenceNo: String?,
+      notes: String?,
+  ): String {
+    val printerEnabled = generalPreferences.printerEnabled.firstOrNull() ?: true
+    if (!printerEnabled) return "Impresion deshabilitada en Configuraciones."
+
+    val defaultPrinter = printerProfileRepository.getDefaultProfile()
+    if (defaultPrinter == null) {
+      return "No hay impresora predeterminada configurada."
+    }
+
+    val receipt =
+        buildPendingInvoicePaymentReceipt(
+            invoiceId = invoiceId,
+            amount = amount,
+            currencyCode = currencyCode,
+            modeOfPayment = modeOfPayment,
+            referenceNo = referenceNo,
+            notes = notes,
+        )
+
+    return runCatching {
+          printReceiptUseCase(
+              PrintReceiptInput(
+                  profileId = defaultPrinter.id,
+                  document = receipt,
+              )
+          ).getOrThrow()
+          "Comprobante impreso en ${defaultPrinter.name}."
+        }
+        .getOrElse { error ->
+          AppLogger.warn(
+              "PaymentEntryViewModel.tryPrintPendingInvoicePaymentReceipt failed",
+              error,
+              reportToSentry = false,
+          )
+          "Cobro guardado, pero no se pudo imprimir: ${error.message ?: "error desconocido"}."
+        }
   }
 
   private fun loadSupplierOutstandingInvoices(party: String) {

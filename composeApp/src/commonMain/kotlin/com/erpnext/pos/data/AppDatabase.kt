@@ -23,9 +23,11 @@ import com.erpnext.pos.localSource.dao.POSClosingEntryDao
 import com.erpnext.pos.localSource.dao.POSOpeningEntryDao
 import com.erpnext.pos.localSource.dao.POSOpeningEntryLinkDao
 import com.erpnext.pos.localSource.dao.POSProfileDao
+import com.erpnext.pos.localSource.dao.PrintJobDao
 import com.erpnext.pos.localSource.dao.PaymentTermDao
 import com.erpnext.pos.localSource.dao.PosProfileLocalDao
 import com.erpnext.pos.localSource.dao.PosProfilePaymentMethodDao
+import com.erpnext.pos.localSource.dao.PrinterProfileDao
 import com.erpnext.pos.localSource.dao.SalesInvoiceDao
 import com.erpnext.pos.localSource.dao.SupplierDao
 import com.erpnext.pos.localSource.dao.TerritoryDao
@@ -52,8 +54,10 @@ import com.erpnext.pos.localSource.entities.POSOpeningEntryEntity
 import com.erpnext.pos.localSource.entities.POSOpeningEntryLinkEntity
 import com.erpnext.pos.localSource.entities.POSProfileEntity
 import com.erpnext.pos.localSource.entities.PaymentTermEntity
+import com.erpnext.pos.localSource.entities.PrintJobEntity
 import com.erpnext.pos.localSource.entities.PosProfileLocalEntity
 import com.erpnext.pos.localSource.entities.PosProfilePaymentMethodEntity
+import com.erpnext.pos.localSource.entities.PrinterProfileEntity
 import com.erpnext.pos.localSource.entities.SalesInvoiceEntity
 import com.erpnext.pos.localSource.entities.SalesInvoiceItemEntity
 import com.erpnext.pos.localSource.entities.SupplierEntity
@@ -94,8 +98,10 @@ import com.erpnext.pos.localSource.entities.UserEntity
             CustomerOutboxEntity::class,
             SupplierEntity::class,
             CompanyAccountEntity::class,
+            PrinterProfileEntity::class,
+            PrintJobEntity::class,
         ],
-    version = 2,
+    version = 3,
     exportSchema = true,
 )
 @ConstructedBy(AppDatabaseConstructor::class)
@@ -151,6 +157,10 @@ abstract class AppDatabase : RoomDatabase() {
   abstract fun supplierDao(): SupplierDao
 
   abstract fun companyAccountDao(): CompanyAccountDao
+
+  abstract fun printerProfileDao(): PrinterProfileDao
+
+  abstract fun printJobDao(): PrintJobDao
 }
 
 @Suppress("KotlinNoActualForExpect")

@@ -62,6 +62,8 @@ sealed class NavRoute(val path: String, val title: String, val icon: ImageVector
 
   object Settings : NavRoute("settings", "", Icons.Filled.Settings)
 
+  object Printers : NavRoute("printers", "Printers", Icons.Filled.Settings)
+
   object Expenses :
       NavRoute(path = "expenses", title = strings.navigation.expenses, icon = Icons.Filled.Payments)
 
@@ -101,6 +103,7 @@ fun NavRoute.localizedTitle(): String {
     NavRoute.DeliveryNote -> strings.deliveryNote
     NavRoute.Activity -> "" // strings.activity
     NavRoute.Settings -> "" // strings.settings
+    NavRoute.Printers -> "Printers"
     NavRoute.Expenses -> strings.expenses
     is NavRoute.Reconciliation -> strings.reconciliation
     is NavRoute.PaymentEntry -> strings.expenses

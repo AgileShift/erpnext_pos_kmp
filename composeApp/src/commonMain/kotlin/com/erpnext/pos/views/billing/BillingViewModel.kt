@@ -13,11 +13,14 @@ import com.erpnext.pos.domain.models.ItemBO
 import com.erpnext.pos.domain.models.POSCurrencyOption
 import com.erpnext.pos.domain.models.POSPaymentModeOption
 import com.erpnext.pos.domain.models.PaymentTermBO
+import com.erpnext.pos.domain.printing.usecase.PrintReceiptInput
+import com.erpnext.pos.domain.printing.usecase.PrintReceiptUseCase
 import com.erpnext.pos.domain.policy.SalesPostingBlockReason
 import com.erpnext.pos.domain.policy.SalesPostingDecision
 import com.erpnext.pos.domain.policy.SalesPostingPolicy
 import com.erpnext.pos.domain.policy.SalesPostingResolution
 import com.erpnext.pos.domain.policy.SalesPostingType
+import com.erpnext.pos.domain.repositories.printing.IPrinterProfileRepository
 import com.erpnext.pos.domain.usecases.AdjustLocalInventoryInput
 import com.erpnext.pos.domain.usecases.AdjustLocalInventoryUseCase
 import com.erpnext.pos.domain.usecases.BillingProductsQueryInput
@@ -44,11 +47,13 @@ import com.erpnext.pos.localSource.preferences.LanguagePreferences
 import com.erpnext.pos.localization.AppLanguage
 import com.erpnext.pos.navigation.NavRoute
 import com.erpnext.pos.navigation.NavigationManager
+import com.erpnext.pos.printing.templates.buildBillingSaleReceipt
 import com.erpnext.pos.remoteSource.dto.SalesInvoiceDto
 import com.erpnext.pos.remoteSource.dto.SalesInvoiceItemDto
 import com.erpnext.pos.remoteSource.dto.SalesInvoicePaymentScheduleDto
 import com.erpnext.pos.remoteSource.sdk.extractReservedStockItemCode
 import com.erpnext.pos.remoteSource.sdk.toUserMessage
+import com.erpnext.pos.utils.AppLogger
 import com.erpnext.pos.utils.NetworkMonitor
 import com.erpnext.pos.utils.buildPaymentModeDetailMap
 import com.erpnext.pos.utils.calculateTotals
@@ -116,6 +121,8 @@ class BillingViewModel(
     private val languagePreferences: LanguagePreferences,
     private val generalPreferences: GeneralPreferences,
     private val networkMonitor: NetworkMonitor,
+    private val printReceiptUseCase: PrintReceiptUseCase,
+    private val printerProfileRepository: IPrinterProfileRepository,
 ) : BaseViewModel() {
 
   private val _state: MutableStateFlow<BillingState> = MutableStateFlow(BillingState.Loading)
@@ -1078,6 +1085,20 @@ class BillingViewModel(
               productStockByCode[code] = (currentStock - sold).coerceAtLeast(0.0)
             }
 
+            val invoiceLabel = created?.name ?: localInvoiceName
+            val printFeedback =
+                tryPrintBillingReceipt(
+                    invoiceLabel = invoiceLabel,
+                    customerLabel = customer.customerName.ifBlank { customer.name },
+                    currencyCode = invoiceCurrency,
+                    cartItems = currentWithHints.cartItems,
+                    subtotal = totals.subtotal,
+                    taxes = totals.taxes,
+                    total = totals.total,
+                    paidAmount = resolvedPaymentLines.sumOf { it.baseAmount },
+                    balanceDue = (totals.total - resolvedPaymentLines.sumOf { it.baseAmount }).coerceAtLeast(0.0),
+                )
+
             _state.update {
               currentWithHints.copy(
                   selectedCustomer = null,
@@ -1112,14 +1133,14 @@ class BillingViewModel(
                                 spanish =
                                     "Factura $localInvoiceName guardada localmente (pendiente de sincronización).",
                                 english = "Invoice $localInvoiceName saved locally (pending sync).",
-                            )
+                            ) + printFeedback.toMessageSuffix()
                           } else {
                             tr(
                                 spanish =
                                     "Factura $localInvoiceName guardada localmente (pendiente de sincronización). $remoteErrorMessage",
                                 english =
                                     "Invoice $localInvoiceName saved locally (pending sync). $remoteErrorMessage",
-                            )
+                            ) + printFeedback.toMessageSuffix()
                           }
                         }
 
@@ -1129,12 +1150,12 @@ class BillingViewModel(
                             tr(
                                 spanish = "Factura $label creada. Pagos enviados correctamente.",
                                 english = "Invoice $label created. Payments sent successfully.",
-                            )
+                            ) + printFeedback.toMessageSuffix()
                           } else {
                             tr(
                                 spanish = "Factura $label creada. Pagos guardados localmente.",
                                 english = "Invoice $label created. Payments saved locally.",
-                            ) + paymentsSyncWarning
+                            ) + paymentsSyncWarning + printFeedback.toMessageSuffix()
                           }
                         }
 
@@ -1143,7 +1164,7 @@ class BillingViewModel(
                           tr(
                               spanish = "Factura $label creada correctamente.",
                               english = "Invoice $label created successfully.",
-                          )
+                          ) + printFeedback.toMessageSuffix()
                         }
                       },
                   successDialogMessage =
@@ -1902,4 +1923,75 @@ class BillingViewModel(
       is SalesPostingResolution.Blocked -> error(mapPostingBlockToMessage(resolution.reason))
     }
   }
+
+  private suspend fun tryPrintBillingReceipt(
+      invoiceLabel: String,
+      customerLabel: String,
+      currencyCode: String,
+      cartItems: List<CartItem>,
+      subtotal: Double,
+      taxes: Double,
+      total: Double,
+      paidAmount: Double,
+      balanceDue: Double,
+  ): String {
+    val printerEnabled = generalPreferences.printerEnabled.first()
+    if (!printerEnabled) return tr("Impresion deshabilitada.", "Printing is disabled.")
+
+    val defaultPrinter = printerProfileRepository.getDefaultProfile()
+    if (defaultPrinter == null) {
+      return tr("No hay impresora predeterminada.", "No default printer is configured.")
+    }
+
+    val itemLines =
+        cartItems.map { item ->
+          val label = "${item.quantity}x ${item.name}".trim()
+          val amount = item.quantity * item.price
+          label to amount
+        }
+
+    val receipt =
+        buildBillingSaleReceipt(
+            invoiceLabel = invoiceLabel,
+            customerLabel = customerLabel,
+            currencyCode = currencyCode,
+            itemLines = itemLines,
+            subtotal = subtotal,
+            taxes = taxes,
+            total = total,
+            paidAmount = paidAmount,
+            balanceDue = balanceDue,
+        )
+
+    return runCatching {
+          printReceiptUseCase(
+              PrintReceiptInput(
+                  profileId = defaultPrinter.id,
+                  document = receipt,
+              )
+          ).getOrThrow()
+          tr(
+              "Recibo impreso en ${defaultPrinter.name}.",
+              "Receipt printed on ${defaultPrinter.name}.",
+          )
+        }
+        .getOrElse { error ->
+          AppLogger.warn(
+              "BillingViewModel.tryPrintBillingReceipt failed",
+              error,
+              reportToSentry = false,
+          )
+          tr(
+              "Venta registrada, pero no se pudo imprimir: ${error.message ?: "error desconocido"}.",
+              "Sale saved, but printing failed: ${error.message ?: "unknown error"}.",
+          )
+        }
+  }
+
+  private fun String.toMessageSuffix(): String =
+      if (isBlank()) {
+        ""
+      } else {
+        " $this"
+      }
 }

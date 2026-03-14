@@ -54,6 +54,8 @@ class SettingsCoordinator(val viewModel: SettingsViewModel) {
   fun onThemeSelected(theme: AppColorTheme) = viewModel.setTheme(theme)
 
   fun onThemeModeSelected(mode: AppThemeMode) = viewModel.setThemeMode(mode)
+
+  fun openPrinters() = viewModel.openPrinters()
 }
 
 @Composable
