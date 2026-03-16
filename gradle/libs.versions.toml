@@ -35,7 +35,7 @@ room = "2.8.4"
 securityCryptoVersion = "1.1.0"
 sqlite = "2.6.2"
 konfig = "0.17.1"
-sqldelight = "2.2.1"
+sqldelight = "2.3.1"
 spotless = "8.3.0"
 detekt = "1.23.8"
 
