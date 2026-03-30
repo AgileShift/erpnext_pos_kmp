@@ -122,7 +122,7 @@ work-runtime-ktx = { group = "androidx.work", name = "work-runtime-ktx", version
 
 
 [plugins]
-sentry = { id = "io.sentry.jvm.gradle", version = "6.1.0" }
+sentry = { id = "io.sentry.jvm.gradle", version = "6.3.0" }
 google-services = { id = "com.google.gms.google-services", version.ref = "google-services" }
 sqlDelight = { id = "app.cash.sqldelight", version.ref = "sqldelight" }
 kmpLibrary = { id = "com.android.kotlin.multiplatform.library", version.ref = "androidGradlePlugin" }
