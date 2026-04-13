@@ -23,7 +23,7 @@ logbackClassic = "1.5.32"
 
 kotlin = "2.3.20"
 kotlinx-coroutines = "1.10.2"
-kotlinx-serialization = "1.10.0"
+kotlinx-serialization = "1.11.0"
 
 ksp = "2.3.6"
 ktor = "3.4.2"
